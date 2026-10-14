@@ -1,0 +1,18 @@
+# Xcode
+*.xcodeproj
+DerivedData/
+build/
+xcuserdata/
+*.xcresult
+
+# Swift Package Manager
+Packages/MyNotionKit/.build/
+Packages/MyNotionKit/.swiftpm/
+.swiftpm/
+
+# Сервер синхронизации
+server/node_modules/
+server/data/
+
+# macOS
+.DS_Store

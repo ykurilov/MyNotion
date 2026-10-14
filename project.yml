@@ -1,0 +1,114 @@
+name: MyNotion
+options:
+  bundleIdPrefix: cloud.kurilov
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    ARCHS: arm64
+    ONLY_ACTIVE_ARCH: NO
+    MACOSX_DEPLOYMENT_TARGET: "26.0"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Manual
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+packages:
+  MyNotionKit:
+    path: Packages/MyNotionKit
+targets:
+  MyNotion:
+    type: application
+    platform: macOS
+    sources:
+      - App
+    dependencies:
+      - package: MyNotionKit
+        product: VisualStyle
+      - package: MyNotionKit
+        product: NotesCore
+      - package: MyNotionKit
+        product: PageTree
+      - package: MyNotionKit
+        product: PageEditor
+      - package: MyNotionKit
+        product: PageSearch
+      - package: MyNotionKit
+        product: MarkdownExport
+      - package: MyNotionKit
+        product: NotionImport
+      - package: MyNotionKit
+        product: Sync
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion
+        PRODUCT_NAME: MyNotion
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: MyNotion
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        ENABLE_HARDENED_RUNTIME: NO
+        ENABLE_APP_SANDBOX: NO
+  UITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: UITests
+        createIntermediateGroups: true
+    dependencies:
+      - target: MyNotion
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: MyNotion
+  PerformanceTests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: PerformanceTests
+    dependencies:
+      - target: MyNotion
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion.performancetests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: MyNotion
+schemes:
+  MyNotion:
+    build:
+      targets:
+        MyNotion: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      gatherCoverageData: false
+      targets:
+        - package: MyNotionKit/VisualStyleTests
+        - package: MyNotionKit/NotesCoreTests
+        - package: MyNotionKit/PageTreeTests
+        - package: MyNotionKit/PageEditorTests
+        - package: MyNotionKit/PageSearchTests
+        - package: MyNotionKit/MarkdownExportTests
+        - package: MyNotionKit/NotionImportTests
+        - package: MyNotionKit/SyncTests
+        - UITests
+    profile:
+      config: Release
+    archive:
+      config: Release
+  MyNotionPerformance:
+    build:
+      targets:
+        MyNotion: all
+    run:
+      config: Release
+    test:
+      config: Release
+      targets:
+        - PerformanceTests

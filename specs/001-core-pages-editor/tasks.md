@@ -30,10 +30,10 @@ description: "Задачи: минимальное ядро MyNotion для macO
 
 **Purpose**: Проект собирается и запускает пустое окно.
 
-- [ ] T001 Создать `project.yml` для XcodeGen: приложение `MyNotion` (bundle id `cloud.kurilov.mynotion`, macOS 26.0, только arm64, Swift 6, строгая проверка параллелизма), цели `UITests` и `PerformanceTests`, схемы `MyNotion` (Debug) и `MyNotionPerformance` (Release), зависимость на локальный пакет `Packages/MyNotionKit`; добавить `*.xcodeproj` в `.gitignore`
-- [ ] T002 Создать `PK/Package.swift`: библиотеки `VisualStyle` (без зависимостей; от неё зависят `PageTree`, `PageEditor`, `PageSearch`), `NotesCore`, `PageTree`, `PageEditor`, `PageSearch`, `MarkdownExport`, `NotionImport`, `Sync` с тестовыми целями; зависимость GRDB.swift 7.x только у `NotesCore`; `PageTree`, `PageEditor`, `PageSearch`, `MarkdownExport`, `NotionImport`, `Sync` зависят от `NotesCore`, `NotesCore` — ни от кого из них
-- [ ] T003 Создать `App/MyNotionApp.swift` и `App/MainWindow/MainWindowView.swift`: `WindowGroup` с `NavigationSplitView` (пустая боковая панель + пустая область страницы), стандартное меню Mac; проверить `xcodegen generate && xcodebuild build -scheme MyNotion`
-- [ ] T004 [P] Создать `.gitignore` (DerivedData, `*.xcodeproj`, `server/node_modules`, `server/data`) и `README.md` с командами сборки из quickstart.md
+- [x] T001 Создать `project.yml` для XcodeGen: приложение `MyNotion` (bundle id `cloud.kurilov.mynotion`, macOS 26.0, только arm64, Swift 6, строгая проверка параллелизма), цели `UITests` и `PerformanceTests`, схемы `MyNotion` (Debug) и `MyNotionPerformance` (Release), зависимость на локальный пакет `Packages/MyNotionKit`; добавить `*.xcodeproj` в `.gitignore`
+- [x] T002 Создать `PK/Package.swift`: библиотеки `VisualStyle` (без зависимостей; от неё зависят `PageTree`, `PageEditor`, `PageSearch`), `NotesCore`, `PageTree`, `PageEditor`, `PageSearch`, `MarkdownExport`, `NotionImport`, `Sync` с тестовыми целями; зависимость GRDB.swift 7.x только у `NotesCore`; `PageTree`, `PageEditor`, `PageSearch`, `MarkdownExport`, `NotionImport`, `Sync` зависят от `NotesCore`, `NotesCore` — ни от кого из них
+- [x] T003 Создать `App/MyNotionApp.swift` и `App/MainWindow/MainWindowView.swift`: `WindowGroup` с `NavigationSplitView` (пустая боковая панель + пустая область страницы), стандартное меню Mac; проверить `xcodegen generate && xcodebuild build -scheme MyNotion`
+- [x] T004 [P] Создать `.gitignore` (DerivedData, `*.xcodeproj`, `server/node_modules`, `server/data`) и `README.md` с командами сборки из quickstart.md
 
 ---
 
