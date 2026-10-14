@@ -66,16 +66,36 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion.uitests
         GENERATE_INFOPLIST_FILE: YES
         TEST_TARGET_NAME: MyNotion
+  # Бюджет запуска и памяти: обычные тесты без «песочницы», приложение запускается
+  # через систему, как из Dock (исполнитель UI-тестов не может передать ему флаги).
   PerformanceTests:
-    type: bundle.ui-testing
+    type: bundle.unit-test
     platform: macOS
     sources:
       - path: PerformanceTests
+        excludes:
+          - UI/**
     dependencies:
-      - target: MyNotion
+      - package: MyNotionKit
+        product: NotesCore
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion.performancetests
+        GENERATE_INFOPLIST_FILE: YES
+  # Замеры, которым нужен XCUITest: метрика запуска XCTest, позже — набор текста.
+  PerformanceUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: PerformanceTests/UI
+      - path: PerformanceTests/Shared
+    dependencies:
+      - target: MyNotion
+      - package: MyNotionKit
+        product: NotesCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion.performanceuitests
         GENERATE_INFOPLIST_FILE: YES
         TEST_TARGET_NAME: MyNotion
 schemes:
@@ -112,3 +132,4 @@ schemes:
       config: Release
       targets:
         - PerformanceTests
+        - PerformanceUITests

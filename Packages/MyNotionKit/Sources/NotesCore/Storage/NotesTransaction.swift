@@ -96,7 +96,7 @@ public final class NotesTransaction {
     /// Записать новый блок; все поля получают одну метку часов.
     @discardableResult
     public func insertBlock(_ block: Block) throws -> Block {
-        guard try page(block.pageId) != nil else { throw NotesStoreError.pageNotFound(block.pageId) }
+        guard try pageExists(block.pageId) else { throw NotesStoreError.pageNotFound(block.pageId) }
         try validate(block)
         var inserted = block
         let stamp = clock.now()
@@ -153,11 +153,18 @@ public final class NotesTransaction {
                 sql: "SELECT EXISTS (SELECT 1 FROM block WHERE pageId = ? AND isDeleted = 0)",
                 arguments: [pageId.databaseText]
             ) ?? false
-            if !hasBlocks, try page(pageId) != nil {
+            if !hasBlocks, try pageExists(pageId) {
                 try insertBlock(Block(pageId: pageId, sortKey: .between(nil, nil)))
             }
         }
         touchedPageIds.removeAll()
+    }
+
+    private func pageExists(_ id: UUID) throws -> Bool {
+        try Bool.fetchOne(
+            db.cachedStatement(sql: "SELECT EXISTS (SELECT 1 FROM page WHERE id = ?)"),
+            arguments: [id.databaseText]
+        ) ?? false
     }
 
     private func storedBlock(_ id: UUID) throws -> Block? {
@@ -183,7 +190,7 @@ public final class NotesTransaction {
                 throw NotesStoreError.invalidPage("страница не может лежать внутри себя или своей подстраницы")
             }
             guard visited.insert(currentId).inserted else { break }
-            ancestorId = try String.fetchOne(db, sql: "SELECT parentId FROM page WHERE id = ?", arguments: [currentId.databaseText])
+            ancestorId = try String.fetchOne(db.cachedStatement(sql: "SELECT parentId FROM page WHERE id = ?"), arguments: [currentId.databaseText])
                 .flatMap(UUID.init(uuidString:))
         }
     }

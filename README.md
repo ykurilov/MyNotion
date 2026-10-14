@@ -28,7 +28,8 @@ cd Packages/MyNotionKit && swift test
 # Все модули и сценарии XCUITest
 xcodebuild test -scheme MyNotion -destination 'platform=macOS,arch=arm64'
 
-# Замеры бюджета (запуск ≤ 1 с, память ≤ 200 МБ) — сборка Release на эталонной базе
+# Замеры бюджета (запуск ≤ 1 с, память ≤ 200 МБ) — сборка Release на эталонной базе.
+# PerformanceTests запускает приложение через систему, как Dock; PerformanceUITests — замеры через XCUITest.
 xcodebuild test -scheme MyNotionPerformance -configuration Release -destination 'platform=macOS,arch=arm64'
 ```
 

@@ -39,6 +39,33 @@ enum JSONColumn {
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         return String(decoding: try encoder.encode(value), as: UTF8.self)
     }
+
+    /// Набор меток полей: `{"поле":"метка",…}` по алфавиту. Пишется на каждую запись,
+    /// поэтому собирается вручную, без JSONEncoder (эталон — 100 000 блоков).
+    static func encodeClocks(_ clocks: [(field: String, stamp: HybridTimestamp?)]) -> String {
+        let pairs = clocks
+            .compactMap { field, stamp in stamp.map { (field, $0) } }
+            .sorted { $0.0 < $1.0 }
+            .map { "\"\($0.0)\":\"\($0.1.description)\"" }
+        return "{" + pairs.joined(separator: ",") + "}"
+    }
+
+    static func encodeRuns(_ runs: [StyledRun]) throws -> String {
+        runs.isEmpty ? "[]" : try encode(runs)
+    }
+}
+
+extension PageFieldClocks {
+    var databaseJSON: String {
+        JSONColumn.encodeClocks([("title", title), ("icon", icon), ("placement", placement), ("trashedAt", trashedAt)])
+    }
+}
+
+extension BlockFieldClocks {
+    var databaseJSON: String {
+        JSONColumn.encodeClocks([("kindAndIndent", kindAndIndent), ("text", text), ("isChecked", isChecked),
+                                 ("sortKey", sortKey), ("deleted", deleted)])
+    }
 }
 
 extension Page {
@@ -57,25 +84,25 @@ extension Page {
     }
 
     func insert(into db: Database) throws {
-        try db.execute(
+        try db.cachedStatement(
             sql: """
                 INSERT INTO page (id, title, icon, parentId, sortKey, trashedAt, createdAt, updatedAt, fieldClocks)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-            arguments: [id.databaseText, title, icon, parentId?.databaseText, sortKey.rawValue,
-                        trashedAt, createdAt, updatedAt, try JSONColumn.encode(fieldClocks)]
+                """
+        ).execute(arguments: [id.databaseText, title, icon, parentId?.databaseText, sortKey.rawValue,
+                        trashedAt, createdAt, updatedAt, fieldClocks.databaseJSON]
         )
     }
 
     func update(in db: Database) throws {
-        try db.execute(
+        try db.cachedStatement(
             sql: """
                 UPDATE page SET title = ?, icon = ?, parentId = ?, sortKey = ?, trashedAt = ?,
                     updatedAt = ?, fieldClocks = ?
                 WHERE id = ?
-                """,
-            arguments: [title, icon, parentId?.databaseText, sortKey.rawValue, trashedAt,
-                        updatedAt, try JSONColumn.encode(fieldClocks), id.databaseText]
+                """
+        ).execute(arguments: [title, icon, parentId?.databaseText, sortKey.rawValue, trashedAt,
+                        updatedAt, fieldClocks.databaseJSON, id.databaseText]
         )
     }
 }
@@ -101,27 +128,27 @@ extension Block {
     }
 
     func insert(into db: Database) throws {
-        try db.execute(
+        try db.cachedStatement(
             sql: """
                 INSERT INTO block (id, pageId, kind, text, textStyles, indent, isChecked, linkedPageId,
                     sortKey, isDeleted, fieldClocks, textBaseClock)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
-                """,
-            arguments: [id.databaseText, pageId.databaseText, kind.rawValue, text.string,
-                        try JSONColumn.encode(text.runs), indent, isChecked, linkedPageId?.databaseText,
-                        sortKey.rawValue, try JSONColumn.encode(fieldClocks), textBaseClock?.description]
+                """
+        ).execute(arguments: [id.databaseText, pageId.databaseText, kind.rawValue, text.string,
+                        try JSONColumn.encodeRuns(text.runs), indent, isChecked, linkedPageId?.databaseText,
+                        sortKey.rawValue, fieldClocks.databaseJSON, textBaseClock?.description]
         )
     }
 
     func update(in db: Database) throws {
-        try db.execute(
+        try db.cachedStatement(
             sql: """
                 UPDATE block SET kind = ?, text = ?, textStyles = ?, indent = ?, isChecked = ?, linkedPageId = ?,
                     sortKey = ?, fieldClocks = ?, textBaseClock = ?
                 WHERE id = ?
-                """,
-            arguments: [kind.rawValue, text.string, try JSONColumn.encode(text.runs), indent, isChecked,
-                        linkedPageId?.databaseText, sortKey.rawValue, try JSONColumn.encode(fieldClocks),
+                """
+        ).execute(arguments: [kind.rawValue, text.string, try JSONColumn.encodeRuns(text.runs), indent, isChecked,
+                        linkedPageId?.databaseText, sortKey.rawValue, fieldClocks.databaseJSON,
                         textBaseClock?.description, id.databaseText]
         )
     }
