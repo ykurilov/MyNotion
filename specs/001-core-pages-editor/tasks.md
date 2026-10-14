@@ -31,7 +31,7 @@ description: "Задачи: минимальное ядро MyNotion для macO
 **Purpose**: Проект собирается и запускает пустое окно.
 
 - [ ] T001 Создать `project.yml` для XcodeGen: приложение `MyNotion` (bundle id `cloud.kurilov.mynotion`, macOS 26.0, только arm64, Swift 6, строгая проверка параллелизма), цели `UITests` и `PerformanceTests`, схемы `MyNotion` (Debug) и `MyNotionPerformance` (Release), зависимость на локальный пакет `Packages/MyNotionKit`; добавить `*.xcodeproj` в `.gitignore`
-- [ ] T002 Создать `PK/Package.swift`: библиотеки `NotesCore`, `PageTree`, `PageEditor`, `QuickSearch`, `MarkdownExport`, `NotionImport`, `Sync` с тестовыми целями; зависимость GRDB.swift 7.x только у `NotesCore`; `PageTree`, `PageEditor`, `QuickSearch`, `MarkdownExport`, `NotionImport`, `Sync` зависят от `NotesCore`, `NotesCore` — ни от кого из них
+- [ ] T002 Создать `PK/Package.swift`: библиотеки `NotesCore`, `PageTree`, `PageEditor`, `PageSearch`, `MarkdownExport`, `NotionImport`, `Sync` с тестовыми целями; зависимость GRDB.swift 7.x только у `NotesCore`; `PageTree`, `PageEditor`, `PageSearch`, `MarkdownExport`, `NotionImport`, `Sync` зависят от `NotesCore`, `NotesCore` — ни от кого из них
 - [ ] T003 Создать `App/MyNotionApp.swift` и `App/MainWindow/MainWindowView.swift`: `WindowGroup` с `NavigationSplitView` (пустая боковая панель + пустая область страницы), стандартное меню Mac; проверить `xcodegen generate && xcodebuild build -scheme MyNotion`
 - [ ] T004 [P] Создать `.gitignore` (DerivedData, `*.xcodeproj`, `server/node_modules`, `server/data`) и `README.md` с командами сборки из quickstart.md
 
@@ -56,7 +56,7 @@ description: "Задачи: минимальное ядро MyNotion для macO
 - [ ] T010 [P] `FractionalSortKey` в `PK/Sources/NotesCore/Ordering/FractionalSortKey.swift`
 - [ ] T011 Модели `Page` и `Block` в `PK/Sources/NotesCore/Model/Page.swift`, `Block.swift`, `InlineText.swift` строго по data-model.md: id UUID v7; `title` «может быть пустым; показывается «Без названия»»; `icon` «один эмодзи или пусто»; `parentId` «пусто — корень дерева; не может указывать на себя или потомка»; `kind` ∈ paragraph, heading1, heading2, heading3, bulletItem, numberedItem, checkbox, pageLink; `indent` «целое 0…8», «для заголовков всегда 0»; `isChecked` «только для checkbox»; `linkedPageId` «только для pageLink»; `InlineText` = строка + отрезки `{start, length, style}`, style ∈ bold, italic, strikethrough, code, link(url); `fieldClocks` и `textBaseClock` по data-model.md
 - [ ] T012 Схема и миграции GRDB в `PK/Sources/NotesCore/Storage/AppDatabase.swift`: файл `~/Library/Application Support/MyNotion/MyNotion.sqlite`, WAL; таблицы page, block, conflict, window_state, import_run, sync_account, outbox_entry; FTS5 `search_index(pageId, blockId, content)` с токенизатором `unicode61 remove_diacritics 2`; копия базы перед каждой миграцией (T007)
-- [ ] T013 `NotesStore` в `PK/Sources/NotesCore/Storage/NotesStore.swift`: чтение дерева без текста блоков, чтение страницы, транзакционные операции записи со штампами HLC; хук «изменение записано» для подписчиков (поиск, Sync) без зависимости ядра от них
+- [ ] T013 `NotesStore` в `PK/Sources/NotesCore/Storage/NotesStore.swift`: чтение дерева без текста блоков, чтение страницы, транзакционные операции записи со штампами HLC; хук «внутри транзакции записи» для подписчиков (поиск, Sync): они пишут в ту же транзакцию, ядро от них не зависит
 - [ ] T014 [P] Генератор эталонной базы в `PK/Sources/NotesCore/Fixtures/ReferenceLibraryGenerator.swift`: 1 000 страниц до 10 уровней, 100 000 блоков всех типов, одна страница на 1 000 блоков, кириллица и латиница; запуск флагом `--generate-reference-library <путь>` из `App/MyNotionApp.swift`
 - [ ] T015 [P] Замер запуска и памяти в `PerformanceTests/LaunchAndMemoryTests.swift`: `XCTApplicationLaunchMetric` до готовности редактора к вводу (signpost `EditorReady`), память всех процессов приложения через 10 с покоя на эталонной базе; пороги ≤ 1 с и ≤ 200 МБ — тест падает при превышении
 
@@ -72,21 +72,22 @@ description: "Задачи: минимальное ядро MyNotion для macO
 
 ### Тесты US1 (сначала, должны упасть)
 
-- [ ] T016 [P] [US1] Тест автосохранения в `PK/Tests/NotesCoreTests/AutosaveCoordinatorTests.swift` с подменёнными часами: запись через 300 мс после последней правки, немедленная запись при уходе в фон и выходе, не позже 1 с после окончания ввода (FR-014)
-- [ ] T017 [P] [US1] Тест ошибки записи в `PK/Tests/NotesCoreTests/SaveFailureTests.swift`: при отказе диска состояние «не сохранено» с причиной, текст в памяти не теряется, повторная попытка записывает его (FR-015)
-- [ ] T018 [P] [US1] Тест разбора абзацев в `PK/Tests/PageEditorTests/PageTextMappingTests.swift`: блоки → текст с атрибутами абзацев (id блока) → блоки без потерь; Enter делит блок, ⌫ в начале склеивает
-- [ ] T019 [P] [US1] Сценарий `UITests/NoteSurvivesRelaunchTests.swift`: новая страница, название, абзац, выход, запуск — открыта та же страница с тем же текстом; второй прогон с `kill -9` через 1,5 с после набора — текст на месте (SC-004, SC-005)
+- [ ] T016 [P] [US1] Тест автосохранения в `PK/Tests/NotesCoreTests/AutosaveCoordinatorTests.swift` с подменёнными часами: запись через 300 мс после последней правки, немедленная запись при уходе в фон и выходе, не позже 1 с после окончания ввода (FR-014); пишутся только изменённые поля изменённых блоков; если в базе версия блока новее `textBaseClock` — запись не затирает её, а создаёт `Conflict`
+- [ ] T017 [P] [US1] Тест «сто циклов» в `PK/Tests/NotesCoreTests/SaveReopenCycleTests.swift`: 100 раз — случайный текст во всех типах полей → закрыть документ и базу → открыть → полное совпадение (SC-004); в браузерном тесте T020 остаётся один живой случай
+- [ ] T018 [P] [US1] Тест ошибки записи в `PK/Tests/NotesCoreTests/SaveFailureTests.swift`: при отказе диска состояние «не сохранено» с причиной, текст в памяти не теряется, повторная попытка записывает его (FR-015)
+- [ ] T019 [P] [US1] Тест разбора абзацев в `PK/Tests/PageEditorTests/PageTextMappingTests.swift`: блоки → текст с атрибутами абзацев (id блока) → блоки без потерь; Enter делит блок, ⌫ в начале склеивает
+- [ ] T020 [P] [US1] Сценарий `UITests/NoteSurvivesRelaunchTests.swift`: новая страница, название, абзац, выход, запуск — открыта та же страница с тем же текстом; второй прогон с `kill -9` через 1,5 с после набора — текст на месте (SC-004, SC-005)
 
 ### Реализация US1
 
-- [ ] T020 [US1] `PageDocument` в `PK/Sources/NotesCore/Document/PageDocument.swift`: одна живая копия страницы в памяти; `OpenDocuments` выдаёт один и тот же объект всем окнам (R5)
-- [ ] T021 [US1] `AutosaveCoordinator` в `PK/Sources/NotesCore/Document/AutosaveCoordinator.swift` (R4) и состояние сохранения `SaveStatus` (сохранено / сохраняется / не сохранено + причина)
-- [ ] T022 [US1] Редактор в `PK/Sources/PageEditor/PageTextView.swift` и `PageTextStorageMapper.swift`: `NSTextView` на TextKit 2, абзац = блок (атрибут id блока), проверка орфографии и системное поведение текста (FR-013); правки уходят в `PageDocument`
-- [ ] T023 [US1] Поле названия страницы и редактор в `PK/Sources/PageEditor/PageEditorView.swift` (SwiftUI-обёртка); пустое название показывается «Без названия»
-- [ ] T024 [US1] Полоса ошибки сохранения «Изменения не сохранены — <причина>. Повторяем…» в `PK/Sources/PageEditor/SaveStatusBanner.swift` (contracts/editor-interactions.md)
-- [ ] T025 [US1] Временный плоский список страниц и ⌘N в `App/MainWindow/MainWindowView.swift`; восстановление последней открытой страницы при запуске через `WindowState` (FR-006); signpost `EditorReady` для T015
+- [ ] T021 [US1] `PageDocument` в `PK/Sources/NotesCore/Document/PageDocument.swift`: одна живая копия страницы в памяти; `OpenDocuments` выдаёт один и тот же объект всем окнам (R5)
+- [ ] T022 [US1] `AutosaveCoordinator` в `PK/Sources/NotesCore/Document/AutosaveCoordinator.swift` (R4: только изменённые поля с проверкой `textBaseClock`) и состояние сохранения `SaveStatus` (сохранено / сохраняется / не сохранено + причина)
+- [ ] T023 [US1] Редактор в `PK/Sources/PageEditor/PageTextView.swift` и `PageTextStorageMapper.swift`: `NSTextView` на TextKit 2, абзац = блок (атрибут id блока), проверка орфографии и системное поведение текста (FR-013); правки уходят в `PageDocument`
+- [ ] T024 [US1] Поле названия страницы и редактор в `PK/Sources/PageEditor/PageEditorView.swift` (SwiftUI-обёртка); пустое название показывается «Без названия»
+- [ ] T025 [US1] Полоса ошибки сохранения «Изменения не сохранены — <причина>. Повторяем…» в `PK/Sources/PageEditor/SaveStatusBanner.swift` (contracts/editor-interactions.md)
+- [ ] T026 [US1] Временный плоский список страниц и ⌘N в `App/MainWindow/MainWindowView.swift`; восстановление последней открытой страницы при запуске через `WindowState` (FR-006); signpost `EditorReady` для T015
 
-**Checkpoint**: Рабочий блокнот с надёжным сохранением. Коммит, показ Юрию в сборке.
+**Checkpoint**: Рабочий блокнот с надёжным сохранением. Сборка, затронутые тесты и замеры, показ Юрию, коммит.
 
 ---
 
@@ -98,18 +99,18 @@ description: "Задачи: минимальное ядро MyNotion для macO
 
 ### Тесты US2 (сначала, должны упасть)
 
-- [ ] T026 [P] [US2] Тест операций дерева в `PK/Tests/NotesCoreTests/PageTreeOperationsTests.swift`: подстраница создаётся парой «Page с parentId + блок pageLink в родителе»; перенос ветки целиком; перенос внутрь своего потомка отклоняется; удаление уводит ветку в корзину; возврат ставит на прежнее место, «если родитель исчез — в корень»; удаление навсегда оставляет надгробие (id + HLC)
-- [ ] T027 [P] [US2] Сценарий `UITests/PageTreeTests.swift`: 3 уровня, перетаскивание ветки, свернуть ветку, ⌘⌫ в корзину, вернуть, перезапуск — дерево и свёрнутость те же (сценарии 2.1–2.4)
+- [ ] T027 [P] [US2] Тест операций дерева в `PK/Tests/NotesCoreTests/PageTreeOperationsTests.swift`: подстраница создаётся парой «Page с parentId + блок pageLink в родителе»; перенос ветки целиком; перенос внутрь своего потомка отклоняется; удаление уводит ветку в корзину; возврат ставит на прежнее место, «если родитель исчез — в корень»; удаление навсегда оставляет надгробие (id + HLC)
+- [ ] T028 [P] [US2] Сценарий `UITests/PageTreeTests.swift`: 3 уровня, перетаскивание ветки, свернуть ветку, ⌘⌫ в корзину, вернуть, перезапуск — дерево и свёрнутость те же (сценарии 2.1–2.4)
 
 ### Реализация US2
 
-- [ ] T028 [US2] `PageTreeOperations` в `PK/Sources/NotesCore/Tree/PageTreeOperations.swift`: создать подстраницу, переименовать, перенести, в корзину, вернуть, удалить навсегда, очистить корзину; каждая операция — одна транзакция
-- [ ] T029 [US2] Боковое дерево в `PK/Sources/PageTree/PageOutlineView.swift` и `PageOutlineDataSource.swift`: `NSOutlineView`, ленивые ветки, перетаскивание «на страницу — внутрь, между — рядом», запрет сброса в потомка, переименование двойным щелчком или Enter, ⌘⌫ (contracts/editor-interactions.md)
-- [ ] T030 [US2] Корзина в `PK/Sources/PageTree/TrashView.swift`: вернуть, удалить навсегда, очистить
-- [ ] T031 [US2] Заменить временный список в `App/MainWindow/MainWindowView.swift` деревом; ⇧⌘N — подстраница; сохранение свёрнутых веток и ширины панели в `WindowState`
-- [ ] T032 [US2] Отмена операций с деревом через `UndoManager` окна в `PK/Sources/NotesCore/Tree/PageTreeOperations.swift` (FR-012)
+- [ ] T029 [US2] `PageTreeOperations` в `PK/Sources/NotesCore/Tree/PageTreeOperations.swift`: создать подстраницу, переименовать, перенести, в корзину, вернуть, удалить навсегда, очистить корзину; каждая операция — одна транзакция
+- [ ] T030 [US2] Боковое дерево в `PK/Sources/PageTree/PageOutlineView.swift` и `PageOutlineDataSource.swift`: `NSOutlineView`, ленивые ветки, перетаскивание «на страницу — внутрь, между — рядом», запрет сброса в потомка, переименование двойным щелчком или Enter, ⌘⌫ (contracts/editor-interactions.md)
+- [ ] T031 [US2] Корзина в `PK/Sources/PageTree/TrashView.swift`: вернуть, удалить навсегда, очистить
+- [ ] T032 [US2] Заменить временный список в `App/MainWindow/MainWindowView.swift` деревом; ⇧⌘N — подстраница; сохранение свёрнутых веток и ширины панели в `WindowState`
+- [ ] T033 [US2] Отмена операций с деревом через `UndoManager` окна в `PK/Sources/NotesCore/Tree/PageTreeOperations.swift` (FR-012)
 
-**Checkpoint**: Записи раскладываются по дереву. Коммит.
+**Checkpoint**: Записи раскладываются по дереву. Сборка, затронутые тесты и замеры (`PerformanceTests`), показ Юрию, коммит.
 
 ---
 
@@ -123,23 +124,24 @@ description: "Задачи: минимальное ядро MyNotion для macO
 
 ### Тесты US3 (сначала, должны упасть)
 
-- [ ] T033 [P] [US3] Тест быстрых символов в `PK/Tests/PageEditorTests/MarkdownShortcutTests.swift`: `# `, `## `, `### `, `- `, `* `, `1. `, `[] `, `[ ] ` в начале пустой строки; ⌫ в начале не-абзаца → абзац; Enter в пустом пункте → абзац (contracts/editor-interactions.md)
-- [ ] T034 [P] [US3] Тест вложенности и перестановки в `PK/Tests/PageEditorTests/BlockStructureTests.swift`: Tab/⇧Tab в пределах «целое 0…8», заголовок всегда 0; ⌥⇧↑/⌥⇧↓ меняют `sortKey`; ⌘Enter переключает чекбокс
-- [ ] T035 [P] [US3] Тест оформления в строке в `PK/Tests/PageEditorTests/InlineStyleTests.swift`: ⌘B/⌘I/⇧⌘X/⌘E; вставка адреса поверх выделения создаёт ссылку; вставка из другого приложения оставляет текст и поддерживаемое оформление
-- [ ] T036 [P] [US3] Сценарий `UITests/BlockEditingTests.swift`: все типы блоков, меню «/» с поиском, щелчок по чекбоксу, перетаскивание блока мышью, ⌘Z/⇧⌘Z, перезапуск (сценарии 3.1–3.5)
+- [ ] T034 [P] [US3] Тест быстрых символов в `PK/Tests/PageEditorTests/MarkdownShortcutTests.swift`: `# `, `## `, `### `, `- `, `* `, `1. `, `[] `, `[ ] ` в начале пустой строки; ⌫ в начале не-абзаца → абзац; Enter в пустом пункте → абзац (contracts/editor-interactions.md)
+- [ ] T035 [P] [US3] Тест вложенности и перестановки в `PK/Tests/PageEditorTests/BlockStructureTests.swift`: Tab/⇧Tab в пределах «целое 0…8», заголовок всегда 0; ⌥⇧↑/⌥⇧↓ меняют `sortKey`; ⌘Enter переключает чекбокс
+- [ ] T036 [P] [US3] Тест оформления в строке в `PK/Tests/PageEditorTests/InlineStyleTests.swift`: ⌘B/⌘I/⇧⌘X/⌘E; вставка адреса поверх выделения создаёт ссылку; вставка из другого приложения оставляет текст и поддерживаемое оформление
+- [ ] T037 [P] [US3] Сценарий `UITests/KeyboardOnlyPageTests.swift`: ⌘N, название, Enter, `# ` заголовок, `- ` три пункта — только клавиши, укладывается в 10 с (SC-006; contracts/editor-interactions.md)
+- [ ] T038 [P] [US3] Сценарий `UITests/BlockEditingTests.swift`: все типы блоков, меню «/» с поиском, щелчок по чекбоксу, перетаскивание блока мышью, ⌘Z/⇧⌘Z, перезапуск (сценарии 3.1–3.5)
 
 ### Реализация US3
 
-- [ ] T037 [US3] Отрисовка блоков в `PK/Sources/PageEditor/BlockLayoutFragment.swift`: заголовки, маркеры и номера списков, квадраты чекбоксов (щелчок переключает), отступы; маркеры не входят в текст (R2)
-- [ ] T038 [US3] Быстрые символы и смена типа в `PK/Sources/PageEditor/MarkdownShortcuts.swift`
-- [ ] T039 [US3] Меню «/» с поиском по названию в `PK/Sources/PageEditor/SlashCommandMenu.swift`; Esc закрывает, оставляя `/`
-- [ ] T040 [US3] Вложенность, перестановка клавишами и перетаскиванием блока в `PK/Sources/PageEditor/BlockMoveController.swift`
-- [ ] T041 [US3] Оформление в строке, меню «Формат» (включая «Формат → Ссылка») и вставка в `PK/Sources/PageEditor/InlineFormatting.swift` и `App/MyNotionApp.swift`
-- [ ] T042 [US3] Блок `pageLink`: показ названия подстраницы, переход по щелчку, в `PK/Sources/PageEditor/PageLinkAttachment.swift`
-- [ ] T043 [US3] Единая отмена для смены типа, перестановки и вложенности в `PK/Sources/PageEditor/PageTextView.swift` (FR-012)
-- [ ] T044 [P] [US3] Замер отклика в `PerformanceTests/TypingAndNavigationTests.swift`: 200 нажатий в странице на 1 000 блоков и переходы между страницами на эталонной базе, p95 ≤ 50 мс через signpost; страница на 10 000 блоков прокручивается и набирается без превышения
+- [ ] T039 [US3] Отрисовка блоков в `PK/Sources/PageEditor/BlockLayoutFragment.swift`: заголовки, маркеры и номера списков, квадраты чекбоксов (щелчок переключает), отступы; маркеры не входят в текст (R2)
+- [ ] T040 [US3] Быстрые символы и смена типа в `PK/Sources/PageEditor/MarkdownShortcuts.swift`
+- [ ] T041 [US3] Меню «/» с поиском по названию в `PK/Sources/PageEditor/SlashCommandMenu.swift`; Esc закрывает, оставляя `/`
+- [ ] T042 [US3] Вложенность, перестановка клавишами и перетаскиванием блока в `PK/Sources/PageEditor/BlockMoveController.swift`
+- [ ] T043 [US3] Оформление в строке, меню «Формат» (включая «Формат → Ссылка») и вставка в `PK/Sources/PageEditor/InlineFormatting.swift` и `App/MyNotionApp.swift`
+- [ ] T044 [US3] Блок `pageLink`: показ названия подстраницы, переход по щелчку, в `PK/Sources/PageEditor/PageLinkAttachment.swift`
+- [ ] T045 [US3] Единая отмена для смены типа, перестановки и вложенности в `PK/Sources/PageEditor/PageTextView.swift` (FR-012)
+- [ ] T046 [P] [US3] Замер отклика в `PerformanceTests/TypingAndNavigationTests.swift`: 200 нажатий в странице на 1 000 блоков и переходы между страницами на эталонной базе, p95 ≤ 50 мс через signpost; страница на 10 000 блоков прокручивается и набирается без превышения
 
-**Checkpoint**: Полноценный редактор. Коммит.
+**Checkpoint**: Полноценный редактор. Сборка, затронутые тесты и замеры (`PerformanceTests`), показ Юрию, коммит.
 
 ---
 
@@ -151,17 +153,17 @@ description: "Задачи: минимальное ядро MyNotion для macO
 
 ### Тесты US4 (сначала, должны упасть)
 
-- [ ] T045 [P] [US4] Тест поиска в `PK/Tests/QuickSearchTests/PageSearchTests.swift`: поиск по началу слова в названии и тексте, кириллица и латиница, регистр не важен, «Страницы в корзине из выдачи исключаются», индекс обновлён в той же транзакции, что и запись
-- [ ] T046 [P] [US4] Сценарий `UITests/QuickSearchTests.swift`: ⇧⌘F, ввод слова, ↓, Enter открывает страницу (сценарий 4.1)
+- [ ] T047 [P] [US4] Тест поиска в `PK/Tests/PageSearchTests/PageSearchTests.swift`: поиск по началу слова в названии и тексте, кириллица и латиница, регистр не важен, «Страницы в корзине из выдачи исключаются», индекс обновлён в той же транзакции, что и запись
+- [ ] T048 [P] [US4] Сценарий `UITests/PageSearchUITests.swift`: ⇧⌘F, ввод слова, ↓, Enter открывает страницу (сценарий 4.1)
 
 ### Реализация US4
 
-- [ ] T047 [US4] Обновление `search_index` подписчиком изменений в `PK/Sources/QuickSearch/SearchIndexer.swift`
-- [ ] T048 [US4] Запрос FTS5 и ранжирование (сначала совпадения в названии) в `PK/Sources/QuickSearch/PageSearch.swift`
-- [ ] T049 [US4] Поле поиска и список результатов вверху боковой панели в `PK/Sources/QuickSearch/SidebarSearchField.swift`; подключение в `App/MainWindow/MainWindowView.swift`, ⇧⌘F фокусирует поле
-- [ ] T050 [P] [US4] Замер в `PerformanceTests/SearchTests.swift`: ≤ 100 мс на символ по эталонной базе (SC-009)
+- [ ] T049 [US4] Обновление `search_index` через хук транзакции ядра (та же транзакция, что запись) в `PK/Sources/PageSearch/SearchIndexer.swift`
+- [ ] T050 [US4] Запрос FTS5 и ранжирование (сначала совпадения в названии) в `PK/Sources/PageSearch/PageSearch.swift`
+- [ ] T051 [US4] Поле поиска и список результатов вверху боковой панели в `PK/Sources/PageSearch/SidebarSearchField.swift`; подключение в `App/MainWindow/MainWindowView.swift`, ⇧⌘F фокусирует поле
+- [ ] T052 [P] [US4] Замер в `PerformanceTests/SearchTests.swift`: ≤ 100 мс на символ по эталонной базе (SC-009)
 
-**Checkpoint**: Поиск работает. Коммит.
+**Checkpoint**: Поиск работает. Сборка, затронутые тесты и замеры (`PerformanceTests`), показ Юрию, коммит.
 
 ---
 
@@ -171,11 +173,11 @@ description: "Задачи: минимальное ядро MyNotion для macO
 
 **Может идти параллельно с US4.**
 
-- [ ] T051 [P] Тест выгрузки в `PK/Tests/MarkdownExportTests/MarkdownExporterTests.swift` по таблице contracts/files-import-export.md: все типы блоков и оформление, папки подстраниц, замена `/` и `:` на `-`, ` (2)` для одинаковых соседей, корзина не выгружается
-- [ ] T052 `MarkdownBlockWriter` в `PK/Sources/MarkdownExport/MarkdownBlockWriter.swift` и `MarkdownExporter` в `PK/Sources/MarkdownExport/MarkdownExporter.swift` (папка `MyNotion-выгрузка-<ГГГГ-ММ-ДД>/`)
-- [ ] T053 Команда меню «Выгрузить в Markdown…» (⌘⇧E) с выбором папки в `App/Settings/ExportCommand.swift`
+- [ ] T053 [P] Тест выгрузки в `PK/Tests/MarkdownExportTests/MarkdownExporterTests.swift` по таблице contracts/files-import-export.md: все типы блоков и оформление, папки подстраниц, замена `/` и `:` на `-`, ` (2)` для одинаковых соседей, корзина не выгружается
+- [ ] T054 `MarkdownBlockWriter` в `PK/Sources/MarkdownExport/MarkdownBlockWriter.swift` и `MarkdownExporter` в `PK/Sources/MarkdownExport/MarkdownExporter.swift` (папка `MyNotion-выгрузка-<ГГГГ-ММ-ДД>/`)
+- [ ] T055 Команда меню «Выгрузить в Markdown…» (⌘⇧E) с выбором папки в `App/Settings/ExportCommand.swift`
 
-**Checkpoint**: Записи можно забрать в обычные файлы. Коммит.
+**Checkpoint**: Записи можно забрать в обычные файлы. Сборка, затронутые тесты и замеры (`PerformanceTests`), показ Юрию, коммит.
 
 ---
 
@@ -185,43 +187,46 @@ description: "Задачи: минимальное ядро MyNotion для macO
 
 **Independent Test**: Два клиента с локальным сервером: правка доходит, правки без связи сливаются, конфликт текста даёт выбор, 0 потерь.
 
-**Серверная часть (T054–T063) может начаться сразу после Phase 1** — она не зависит от модулей приложения.
+**Серверная часть (T056–T065) может начаться сразу после Phase 1** — она не зависит от модулей приложения.
 
 ### Сервер: тесты (сначала, должны упасть)
 
-- [ ] T054 [P] [US5] Создать `server/package.json` (pnpm, Node 22, Hono, better-sqlite3, Vitest, TypeScript), `server/tsconfig.json`; `pnpm install`, коммит `pnpm-lock.yaml`
-- [ ] T055 [P] [US5] Контрактные тесты в `server/test/devices.test.ts`: `/devices/invite` → 201 со сроком 15 минут и одним использованием; `/devices/join` → 201 или 410; `GET /devices`; `DELETE /devices/{id}` → 204, затем 401 для этого токена; хранится только sha256 токена
-- [ ] T056 [P] [US5] Контрактные тесты в `server/test/journal.test.ts`: `POST /changes` → 201 с `seq`, повтор `batchId` → 200 с тем же `seq`, больше 4 МБ → `too_large`; `GET /changes` отдаёт до 200 пачек и `hasMore`, долгое ожидание отвечает сразу при новой пачке (подменённые часы, один живой случай), `410 log_compacted` после сжатия; `/ack`; `PUT/GET /snapshot` и удаление пачек ≤ seq после подтверждения всеми активными устройствами; единый вид ошибок
+- [ ] T056 [P] [US5] Создать `server/package.json` (pnpm, Node 22, Hono, better-sqlite3, Vitest, TypeScript), `server/tsconfig.json`; `pnpm install`, коммит `pnpm-lock.yaml`
+- [ ] T057 [P] [US5] Контрактные тесты в `server/test/devices.test.ts`: `/devices/invite` → 201 со сроком 15 минут и одним использованием; `/devices/join` → 201 или 410; `GET /devices`; `DELETE /devices/{id}` → 204, затем 401 для этого токена; хранится только sha256 токена
+- [ ] T058 [P] [US5] Контрактные тесты в `server/test/journal.test.ts`: `POST /changes` → 201 с `seq`, повтор `batchId` → 200 с тем же `seq`, больше 4 МБ → `too_large`; `GET /changes` отдаёт до 200 пачек и `hasMore`, долгое ожидание отвечает сразу при новой пачке (подменённые часы, один живой случай), `410 log_compacted` после сжатия; `/ack`; `PUT/GET /snapshot` и удаление пачек ≤ seq после подтверждения всеми активными устройствами; единый вид ошибок
 
 ### Сервер: реализация
 
-- [ ] T057 [US5] Устройства и приглашения в `server/src/devices.ts`
-- [ ] T058 [US5] Журнал, долгое ожидание, снимки и сжатие в `server/src/journal.ts`
-- [ ] T059 [US5] Маршруты, авторизация `Bearer`, `/health`, лимиты тела в `server/src/app.ts`; запуск в `server/src/main.ts` (порт из `PORT`, база в `DATA_DIR`)
-- [ ] T060 [US5] Команда `mynotion-sync bootstrap` (создаёт первое устройство и печатает токен один раз) в `server/src/bootstrap.ts`
-- [ ] T061 [US5] `server/Dockerfile` и `server/docker-compose.yml`: том для `DATA_DIR`, `restart: unless-stopped`, проверка `/health`
-- [ ] T062 [US5] Развернуть на индонезийском сервере по скиллу server-deploy: `/opt/apps/mynotion-sync`, Nginx и сертификат для `mynotion.kurilov.cloud` (`proxy_read_timeout` ≥ 35 с для долгого ожидания), ежедневная копия файла базы; гейт «прод жив»: `https://mynotion.kurilov.cloud/health` → 200
-- [ ] T063 [US5] Токен первого устройства передать через secret-handoff в `~/.codex/secrets/mynotion-sync-device.env`; в чат, файлы проекта и коммиты не попадает
+- [ ] T059 [US5] Устройства и приглашения в `server/src/devices.ts`
+- [ ] T060 [US5] Журнал, долгое ожидание, снимки и сжатие в `server/src/journal.ts`
+- [ ] T061 [US5] Маршруты, авторизация `Bearer`, `/health`, лимиты тела в `server/src/app.ts`; запуск в `server/src/main.ts` (порт из `PORT`, база в `DATA_DIR`)
+- [ ] T062 [US5] Команда `mynotion-sync bootstrap` (создаёт первое устройство и печатает токен один раз) в `server/src/bootstrap.ts`
+- [ ] T063 [US5] `server/Dockerfile` и `server/docker-compose.yml`: том для `DATA_DIR`, `restart: unless-stopped`, проверка `/health`
+- [ ] T064 [US5] Развернуть на индонезийском сервере по скиллу server-deploy: `/opt/apps/mynotion-sync`, Nginx и сертификат для `mynotion.kurilov.cloud` (`proxy_read_timeout` ≥ 35 с для долгого ожидания), ежедневная копия файла базы; гейт «прод жив»: `https://mynotion.kurilov.cloud/health` → 200
+- [ ] T065 [US5] Токен первого устройства передать через secret-handoff в `~/.codex/secrets/mynotion-sync-device.env`; в чат, файлы проекта и коммиты не попадает
 
 ### Приложение: тесты (сначала, должны упасть)
 
-- [ ] T064 [P] [US5] Тест слияния в `PK/Tests/SyncTests/ChangeMergerTests.swift` по R8: поля страницы и блока — побеждает поздний HLC; одновременная правка текста одного блока → `Conflict` с обеими версиями; перенос с петлёй отклоняется; правка страницы из корзины возвращает её и даёт уведомление; разное перемещение одной ветки на двух Mac сходится к одному дереву; применение одной пачки дважды ничего не меняет
-- [ ] T065 [P] [US5] Тест шифрования в `PK/Tests/SyncTests/BatchCipherTests.swift`: ChaChaPoly, свой nonce на пачку, `deviceId` и `batchId` проверяются; подменённая пачка отвергается; `formatVersion` новее известного — пачка ждёт с сообщением «обновите MyNotion на этом Mac»
-- [ ] T066 [P] [US5] Тест сходимости в `PK/Tests/SyncTests/SyncConvergenceTests.swift`: два клиента и сервер из `server/` (запуск на свободном порту, своя база); правка доходит; оба без связи правят, связь возвращается — 0 потерянных правок (SC-008); сжатие журнала и подключение третьего клиента со снимка
-- [ ] T067 [P] [US5] Тест отключения в `PK/Tests/SyncTests/SyncToggleTests.swift`: выключение удаляет `SyncAccount` и очередь, записи не меняются, ядро работает (FR-024)
+- [ ] T066 [P] [US5] Тест слияния в `PK/Tests/SyncTests/ChangeMergerTests.swift` по R8: поля страницы и блока — побеждает поздний HLC; одновременная правка текста одного блока → `Conflict` с обеими версиями; перенос с петлёй отклоняется; правка страницы из корзины возвращает её и даёт уведомление; правка страницы, стёртой навсегда на другом Mac без знания о правке, возвращает её в корзину на всех Mac с уведомлением; стирание навсегда побеждает правки, сделанные до него; разное перемещение одной ветки на двух Mac сходится к одному дереву; надгробия и помеченные блоки стираются только после подтверждения всеми устройствами; применение одной пачки дважды ничего не меняет
+- [ ] T067 [P] [US5] Тест шифрования в `PK/Tests/SyncTests/BatchCipherTests.swift`: ChaChaPoly, свой nonce на пачку, `deviceId` и `batchId` проверяются; подменённая пачка отвергается; `formatVersion` новее известного — пачка ждёт с сообщением «обновите MyNotion на этом Mac»
+- [ ] T068 [P] [US5] Тест сходимости в `PK/Tests/SyncTests/SyncConvergenceTests.swift`: два клиента и сервер из `server/` (запуск на свободном порту, своя база); правка доходит не позже 10 с (SC-007); оба без связи правят, связь возвращается — 0 потерянных правок (SC-008); сжатие журнала и подключение третьего клиента со снимка
+- [ ] T069 [P] [US5] Тест открытой страницы в `PK/Tests/SyncTests/OpenDocumentRemoteApplyTests.swift`: пришедшая правка чужого блока появляется в открытом `PageDocument` без сдвига курсора; правка блока, который сейчас набирается, становится `Conflict`; последующее автосохранение не затирает пришедшую правку (research R4, R5)
+- [ ] T070 [P] [US5] Тест отключения в `PK/Tests/SyncTests/SyncToggleTests.swift`: выключение удаляет `SyncAccount` и очередь, записи не меняются, ядро работает (FR-024)
 
 ### Приложение: реализация
 
-- [ ] T068 [US5] Очередь исходящих в `PK/Sources/Sync/Outbox.swift`: подписчик изменений `NotesStore` кладёт `OutboxEntry` в той же транзакции, только если Sync включён
-- [ ] T069 [US5] `BatchCipher` в `PK/Sources/Sync/BatchCipher.swift`; ключ и токен устройства в связке ключей в `PK/Sources/Sync/SyncKeychain.swift`
-- [ ] T070 [US5] `ChangeMerger` в `PK/Sources/Sync/ChangeMerger.swift` и запись конфликтов в таблицу conflict
-- [ ] T071 [US5] Клиент сервера в `PK/Sources/Sync/SyncClient.swift` по contracts/sync-api.md: отправка с повтором, долгое ожидание 25 с, `/ack`, снимок при `410`, повтор с паузой при отсутствии сети
-- [ ] T072 [US5] `SyncEngine` в `PK/Sources/Sync/SyncEngine.swift`: цикл отправки и получения, применение пачек, периодический снимок; состояние «готово / отправка / ошибка»
-- [ ] T073 [US5] Подключение Mac в `App/Settings/SyncSettingsView.swift`: включить с токеном первого устройства; «Добавить Mac» показывает код (приглашение + ключ шифрования); ввод кода на втором Mac; список устройств и отключение
-- [ ] T074 [US5] Значок синхронизации внизу боковой панели в `PK/Sources/PageTree/SyncStatusBadge.swift` (FR-022)
-- [ ] T075 [US5] Метка «Две версии» и окно сравнения с выбором (одна версия или обе двумя блоками) в `PK/Sources/PageEditor/ConflictResolutionView.swift`; уведомление о возврате страницы из корзины
+- [ ] T071 [US5] Очередь исходящих в `PK/Sources/Sync/Outbox.swift`: хук транзакции `NotesStore` кладёт `OutboxEntry` в той же транзакции, только если Sync включён
+- [ ] T072 [US5] `BatchCipher` в `PK/Sources/Sync/BatchCipher.swift`; ключ и токен устройства в связке ключей в `PK/Sources/Sync/SyncKeychain.swift`
+- [ ] T073 [US5] `ChangeMerger` в `PK/Sources/Sync/ChangeMerger.swift` и запись конфликтов в таблицу conflict
+- [ ] T074 [US5] Доставка пришедших правок в открытые документы: `PageDocument.applyExternalChanges` в `PK/Sources/NotesCore/Document/PageDocument.swift` и `RemoteChangeApplier` в `PK/Sources/Sync/RemoteChangeApplier.swift`
+- [ ] T075 [US5] Клиент сервера в `PK/Sources/Sync/SyncClient.swift` по contracts/sync-api.md: отправка с повтором, долгое ожидание 25 с, `/ack`, снимок при `410`, повтор с паузой при отсутствии сети
+- [ ] T076 [US5] `SyncEngine` в `PK/Sources/Sync/SyncEngine.swift`: цикл отправки и получения, применение пачек, периодический снимок; состояние «готово / отправка / ошибка»
+- [ ] T077 [US5] Сборщик надгробий в `PK/Sources/Sync/TombstoneCollector.swift`: стирает надгробия страниц и помеченные блоки после подтверждения всеми устройствами (`GET /devices`, `lastAckSeq`); при выключенном Sync — сразу
+- [ ] T078 [US5] Подключение Mac в `App/Settings/SyncSettingsView.swift`: включить с токеном первого устройства; «Добавить Mac» показывает код (приглашение + ключ шифрования); ввод кода на втором Mac; рядом с кодом предупреждение «Код открывает все записи. Не пересылайте его в мессенджерах — введите вручную»; список устройств и отключение
+- [ ] T079 [US5] Значок синхронизации внизу боковой панели в `PK/Sources/PageTree/SyncStatusBadge.swift` (FR-022)
+- [ ] T080 [US5] Метка «Две версии» и окно сравнения с выбором (одна версия или обе двумя блоками) в `PK/Sources/PageEditor/ConflictResolutionView.swift`; уведомление о возврате страницы из корзины
 
-**Checkpoint**: Записи на всех Mac. Живая проверка на двух Mac по quickstart.md. Коммит.
+**Checkpoint**: Записи на всех Mac. Живая проверка на двух Mac по quickstart.md. Сборка, затронутые тесты и замеры (`PerformanceTests`), показ Юрию, коммит.
 
 ---
 
@@ -233,29 +238,29 @@ description: "Задачи: минимальное ядро MyNotion для macO
 
 ### Тесты US6 (сначала, должны упасть)
 
-- [ ] T076 [P] [US6] Образец выгрузки в `PK/Tests/Fixtures/notion-export/`: 3 уровня страниц с хвостами `<32 hex>`, все поддерживаемые блоки, CSV-таблица, картинка, toggle, callout, цитата, код-блок, ссылки между страницами, вложенный ZIP
-- [ ] T077 [P] [US6] Тест разбора в `PK/Tests/NotionImportTests/NotionMarkdownParserTests.swift`: поддерживаемое → блоки по таблице contracts/files-import-export.md; круговой тест «наша выгрузка → разбор → те же блоки»
-- [ ] T078 [P] [US6] Тест импорта в `PK/Tests/NotionImportTests/NotionImporterTests.swift`: вложенность из путей; CSV → «Колонка: значение»; файлы → «[файл: имя]»; неподдерживаемое → абзацы с текстом; ссылки между страницами → pageLink или текст; ветка «Импорт из Notion — <дата>»; отчёт; прерванный импорт откатывает ветку; повтор с тем же `sourceFingerprint` — предупреждение до начала
-- [ ] T079 [P] [US6] Замер в `PerformanceTests/NotionImportPerformanceTests.swift`: сгенерированная выгрузка на 1 000 страниц ≤ 60 с, окно отвечает во время импорта (SC-010)
+- [ ] T081 [P] [US6] Образец выгрузки в `PK/Tests/Fixtures/notion-export/`: 3 уровня страниц с хвостами `<32 hex>`, все поддерживаемые блоки, CSV-таблица, картинка, toggle, callout, цитата, код-блок, ссылки между страницами, вложенный ZIP
+- [ ] T082 [P] [US6] Тест разбора в `PK/Tests/NotionImportTests/NotionMarkdownParserTests.swift`: поддерживаемое → блоки по таблице contracts/files-import-export.md; круговой тест «наша выгрузка → разбор → те же блоки»
+- [ ] T083 [P] [US6] Тест импорта в `PK/Tests/NotionImportTests/NotionImporterTests.swift`: вложенность из путей; CSV → «Колонка: значение»; файлы → «[файл: имя]»; неподдерживаемое → абзацы с текстом; ссылки между страницами → pageLink или текст; ветка «Импорт из Notion — <дата>»; отчёт; прерванный импорт откатывает ветку; повтор с тем же `sourceFingerprint` — предупреждение до начала
+- [ ] T084 [P] [US6] Замер в `PerformanceTests/NotionImportPerformanceTests.swift`: сгенерированная выгрузка на 1 000 страниц ≤ 60 с, окно отвечает во время импорта (SC-010)
 
 ### Реализация US6
 
-- [ ] T080 [US6] Распаковка через `/usr/bin/ditto -x -k` во временную папку, включая вложенные ZIP, в `PK/Sources/NotionImport/NotionExportUnpacker.swift`
-- [ ] T081 [US6] Разбор Markdown-подмножества Notion в `PK/Sources/NotionImport/NotionMarkdownParser.swift`
-- [ ] T082 [US6] `NotionImporter` в `PK/Sources/NotionImport/NotionImporter.swift`: обход папок, CSV, ссылки, транзакция на ветку, `ImportRun` со статусами running, finished, failed, ход работы
-- [ ] T083 [US6] Команда «Импорт из Notion…», прогресс и окно отчёта в `App/Settings/NotionImportView.swift`
+- [ ] T085 [US6] Распаковка через `/usr/bin/ditto -x -k` во временную папку, включая вложенные ZIP, в `PK/Sources/NotionImport/NotionExportUnpacker.swift`
+- [ ] T086 [US6] Разбор Markdown-подмножества Notion в `PK/Sources/NotionImport/NotionMarkdownParser.swift`
+- [ ] T087 [US6] `NotionImporter` в `PK/Sources/NotionImport/NotionImporter.swift`: обход папок, CSV, ссылки, транзакция на ветку, `ImportRun` со статусами running, finished, failed, ход работы
+- [ ] T088 [US6] Команда «Импорт из Notion…», прогресс и окно отчёта в `App/Settings/NotionImportView.swift`
 
-**Checkpoint**: Переезд из Notion. Коммит.
+**Checkpoint**: Переезд из Notion. Сборка, затронутые тесты и замеры (`PerformanceTests`), показ Юрию, коммит.
 
 ---
 
 ## Phase 10: Polish & Cross-Cutting Concerns
 
-- [ ] T084 Светлая и тёмная тема: снимки главного окна, дерева, редактора, полос и окна конфликта в `UITests/AppearanceSnapshotTests.swift` (FR-028)
-- [ ] T085 Несколько окон: одна страница в двух окнах, набор в обоих — текст общий, без потерь, в `UITests/MultiWindowTests.swift` (FR-029)
-- [ ] T086 Крайние случаи из spec: глубокое дерево 10+ уровней читаемо, нет места на диске (подменённый отказ записи) — предупреждение без потери текста; дополнить `UITests/PageTreeTests.swift` и `PK/Tests/NotesCoreTests/SaveFailureTests.swift`
-- [ ] T087 Полный прогон: `xcodebuild test -scheme MyNotion`, `xcodebuild test -scheme MyNotionPerformance -configuration Release` на эталонной базе, `pnpm test` в `server/`; результаты замеров записать в `specs/001-core-pages-editor/quickstart.md`
-- [ ] T088 Сборка Release, установка в `/Applications/MyNotion.app`, ручная проверка по quickstart.md
+- [ ] T089 Светлая и тёмная тема: снимки главного окна, дерева, редактора, полос и окна конфликта в `UITests/AppearanceSnapshotTests.swift` (FR-028)
+- [ ] T090 Несколько окон: одна страница в двух окнах, набор в обоих — текст общий, без потерь, в `UITests/MultiWindowTests.swift` (FR-029)
+- [ ] T091 Крайние случаи из spec: глубокое дерево 10+ уровней читаемо, нет места на диске (подменённый отказ записи) — предупреждение без потери текста; дополнить `UITests/PageTreeTests.swift` и `PK/Tests/NotesCoreTests/SaveFailureTests.swift`
+- [ ] T092 Полный прогон: `xcodebuild test -scheme MyNotion`, `xcodebuild test -scheme MyNotionPerformance -configuration Release` на эталонной базе, `pnpm test` в `server/`; результаты замеров записать в `specs/001-core-pages-editor/quickstart.md`
+- [ ] T093 Сборка Release, установка в `/Applications/MyNotion.app`, ручная проверка по quickstart.md
 
 ---
 
@@ -267,7 +272,7 @@ description: "Задачи: минимальное ядро MyNotion для macO
 - **US1 (3)** — после фазы 2. MVP.
 - **US2 (4)** и **US3 (5)** — после US1, параллельно друг другу.
 - **US4 (6)** и **Выгрузка (7)** — после US2 и US3, параллельно друг другу.
-- **US5 (8)**: сервер (T054–T063) — сразу после фазы 1, параллельно всему; приложение (T064–T075) — после US2 и US3.
+- **US5 (8)**: сервер (T056–T065) — сразу после фазы 1, параллельно всему; приложение (T066–T080) — после US2 и US3.
 - **US6 (9)** — после US3 и выгрузки (общий круговой тест Markdown).
 - **Polish (10)** — после всех.
 
@@ -279,8 +284,8 @@ description: "Задачи: минимальное ядро MyNotion для macO
 
 | Окно | Агент A | Агент B | Агент C |
 |------|---------|---------|---------|
-| После фазы 2 | US1 | Сервер T054–T061 | — |
-| После US1 | US2 | US3 | Сервер T062–T063 (деплой) |
+| После фазы 2 | US1 | Сервер T056–T063 | — |
+| После US1 | US2 | US3 | Сервер T064–T065 (деплой) |
 | После US2+US3 | US4 | Выгрузка | US5-приложение |
 | После выгрузки | US6 | — | — |
 
@@ -288,13 +293,17 @@ description: "Задачи: минимальное ядро MyNotion для macO
 
 ```text
 Агент пишет одновременно (разные файлы):
-T033 MarkdownShortcutTests.swift
-T034 BlockStructureTests.swift
-T035 InlineStyleTests.swift
-T036 BlockEditingTests.swift
+T034 MarkdownShortcutTests.swift
+T035 BlockStructureTests.swift
+T036 InlineStyleTests.swift
+T038 BlockEditingTests.swift
 ```
 
 ## Implementation Strategy
+
+### Ветка
+
+Вся стройка — в ветке `001-core-pages-editor` (параллельные агенты — в своих worktree от неё); в `main` — после T092.
 
 ### MVP
 
