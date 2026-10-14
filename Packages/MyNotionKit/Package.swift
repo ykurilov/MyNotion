@@ -29,7 +29,7 @@ let package = Package(
         .target(name: "Sync", dependencies: ["NotesCore"]),
 
         .testTarget(name: "VisualStyleTests", dependencies: ["VisualStyle"]),
-        .testTarget(name: "NotesCoreTests", dependencies: ["NotesCore"]),
+        .testTarget(name: "NotesCoreTests", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "PageTreeTests", dependencies: ["PageTree"]),
         .testTarget(name: "PageEditorTests", dependencies: ["PageEditor"]),
         .testTarget(name: "PageSearchTests", dependencies: ["PageSearch"]),
