@@ -1,50 +1,86 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+Sync Impact Report
+- Version change: template → 1.0.0 (первая редакция)
+- Modified principles: все пять заполнены с нуля, добавлен шестой
+- Added sections: «Технические рамки», «Порядок работы»
+- Removed sections: нет
+- Templates: plan/spec/tasks читают конституцию при запуске, не правились
+- Deferred TODOs: нет. Принцип IV (данные локально) выведен из целей, ждёт подтверждения Юрия
+-->
+
+# MyNotion Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Только нужное
+MyNotion — личный инструмент Юрия, а не продукт для всех.
+- Ядро повторяет ранний Notion: страницы, вложенность страниц, блоки текста, редактирование.
+- Каждая новая функция появляется только по явному решению Юрия.
+- Функцию, которой не пользуются, удаляют, а не прячут.
+- Предложение «добавить на всякий случай» — повод отказаться.
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+Почему: Notion испортился именно от функций «для кого-то другого».
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### II. Лёгкость и скорость
+Приложение обязано оставаться лёгким при любом объёме записей.
+- Холодный запуск — не дольше 1 секунды.
+- Память в покое — не больше 200 МБ.
+- Набор текста и переход между страницами — без заметной задержки (до 50 мс).
+- Новая зависимость допускается, только если без неё нельзя; её вес обосновывается в плане.
+- Замеры скорости и памяти проводятся в конце каждого этапа; регресс — повод чинить до слияния.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+Почему: вторая причина ухода от Notion — он «жрёт ресурсы».
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### III. macOS прежде всего
+- Целевая платформа одна: macOS. Windows и Linux не поддерживаются и не тестируются.
+- Приложение ведёт себя как родное для Mac: привычные сочетания клавиш, меню, тёмная тема системы.
+- Удобство работы с клавиатуры важнее мыши.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+Почему: Юрий работает на Mac, на PC приложение не планируется.
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### IV. Данные у владельца
+- Записи хранятся локально на Mac Юрия, работают без интернета.
+- Формат хранения открытый и читаемый (например, Markdown или SQLite), без закрытого облака.
+- Экспорт всех записей в обычные файлы доступен всегда.
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+Почему: полный контроль над приложением включает контроль над своими записями.
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+### V. Маленькое ядро и отдельные добавки
+- Ядро (страницы, блоки, хранение) держится минимальным и стабильным.
+- Собственные добавки Юрия подключаются отдельными модулями с тонким интерфейсом к ядру.
+- Удаление добавки не ломает ядро и не портит данные.
+- Код описывает себя сам: предметные названия файлов, функций и переменных.
+
+Почему: так можно наращивать «свои штуки», не превращаясь снова в Notion.
+
+### VI. Тесты по делу
+- Новый модуль или существенная возможность — по TDD: тесты сначала, красные по нужной причине, затем зелёные все.
+- Мелкие правки — без новых тестов, с проверкой затронутого.
+- Тесты под код не подгоняются.
+
+Почему: ядро с данными Юрия нельзя ломать незаметно.
+
+## Технические рамки
+
+- Стек выбирается на этапе плана; главный критерий — соответствие принципу II.
+- Тяжёлые оболочки, тянущие целый браузер, допускаются, только если план докажет выполнение лимитов принципа II.
+- Если в проекте есть Node.js — менеджер пакетов pnpm, файл-замок коммитится.
+- Учётные записи, серверы и синхронизация между устройствами — вне ядра; появляются только отдельной добавкой по решению Юрия.
+
+## Порядок работы
+
+- Работа идёт вертикальными срезами: каждый этап даёт законченную пользу, которую можно открыть и потрогать.
+- Новая возможность или правка нескольких модулей — цикл «спецификация → план → задачи».
+  Небольшая доработка — короткий план и тесты.
+- Коммит после каждого законченного этапа.
+- Полный прогон всех тестов — один раз перед вливанием в основную ветку.
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+- Конституция главнее остальных практик проекта. Планы и задачи сверяются с ней.
+- Изменение конституции — только с согласия Юрия, с записью версии и даты.
+- Версии: MAJOR — удаление или переопределение принципа; MINOR — новый принцип или раздел;
+  PATCH — уточнения формулировок.
+- Нарушение принципа в плане допускается только с письменным обоснованием в разделе сложности плана.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 1.0.0 | **Ratified**: 2026-10-15 | **Last Amended**: 2026-10-15
