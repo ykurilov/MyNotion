@@ -24,7 +24,7 @@ enum PageLinkPainter {
     static var titleFont: NSFont { Typography.pageLinkTitle.font }
 
     static func draw(_ page: LinkedPage?, column: CGRect, textStart: CGFloat, baseline: CGFloat, maxX: CGFloat) {
-        drawIcon(page?.icon, in: column)
+        drawIcon(page?.icon, in: column, centerY: baseline - titleFont.capHeight / 2)
         let title = page?.displayTitle ?? Page.untitledTitle
         let color = page == nil || page?.title.isEmpty == true ? Palette.textSecondary : Palette.textPrimary
         let line = truncatedLine(title, width: max(0, maxX - textStart))
@@ -37,10 +37,10 @@ enum PageLinkPainter {
         underline.fill()
     }
 
-    /// Эмодзи страницы или значок документа по центру колонки маркера.
-    private static func drawIcon(_ icon: String?, in column: CGRect) {
+    /// Эмодзи страницы или значок документа по центру колонки маркера, на высоте середины заглавных букв названия.
+    private static func drawIcon(_ icon: String?, in column: CGRect, centerY: CGFloat) {
         let size = Metrics.PageLinkBlock.iconSize
-        let box = CGRect(x: column.midX - size / 2, y: column.midY - size / 2, width: size, height: size)
+        let box = CGRect(x: column.midX - size / 2, y: centerY - size / 2, width: size, height: size)
         if let icon, !icon.isEmpty {
             let font = NSFont.systemFont(ofSize: size * 0.85)
             let string = NSAttributedString(string: icon, attributes: [.font: font])

@@ -24,7 +24,7 @@ public enum Metrics {
         /// Внутренний отступ блока по краям текста.
         public static let blockHorizontalPadding: CGFloat = 2
         /// Сдвиг вложенного пункта на уровень.
-        public static let indentPerLevel: CGFloat = 36
+        public static let indentPerLevel: CGFloat = 32
     }
 
     /// Высота блока в одну строку вместе с отступами и отступ над ним.
@@ -53,10 +53,10 @@ public enum Metrics {
     /// Текст блока начинается за колонкой и промежутком (≈ по снимку).
     public enum BlockMarker {
         public static let columnWidth: CGFloat = 24
-        public static let textSpacing: CGFloat = 2
+        public static let textSpacing: CGFloat = 6
         public static var textInset: CGFloat { columnWidth + textSpacing }
         /// Маркеры `•` `◦` `▪` крупнее текста (≈ по снимку).
-        public static let bulletScale: CGFloat = 1.5
+        public static let bulletScale: CGFloat = 2.2
     }
 
     public enum PageLinkBlock {

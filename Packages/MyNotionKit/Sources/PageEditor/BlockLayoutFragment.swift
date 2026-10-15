@@ -25,10 +25,12 @@ struct BlockLine {
         return CGRect(x: x, y: top, width: Metrics.BlockMarker.columnWidth, height: height)
     }
 
+    /// Квадрат чекбокса по середине заглавных букв первой строки, как в Notion.
     var checkboxRect: CGRect {
         let size = Metrics.Checkbox.size
         let column = markerColumn
-        return CGRect(x: column.midX - size / 2, y: column.midY - size / 2, width: size, height: size)
+        let centerY = baseline - Typography.line(for: .listItem).font.capHeight / 2
+        return CGRect(x: column.midX - size / 2, y: centerY - size / 2, width: size, height: size)
     }
 
     /// Начало текста блока за колонкой маркера.
@@ -57,7 +59,10 @@ final class BlockLayoutFragment: NSTextLayoutFragment, @unchecked Sendable {
         let bounds = super.renderingSurfaceBounds
         // Колонка маркера лежит левее текста, название подстраницы — правее пустой строки.
         let containerWidth = textLayoutManager?.textContainer?.size.width ?? Metrics.Page.columnWidth
-        let wide = CGRect(x: -layoutFragmentFrame.minX, y: 0, width: containerWidth, height: layoutFragmentFrame.height)
+        // Добавочная строка пустого последнего блока рисуется ниже, с отступами блока (`trailingBlockLine`).
+        let isLast = textLayoutManager.map { rangeInElement.endLocation.compare($0.documentRange.endLocation) != .orderedAscending } ?? false
+        let wide = CGRect(x: -layoutFragmentFrame.minX, y: 0, width: containerWidth,
+                          height: layoutFragmentFrame.height + (isLast ? Metrics.Page.bottomPadding : 0))
         return bounds.union(wide)
     }
 
@@ -184,7 +189,7 @@ extension PageTextView {
         if text.length > 0, text.attribute(.trailingEmptyBlock, at: text.length - 1, effectiveRange: nil) != nil,
            let last = document.blocks.last, let decoration = decoration(for: last),
            let extra = fragment.textLineFragments.last, extra.characterRange.length == 0 {
-            result.append((decoration, blockLine(extra, in: fragment, indent: last.indent)))
+            result.append((decoration, trailingBlockLine(extra, in: fragment, block: last)))
         }
         return result
     }
@@ -193,6 +198,23 @@ extension PageTextView {
         let frame = fragment.layoutFragmentFrame
         let top = frame.minY + line.typographicBounds.minY
         return BlockLine(indent: indent, top: top, height: line.typographicBounds.height, baseline: top + line.glyphOrigin.y)
+    }
+
+    /// Добавочная строка пустого последнего блока. TextKit ставит её вплотную к строке выше, без отступов
+    /// абзацев, поэтому строка ниже на отступ после блока выше и отступ перед своим блоком — как у обычного блока.
+    private func trailingBlockLine(_ extra: NSTextLineFragment, in fragment: NSTextLayoutFragment, block: Block) -> BlockLine {
+        var line = blockLine(extra, in: fragment, indent: block.indent)
+        let lines = fragment.textLineFragments
+        guard lines.count > 1, let paragraph = fragment.textElement as? NSTextParagraph, paragraph.attributedString.length > 0 else {
+            return line
+        }
+        let gap = extra.typographicBounds.minY - lines[lines.count - 2].typographicBounds.maxY
+        let above = paragraph.attributedString.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
+        let own = PageTextStorageMapper.baseAttributes(for: block)[.paragraphStyle] as? NSParagraphStyle
+        let shift = max(0, (above?.paragraphSpacing ?? 0) + (own?.paragraphSpacingBefore ?? 0) - gap)
+        line.top += shift
+        line.baseline += shift
+        return line
     }
 
     func decoration(for block: Block) -> BlockDecoration? {
@@ -232,7 +254,7 @@ extension PageTextView {
         guard let fragment = textLayoutManager.textLayoutFragment(for: location) else { return nil }
         let line = isTrailing ? fragment.textLineFragments.last : fragment.textLineFragments.first
         guard let line, !isTrailing || line.characterRange.length == 0 else { return nil }
-        return blockLine(line, in: fragment, indent: block.indent)
+        return isTrailing ? trailingBlockLine(line, in: fragment, block: block) : blockLine(line, in: fragment, indent: block.indent)
     }
 
     /// Квадрат чекбокса в координатах окна текста.
