@@ -10,6 +10,8 @@ enum BlockDecoration: Equatable {
     case number(String)
     case checkbox(checked: Bool)
     case pageLink(LinkedPage?)
+    /// Подсказка пустого заголовка, пункта или чекбокса без курсора (contracts/visual-style.md, «Пустые строки»).
+    case placeholder(String, BlockTextStyle)
 }
 
 /// Строка блока на странице в координатах текстового контейнера.
@@ -18,6 +20,8 @@ struct BlockLine {
     var top: CGFloat
     var height: CGFloat
     var baseline: CGFloat
+    /// Где в пустой строке стоит курсор: начало текста блока.
+    var caretX: CGFloat = 0
 
     /// Колонка маркера: от края вложенности на ширину `Metrics.BlockMarker.columnWidth`.
     var markerColumn: CGRect {
@@ -101,6 +105,11 @@ enum BlockDecorationPainter {
         case .pageLink(let page):
             PageLinkPainter.draw(page, column: column, textStart: line.textStart + offset.x, baseline: baseline,
                                  maxX: offset.x + Metrics.Page.columnWidth)
+        case .placeholder(let hint, let style):
+            // Там же, где подсказка под курсором (`PageTextView.updateEmptyParagraphHint`): курсор не меняет её место.
+            let x = line.caretX + Metrics.Page.emptyHintCaretGap + PageTextView.hintLabelTextInset + offset.x
+            drawLine(textLine(hint, font: Typography.line(for: style).font), color: Palette.textSecondary,
+                     baselineOrigin: CGPoint(x: x, y: baseline))
         }
     }
 
@@ -191,19 +200,31 @@ enum BlockDecorationPainter {
 extension PageTextView {
     // MARK: Маркеры блоков
 
-    /// Что рисует фрагмент: маркер своего блока на первой строке.
+    /// Что рисует фрагмент на первой строке своего блока: маркер и подсказку пустого блока без курсора.
     func decoratedLines(in fragment: NSTextLayoutFragment) -> [(BlockDecoration, BlockLine)] {
         guard let paragraph = fragment.textElement as? NSTextParagraph, paragraph.attributedString.length > 0,
               let id = paragraph.attributedString.attribute(.blockID, at: 0, effectiveRange: nil) as? UUID,
-              let block = document.block(id), let decoration = decoration(for: block),
-              let line = fragment.textLineFragments.first else { return [] }
-        return [(decoration, blockLine(line, in: fragment, indent: block.indent))]
+              let block = document.block(id), let first = fragment.textLineFragments.first else { return [] }
+        let line = blockLine(first, in: fragment, indent: block.indent)
+        var lines: [(BlockDecoration, BlockLine)] = []
+        if let decoration = decoration(for: block) { lines.append((decoration, line)) }
+        let isEmpty = paragraph.attributedString.string.trimmingCharacters(in: .newlines).isEmpty
+        if isEmpty, block.id != emptyHintBlockID, let placeholder = Self.persistentPlaceholder(for: block.kind) {
+            lines.append((.placeholder(placeholder, PageTextStorageMapper.textStyle(of: block.kind)), line))
+        }
+        return lines
+    }
+
+    /// Подсказка, видная и без курсора: у заголовков, пунктов и чекбоксов, как в Notion. У абзаца — только под курсором.
+    static func persistentPlaceholder(for kind: BlockKind) -> String? {
+        kind == .paragraph ? nil : emptyBlockHint(for: kind)
     }
 
     private func blockLine(_ line: NSTextLineFragment, in fragment: NSTextLayoutFragment, indent: Int) -> BlockLine {
         let frame = fragment.layoutFragmentFrame
         let top = frame.minY + line.typographicBounds.minY
-        return BlockLine(indent: indent, top: top, height: line.typographicBounds.height, baseline: top + line.glyphOrigin.y)
+        let caretX = frame.minX + line.typographicBounds.minX + line.locationForCharacter(at: 0).x
+        return BlockLine(indent: indent, top: top, height: line.typographicBounds.height, baseline: top + line.glyphOrigin.y, caretX: caretX)
     }
 
     func decoration(for block: Block) -> BlockDecoration? {
@@ -275,6 +296,23 @@ extension PageTextView {
         }
         let offset = contentStorage.offset(from: contentStorage.documentRange.location, to: fragment.rangeInElement.location)
         return mapper.blockPosition(at: offset)?.index
+    }
+
+    /// Перерисовать строки блоков без пересчёта раскладки: подсказка без курсора появилась или пропала.
+    /// Пересчёт раскладки здесь не нужен и сдвигает строки ниже на время до следующей раскладки.
+    func redrawBlocks(_ ids: [UUID]) {
+        guard let textLayoutManager, let contentStorage = textContentStorage else { return }
+        let length = textStorage?.length ?? 0
+        for id in ids {
+            guard let index = document.index(ofBlock: id) else { continue }
+            let start = mapper.paragraphStart(ofBlockAt: index)
+            let end = index + 1 < document.blocks.count ? mapper.paragraphStart(ofBlockAt: index + 1) : length
+            guard let from = contentStorage.location(contentStorage.documentRange.location, offsetBy: start),
+                  let to = contentStorage.location(from, offsetBy: max(0, end - start)),
+                  let range = NSTextRange(location: from, end: to) else { continue }
+            textLayoutManager.invalidateRenderingAttributes(for: range)
+        }
+        needsDisplay = true
     }
 
     /// Перерисовать маркеры видимых блоков: номера и вид зависят от соседей.

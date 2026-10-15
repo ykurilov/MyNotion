@@ -11,6 +11,12 @@ public final class PageTextView: NSTextView {
     public let header: PageHeaderView
     private(set) var mapper: PageTextStorageMapper!
     let emptyParagraphHint = NSTextField(labelWithString: "Введите «/» для выбора блока")
+    /// Блок, у которого сейчас видна подсказка под курсором: его фрагмент свою подсказку не рисует.
+    private(set) var emptyHintBlockID: UUID? {
+        didSet { if emptyHintBlockID != oldValue { redrawBlocks([oldValue, emptyHintBlockID].compactMap { $0 }) } }
+    }
+    /// Поле-надпись рисует текст на 2 правее своего края.
+    static let hintLabelTextInset: CGFloat = 2
     /// Проверка орфографии при наборе включена в меню «Правописание» (FR-013).
     private var spellCheckingWanted = true
     /// Подложка под «/» с поиском, пока открыто меню «/».
@@ -415,6 +421,7 @@ public final class PageTextView: NSTextView {
     public override func resignFirstResponder() -> Bool {
         defer {
             emptyParagraphHint.isHidden = true
+            emptyHintBlockID = nil
             closePopups()
             updateSpellingMarks(isFocused: false)
         }
@@ -460,9 +467,11 @@ public final class PageTextView: NSTextView {
                 ? Self.slashQueryHint
                 : isAtEmptyParagraph(selection.location) ? Self.emptyBlockHint(for: document.blocks[position.index].kind) : nil else {
             emptyParagraphHint.isHidden = true
+            emptyHintBlockID = nil
             return
         }
         emptyParagraphHint.stringValue = hint
+        emptyHintBlockID = document.blocks[position.index].id
         let caretOnScreen = firstRect(forCharacterRange: selection, actualRange: nil)
         let caret = convert(window.convertFromScreen(caretOnScreen), from: nil)
         let font = typingAttributes[.font] as? NSFont ?? Typography.line(for: .paragraph).font

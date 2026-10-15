@@ -45,6 +45,39 @@ struct ViewPixels {
         return pointRect(columns: minX...maxX, rows: minY...maxY)
     }
 
+    /// Рамка нарисованного поверх сплошного фона `background` внутри `area`: точки, цвет которых отличается от фона
+    /// больше чем на `threshold`. Для видов, которые сами заливают фон.
+    func inkBounds(in area: NSRect, over background: (red: CGFloat, green: CGFloat, blue: CGFloat), threshold: CGFloat = 0.15) -> NSRect? {
+        var minX = Int.max, minY = Int.max, maxX = Int.min, maxY = Int.min
+        let (columns, rows) = pixelRange(of: area)
+        for row in rows {
+            for column in columns {
+                guard let color = bitmap.colorAt(x: column, y: row)?.usingColorSpace(.sRGB),
+                      colorDistance((color.redComponent, color.greenComponent, color.blueComponent), background) > threshold else { continue }
+                minX = min(minX, column); maxX = max(maxX, column)
+                minY = min(minY, row); maxY = max(maxY, row)
+            }
+        }
+        guard minX <= maxX else { return nil }
+        return pointRect(columns: minX...maxX, rows: minY...maxY)
+    }
+
+    /// Самый далёкий от фона цвет внутри `area`: цвет штрихов без сглаженных краёв.
+    func strongestInkColor(in area: NSRect, over background: (red: CGFloat, green: CGFloat, blue: CGFloat)) -> (red: CGFloat, green: CGFloat, blue: CGFloat)? {
+        var best: (red: CGFloat, green: CGFloat, blue: CGFloat)?
+        var bestDistance: CGFloat = 0
+        let (columns, rows) = pixelRange(of: area)
+        for row in rows {
+            for column in columns {
+                guard let color = bitmap.colorAt(x: column, y: row)?.usingColorSpace(.sRGB) else { continue }
+                let value = (red: color.redComponent, green: color.greenComponent, blue: color.blueComponent)
+                let distance = colorDistance(value, background)
+                if distance > bestDistance { bestDistance = distance; best = value }
+            }
+        }
+        return best
+    }
+
     /// Средний цвет нарисованного внутри `area`.
     func averageInkColor(in area: NSRect, threshold: CGFloat = 0.5) -> (red: CGFloat, green: CGFloat, blue: CGFloat)? {
         var sum = (red: CGFloat(0), green: CGFloat(0), blue: CGFloat(0)), count: CGFloat = 0
