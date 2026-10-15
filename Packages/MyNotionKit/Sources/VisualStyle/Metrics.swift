@@ -169,11 +169,13 @@ public enum Metrics {
         public static let blockMenuWidth: CGFloat = 240
         public static let blockMenuRowHeight: CGFloat = 28
         public static let blockMenuIconSize: CGFloat = 20
-        /// Шрифт надписи в значке («Aa», «H1»): в меню «/» и в меню блока. Системные значки и квадрат чекбокса —
-        /// в `iconSymbolToCapHeight` раза выше заглавных этого шрифта, чтобы все значки были одной высоты (≈ по снимку).
+        /// Исходный размер шрифта надписи в значке («Aa», «H1») и системных значков; на экране они подогнаны под `…IconInkSize`.
         public static let slashMenuIconGlyphSize: CGFloat = 18
         public static let blockMenuIconGlyphSize: CGFloat = 14
-        public static let iconSymbolToCapHeight: CGFloat = 1.2
+        /// Квадрат рисунка значка: все значки вписаны в него и стоят по его центру — одна колонка одной ширины,
+        /// как в Notion (раунд 2, № 6; ≈ по снимку).
+        public static let slashMenuIconInkSize: CGFloat = 24
+        public static let blockMenuIconInkSize: CGFloat = 16
         /// Сколько строк видно без прокрутки.
         public static let maximumVisibleRows = 8
         /// Зазор между строкой текста и меню.

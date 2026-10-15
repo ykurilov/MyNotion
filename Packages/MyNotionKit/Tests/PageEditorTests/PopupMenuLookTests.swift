@@ -50,25 +50,34 @@ struct PopupMenuLookTests {
             let pixels = try ViewPixels(row, appearance: theme)
             let size = min(style.iconSize, style.rowHeight)
             let box = NSRect(x: Metrics.PopupMenu.rowHorizontalPadding, y: (style.rowHeight - size) / 2, width: size, height: size)
-            // В меню «/» значок в рамке: мерить внутри неё.
-            let area = style == .slash ? box.insetBy(dx: 2, dy: 2) : box
-            let ink = try #require(pixels.inkBounds(in: area), "\(item.title): значок не нарисован")
+            // Мерить около квадрата рисунка: в меню «/» вокруг него рамка значка, залитая фоном меню.
+            // Сглаживание краёв добавляет до полточки с каждой стороны.
+            let reach = style.iconInkSize + 4
+            let area = NSRect(x: box.midX - reach / 2, y: box.midY - reach / 2, width: reach, height: reach)
+            let found = style == .slash
+                ? pixels.inkBounds(in: area, over: Palette.popupMenuBackground.resolved(in: theme))
+                : pixels.inkBounds(in: area)
+            let ink = try #require(found, "\(item.title): значок не нарисован")
             return (item, ink, box, pixels)
         }
     }
 
-    @Test("Значки строк одного размера и по центру своего места", arguments: [PopupMenuStyle.slash, .block])
-    func iconsShareSize(style: PopupMenuStyle) throws {
+    @Test("Значки строк — одна колонка одной ширины: все вписаны в один квадрат и стоят по его центру (раунд 2, № 6)",
+          arguments: [PopupMenuStyle.slash, .block])
+    func iconsShareColumn(style: PopupMenuStyle) throws {
         let icons = try Self.iconInk(style, theme: .aqua)
-        let heights = icons.map(\.ink.height)
-        let smallest = try #require(heights.min()), largest = try #require(heights.max())
-        #expect(largest / smallest <= 1.35,
-                "\(style): высота значков от \(smallest) до \(largest): \(icons.map { "\($0.item.title) \($0.ink.height)" })")
+        let side = style.iconInkSize
+        let report = icons.map { "\($0.item.title) \($0.ink.width)×\($0.ink.height)" }
         for icon in icons {
-            #expect(icon.ink.width <= icon.box.width && icon.ink.height <= icon.box.height, "\(icon.item.title) не помещается в своё место")
-            #expect(abs(icon.ink.midX - icon.box.midX) <= 1.5 && abs(icon.ink.midY - icon.box.midY) <= 1.5,
+            #expect(icon.ink.width >= side * 0.78 - 0.5 && icon.ink.width <= side + 1,
+                    "\(style), \(icon.item.title): ширина \(icon.ink.width) при квадрате \(side); все: \(report)")
+            #expect(icon.ink.height <= side + 1, "\(style), \(icon.item.title): высота \(icon.ink.height) больше квадрата \(side)")
+            #expect(abs(icon.ink.midX - icon.box.midX) <= 1 && abs(icon.ink.midY - icon.box.midY) <= 1.5,
                     "\(style), \(icon.item.title): значок \(icon.ink) не по центру места \(icon.box)")
         }
+        let labels = icons.filter { if case .label = $0.item.icon { true } else { false } }
+        let labelHeights = labels.map(\.ink.height)
+        #expect((labelHeights.max() ?? 0) - (labelHeights.min() ?? 0) <= 1, "\(style): надписи «Aa», «H1»… одним шрифтом: \(report)")
     }
 
     @Test("Значок «Удалить» того же красного, что и надпись", arguments: Self.themes)
