@@ -70,9 +70,9 @@ take_vm_lock() {
     perl -e 'select(undef,undef,undef,3)'
   done
   echo $$ > $LOCK/pid
-  trap 'rm -rf $LOCK' EXIT
 }
-[[ ${1:-} == (gallery|run|uitest) ]] && take_vm_lock
+# Ловушка — на верхнем уровне: в zsh `trap ... EXIT` внутри функции срабатывает при выходе из функции.
+if [[ ${1:-} == (gallery|run|uitest) ]]; then take_vm_lock; trap 'rm -rf $LOCK' EXIT; fi
 
 case ${1:-} in
   gallery)
