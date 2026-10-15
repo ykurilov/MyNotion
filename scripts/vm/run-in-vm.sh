@@ -81,7 +81,7 @@ case ${1:-} in
     ip=$(ensure_vm_running); build_and_push $ip; set_screen $ip
     vm_ssh $ip "rm -rf ~/gallery && mkdir ~/gallery"
     run_app $ip --ui-gallery /Users/$VM_USER/gallery $only
-    mkdir -p $out && rsync -a -e "ssh -i $SSH_KEY" $VM_USER@$ip:/Users/$VM_USER/gallery/ $out/
+    mkdir -p $out && rsync -a --delete -e "ssh -i $SSH_KEY" $VM_USER@$ip:/Users/$VM_USER/gallery/ $out/
     echo "Галерея: $out ($(ls $out | grep -c png) снимков)";;
   run)
     shift; ip=$(ensure_vm_running); build_and_push $ip; run_app $ip "$@";;
