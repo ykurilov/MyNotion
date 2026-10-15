@@ -72,6 +72,10 @@ public enum Metrics {
         public static let defaultWidth: CGFloat = 270
         /// Нижний предел перетаскивания края (в contracts/visual-style.md не задан).
         public static let minimumWidth: CGFloat = 200
+        /// Верхний предел перетаскивания края (в contracts/visual-style.md не задан).
+        public static let maximumWidth: CGFloat = 480
+        /// Полоса у края панели, за которую её тянут.
+        public static let resizeHandleWidth: CGFloat = 6
         public static let rowHeight: CGFloat = 30
         public static let rowVerticalPadding: CGFloat = 5
         public static let rowHorizontalPadding: CGFloat = 8
@@ -79,12 +83,21 @@ public enum Metrics {
         /// Отступ строк от краёв панели.
         public static let panelInset: CGFloat = 8
         public static let rowIconSize: CGFloat = 20
+        /// Эмодзи иконки внутри квадрата `rowIconSize` (≈ по Notion).
+        public static let rowEmojiFontSize: CGFloat = 15
+        /// Промежуток между иконкой и названием (≈ по Notion).
+        public static let rowIconSpacing: CGFloat = 6
+        /// Стрелка раскрытия внутри квадрата иконки.
+        public static let disclosureSymbolSize: CGFloat = 11
         public static let indentPerLevel: CGFloat = 9
         /// «⋯» и «+» справа в строке при наведении.
         public static let rowAccessorySize: CGFloat = 20
         public static let searchFieldHeight: CGFloat = 32
         public static let searchFieldCornerRadius: CGFloat = 6
         public static let syncStatusRowHeight: CGFloat = 30
+        /// Окно корзины над строкой «Корзина» (в contracts/visual-style.md не задано).
+        public static let trashPopoverWidth: CGFloat = 360
+        public static let trashPopoverMaxHeight: CGFloat = 420
     }
 
     /// Меню «/», меню блока, выдача поиска.

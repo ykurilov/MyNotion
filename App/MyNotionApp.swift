@@ -34,6 +34,8 @@ struct MyNotionApp: App {
             CommandGroup(replacing: .newItem) {
                 Button("Новая страница") { (try? library.get())?.createPage() }
                     .keyboardShortcut("n")
+                Button("Новая подстраница") { (try? library.get())?.createSubpage() }
+                    .keyboardShortcut("n", modifiers: [.command, .shift])
             }
         }
     }

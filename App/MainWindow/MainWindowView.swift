@@ -1,9 +1,10 @@
 import NotesCore
 import PageEditor
+import PageTree
 import SwiftUI
 import VisualStyle
 
-/// Главное окно: страницы слева, открытая страница справа.
+/// Главное окно: дерево страниц слева, открытая страница справа.
 struct MainWindowView: View {
     let library: Result<MainWindowModel, any Error>
     let options: LaunchOptions
@@ -33,20 +34,77 @@ struct MainWindowView: View {
 private struct PagesWindow: View {
     @Bindable var model: MainWindowModel
     let onEditorReady: @MainActor () -> Void
+    @Environment(\.undoManager) private var undoManager
+    /// Ширина в начале перетаскивания края панели.
+    @State private var widthAtDragStart: Double?
 
     var body: some View {
         HStack(spacing: 0) {
-            PageListSidebar(model: model)
-                .frame(width: Metrics.Sidebar.defaultWidth)
-            Rectangle()
-                .fill(Color(nsColor: Palette.border))
-                .frame(width: 1)
+            sidebar
+                .frame(width: model.sidebarWidth)
+            sidebarEdge
             pageArea
                 .frame(maxWidth: .infinity)
         }
         // Путь страницы — в самой верхней полосе окна, как в Notion; кнопки окна — над боковой панелью.
         .ignoresSafeArea(.container, edges: .top)
+        .onAppear { model.attachUndoManager(undoManager) }
+        .onChange(of: undoManager) { _, undoManager in model.attachUndoManager(undoManager) }
         .onDisappear { model.saveAll() }
+    }
+
+    private var sidebar: some View {
+        PageTreeSidebar(
+            tree: model.tree,
+            treeRevision: model.treeRevision,
+            collapsedPageIds: model.collapsedPageIds,
+            selectedPageId: model.openPageId,
+            liveTitle: model.liveTitleOfOpenPage,
+            trashEntries: model.trashEntries,
+            actions: PageTreeActions(
+                select: { model.select($0) },
+                rename: { model.rename($0, to: $1) },
+                move: { model.move($0, toParent: $1, at: $2) },
+                moveToTrash: { model.moveToTrash($0) },
+                addSubpage: { model.createSubpage(in: $0) },
+                collapsedPagesChanged: { model.setCollapsedPages($0) }
+            ),
+            trashActions: TrashActions(
+                restore: { model.restore($0) },
+                deleteForever: { model.deleteForever($0) },
+                emptyTrash: { model.emptyTrash() }
+            ),
+            topInset: Metrics.Page.topBarHeight
+        )
+    }
+
+    /// Край панели: линия цвета border; за полосу шириной `resizeHandleWidth` панель тянут.
+    private var sidebarEdge: some View {
+        Rectangle()
+            .fill(Color(nsColor: Palette.border))
+            .frame(width: 1)
+            .overlay {
+                Color.clear
+                    .frame(width: Metrics.Sidebar.resizeHandleWidth)
+                    .contentShape(Rectangle())
+                    .onHover { inside in
+                        if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+                    }
+                    .gesture(
+                        DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                            .onChanged { drag in
+                                let start = widthAtDragStart ?? model.sidebarWidth
+                                widthAtDragStart = start
+                                model.setSidebarWidth(start + drag.translation.width)
+                            }
+                            .onEnded { _ in
+                                widthAtDragStart = nil
+                                model.saveSidebarWidth()
+                            }
+                    )
+                    .accessibilityIdentifier("sidebar-resize-handle")
+            }
+            .zIndex(1)
     }
 
     @ViewBuilder
@@ -58,7 +116,8 @@ private struct PagesWindow: View {
                 initialFocus: model.initialFocus,
                 onReady: onEditorReady
             )
-            .id(document.pageId)
+            // Новый документ — новый редактор: страницу перечитали после операции с деревом.
+            .id(ObjectIdentifier(document))
         } else {
             Text(model.loadError ?? "Нет страниц. ⌘N — новая страница")
                 .foregroundStyle(Color(nsColor: Palette.textSecondary))
@@ -69,52 +128,5 @@ private struct PagesWindow: View {
                     DispatchQueue.main.async { onEditorReady() }
                 }
         }
-    }
-}
-
-/// Временный плоский список страниц (T027): дерево со сворачиванием — история US2.
-/// Сплошной фон, как у Notion (contracts/visual-style.md, «Боковая панель»).
-private struct PageListSidebar: View {
-    @Bindable var model: MainWindowModel
-
-    var body: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(model.pages, id: \.id) { page in
-                    row(page)
-                }
-            }
-            .padding(.horizontal, Metrics.Sidebar.panelInset)
-        }
-        // Место под кнопками окна.
-        .padding(.top, Metrics.Page.topBarHeight)
-        .background(Color(nsColor: Palette.sidebarBackground))
-    }
-
-    private func row(_ page: Page) -> some View {
-        let isOpen = page.id == model.openPageId
-        return Button {
-            model.select(page.id)
-        } label: {
-            HStack(spacing: Metrics.Sidebar.rowHorizontalPadding) {
-                Text(page.icon ?? "📄")
-                    .frame(width: Metrics.Sidebar.rowIconSize, height: Metrics.Sidebar.rowIconSize)
-                Text(model.title(of: page))
-                    .font(Font(Typography.sidebarRow.font))
-                    .foregroundStyle(Color(nsColor: isOpen ? Palette.textPrimary : Palette.sidebarText))
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-            }
-            .padding(.vertical, Metrics.Sidebar.rowVerticalPadding)
-            .padding(.horizontal, Metrics.Sidebar.rowHorizontalPadding)
-            .frame(height: Metrics.Sidebar.rowHeight)
-            .background(
-                RoundedRectangle(cornerRadius: Metrics.Sidebar.rowCornerRadius)
-                    .fill(isOpen ? Color(nsColor: Palette.hoverBackground) : .clear)
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("sidebar-page")
     }
 }

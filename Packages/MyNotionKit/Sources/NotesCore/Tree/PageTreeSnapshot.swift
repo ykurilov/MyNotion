@@ -97,7 +97,8 @@ extension NotesStore {
         return Self.trashEntries(in: all)
     }
 
-    static func trashEntries(in all: [Page]) -> [Page] {
+    /// Записи корзины среди уже прочитанных страниц.
+    public static func trashEntries(in all: [Page]) -> [Page] {
         let byId = Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0) })
         return all.filter { page in
             guard page.trashedAt != nil else { return false }
