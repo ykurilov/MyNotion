@@ -18,7 +18,7 @@ struct DatabaseMigrationTests {
             )
         }
 
-        let expected: Set = ["page", "block", "conflict", "window_state", "import_run", "sync_account", "outbox_entry", "search_index"]
+        let expected: Set = ["page", "block", "conflict", "window_state", "import_run", "sync_account", "outbox_entry", "search_index", "page_tombstone"]
         #expect(expected.isSubset(of: tables))
         #expect(journalMode == "wal")
         #expect(searchIndexSQL?.contains("fts5") == true)
@@ -61,6 +61,25 @@ struct DatabaseMigrationTests {
         #expect(pages.map(\.id) == [page.id])
         #expect(pages.first?.title == "До миграции")
         #expect(try restored.appliedSchemaVersion() == versionBefore)
+    }
+
+    @Test("v1 → v2: записи на месте, появилась таблица надгробий, рядом копия v1")
+    func migrationAddsPageTombstones() throws {
+        let folder = try TemporaryFolder()
+        let clock = HybridLogicalClock(deviceId: UUID(), wallClock: AdjustableWallClock().reading)
+        let onlyV1 = SchemaMigrations(steps: Array(SchemaMigrations.current.steps.prefix(1)))
+
+        let old = try AppDatabase.open(at: folder.databaseURL, migrations: onlyV1)
+        let page = try NotesStore(database: old, clock: clock).write { try $0.createPage(title: "Старая запись") }
+        old.close()
+
+        let migrated = try AppDatabase.open(at: folder.databaseURL)
+        #expect(try migrated.appliedSchemaVersion() == "v2")
+        #expect(try NotesStore(database: migrated, clock: clock).pageOutline().map(\.title) == ["Старая запись"])
+        #expect(try NotesStore(database: migrated, clock: clock).pageContent(page.id)?.blocks.count == 1)
+        let hasTombstones = try migrated.dbWriter.read { db in try db.tableExists("page_tombstone") }
+        #expect(hasTombstones)
+        #expect(FileManager.default.fileExists(atPath: AppDatabase.backupURL(for: folder.databaseURL, version: "v1").path))
     }
 
     @Test("Основная база живёт в ~/Library/Application Support/MyNotion/MyNotion.sqlite")

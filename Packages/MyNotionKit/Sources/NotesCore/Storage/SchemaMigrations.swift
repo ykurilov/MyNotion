@@ -12,6 +12,7 @@ public struct SchemaMigrations: Sendable {
     /// Схема текущей версии приложения.
     public static let current = SchemaMigrations(steps: [
         Step(version: "v1", migrate: createInitialSchema),
+        Step(version: "v2", migrate: addPageTombstones),
     ])
 
     /// Та же схема плюс ещё один шаг — для проверки миграций.
@@ -113,6 +114,16 @@ private func createInitialSchema(_ db: Database) throws {
             blockId UNINDEXED,
             content,
             tokenize = 'unicode61 remove_diacritics 2'
+        );
+        """)
+}
+
+/// Надгробия стёртых навсегда страниц (data-model.md): id и метка часов стирания — для синхронизации.
+private func addPageTombstones(_ db: Database) throws {
+    try db.execute(sql: """
+        CREATE TABLE page_tombstone (
+            pageId TEXT PRIMARY KEY NOT NULL,
+            erasedAt TEXT NOT NULL
         );
         """)
 }
