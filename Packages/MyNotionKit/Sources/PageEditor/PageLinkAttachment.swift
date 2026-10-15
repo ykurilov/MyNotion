@@ -48,13 +48,8 @@ enum PageLinkPainter {
             string.draw(at: CGPoint(x: box.midX - measured.width / 2, y: box.midY - measured.height / 2))
             return
         }
-        let configuration = NSImage.SymbolConfiguration(pointSize: size * 0.8, weight: .regular)
-            .applying(.init(paletteColors: [Palette.textSecondary]))
-        guard let symbol = NSImage(systemSymbolName: "doc.text", accessibilityDescription: nil)?.withSymbolConfiguration(configuration) else { return }
-        let symbolSize = symbol.size
-        symbol.draw(in: CGRect(x: box.midX - symbolSize.width / 2, y: box.midY - symbolSize.height / 2,
-                               width: symbolSize.width, height: symbolSize.height),
-                    from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        // Тот же пустой лист, что у страницы без иконки в дереве слева.
+        DocumentGlyph.image(size: size, color: Palette.textSecondary).draw(in: box)
     }
 
     static func truncatedLine(_ title: String, width: CGFloat) -> CTLine {
