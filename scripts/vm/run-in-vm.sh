@@ -60,6 +60,19 @@ run_app() {
   vm_ssh $ip "open -W -n $APP_REMOTE --stdout /tmp/mynotion.out --stderr /tmp/mynotion.err --args ${(q)@}; cat /tmp/mynotion.out /tmp/mynotion.err"
 }
 
+# Виртуальный Mac один на всех агентов: запуски идут по очереди (папка-замок; сбрасывается, если владелец умер).
+LOCK=/tmp/mynotion-vm.lock
+take_vm_lock() {
+  until mkdir $LOCK 2>/dev/null; do
+    local owner; owner=$(cat $LOCK/pid 2>/dev/null || true)
+    if [[ -n $owner ]] && ! kill -0 $owner 2>/dev/null; then rm -rf $LOCK; continue; fi
+    perl -e 'select(undef,undef,undef,3)'
+  done
+  echo $$ > $LOCK/pid
+  trap 'rm -rf $LOCK' EXIT
+}
+[[ ${1:-} == (gallery|run) ]] && take_vm_lock
+
 case ${1:-} in
   gallery)
     shift; only=(); out=/tmp/mynotion-gallery-vm-$(date +%H%M%S)
