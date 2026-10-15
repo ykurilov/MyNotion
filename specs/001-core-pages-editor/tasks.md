@@ -100,16 +100,16 @@ description: "Задачи: минимальное ядро MyNotion для macO
 
 ### Тесты US2 (сначала, должны упасть)
 
-- [ ] T028 [P] [US2] Тест операций дерева в `PK/Tests/NotesCoreTests/PageTreeOperationsTests.swift`: подстраница создаётся парой «Page с parentId + блок pageLink в родителе»; перенос ветки целиком; перенос внутрь своего потомка отклоняется; удаление уводит ветку в корзину; возврат ставит на прежнее место, «если родитель исчез — в корень»; удаление навсегда оставляет надгробие (id + HLC)
+- [x] T028 [P] [US2] Тест операций дерева в `PK/Tests/NotesCoreTests/PageTreeOperationsTests.swift`: подстраница создаётся парой «Page с parentId + блок pageLink в родителе»; перенос ветки целиком; перенос внутрь своего потомка отклоняется; удаление уводит ветку в корзину; возврат ставит на прежнее место, «если родитель исчез — в корень»; удаление навсегда оставляет надгробие (id + HLC)
 - [ ] T029 [P] [US2] Сценарий `UITests/PageTreeTests.swift`: 3 уровня, перетаскивание ветки, свернуть ветку, ⌘⌫ в корзину, вернуть, перезапуск — дерево и свёрнутость те же (сценарии 2.1–2.4)
 
 ### Реализация US2
 
-- [ ] T030 [US2] `PageTreeOperations` в `PK/Sources/NotesCore/Tree/PageTreeOperations.swift`: создать подстраницу, переименовать, перенести, в корзину, вернуть, удалить навсегда, очистить корзину; каждая операция — одна транзакция
+- [x] T030 [US2] `PageTreeOperations` в `PK/Sources/NotesCore/Tree/PageTreeOperations.swift`: создать подстраницу, переименовать, перенести, в корзину, вернуть, удалить навсегда, очистить корзину; каждая операция — одна транзакция
 - [ ] T031 [US2] Боковое дерево в `PK/Sources/PageTree/PageOutlineView.swift` и `PageOutlineDataSource.swift`: `NSOutlineView` со своими строками по contracts/visual-style.md (высота 30, скругление 6, текст 14/500, выбранная строка с фоном hoverBackground, стрелка раскрытия вместо иконки при наведении, «⋯» и «+» справа при наведении, фон панели sidebarBackground), ленивые ветки, перетаскивание «на страницу — внутрь, между — рядом», запрет сброса в потомка, переименование двойным щелчком или Enter, ⌘⌫ (contracts/editor-interactions.md)
 - [ ] T032 [US2] Корзина в `PK/Sources/PageTree/TrashView.swift`: вернуть, удалить навсегда, очистить
 - [ ] T033 [US2] Заменить временный список в `App/MainWindow/MainWindowView.swift` деревом; ⇧⌘N — подстраница; сохранение свёрнутых веток и ширины панели в `WindowState`
-- [ ] T034 [US2] Отмена операций с деревом через `UndoManager` окна в `PK/Sources/NotesCore/Tree/PageTreeOperations.swift` (FR-012)
+- [x] T034 [US2] Отмена операций с деревом через `UndoManager` окна в `PK/Sources/NotesCore/Tree/PageTreeOperations.swift` (FR-012)
 
 **Checkpoint**: Записи раскладываются по дереву. Сборка, затронутые тесты и замеры (`PerformanceTests`), показ Юрию, коммит.
 

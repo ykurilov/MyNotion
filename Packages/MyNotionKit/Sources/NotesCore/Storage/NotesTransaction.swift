@@ -96,6 +96,25 @@ public final class NotesTransaction {
         return updated
     }
 
+    /// Стереть страницу навсегда вместе с её блоками; остаётся надгробие (id + метка часов).
+    /// Подстраницы не трогаются — ветку стирает `PageTreeOperations`.
+    public func erasePage(_ pageId: UUID) throws {
+        guard try pageExists(pageId) else { throw NotesStoreError.pageNotFound(pageId) }
+        try db.execute(sql: "DELETE FROM block WHERE pageId = ?", arguments: [pageId.databaseText])
+        try db.execute(sql: "DELETE FROM page WHERE id = ?", arguments: [pageId.databaseText])
+        try db.execute(
+            sql: "INSERT OR REPLACE INTO page_tombstone (pageId, erasedAt) VALUES (?, ?)",
+            arguments: [pageId.databaseText, clock.now().description]
+        )
+        touchedPageIds.remove(pageId)
+        changes.erasedPageIds.append(pageId)
+    }
+
+    /// Все страницы, включая корзину, без блоков.
+    public func allPages() throws -> [Page] {
+        try Row.fetchAll(db, sql: "SELECT * FROM page ORDER BY sortKey, id").map(Page.init(row:))
+    }
+
     // MARK: Блоки
 
     /// Записать новый блок; все поля получают одну метку часов.

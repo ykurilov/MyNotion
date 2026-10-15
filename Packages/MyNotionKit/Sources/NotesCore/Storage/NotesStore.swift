@@ -91,8 +91,10 @@ public protocol NotesWriteHook: Sendable {
 public struct NotesChanges: Sendable {
     public internal(set) var pages: [PageChange] = []
     public internal(set) var blocks: [BlockChange] = []
+    /// Страницы, стёртые навсегда; их блоки стёрты вместе с ними.
+    public internal(set) var erasedPageIds: [UUID] = []
 
-    public var isEmpty: Bool { pages.isEmpty && blocks.isEmpty }
+    public var isEmpty: Bool { pages.isEmpty && blocks.isEmpty && erasedPageIds.isEmpty }
 }
 
 public struct PageChange: Sendable {
