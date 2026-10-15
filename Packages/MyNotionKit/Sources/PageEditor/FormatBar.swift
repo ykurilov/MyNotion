@@ -1,0 +1,450 @@
+import AppKit
+import NotesCore
+import VisualStyle
+
+/// Кнопка панели форматирования (FR-033), слева направо.
+public enum FormatBarButton: String, CaseIterable, Sendable {
+    case bold
+    case italic
+    case underline
+    case strikethrough
+    case code
+    case link
+
+    var title: String {
+        switch self {
+        case .bold: "Жирный"
+        case .italic: "Курсив"
+        case .underline: "Подчёркнутый"
+        case .strikethrough: "Зачёркнутый"
+        case .code: "Код"
+        case .link: "Ссылка"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .bold: "bold"
+        case .italic: "italic"
+        case .underline: "underline"
+        case .strikethrough: "strikethrough"
+        case .code: "chevron.left.forwardslash.chevron.right"
+        case .link: "link"
+        }
+    }
+
+    /// Оформление кнопки; у ссылки — окно адреса.
+    var format: InlineFormat? {
+        switch self {
+        case .bold: .bold
+        case .italic: .italic
+        case .underline: .underline
+        case .strikethrough: .strikethrough
+        case .code: .code
+        case .link: nil
+        }
+    }
+}
+
+/// Что показывает панель: тип выделенных блоков (`nil` — разные) и нажатые кнопки.
+struct FormatBarState: Equatable {
+    var kind: BlockKind?
+    var active: Set<FormatBarButton>
+
+    var kindItem: PopupMenuItem? {
+        kind.flatMap { kind in PopupMenuItem.blockKinds.first { $0.action == .setKind(kind) } }
+    }
+
+    /// Как «Multiple Types» у Notion, когда выделены блоки разных типов.
+    var kindTitle: String { kindItem?.title ?? "Разные типы" }
+    var kindIcon: PopupMenuItem.Icon { kindItem?.icon ?? .symbol("square.stack") }
+}
+
+/// Панель форматирования над выделенным текстом (contracts/editor-interactions.md, «Панель форматирования»):
+/// окно без рамки, ввод остаётся в тексте страницы.
+@MainActor
+final class FormatBarWindow: NSPanel {
+    static let shadowMargin: CGFloat = PopupMenuWindow.shadowMargin
+    let barView = FormatBarView()
+
+    init() {
+        super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
+        isOpaque = false
+        backgroundColor = .clear
+        hasShadow = false
+        level = .popUpMenu
+        isReleasedWhenClosed = false
+        becomesKeyOnlyIfNeeded = true
+        contentView = barView
+        setAccessibilityIdentifier("format-bar")
+    }
+
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
+
+    /// Карточка с местом `card` (координаты экрана). Невидимое окно страницы — на экран не выходит.
+    func show(card: NSRect, parent: NSWindow) {
+        let margin = Self.shadowMargin
+        setFrame(card.insetBy(dx: -margin, dy: -margin), display: true)
+        PopupWindows.show(self, over: parent)
+    }
+
+    func hide() {
+        parent?.removeChildWindow(self)
+        orderOut(nil)
+    }
+}
+
+/// Карточка панели: строка типа блока со стрелкой «›», разделитель, ряд кнопок (contracts/visual-style.md,
+/// «Панель форматирования»).
+@MainActor
+final class FormatBarView: NSView {
+    let kindRow = FormatBarKindRowView()
+    private(set) var buttons: [FormatBarButtonView] = []
+    var state = FormatBarState(kind: .paragraph, active: []) {
+        didSet {
+            guard state != oldValue else { return }
+            kindRow.state = state
+            for button in buttons { button.isActive = state.active.contains(button.button) }
+        }
+    }
+    var onKind: (() -> Void)? {
+        get { kindRow.onClick }
+        set { kindRow.onClick = newValue }
+    }
+    var onButton: ((FormatBarButton) -> Void)?
+
+    init() {
+        super.init(frame: .zero)
+        setAccessibilityRole(.toolbar)
+        setAccessibilityLabel("Форматирование")
+        kindRow.state = state
+        addSubview(kindRow)
+        buttons = FormatBarButton.allCases.map { button in
+            let view = FormatBarButtonView(button: button)
+            view.onClick = { [weak self] in self?.onButton?(button) }
+            addSubview(view)
+            return view
+        }
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
+
+    override var isFlipped: Bool { true }
+
+    private var card: NSRect {
+        let margin = FormatBarWindow.shadowMargin
+        return NSRect(x: margin, y: margin, width: Metrics.FormatBar.width, height: Metrics.FormatBar.height)
+    }
+
+    override func layout() {
+        super.layout()
+        let card = card
+        let inset = Metrics.PopupMenu.rowInset
+        kindRow.frame = NSRect(x: card.minX + inset, y: card.minY + Metrics.FormatBar.verticalPadding,
+                               width: card.width - 2 * inset, height: Metrics.FormatBar.kindRowHeight)
+        let rowTop = kindRow.frame.maxY + Metrics.FormatBar.dividerBandHeight
+        for (index, button) in buttons.enumerated() {
+            button.frame = NSRect(x: card.minX + Metrics.FormatBar.horizontalPadding + CGFloat(index) * Metrics.FormatBar.buttonWidth,
+                                  y: rowTop, width: Metrics.FormatBar.buttonWidth, height: Metrics.FormatBar.buttonRowHeight)
+        }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let card = card
+        PopupSurface.draw(card: card)
+        Palette.popupDivider.setFill()
+        let y = card.minY + Metrics.FormatBar.verticalPadding + Metrics.FormatBar.kindRowHeight + Metrics.FormatBar.dividerOffset
+        let inset = Metrics.FormatBar.dividerInset
+        NSRect(x: card.minX + inset, y: y, width: card.width - 2 * inset, height: Metrics.FormatBar.dividerWidth).fill()
+    }
+}
+
+/// Нажатие мышью внутри вида: по отпусканию над ним, как у строк меню; подсветка под мышью.
+@MainActor
+class FormatBarControlView: NSView {
+    var onClick: (() -> Void)?
+    var isHovered = false { didSet { if isHovered != oldValue { needsDisplay = true } } }
+
+    override var isFlipped: Bool { true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) { isHovered = true }
+    override func mouseExited(with event: NSEvent) { isHovered = false }
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) {
+        if bounds.contains(convert(event.locationInWindow, from: nil)) { onClick?() }
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        onClick?()
+        return true
+    }
+}
+
+/// Строка типа: значок и название типа выделенных блоков, справа серая «›»; щелчок открывает список типов.
+@MainActor
+final class FormatBarKindRowView: FormatBarControlView {
+    var state = FormatBarState(kind: .paragraph, active: []) {
+        didSet {
+            setAccessibilityLabel(state.kindTitle)
+            needsDisplay = true
+        }
+    }
+
+    init() {
+        super.init(frame: .zero)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.popUpButton)
+        setAccessibilityIdentifier("format-kind")
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
+
+    override func draw(_ dirtyRect: NSRect) {
+        if isHovered { PopupMenuRowView.drawHighlight(in: bounds) }
+        // Места — от края карточки: строка отступает от него на rowInset.
+        let inset = Metrics.PopupMenu.rowInset
+        let iconSize = Metrics.PopupMenu.iconSize
+        PopupMenuRowView.drawIcon(state.kindIcon, color: Palette.textPrimary,
+                                  in: NSRect(x: Metrics.FormatBar.kindIconCenterX - inset - iconSize / 2, y: (bounds.height - iconSize) / 2,
+                                             width: iconSize, height: iconSize))
+
+        let chevronX = bounds.maxX - (Metrics.FormatBar.kindChevronCenterFromRight - inset)
+        let configuration = NSImage.SymbolConfiguration(pointSize: Metrics.FormatBar.kindChevronGlyphSize, weight: .regular)
+            .applying(.init(paletteColors: [Palette.textSecondary]))
+        var textEnd = bounds.maxX
+        if let chevron = NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil)?.withSymbolConfiguration(configuration) {
+            let size = chevron.size
+            chevron.draw(in: NSRect(x: chevronX - size.width / 2, y: (bounds.height - size.height) / 2, width: size.width, height: size.height),
+                         from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            textEnd = chevronX - size.width
+        }
+
+        let titleStyle = Typography.popupMenuTitle
+        let textX = Metrics.FormatBar.kindTitleX - inset
+        NSAttributedString(string: state.kindTitle, attributes: [.font: titleStyle.font, .foregroundColor: Palette.textPrimary])
+            .draw(in: NSRect(x: textX, y: (bounds.height - titleStyle.lineHeight) / 2, width: textEnd - textX, height: titleStyle.lineHeight))
+    }
+}
+
+/// Кнопка оформления: системный значок по центру места; нажатая — синий значок, как у Notion.
+@MainActor
+final class FormatBarButtonView: FormatBarControlView {
+    let button: FormatBarButton
+    var isActive = false {
+        didSet {
+            guard isActive != oldValue else { return }
+            setAccessibilitySelected(isActive)
+            needsDisplay = true
+        }
+    }
+    private let symbol: NSImage?
+    /// Где в картинке значка сам рисунок: значок ставится по центру рисунка, а не картинки.
+    private let ink: NSRect
+
+    init(button: FormatBarButton) {
+        self.button = button
+        let configuration = NSImage.SymbolConfiguration(pointSize: Metrics.FormatBar.buttonGlyphSize, weight: .regular)
+        symbol = NSImage(systemSymbolName: button.symbolName, accessibilityDescription: button.title)?.withSymbolConfiguration(configuration)
+        ink = symbol.map(PopupMenuRowView.inkRect(of:)) ?? .zero
+        super.init(frame: .zero)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
+        setAccessibilityLabel(button.title)
+        setAccessibilityIdentifier("format-\(button.rawValue)")
+        setAccessibilitySelected(false)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
+
+    override func draw(_ dirtyRect: NSRect) {
+        if isHovered {
+            let size = Metrics.FormatBar.buttonHighlightSize
+            let radius = Metrics.FormatBar.buttonCornerRadius
+            Palette.hoverBackground.setFill()
+            NSBezierPath(roundedRect: NSRect(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2, width: size.width, height: size.height),
+                         xRadius: radius, yRadius: radius).fill()
+        }
+        guard let symbol else { return }
+        let color = isActive ? Palette.formatBarActiveIcon : Palette.textPrimary
+        let tinted = symbol.withSymbolConfiguration(.init(paletteColors: [color])) ?? symbol
+        // Широкие значки («</>») уменьшаются, чтобы рисунок влез в рамку, как у Notion.
+        let box = Metrics.FormatBar.buttonInkBox
+        let scale = min(1, box.width / max(ink.width, 1), box.height / max(ink.height, 1))
+        let origin = NSPoint(x: (bounds.midX - ink.midX * scale).rounded(), y: (bounds.midY - ink.midY * scale).rounded())
+        tinted.draw(in: NSRect(x: origin.x, y: origin.y, width: symbol.size.width * scale, height: symbol.size.height * scale),
+                    from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+    }
+}
+
+/// Показывает и прячет панель, открывает список типов. Панель живёт, пока в тексте страницы выделен текст.
+@MainActor
+final class FormatBarController {
+    weak var textView: PageTextView?
+    private(set) var state: FormatBarState?
+    /// Место карточки без тени, в координатах экрана; `nil` — панель скрыта.
+    private(set) var cardFrame: NSRect?
+    private var window: FormatBarWindow?
+    private var kindMenu: PopupMenuWindow?
+    private var observers: [NSObjectProtocol] = []
+
+    var isShown: Bool { state != nil }
+    var isKindMenuOpen: Bool { kindMenu != nil }
+    var kindMenuItems: [PopupMenuItem] { kindMenu?.menuView.items ?? [] }
+    var checkedKindItem: PopupMenuItem? { kindMenu?.menuView.checkedItem }
+
+    /// Показать над первой строкой выделения `top`; не помещается в `visible` сверху — под последней строкой `bottom`.
+    /// Все места — в координатах экрана.
+    func show(_ state: FormatBarState, top: NSRect, bottom: NSRect, visible: NSRect) {
+        guard let parent = textView?.window else { return }
+        let size = NSSize(width: Metrics.FormatBar.width, height: Metrics.FormatBar.height)
+        let spacing = Metrics.FormatBar.selectionSpacing
+        var origin = NSPoint(x: top.minX, y: top.maxY + spacing)
+        if origin.y + size.height > visible.maxY { origin.y = bottom.minY - spacing - size.height }
+        origin.x = max(visible.minX, min(origin.x, visible.maxX - size.width))
+        let card = NSRect(origin: origin, size: size)
+
+        let window = window ?? makeWindow()
+        self.state = state
+        window.barView.state = state
+        if card != cardFrame || window.parent == nil {
+            cardFrame = card
+            window.show(card: card, parent: parent)
+        }
+        kindMenu?.menuView.checkedItem = state.kindItem
+        if observers.isEmpty { observe() }
+    }
+
+    func hide() {
+        closeKindMenu()
+        state = nil
+        cardFrame = nil
+        window?.hide()
+        observers.forEach(NotificationCenter.default.removeObserver)
+        observers = []
+    }
+
+    func press(_ button: FormatBarButton) {
+        guard isShown, let textView else { return }
+        closeKindMenu()
+        guard let format = button.format else {
+            hide()
+            textView.editLink(nil)
+            return
+        }
+        textView.perform(.toggleInline(format))
+        textView.updateFormatBar()
+    }
+
+    // MARK: Список типов
+
+    func openKindMenu() {
+        guard let state, let window, let parent = textView?.window else { return }
+        let menu = kindMenu ?? PopupMenuWindow(style: .kindPicker)
+        kindMenu = menu
+        menu.menuView.setItems(PopupMenuItem.blockKinds)
+        menu.menuView.checkedItem = state.kindItem
+        menu.menuView.onChoose = { [weak self] item in
+            if case .setKind(let kind) = item.action { self?.chooseKind(kind) }
+        }
+        let row = window.barView.kindRow
+        let rowOnScreen = window.convertToScreen(row.convert(row.bounds, to: nil))
+        menu.show(below: rowOnScreen, parent: parent)
+    }
+
+    func closeKindMenu() {
+        kindMenu?.hide()
+        kindMenu = nil
+    }
+
+    func chooseKind(_ kind: BlockKind) {
+        closeKindMenu()
+        guard let textView else { return }
+        textView.perform(.setKind(kind))
+        textView.window?.makeFirstResponder(textView)
+        textView.updateFormatBar()
+    }
+
+    /// Стрелки, Enter и Esc, пока открыт список типов.
+    func handleCommand(_ selector: Selector) -> Bool {
+        guard let kindMenu else { return false }
+        switch selector {
+        case #selector(NSResponder.moveUp(_:)): kindMenu.menuView.moveSelection(by: -1)
+        case #selector(NSResponder.moveDown(_:)): kindMenu.menuView.moveSelection(by: 1)
+        case #selector(NSResponder.insertNewline(_:)):
+            if case .setKind(let kind)? = kindMenu.menuView.selectedItem?.action { chooseKind(kind) }
+        case #selector(NSResponder.cancelOperation(_:)): closeKindMenu()
+        default: return false
+        }
+        return true
+    }
+
+    private func makeWindow() -> FormatBarWindow {
+        let window = FormatBarWindow()
+        window.barView.onButton = { [weak self] button in self?.press(button) }
+        window.barView.onKind = { [weak self] in
+            guard let self else { return }
+            if isKindMenuOpen { closeKindMenu() } else { openKindMenu() }
+        }
+        self.window = window
+        return window
+    }
+
+    /// Приложение ушло в фон — панель прячется; прокрутка страницы — панель следует за выделением.
+    private func observe() {
+        observers.append(PopupWindows.onAppDeactivation { [weak self] in self?.hide() })
+        if let clip = textView?.enclosingScrollView?.contentView {
+            clip.postsBoundsChangedNotifications = true
+            observers.append(NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: clip, queue: .main) {
+                [weak self] _ in MainActor.assumeIsolated { self?.textView?.updateFormatBar() }
+            })
+        }
+    }
+}
+
+extension PageTextView {
+    // MARK: Панель форматирования
+
+    /// Панель видна, пока в тексте страницы в фокусе выделен текст — внутри блока или через блоки.
+    /// Курсор без выделения, режим блоков, набор с подбором букв — панели нет.
+    func updateFormatBar() {
+        let selection = selectedRange()
+        guard selection.length > 0, !isBlockSelection, !hasMarkedText(), let window, window.firstResponder === self,
+              let blocks = selectedBlockRange() else {
+            formatBar.hide()
+            return
+        }
+        let top = firstRect(forCharacterRange: NSRange(location: selection.location, length: 1), actualRange: nil)
+        let bottom = firstRect(forCharacterRange: NSRange(location: NSMaxRange(selection) - 1, length: 1), actualRange: nil)
+        let visible = window.convertToScreen(convert(visibleRect, to: nil))
+        formatBar.show(formatBarState(for: selection, blocks: blocks), top: top, bottom: bottom, visible: visible)
+    }
+
+    /// Тип выделенных блоков и оформление, которое есть у всего выделенного текста.
+    func formatBarState(for selection: NSRange, blocks: Range<Int>) -> FormatBarState {
+        let pieces = blocks.map { index in (index, localRange(of: selection, inBlockAt: index)) }.filter { !$0.1.isEmpty }
+        var active = Set<FormatBarButton>()
+        if !pieces.isEmpty {
+            for button in FormatBarButton.allCases {
+                let covered = pieces.allSatisfy { index, range in
+                    let text = document.blocks[index].text
+                    guard let format = button.format else { return InlineFormatting.coversLink(text, in: range) }
+                    return InlineFormatting.covers(text, with: format, in: range)
+                }
+                if covered { active.insert(button) }
+            }
+        }
+        let kinds = Set(document.blocks[blocks].map(\.kind).filter { $0 != .pageLink })
+        return FormatBarState(kind: kinds.count == 1 ? kinds.first : nil, active: active)
+    }
+}

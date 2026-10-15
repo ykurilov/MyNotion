@@ -13,6 +13,16 @@ public enum InlineFormatting {
         return covered.contains(integersIn: range)
     }
 
+    /// Весь ли отрезок `range` текста — ссылка (любая).
+    static func coversLink(_ text: InlineText, in range: Range<Int>) -> Bool {
+        guard !range.isEmpty else { return false }
+        var covered = IndexSet()
+        for run in text.runs {
+            if case .link = run.style { covered.insert(integersIn: run.start..<run.start + run.length) }
+        }
+        return covered.contains(integersIn: range)
+    }
+
     /// Текст, где отрезок `range` оформлен (`enabled`) или освобождён от оформления.
     static func text(_ text: InlineText, setting format: InlineFormat, to enabled: Bool, in range: Range<Int>) -> InlineText {
         var runs = text.runs.flatMap { run in run.style == format.style ? subtract(range, from: run) : [run] }

@@ -40,6 +40,7 @@ public final class PageTextView: NSTextView {
     public var openURL: @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) }
     let layoutDelegate = BlockLayoutDelegate()
     let popups = EditorPopupController()
+    let formatBar = FormatBarController()
     lazy var blockHandles = BlockHandlesOverlay(textView: self)
     /// Курсор как в Notion вместо системного (`TextCaret`).
     private(set) lazy var caret = TextCaret(textView: self)
@@ -71,6 +72,7 @@ public final class PageTextView: NSTextView {
         layoutDelegate.textView = self
         layoutManager.delegate = layoutDelegate
         popups.textView = self
+        formatBar.textView = self
 
         configureTextBehaviour()
         mapper = PageTextStorageMapper(document: document, textStorage: textStorage!)
@@ -250,6 +252,7 @@ public final class PageTextView: NSTextView {
             return
         }
         if handlePopupCommand(selector) { return }
+        if formatBar.handleCommand(selector) { return }
         if handleBlockSelectionCommand(selector) { return }
         super.doCommand(by: selector)
     }
@@ -425,10 +428,14 @@ public final class PageTextView: NSTextView {
         if !isApplyingBlockSelection { blockSelectionEnds = nil }
         super.setSelectedRanges(ranges.map(keepingBeforeFinalNewline), affinity: affinity, stillSelecting: stillSelecting)
         updateSelectionLook()
-        guard !stillSelecting else { return }
+        guard !stillSelecting else {
+            formatBar.hide()
+            return
+        }
         applyEmptyParagraphTypingAttributes()
         updateEmptyParagraphHint()
         selectionDidChangeForPopups()
+        updateFormatBar()
     }
 
     /// Выделение не заходит за последний перевод строки: строка после него — не блок.
@@ -503,6 +510,7 @@ public final class PageTextView: NSTextView {
             emptyParagraphHint.isHidden = true
             emptyHintBlockID = nil
             closePopups()
+            formatBar.hide()
             updateSpellingMarks(isFocused: false)
             updateSelectionLook(isFocused: false)
         }
@@ -527,6 +535,11 @@ public final class PageTextView: NSTextView {
 
     public override func viewWillMove(toWindow newWindow: NSWindow?) {
         super.viewWillMove(toWindow: newWindow)
+        // Страницу закрыли или сменили: её панель и меню не остаются висеть над окном.
+        if newWindow == nil {
+            formatBar.hide()
+            closePopups()
+        }
         for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification] {
             if let window { NotificationCenter.default.removeObserver(self, name: name, object: window) }
             if let newWindow {
@@ -630,6 +643,7 @@ public final class PageTextView: NSTextView {
         }
         invalidateTextContainerOrigin()
         updateEmptyParagraphHint()
+        if formatBar.isShown { updateFormatBar() }
         updateSelectionLook()
     }
 

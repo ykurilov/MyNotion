@@ -34,13 +34,29 @@ struct UITestLibrary {
 
     /// Блоки страницы с названием `title` в порядке страницы. Читать после выхода приложения.
     func savedBlocks(ofPage title: String) throws -> [SavedBlock] {
+        try rows(ofPage: title, columns: "block.kind, block.text, block.indent, block.isChecked") { statement in
+            SavedBlock(
+                kind: String(cString: sqlite3_column_text(statement, 0)),
+                text: String(cString: sqlite3_column_text(statement, 1)),
+                indent: Int(sqlite3_column_int(statement, 2)),
+                isChecked: sqlite3_column_int(statement, 3) != 0
+            )
+        }
+    }
+
+    /// Оформление блоков страницы — записи отрезков в том виде, как они лежат в базе (JSON). Читать после выхода.
+    func savedTextStyles(ofPage title: String) throws -> [String] {
+        try rows(ofPage: title, columns: "block.textStyles") { String(cString: sqlite3_column_text($0, 0)) }
+    }
+
+    private func rows<Row>(ofPage title: String, columns: String, row: (OpaquePointer?) -> Row) throws -> [Row] {
         var database: OpaquePointer?
         guard sqlite3_open_v2(databaseURL.path, &database, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
             throw SQLiteFailure(message: "база не открылась: \(databaseURL.path)")
         }
         defer { sqlite3_close(database) }
         let sql = """
-            SELECT block.kind, block.text, block.indent, block.isChecked FROM block
+            SELECT \(columns) FROM block
             JOIN page ON page.id = block.pageId
             WHERE page.title = ? AND page.trashedAt IS NULL AND block.isDeleted = 0
             ORDER BY block.sortKey
@@ -52,16 +68,9 @@ struct UITestLibrary {
         defer { sqlite3_finalize(statement) }
         let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
         sqlite3_bind_text(statement, 1, title, -1, transient)
-        var blocks: [SavedBlock] = []
-        while sqlite3_step(statement) == SQLITE_ROW {
-            blocks.append(SavedBlock(
-                kind: String(cString: sqlite3_column_text(statement, 0)),
-                text: String(cString: sqlite3_column_text(statement, 1)),
-                indent: Int(sqlite3_column_int(statement, 2)),
-                isChecked: sqlite3_column_int(statement, 3) != 0
-            ))
-        }
-        return blocks
+        var rows: [Row] = []
+        while sqlite3_step(statement) == SQLITE_ROW { rows.append(row(statement)) }
+        return rows
     }
 
     struct SQLiteFailure: Error, CustomStringConvertible {

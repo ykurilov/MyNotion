@@ -212,6 +212,16 @@ final class UIGalleryRunner {
             GalleryTarget.scrollToSelection(in: window)
             if let problem = GalleryTarget.selectionProblem("выделение", in: window) { return problem }
 
+        case .formatBar(let kindMenu):
+            await open(library.sample.page.id)
+            guard let block = library.sample.blocks.first else { return "образец пуст" }
+            let bold = (block.text.string as NSString).range(of: "жирный")
+            guard bold.location != NSNotFound else { return "в первом абзаце нет слова «жирный»" }
+            PageEditorPreview.select(bold, inBlock: block.id, in: window)
+            GalleryTarget.scrollToSelection(in: window)
+            if kindMenu, !PageEditorPreview.openFormatBarKindMenu(in: window) { return "список типов не открылся" }
+            if let problem = GalleryTarget.popupsProblem("панель форматирования", in: window) { return problem }
+
         case .selectionAcrossBlocks:
             guard let page = library.blockKindPages[.numberedItem] else { return "нет страницы нумерованного списка" }
             await open(page.pageId)

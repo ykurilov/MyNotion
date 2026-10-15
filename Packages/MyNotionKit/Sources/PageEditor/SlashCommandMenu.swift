@@ -68,14 +68,24 @@ struct PopupMenuItem: Equatable {
     }
 }
 
-/// Вид меню: «/» — с заголовком раздела, быстрыми символами и строкой «Закрыть меню»; меню блока — только строки.
+/// Вид меню: «/» — с заголовком раздела, быстрыми символами и строкой «Закрыть меню»; меню блока и список типов
+/// панели форматирования — только строки, в списке типов текущий отмечен галочкой.
 enum PopupMenuStyle {
     case slash
     case block
+    case kindPicker
 
     var width: CGFloat { self == .slash ? Metrics.PopupMenu.slashMenuWidth : Metrics.PopupMenu.blockMenuWidth }
     var sectionTitle: String? { self == .slash ? "Основные блоки" : nil }
     var hasCloseRow: Bool { self == .slash }
+
+    var windowIdentifier: String {
+        switch self {
+        case .slash: "slash-menu"
+        case .block: "block-menu"
+        case .kindPicker: "kind-menu"
+        }
+    }
 }
 
 /// Всплывающее меню блоков (contracts/visual-style.md, «Всплывающие меню»): окно без рамки над страницей.
@@ -96,7 +106,7 @@ final class PopupMenuWindow: NSPanel {
         isReleasedWhenClosed = false
         becomesKeyOnlyIfNeeded = true
         contentView = menuView
-        setAccessibilityIdentifier(style == .slash ? "slash-menu" : "block-menu")
+        setAccessibilityIdentifier(style.windowIdentifier)
     }
 
     override var canBecomeKey: Bool { false }
@@ -131,6 +141,10 @@ final class PopupMenuView: NSView {
     /// Строка «Закрыть меню» внизу меню «/»: мышью закрывает меню, стрелками не выбирается — как у Notion.
     private(set) var footer: PopupMenuFooterView?
     var onChoose: ((PopupMenuItem) -> Void)?
+    /// Отмеченная галочкой строка (текущий тип в списке типов).
+    var checkedItem: PopupMenuItem? {
+        didSet { for row in rows { row.isChecked = row.item == checkedItem } }
+    }
     var onClose: (() -> Void)? {
         get { footer?.onClick }
         set { footer?.onClick = newValue }
@@ -180,6 +194,7 @@ final class PopupMenuView: NSView {
         rows.forEach { $0.removeFromSuperview() }
         rows = items.enumerated().map { index, item in
             let row = PopupMenuRowView(item: item, style: style)
+            row.isChecked = item == checkedItem
             row.onHover = { [weak self] in self?.select(index) }
             row.onClick = { [weak self] in self?.onChoose?(item) }
             addSubview(row)
@@ -295,6 +310,7 @@ final class PopupMenuRowView: NSView {
     let item: PopupMenuItem
     let style: PopupMenuStyle
     var isSelected = false { didSet { if isSelected != oldValue { needsDisplay = true } } }
+    var isChecked = false { didSet { if isChecked != oldValue { needsDisplay = true } } }
     var onHover: (() -> Void)?
     var onClick: (() -> Void)?
 
@@ -359,6 +375,7 @@ final class PopupMenuRowView: NSView {
         if style == .slash, let shortcut = item.shortcut {
             textEnd = Self.drawShortcut(shortcut, in: bounds) - padding
         }
+        if isChecked { textEnd = drawCheckmark() - padding }
         let textX = padding + iconSize + Metrics.PopupMenu.iconToTitleSpacing
         let titleStyle = Typography.popupMenuTitle
         let title = NSAttributedString(string: item.title, attributes: [
@@ -367,13 +384,31 @@ final class PopupMenuRowView: NSView {
         title.draw(in: NSRect(x: textX, y: (bounds.height - titleStyle.lineHeight) / 2, width: textEnd - textX, height: titleStyle.lineHeight))
     }
 
+    /// Галочка текущего типа справа в строке; возвращает её левый край.
+    private func drawCheckmark() -> CGFloat {
+        let configuration = NSImage.SymbolConfiguration(pointSize: Metrics.PopupMenu.checkmarkGlyphSize, weight: .medium)
+            .applying(.init(paletteColors: [Palette.textPrimary]))
+        guard let symbol = NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)?.withSymbolConfiguration(configuration) else {
+            return bounds.maxX
+        }
+        let size = symbol.size
+        let x = bounds.maxX - Metrics.PopupMenu.rowHorizontalPadding - size.width
+        symbol.draw(in: NSRect(x: x, y: (bounds.height - size.height) / 2, width: size.width, height: size.height),
+                    from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        return x
+    }
+
     /// Значок типа без рамки, как в Notion: рисунок вписан в квадрат `iconInkSize` по центру места значка.
     private func drawIcon(in rect: NSRect) {
+        Self.drawIcon(item.icon, color: item.action == .delete ? Palette.destructiveText : Palette.textPrimary, in: rect)
+    }
+
+    /// Значок строки меню; им же рисуется тип блока в панели форматирования.
+    static func drawIcon(_ icon: PopupMenuItem.Icon, color: NSColor, in rect: NSRect) {
         let side = Metrics.PopupMenu.iconInkSize
-        let color = item.action == .delete ? Palette.destructiveText : Palette.textPrimary
-        switch item.icon {
+        switch icon {
         case .label(let text):
-            let font = Self.labelFont
+            let font = labelFont
             let line = BlockDecorationPainter.textLine(text, font: font)
             let ink = CTLineGetImageBounds(line, nil)
             // Перевёрнутые координаты: прописные стоят по середине места, нижний индекс «H₁» уходит под строку.
@@ -386,7 +421,7 @@ final class PopupMenuRowView: NSView {
                 return
             }
             // У картинки значка пустые поля разной ширины: вписывать сам рисунок, а не картинку.
-            let ink = Self.inkRect(of: symbol)
+            let ink = inkRect(of: symbol)
             let scale = side / max(ink.width, ink.height, 1)
             let origin = CGPoint(x: rect.midX - ink.midX * scale, y: rect.midY - ink.midY * scale)
             symbol.draw(in: NSRect(x: origin.x, y: origin.y, width: symbol.size.width * scale, height: symbol.size.height * scale),
@@ -403,7 +438,7 @@ final class PopupMenuRowView: NSView {
     }
 
     /// Где внутри картинки сам рисунок, в её точках сверху вниз.
-    private static func inkRect(of image: NSImage) -> NSRect {
+    static func inkRect(of image: NSImage) -> NSRect {
         let scale: CGFloat = 4
         let width = Int((image.size.width * scale).rounded(.up)), height = Int((image.size.height * scale).rounded(.up))
         guard width > 0, height > 0,

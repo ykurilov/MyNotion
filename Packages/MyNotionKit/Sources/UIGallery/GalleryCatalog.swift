@@ -30,6 +30,8 @@ public enum GalleryScene: Hashable, Sendable {
     case selectionAcrossBlocks
     /// Те же блоки в режиме выделения блоков (Esc, «⋮⋮», протяжка с поля): прямоугольник на каждый блок.
     case blockSelection
+    /// Панель форматирования над выделенным жирным словом; `kindMenu` — открыт список типов.
+    case formatBar(kindMenu: Bool)
     /// Блоки с переносами строк (Shift+Enter); курсор во второй строке пункта.
     case softLineBreaks
     /// Выделение через блоки с переносами строк: одна подложка на все строки.
@@ -188,6 +190,10 @@ public enum GalleryCatalog {
         GalleryState("block-selection", .blockSelection,
                      "Режим выделения блоков: светлый прямоугольник на каждый блок целиком, между блоками просвет, курсора нет",
                      section: "Правка"),
+        GalleryState("format-bar", .formatBar(kindMenu: false),
+                     "Панель форматирования над выделенным словом: тип блока «Текст», кнопки, «Жирный» нажат (синий)", section: "Правка"),
+        GalleryState("format-bar-type-menu", .formatBar(kindMenu: true),
+                     "Панель форматирования с открытым списком типов: те же типы, что в меню «/», текущий отмечен галочкой", section: "Правка"),
         GalleryState("soft-line-breaks", .softLineBreaks,
                      "Блоки с переносами строк (Shift+Enter): маркер, номер и квадрат у первой строки, следующие — с отступом текста; курсор во второй строке",
                      section: "Правка"),

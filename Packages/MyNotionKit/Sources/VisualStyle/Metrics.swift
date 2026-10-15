@@ -240,6 +240,40 @@ public enum Metrics {
         /// Подложка под «/» с поиском в строке, пока открыто меню «/»: скругление и поля по бокам (≈ по Notion).
         public static let slashQueryCornerRadius: CGFloat = 4
         public static let slashQueryHorizontalPadding: CGFloat = 2
+        /// Галочка текущего типа в списке типов панели форматирования.
+        public static let checkmarkGlyphSize: CGFloat = 12
+    }
+
+    /// Панель форматирования над выделенным текстом (FR-033), карточка как у Notion 7.38.1 (снимок 15.10.2026, ±1,2):
+    /// строка типа блока, разделитель, ряд из 6 кнопок по 36.
+    public enum FormatBar {
+        public static let horizontalPadding: CGFloat = 6
+        public static let verticalPadding: CGFloat = 6
+        public static let buttonWidth: CGFloat = 36
+        public static let buttonCount = 6
+        public static let width: CGFloat = 2 * horizontalPadding + CGFloat(buttonCount) * buttonWidth
+        /// Строка типа: середина значка в 18 от края карточки, название с 42, середина стрелки «›» в 23 от правого края.
+        public static let kindRowHeight: CGFloat = 32
+        public static let kindIconCenterX: CGFloat = 18
+        public static let kindTitleX: CGFloat = 42
+        public static let kindChevronCenterFromRight: CGFloat = 23
+        public static let kindChevronGlyphSize: CGFloat = 11
+        /// Полоса разделителя 6: линия 1 на 2 ниже строки типа (середина в 40,5 от верха карточки), с 16 от краёв.
+        public static let dividerBandHeight: CGFloat = 6
+        public static let dividerOffset: CGFloat = 2
+        public static let dividerInset: CGFloat = 16
+        public static let dividerWidth: CGFloat = 1
+        public static let buttonRowHeight: CGFloat = 31
+        /// Размер шрифта системных значков кнопок: рисунок «B» ≈ 11 высотой, как у Notion.
+        public static let buttonGlyphSize: CGFloat = 15
+        /// Рамка, в которую вписан рисунок значка: у Notion «</>» ≈ 17,5 × 12,7, ссылка ≈ 15 × 15.
+        public static let buttonInkBox = CGSize(width: 18, height: 15)
+        /// Подсветка кнопки под мышью.
+        public static let buttonHighlightSize = CGSize(width: 32, height: 28)
+        public static let buttonCornerRadius: CGFloat = 6
+        public static let height: CGFloat = 2 * verticalPadding + kindRowHeight + dividerBandHeight + buttonRowHeight
+        /// Между верхом первой строки выделения и низом карточки.
+        public static let selectionSpacing: CGFloat = 6
     }
 }
 

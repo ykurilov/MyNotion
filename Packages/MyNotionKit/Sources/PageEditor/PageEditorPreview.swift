@@ -68,6 +68,14 @@ public enum PageEditorPreview {
         }
     }
 
+    /// Открыть список типов панели форматирования, как щелчком по строке типа; `false` — панели нет.
+    @discardableResult
+    public static func openFormatBarKindMenu(in window: NSWindow) -> Bool {
+        guard let bar = textView(in: window)?.formatBar, bar.isShown else { return false }
+        bar.openKindMenu()
+        return bar.isKindMenuOpen
+    }
+
     /// Меню блока, как по щелчку на «⋮⋮» его ручек.
     @discardableResult
     public static func openBlockMenu(forBlock blockId: UUID, in window: NSWindow) -> Bool {

@@ -51,6 +51,10 @@ public enum Palette {
     public static let modalBackdrop = themed(light: .rgba(15, 15, 15, 0.6), dark: .rgba(0, 0, 0, 0.6))
     /// Фон всплывающих панелей (меню, окно корзины): в тёмной теме светлее страницы, как в Notion (≈ по Notion).
     public static let popupMenuBackground = themed(light: .hex(0xFFFFFF), dark: .hex(0x252525))
+    /// Разделитель внутри всплывающей панели (панель форматирования), по снимкам Notion 15.10.2026.
+    public static let popupDivider = themed(light: .hex(0xF0EFED), dark: .hex(0x373736))
+    /// Значок нажатой кнопки панели форматирования — синий, как у Notion (снимок 15.10.2026).
+    public static let formatBarActiveIcon = themed(light: .hex(0x2383E2), dark: .hex(0x2383E2))
 
     /// Тень всплывающих панелей: четыре слоя, последний — тонкая рамка. В тёмной теме тень гуще, а рамка светлая:
     /// тёмная тень на тёмной странице не видна (≈ по Notion).
