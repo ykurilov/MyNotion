@@ -11,6 +11,16 @@ public final class PageTextView: NSTextView {
     public let header: PageHeaderView
     private(set) var mapper: PageTextStorageMapper!
     let emptyParagraphHint = NSTextField(labelWithString: "Введите «/» для выбора блока")
+    /// Блок, у которого сейчас видна подсказка под курсором: его фрагмент свою подсказку не рисует.
+    private(set) var emptyHintBlockID: UUID? {
+        didSet { if emptyHintBlockID != oldValue { redrawBlocks([oldValue, emptyHintBlockID].compactMap { $0 }) } }
+    }
+    /// Поле-надпись рисует текст на 2 правее своего края.
+    static let hintLabelTextInset: CGFloat = 2
+    /// Проверка орфографии при наборе включена в меню «Правописание» (FR-013).
+    private var spellCheckingWanted = true
+    /// Подложка под «/» с поиском, пока открыто меню «/».
+    let slashQueryHighlight = NSView()
 
     /// Куда поставить курсор, когда страница появится в окне.
     public enum InitialFocus { case title, body }
@@ -57,6 +67,10 @@ public final class PageTextView: NSTextView {
         }
 
         addSubview(header)
+        slashQueryHighlight.wantsLayer = true
+        slashQueryHighlight.layer?.cornerRadius = Metrics.PopupMenu.slashQueryCornerRadius
+        slashQueryHighlight.isHidden = true
+        addSubview(slashQueryHighlight)
         addSubview(emptyParagraphHint)
         emptyParagraphHint.textColor = Palette.textSecondary
         emptyParagraphHint.isHidden = true
@@ -77,7 +91,7 @@ public final class PageTextView: NSTextView {
         allowsUndo = true
         usesFindBar = true
         isIncrementalSearchingEnabled = true
-        isContinuousSpellCheckingEnabled = true
+        isContinuousSpellCheckingEnabled = spellCheckingWanted
         isGrammarCheckingEnabled = false
         drawsBackground = true
         backgroundColor = Palette.pageBackground
@@ -367,7 +381,8 @@ public final class PageTextView: NSTextView {
         let selection = selectedRange()
         guard selection.length == 0, isAtEmptyParagraph(selection.location),
               let position = mapper.blockPosition(at: selection.location) else { return }
-        typingAttributes = PageTextStorageMapper.typingAttributes(for: document.blocks[position.index])
+        typingAttributes = PageTextStorageMapper.typingAttributes(for: document.blocks[position.index],
+                                                                 after: mapper.previousKind(ofBlockAt: position.index))
     }
 
     private func isAtEmptyParagraph(_ location: Int) -> Bool {
@@ -397,29 +412,67 @@ public final class PageTextView: NSTextView {
     // MARK: Подсказка в пустом абзаце
 
     public override func becomeFirstResponder() -> Bool {
-        defer { updateEmptyParagraphHint() }
+        defer {
+            updateEmptyParagraphHint()
+            updateSpellingMarks()
+        }
         return super.becomeFirstResponder()
     }
 
     public override func resignFirstResponder() -> Bool {
         defer {
             emptyParagraphHint.isHidden = true
+            emptyHintBlockID = nil
             closePopups()
+            updateSpellingMarks(isFocused: false)
         }
         return super.resignFirstResponder()
+    }
+
+    // MARK: Отметки орфографии
+
+    /// Красные подчёркивания — только пока в тексте курсор и окно ключевое, как в Notion:
+    /// в неактивном окне и при курсоре в названии их не видно. Выбор в меню «Правописание» сохраняется.
+    private func updateSpellingMarks(isFocused: Bool? = nil) {
+        let focused = isFocused ?? (window?.firstResponder === self)
+        let active = spellCheckingWanted && window?.isKeyWindow == true && focused
+        if isContinuousSpellCheckingEnabled != active { super.isContinuousSpellCheckingEnabled = active }
+    }
+
+    public override func toggleContinuousSpellChecking(_ sender: Any?) {
+        spellCheckingWanted.toggle()
+        super.isContinuousSpellCheckingEnabled = spellCheckingWanted
+        updateSpellingMarks()
+    }
+
+    public override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification] {
+            if let window { NotificationCenter.default.removeObserver(self, name: name, object: window) }
+            if let newWindow {
+                NotificationCenter.default.addObserver(self, selector: #selector(windowKeyStateDidChange(_:)), name: name, object: newWindow)
+            }
+        }
+    }
+
+    @objc private func windowKeyStateDidChange(_ notification: Notification) {
+        updateSpellingMarks()
     }
 
     /// Подсказка у курсора в пустом блоке: своя для каждого типа (contracts/visual-style.md, «Пустые строки»).
     func updateEmptyParagraphHint() {
         let selection = selectedRange()
-        guard window?.firstResponder === self, selection.length == 0, !hasMarkedText(),
-              isAtEmptyParagraph(selection.location), let window,
+        guard window?.firstResponder === self, selection.length == 0, !hasMarkedText(), let window,
               let position = mapper.blockPosition(at: selection.location),
-              let hint = Self.emptyBlockHint(for: document.blocks[position.index].kind) else {
+              let hint = isBareSlashLine(caret: selection.location, blockAt: position.index)
+                ? Self.slashQueryHint
+                : isAtEmptyParagraph(selection.location) ? Self.emptyBlockHint(for: document.blocks[position.index].kind) : nil else {
             emptyParagraphHint.isHidden = true
+            emptyHintBlockID = nil
             return
         }
         emptyParagraphHint.stringValue = hint
+        emptyHintBlockID = document.blocks[position.index].id
         let caretOnScreen = firstRect(forCharacterRange: selection, actualRange: nil)
         let caret = convert(window.convertFromScreen(caretOnScreen), from: nil)
         let font = typingAttributes[.font] as? NSFont ?? Typography.line(for: .paragraph).font
@@ -428,10 +481,13 @@ public final class PageTextView: NSTextView {
         // Подсказка стоит там, где встанет набранный текст: на базовой линии строки блока.
         let baseline = markerLine(ofBlockAt: position.index).map { $0.baseline + textContainerOrigin.y } ?? caret.maxY
         let size = emptyParagraphHint.frame.size
-        emptyParagraphHint.frame = NSRect(x: caret.minX, y: baseline - emptyParagraphHint.firstBaselineOffsetFromTop,
+        emptyParagraphHint.frame = NSRect(x: caret.minX + Metrics.Page.emptyHintCaretGap, y: baseline - emptyParagraphHint.firstBaselineOffsetFromTop,
                                           width: size.width, height: size.height)
         emptyParagraphHint.isHidden = false
     }
+
+    /// Подсветка «/» с набранным поиском, пока открыто меню «/» (координаты окна текста).
+    var slashQueryHighlightFrame: NSRect? { slashQueryHighlight.isHidden ? nil : slashQueryHighlight.frame }
 
     static func emptyBlockHint(for kind: BlockKind) -> String? {
         switch kind {
@@ -508,9 +564,25 @@ public final class PageTextView: NSTextView {
 
 /// Шапка страницы над текстом: эмодзи-иконка и название (contracts/visual-style.md, «Страница»).
 @MainActor
+/// Поле названия: курсор того же цвета, что в блоках, а не системный синий.
+final class PageTitleField: NSTextField {
+    override class var cellClass: AnyClass? {
+        get { PageTitleFieldCell.self }
+        set {}
+    }
+}
+
+private final class PageTitleFieldCell: NSTextFieldCell {
+    override func setUpFieldEditorAttributes(_ textObj: NSText) -> NSText {
+        let editor = super.setUpFieldEditorAttributes(textObj)
+        (editor as? NSTextView)?.insertionPointColor = Palette.textPrimary
+        return editor
+    }
+}
+
 public final class PageHeaderView: NSView, NSTextFieldDelegate {
     private let iconLabel = NSTextField(labelWithString: "")
-    let titleField = NSTextField(string: "")
+    let titleField = PageTitleField(string: "")
     var onTitleChange: ((String) -> Void)?
     var onTitleEnter: (() -> Void)?
 
@@ -526,8 +598,10 @@ public final class PageHeaderView: NSView, NSTextFieldDelegate {
         titleField.stringValue = page.title
         titleField.font = titleStyle.font
         titleField.textColor = Palette.textPrimary
+        let placeholderStyle = NSMutableParagraphStyle()
+        placeholderStyle.firstLineHeadIndent = Metrics.Page.emptyHintCaretGap
         titleField.placeholderAttributedString = NSAttributedString(string: Page.untitledTitle, attributes: [
-            .font: titleStyle.font, .foregroundColor: Palette.textSecondary,
+            .font: titleStyle.font, .foregroundColor: Palette.textSecondary, .paragraphStyle: placeholderStyle,
         ])
         titleField.isBordered = false
         titleField.drawsBackground = false
@@ -566,7 +640,11 @@ public final class PageHeaderView: NSView, NSTextFieldDelegate {
 
     public override func layout() {
         super.layout()
-        iconLabel.frame = NSRect(x: 0, y: Metrics.Page.headerTopPadding, width: Metrics.Page.iconSize, height: Metrics.Page.iconSize)
+        // Строка эмодзи выше и шире квадрата иконки, хотя рисунок в нём помещается: поле по размеру строки
+        // с серединой в середине квадрата, иначе рисунок обрезается или съезжает.
+        let square = NSRect(x: 0, y: Metrics.Page.headerTopPadding, width: Metrics.Page.iconSize, height: Metrics.Page.iconSize)
+        let line = iconLabel.intrinsicContentSize
+        iconLabel.frame = NSRect(x: square.midX - line.width / 2, y: square.midY - line.height / 2, width: line.width, height: line.height)
         titleField.frame = NSRect(x: 0, y: titleTop, width: bounds.width, height: titleHeight(forWidth: bounds.width))
     }
 

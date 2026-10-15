@@ -115,6 +115,7 @@ public final class PageTextStorageMapper: NSObject {
         let drafts = blockDrafts(for: paragraphs, replacing: replaced)
         let ids = document.replaceBlocks(after: previousId, before: nextId, with: drafts)
         renderParagraphs(paragraphs, as: ids)
+        if let next = nextId.flatMap(document.index(ofBlock:)) { refreshSpacing(ofBlockAt: next) }
         return true
     }
 
@@ -125,7 +126,7 @@ public final class PageTextStorageMapper: NSObject {
         guard length == 0 || (textStorage.string as NSString).character(at: length - 1) != Self.newline else { return }
         let attributes = length > 0
             ? textStorage.attributes(at: length - 1, effectiveRange: nil)
-            : document.blocks.last.map(Self.baseAttributes(for:)) ?? [:]
+            : document.blocks.last.map { Self.baseAttributes(for: $0, after: previousKind(ofBlockAt: document.blocks.count - 1)) } ?? [:]
         applying { textStorage.append(NSAttributedString(string: "\n", attributes: attributes)) }
     }
 
@@ -193,13 +194,37 @@ public final class PageTextStorageMapper: NSObject {
         applying {
             textStorage.beginEditing()
             for (paragraph, id) in zip(paragraphs, ids) {
-                guard let block = document.block(id) else { continue }
+                guard let block = document.block(id), let index = document.index(ofBlock: id) else { continue }
                 let hasNewline = NSMaxRange(paragraph) > Self.contentRange(of: paragraph, in: string).upperBound
-                let rendered = Self.paragraph(block, withNewline: hasNewline)
+                let rendered = Self.paragraph(block, withNewline: hasNewline, after: previousKind(ofBlockAt: index))
                 guard rendered.length == paragraph.length else { continue }
                 rendered.enumerateAttributes(in: NSRange(location: 0, length: rendered.length)) { attributes, range, _ in
                     textStorage.setAttributes(attributes, range: NSRange(location: paragraph.location + range.location, length: range.length))
                 }
+            }
+            textStorage.endEditing()
+        }
+    }
+
+    /// Тип блока над блоком `index`: от него зависит отступ над блоком.
+    func previousKind(ofBlockAt index: Int) -> BlockKind? {
+        index > 0 && index <= document.blocks.count ? document.blocks[index - 1].kind : nil
+    }
+
+    /// Поправить отступ над блоком `index` после смены соседа сверху: не трогая текст и его оформление.
+    private func refreshSpacing(ofBlockAt index: Int) {
+        guard document.blocks.indices.contains(index) else { return }
+        let range = characterRange(ofBlocksAt: index..<index + 1)
+        guard range.length > 0 else { return }
+        let spacing = Self.spacingBefore(document.blocks[index].kind, after: previousKind(ofBlockAt: index))
+        let current = textStorage.attribute(.paragraphStyle, at: range.location, effectiveRange: nil) as? NSParagraphStyle
+        guard current?.paragraphSpacingBefore != spacing else { return }
+        applying {
+            textStorage.beginEditing()
+            textStorage.enumerateAttribute(.paragraphStyle, in: range) { value, run, _ in
+                guard let style = (value as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle else { return }
+                style.paragraphSpacingBefore = spacing
+                textStorage.addAttribute(.paragraphStyle, value: style, range: run)
             }
             textStorage.endEditing()
         }
@@ -268,10 +293,11 @@ public final class PageTextStorageMapper: NSObject {
         let blocks = document.blocks
         let text = NSMutableAttributedString()
         for index in range {
-            text.append(Self.paragraph(blocks[index], withNewline: true))
+            text.append(Self.paragraph(blocks[index], withNewline: true, after: previousKind(ofBlockAt: index)))
         }
         applying { textStorage.replaceCharacters(in: characters, with: text) }
         paragraphHint = (0, 0)
+        refreshSpacing(ofBlockAt: range.upperBound)
     }
 
     // MARK: Блоки ⇄ текст
@@ -281,8 +307,8 @@ public final class PageTextStorageMapper: NSObject {
     /// Текст страницы: абзацы блоков, каждый с переводом строки.
     public static func attributedText(for blocks: [Block]) -> NSAttributedString {
         let text = NSMutableAttributedString()
-        for block in blocks {
-            text.append(paragraph(block, withNewline: true))
+        for (index, block) in blocks.enumerated() {
+            text.append(paragraph(block, withNewline: true, after: index > 0 ? blocks[index - 1].kind : nil))
         }
         return text
     }
@@ -352,13 +378,14 @@ public final class PageTextStorageMapper: NSObject {
     }
 
     /// Атрибуты, с которыми набирается текст абзаца блока.
-    public static func typingAttributes(for block: Block) -> [NSAttributedString.Key: Any] {
-        baseAttributes(for: block)
+    public static func typingAttributes(for block: Block, after previous: BlockKind? = nil) -> [NSAttributedString.Key: Any] {
+        baseAttributes(for: block, after: previous)
     }
 
     /// Атрибуты набора блока с оформлением в строке из `inline` (жирный, курсив и т. д.).
-    static func typingAttributes(for block: Block, inline: [NSAttributedString.Key: Any]) -> [NSAttributedString.Key: Any] {
-        var attributes = baseAttributes(for: block)
+    static func typingAttributes(for block: Block, after previous: BlockKind? = nil,
+                                 inline: [NSAttributedString.Key: Any]) -> [NSAttributedString.Key: Any] {
+        var attributes = baseAttributes(for: block, after: previous)
         for key in inlineKeys { attributes[key] = inline[key] }
         return attributes.merging(inlineRendering(attributes, line: Typography.line(for: textStyle(of: block.kind)))) { $1 }
     }
@@ -375,12 +402,22 @@ public final class PageTextStorageMapper: NSObject {
         }
     }
 
-    static func baseAttributes(for block: Block) -> [NSAttributedString.Key: Any] {
+    /// Отступ над блоком: свой у типа блока, между абзацем и пунктом, чекбоксом или подстраницей — больше,
+    /// как у Notion (contracts/visual-style.md, «Блоки»).
+    static func spacingBefore(_ kind: BlockKind, after previous: BlockKind?) -> CGFloat {
+        let own = Metrics.block(textStyle(of: kind)).topSpacing
+        guard let previous else { return own }
+        let listLike: Set<BlockKind> = [.bulletItem, .numberedItem, .checkbox, .pageLink]
+        let crossesGroup = kind == .paragraph && listLike.contains(previous) || previous == .paragraph && listLike.contains(kind)
+        return crossesGroup ? own + Metrics.Page.paragraphListSpacing : own
+    }
+
+    static func baseAttributes(for block: Block, after previous: BlockKind? = nil) -> [NSAttributedString.Key: Any] {
         let style = textStyle(of: block.kind)
         let line = Typography.line(for: style)
         let spacing = Metrics.block(style)
         let paragraphStyle = (line.paragraphStyle.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
-        paragraphStyle.paragraphSpacingBefore = spacing.topSpacing
+        paragraphStyle.paragraphSpacingBefore = spacingBefore(block.kind, after: previous)
         paragraphStyle.paragraphSpacing = max(0, spacing.height - line.lineHeight - spacing.topSpacing)
         let marker: CGFloat = block.kind.hasMarkerColumn ? Metrics.BlockMarker.textInset : 0
         let indent = CGFloat(block.indent) * Metrics.Page.indentPerLevel + marker
@@ -399,8 +436,8 @@ public final class PageTextStorageMapper: NSObject {
     }
 
     /// Абзац блока: текст с оформлением и, если нужно, перевод строки с атрибутами того же абзаца.
-    static func paragraph(_ block: Block, withNewline: Bool) -> NSAttributedString {
-        let base = baseAttributes(for: block)
+    static func paragraph(_ block: Block, withNewline: Bool, after previous: BlockKind? = nil) -> NSAttributedString {
+        let base = baseAttributes(for: block, after: previous)
         let line = Typography.line(for: textStyle(of: block.kind))
         let text = NSMutableAttributedString(string: block.text.string, attributes: base)
         let length = text.length
