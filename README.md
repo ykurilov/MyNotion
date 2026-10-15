@@ -54,3 +54,14 @@ xcodebuild test -scheme MyNotionPerformance -configuration Release -destination 
 ```sh
 cd server && pnpm install && pnpm dev   # http://localhost:8787/health → ok
 ```
+
+## Запуск только в виртуальном Mac
+
+На основном Mac приложение не запускается ни в каком виде — это мешает Юрию работать. Сборка на основном Mac разрешена, запуск — только внутри виртуального Mac (Cua/Lume, машина `cua-base-3416f98dedcf` на SSD):
+
+```sh
+scripts/vm/run-in-vm.sh gallery [--only <слово>] [--out <папка>]   # галерея состояний, снимки копируются сюда
+scripts/vm/run-in-vm.sh run <флаги приложения>                       # любой служебный режим
+scripts/vm/run-in-vm.sh ssh <команда>                                # команда внутри
+scripts/vm/run-in-vm.sh status
+```
