@@ -179,10 +179,6 @@ final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineV
         Metrics.Sidebar.rowHeight
     }
 
-    func outlineView(_ outlineView: NSOutlineView, shouldShowOutlineCellForItem item: Any) -> Bool {
-        false
-    }
-
     func outlineViewSelectionDidChange(_ notification: Notification) {
         guard !isApplyingState, let outlineView, let pageId = pageId(atRow: outlineView.selectedRow) else { return }
         actions.select(pageId)
@@ -220,11 +216,18 @@ final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineV
         return (outlineView?.item(atRow: row) as? PageOutlineItem)?.pageId
     }
 
-    /// Развернуть всё, что не свёрнуто, внутри уже видимой ветки. Свёрнутые ветки не читаются.
+    /// Развернуть всё, что не свёрнуто, внутри уже видимой ветки, на любой глубине. Свёрнутые ветки не читаются.
+    /// Уже раскрытая ветка повторно не раскрывается и сама детей не обходит — поэтому спуск здесь, а не только
+    /// в `outlineViewItemDidExpand`: иначе подстраница новой подстраницы осталась бы в нераскрытой ветке.
     private func expandOpenBranches(under parentId: UUID?) {
         guard let outlineView else { return }
         for page in tree.children(of: parentId) where !collapsedPageIds.contains(page.id) && !tree.children(of: page.id).isEmpty {
-            outlineView.expandItem(item(for: page.id))
+            let item = item(for: page.id)
+            if outlineView.isItemExpanded(item) {
+                expandOpenBranches(under: page.id)
+            } else {
+                outlineView.expandItem(item)
+            }
         }
     }
 

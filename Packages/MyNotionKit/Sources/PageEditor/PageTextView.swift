@@ -22,8 +22,9 @@ public final class PageTextView: NSTextView {
     /// Подложка под «/» с поиском, пока открыто меню «/».
     let slashQueryHighlight = NSView()
 
-    /// Куда поставить курсор, когда страница появится в окне.
-    public enum InitialFocus { case title, body }
+    /// Куда поставить курсор, когда страница появится в окне. `unchanged` — фокус остаётся, где был:
+    /// страницу открыли из дерева, и стрелки, Enter и ⌘⌫ дальше работают в дереве.
+    public enum InitialFocus { case title, body, unchanged }
     private var pendingFocus: InitialFocus?
     /// Страница показана и принимает ввод.
     public var onReady: (@MainActor () -> Void)?
@@ -564,6 +565,7 @@ public final class PageTextView: NSTextView {
             switch focus {
             case .title: header.focusTitle()
             case .body: focusBody(at: 0)
+            case .unchanged: break
             }
             onReady?()
         }

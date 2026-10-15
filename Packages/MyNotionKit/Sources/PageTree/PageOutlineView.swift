@@ -22,6 +22,8 @@ final class PageOutlineView: NSOutlineView {
         rowHeight = Metrics.Sidebar.rowHeight
         intercellSpacing = .zero
         indentationPerLevel = Metrics.Sidebar.indentPerLevel
+        // Колонка — ровно по панели: иначе раскрытие ветки расширяет её на отступ, и «⋯ +» уезжают за край.
+        autoresizesOutlineColumn = false
         columnAutoresizingStyle = .uniformColumnAutoresizingStyle
         focusRingType = .none
         selectionHighlightStyle = .regular

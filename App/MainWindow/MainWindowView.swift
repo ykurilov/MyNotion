@@ -76,7 +76,8 @@ private struct PagesWindow: View {
             liveTitle: model.liveTitleOfOpenPage,
             trashEntries: model.trashEntries,
             actions: PageTreeActions(
-                select: { model.select($0) },
+                // Фокус остаётся в дереве: стрелки, Enter и ⌘⌫ дальше работают там.
+                select: { model.select($0, focus: .unchanged) },
                 rename: { model.rename($0, to: $1) },
                 move: { model.move($0, toParent: $1, at: $2) },
                 moveToTrash: { model.moveToTrash($0) },

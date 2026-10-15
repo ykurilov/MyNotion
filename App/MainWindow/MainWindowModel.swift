@@ -59,9 +59,9 @@ final class MainWindowModel {
 
     // MARK: Действия
 
-    func select(_ pageId: UUID?) {
+    func select(_ pageId: UUID?, focus: PageTextView.InitialFocus = .body) {
         guard let pageId, pageId != openPageId else { return }
-        open(pageId, focus: .body, remember: true)
+        open(pageId, focus: focus, remember: true)
     }
 
     /// ⌘N: новая страница рядом с текущей, курсор в названии (contracts/editor-interactions.md).

@@ -23,21 +23,21 @@ final class PageTreeTests: XCTestCase {
         createPage(app, title: "Проекты", shortcut: [.command])
         createPage(app, title: "MyNotion", shortcut: [.command, .shift])
         createPage(app, title: "Заметки", shortcut: [.command, .shift])
-        row(app, "Проекты").click()
+        middle(app, "Проекты").click()
         createPage(app, title: "Входящие", shortcut: [.command])
         XCTAssertEqual(visibleTitles(app), ["Проекты", "MyNotion", "Заметки", "Входящие"])
 
         // 2.2. Перетащить ветку «MyNotion» на «Входящие»: «Заметки» уезжают вместе с ней.
-        row(app, "MyNotion").press(forDuration: 0.5, thenDragTo: row(app, "Входящие"))
+        middle(app, "MyNotion").press(forDuration: 0.5, thenDragTo: middle(app, "Входящие"))
         XCTAssertTrue(waitForTitles(app, ["Проекты", "Входящие", "MyNotion", "Заметки"]))
 
         // Свернуть «MyNotion»: выделить строку и нажать стрелку влево.
-        row(app, "MyNotion").click()
+        middle(app, "MyNotion").click()
         app.outlines["page-tree"].typeKey(.leftArrow, modifierFlags: [])
         XCTAssertTrue(waitForTitles(app, ["Проекты", "Входящие", "MyNotion"]))
 
         // 2.3. ⌘⌫ в дереве — «Проекты» в корзину.
-        row(app, "Проекты").click()
+        middle(app, "Проекты").click()
         app.outlines["page-tree"].typeKey(.delete, modifierFlags: .command)
         XCTAssertTrue(waitForTitles(app, ["Входящие", "MyNotion"]))
 
@@ -55,7 +55,7 @@ final class PageTreeTests: XCTestCase {
         XCTAssertTrue(app.wait(for: .notRunning, timeout: 10), "Приложение не вышло по ⌘Q")
         app = launchApp()
         XCTAssertTrue(waitForTitles(app, ["Проекты", "Входящие", "MyNotion"]))
-        row(app, "MyNotion").click()
+        middle(app, "MyNotion").click()
         app.outlines["page-tree"].typeKey(.rightArrow, modifierFlags: [])
         XCTAssertTrue(waitForTitles(app, ["Проекты", "Входящие", "MyNotion", "Заметки"]))
         app.terminate()
@@ -86,10 +86,17 @@ final class PageTreeTests: XCTestCase {
         app.outlines["page-tree"].outlineRows.containing(NSPredicate(format: "value == %@", title)).firstMatch
     }
 
-    /// Названия видимых строк дерева сверху вниз.
+    /// Середина строки — куда кликает и откуда тянет человек. Клик по самой строке XCUITest наводит на край:
+    /// середину строки доступность отдаёт заменителем ячейки, новым при каждом вопросе, и XCUITest его не узнаёт.
+    @MainActor
+    private func middle(_ app: XCUIApplication, _ title: String) -> XCUICoordinate {
+        row(app, title).coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+    }
+
+    /// Названия видимых строк дерева сверху вниз. Название — надпись, а при переименовании поле ввода: тип любой.
     @MainActor
     private func visibleTitles(_ app: XCUIApplication) -> [String] {
-        app.outlines["page-tree"].textFields.matching(identifier: "page-tree-title")
+        app.outlines["page-tree"].descendants(matching: .any).matching(identifier: "page-tree-title")
             .allElementsBoundByIndex.compactMap { $0.value as? String }
     }
 

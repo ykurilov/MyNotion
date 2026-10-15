@@ -107,6 +107,39 @@ struct SidebarGeometryTests {
         #expect(cell.bounds.maxX - cell.addButton.frame.maxX == Metrics.Sidebar.rowHorizontalPadding)
     }
 
+    @Test("Дерево не шире панели: «⋯ +» строк видны целиком и с тремя уровнями вложенности, и после смены ширины",
+          arguments: [Metrics.Sidebar.defaultWidth, Metrics.Sidebar.defaultWidth + 120])
+    func outlineFitsSidebar(width: CGFloat) throws {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: Metrics.Sidebar.defaultWidth, height: 400),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        let projects = Self.page("Проекты", key: "1")
+        let app = Self.page("MyNotion", parent: projects.id, key: "1")
+        let notes = Self.page("Заметки", parent: app.id, key: "1")
+        let actions = PageTreeActions(select: { _ in }, rename: { _, _ in }, move: { _, _, _ in }, moveToTrash: { _ in },
+                                      addSubpage: { _ in }, collapsedPagesChanged: { _ in })
+        // Как ⌘N «Проекты», ⇧⌘N «MyNotion», ⇧⌘N «Заметки»: ветки раскрываются, когда дерево уже на экране.
+        let steps = [[projects], [projects, app], [projects, app, notes]]
+        let host = NSHostingView(rootView: Self.sidebar(steps[0], revision: 0, actions: actions))
+        window.contentView = host
+        for (revision, pages) in steps.enumerated() {
+            host.rootView = Self.sidebar(pages, revision: revision, actions: actions)
+            host.layoutSubtreeIfNeeded()
+        }
+        window.setContentSize(NSSize(width: width, height: 400))
+        let content = try #require(window.contentView)
+        content.layoutSubtreeIfNeeded()
+        let outline = try #require(Self.find(PageOutlineView.self, in: content))
+        let clip = try #require(outline.enclosingScrollView?.contentView)
+        #expect(outline.numberOfRows == 3)
+        #expect(abs(outline.frame.width - clip.bounds.width) <= 0.5, "дерево \(outline.frame.width), видно \(clip.bounds.width)")
+        for row in 0..<outline.numberOfRows {
+            let cell = try #require(outline.view(atColumn: 0, row: row, makeIfNecessary: true) as? PageTreeCellView)
+            cell.layoutSubtreeIfNeeded()
+            let addButton = cell.convert(cell.addButton.frame, to: clip)
+            #expect(clip.bounds.contains(addButton), "строка \(row): «+» за краем \(addButton), видно \(clip.bounds)")
+        }
+    }
+
     // MARK: Переименование (№2)
 
     @Test("Переименование: текст не сдвигается, поле прозрачное", arguments: ["Заметки", ""])
@@ -141,8 +174,8 @@ struct SidebarGeometryTests {
                width: sidebarWidth - 2 * Metrics.Sidebar.panelInset, height: Metrics.Sidebar.rowHeight)
     }
 
-    private static func page(_ title: String, icon: String? = nil, key: String) -> Page {
-        var page = Page(title: title, parentId: nil, sortKey: FractionalSortKey(rawValue: key)!, createdAt: .now, updatedAt: .now)
+    private static func page(_ title: String, icon: String? = nil, parent: UUID? = nil, key: String) -> Page {
+        var page = Page(title: title, parentId: parent, sortKey: FractionalSortKey(rawValue: key)!, createdAt: .now, updatedAt: .now)
         page.icon = icon
         return page
     }
@@ -168,6 +201,16 @@ struct SidebarGeometryTests {
 
     /// Источник данных дерева держится слабо: живёт до конца прогона.
     private static var retained: [AnyObject] = []
+
+    private static func sidebar(_ pages: [Page], revision: Int, actions: PageTreeActions) -> PageTreeSidebar {
+        PageTreeSidebar(tree: PageTreeSnapshot(allPages: pages), treeRevision: revision, collapsedPageIds: [],
+                        selectedPageId: pages.last?.id, liveTitle: nil, trashEntries: [], actions: actions,
+                        trashActions: TrashActions(restore: { _ in }, deleteForever: { _ in }, emptyTrash: {}), topInset: 0)
+    }
+
+    private static func find<View: NSView>(_ type: View.Type, in view: NSView) -> View? {
+        (view as? View) ?? view.subviews.lazy.compactMap { find(type, in: $0) }.first
+    }
 
     private static func titleArea(of cell: PageTreeCellView) -> NSRect {
         NSRect(x: cell.titleLabel.frame.minX - 6, y: 0, width: cell.bounds.width - cell.titleLabel.frame.minX + 6, height: cell.bounds.height)
