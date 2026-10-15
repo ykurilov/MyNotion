@@ -39,10 +39,12 @@ public struct PageTreeSidebar: View {
             groupHeader("Страницы")
             PageOutline(tree: tree, treeRevision: treeRevision, collapsedPageIds: collapsedPageIds,
                         selectedPageId: selectedPageId, liveTitle: liveTitle, actions: actions)
+            footerDivider
             trashRow
         }
         .padding(.horizontal, Metrics.Sidebar.panelInset)
         .padding(.top, topInset)
+        .padding(.bottom, Metrics.Sidebar.footerBottomInset)
         .background(Color(nsColor: Palette.sidebarBackground))
     }
 
@@ -54,11 +56,21 @@ public struct PageTreeSidebar: View {
             .frame(height: Metrics.Sidebar.rowHeight, alignment: .leading)
     }
 
+    /// Линия цвета border между деревом и нижними строками: прокрученное дерево не сливается с «Корзиной».
+    private var footerDivider: some View {
+        Rectangle()
+            .fill(Color(nsColor: Palette.border))
+            .frame(height: 1)
+            .padding(.horizontal, Metrics.Sidebar.rowHorizontalPadding)
+            .padding(.vertical, Metrics.Sidebar.footerDividerSpacing)
+    }
+
+    /// «Корзина» — обычная строка панели: те же высота, поля, иконка 20×20 на вертикали иконок страниц.
     private var trashRow: some View {
         Button { isTrashShown.toggle() } label: {
             HStack(spacing: Metrics.Sidebar.rowIconSpacing) {
                 Image(systemName: "trash")
-                    .font(.system(size: Metrics.Sidebar.rowEmojiFontSize - 1))
+                    .font(.system(size: Metrics.Sidebar.rowEmojiFontSize - 1, weight: .medium))
                     .foregroundStyle(Color(nsColor: Palette.sidebarText))
                     .frame(width: Metrics.Sidebar.rowIconSize, height: Metrics.Sidebar.rowIconSize)
                 Text("Корзина")
@@ -67,7 +79,8 @@ public struct PageTreeSidebar: View {
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, Metrics.Sidebar.rowHorizontalPadding)
-            .frame(height: Metrics.Sidebar.rowHeight)
+            .padding(.vertical, Metrics.Sidebar.rowVerticalPadding)
+            .frame(maxWidth: .infinity, minHeight: Metrics.Sidebar.rowHeight, maxHeight: Metrics.Sidebar.rowHeight)
             .contentShape(Rectangle())
         }
         .buttonStyle(SidebarRowButtonStyle())

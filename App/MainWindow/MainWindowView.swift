@@ -26,7 +26,7 @@ struct MainWindowView: View {
     private func editorReady() {
         LaunchMilestones.editorReady(reportTo: options.launchReportURL)
         if let snapshotURL = options.windowSnapshotURL {
-            WindowSnapshot.capture(to: snapshotURL)
+            WindowSnapshot.capture(to: snapshotURL, hoveredSidebarRow: options.hoveredSidebarRow)
         }
         if let benchmarkURL = options.typingBenchmarkURL, case .success(let model) = library {
             TypingBenchmark.editorReady(model: model, reportTo: benchmarkURL)
