@@ -69,6 +69,8 @@ final class UIGalleryRunner {
             return
         }
         self.window = window
+        // Курсор текста на каждом снимке: и в неключевом окне, и без мигания.
+        TextCaret.isPreviewMode = true
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         } catch {
@@ -207,6 +209,16 @@ final class UIGalleryRunner {
             let start = text.range(of: "жирный").location, end = NSMaxRange(text.range(of: "зачёркнутый"))
             guard start != NSNotFound, end <= text.length else { return "в первом абзаце нет оформления" }
             PageEditorPreview.select(NSRange(location: start, length: end - start), inBlock: block.id, in: window)
+            GalleryTarget.scrollToSelection(in: window)
+            if let problem = GalleryTarget.selectionProblem("выделение", in: window) { return problem }
+
+        case .selectionAcrossBlocks:
+            guard let page = library.blockKindPages[.numberedItem] else { return "нет страницы нумерованного списка" }
+            await open(page.pageId)
+            guard let textView = PageEditorPreview.textView(in: window), let first = textView.document.blocks.first?.id,
+                  PageEditorPreview.selectBlocks(from: first, through: page.paragraphAfterEmpty, in: window) else {
+                return "блоки не выделены"
+            }
             GalleryTarget.scrollToSelection(in: window)
             if let problem = GalleryTarget.selectionProblem("выделение", in: window) { return problem }
 

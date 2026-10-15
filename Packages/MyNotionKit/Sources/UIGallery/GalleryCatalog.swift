@@ -26,6 +26,8 @@ public enum GalleryScene: Hashable, Sendable {
     case blockDragging
     /// Выделенный текст с жирным, курсивом и кодом.
     case formattedSelection
+    /// Выделены два пункта нумерованного списка и абзац под ними.
+    case selectionAcrossBlocks
     /// Дерево четырёх уровней: ветка развёрнута или свёрнута.
     case sidebarTree(collapsed: Bool)
     /// Строка дерева под мышью: «⋯ +» справа; у длинного названия — обрезка перед ними.
@@ -175,6 +177,9 @@ public enum GalleryCatalog {
                      "Идёт перетаскивание за «⋮⋮»: копия пункта с вложенными едет за мышью, синяя линия — место сброса", section: "Правка"),
         GalleryState("formatted-selection", .formattedSelection,
                      "Выделенный текст с жирным, курсивом и зачёркнутым", section: "Правка"),
+        GalleryState("selection-across-blocks", .selectionAcrossBlocks,
+                     "Выделение через несколько блоков: полоса по тексту каждой строки, номера не закрашены, между блоками просвет",
+                     section: "Правка"),
     ]
 
     private static let sidebarStates: [GalleryState] = [

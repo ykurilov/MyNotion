@@ -46,6 +46,14 @@ struct NotesStoreTests {
         #expect(page.displayTitle == "Без названия")
     }
 
+    @Test("В пути страница — с иконкой перед названием, как у Notion")
+    func pathTitleHasIcon() throws {
+        var page = try store.write { try $0.createPage(title: "Личный журнал") }
+        #expect(page.pathTitle == "Личный журнал")
+        page.icon = "🗒️"
+        #expect(page.pathTitle == "🗒️ Личный журнал")
+    }
+
     @Test("Дерево читается без текста блоков, по порядку ключей")
     func outlineIsOrderedBySortKey() throws {
         let (first, second, between) = try store.write { tx in

@@ -41,8 +41,17 @@ struct EditorChromeGeometryTests {
         #expect(ink.minY > 0.5 && ink.maxY < square.maxY + 2, "Рисунок обрезан: \(ink)")
     }
 
-    /// Системный курсор текста шириной ≈ 2 от своей точки вправо.
-    static let caretWidth: CGFloat = 2
+    @Test("Название без иконки: от середины пути до верха букв 65, как у Notion (снимок Юрия 15.10.2026)")
+    func titleWithoutIconSitsLikeNotion() throws {
+        let page = Page(title: "Блоки", sortKey: .between(nil, nil), createdAt: Date(), updatedAt: Date())
+        let header = PageHeaderView(page: page)
+        header.frame = NSRect(x: 0, y: 0, width: Metrics.Page.columnWidth, height: header.height(forWidth: Metrics.Page.columnWidth))
+        header.layoutSubtreeIfNeeded()
+        let letters = try #require(ViewPixels(header, appearance: .aqua).inkBounds(in: header.bounds))
+        // Шапка начинается под верхней полосой, путь — по её середине.
+        let fromPath = Metrics.Page.topBarHeight / 2 + letters.minY
+        #expect(abs(fromPath - 65) <= 1, "От середины пути до верха букв названия \(fromPath), у Notion 65")
+    }
 
     @Test("Подсказка под курсором начинается там же, где набранный текст того же блока (баг Юрия 15.10.2026)")
     func blockHintStartsAtText() throws {
@@ -75,11 +84,12 @@ struct EditorChromeGeometryTests {
         let placeholder = try #require(ViewPixels(header.titleField, appearance: .aqua).inkBounds(in: header.titleField.bounds))
 
         header.focusTitle()
-        let editor = try #require(header.titleField.currentEditor() as? NSTextView)
-        #expect(editor.insertionPointColor == Palette.textPrimary, "Курсор названия \(editor.insertionPointColor)")
-        let caret = header.titleField.convert(window.convertFromScreen(
-            editor.firstRect(forCharacterRange: editor.selectedRange(), actualRange: nil)), from: nil)
-        let gap = placeholder.minX - (caret.minX + Self.caretWidth)
-        #expect(gap >= 1 && gap <= 3.5, "От курсора до «Без названия» \(gap)")
+        let editor = try #require(header.titleField.currentEditor() as? PageTitleEditor)
+        editor.caret.showsWithoutKeyWindow = true
+        editor.caret.update()
+        #expect(editor.caret.view.color == Palette.textPrimary, "Курсор названия \(editor.caret.view.color)")
+        let caret = header.titleField.convert(editor.caret.frame, from: editor)
+        let gap = placeholder.minX - caret.maxX
+        #expect(gap >= 0.5 && gap <= 3, "От курсора \(caret) до «Без названия» \(placeholder): \(gap)")
     }
 }

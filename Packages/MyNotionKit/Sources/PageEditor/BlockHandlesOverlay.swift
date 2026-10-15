@@ -340,7 +340,7 @@ extension PageTextView {
         guard let top = frames.map(\.lowerBound).min(), let bottom = frames.map(\.upperBound).max() else { return nil }
         let rect = NSRect(x: textContainerOrigin.x, y: top, width: Metrics.Page.columnWidth, height: bottom - top)
         guard let bitmap = bitmapImageRepForCachingDisplay(in: rect) else { return nil }
-        let chrome = ([blockHandles, emptyParagraphHint, slashQueryHighlight] + insertionIndicators(in: self)).filter { !$0.isHidden }
+        let chrome = ([blockHandles, emptyParagraphHint, slashQueryHighlight, caret.view] + insertionIndicators(in: self)).filter { !$0.isHidden }
         chrome.forEach { $0.isHidden = true }
         drawsBackground = false
         cacheDisplay(in: rect, to: bitmap)

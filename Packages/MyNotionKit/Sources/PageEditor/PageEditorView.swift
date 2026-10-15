@@ -7,7 +7,7 @@ import VisualStyle
 /// (contracts/visual-style.md, «Страница»). На каждую страницу — свой редактор: задавайте `.id(pageId)`.
 public struct PageEditorView: View {
     let document: PageDocument
-    /// Названия страниц-предков от корня; у корневой страницы — пусто.
+    /// Названия страниц-предков с иконками, от корня; у корневой страницы — пусто.
     let ancestorTitles: [String]
     let initialFocus: PageTextView.InitialFocus
     /// Названия и иконки страниц для блоков-подстраниц.
@@ -39,13 +39,12 @@ public struct PageEditorView: View {
         .background(Color(nsColor: Palette.pageBackground))
     }
 
-    /// Путь «Родитель / Страница» шрифтом 14; длинный — без середины и с обрезанным по слову названием.
+    /// Путь «Родитель / Страница» шрифтом 14, «/» тусклый; длинный — без середины и с обрезанным по слову названием.
     private var topBar: some View {
         GeometryReader { proxy in
             let width = proxy.size.width - Metrics.Page.topBarHorizontalPadding - Metrics.Page.topBarTrailingInset
-            Text(BreadcrumbText.fitting(ancestorTitles + [breadcrumbTitle], width: width, measure: BreadcrumbText.measure))
-                .font(Font(Typography.breadcrumb.font))
-                .foregroundStyle(Color(nsColor: Palette.textPrimary))
+            Text(BreadcrumbText.styled(BreadcrumbText.fitting(ancestorTitles + [document.page.pathTitle], width: width,
+                                                              measure: BreadcrumbText.measure)))
                 .lineLimit(1)
                 .accessibilityIdentifier("page-breadcrumb")
                 .padding(.leading, Metrics.Page.topBarHorizontalPadding)
@@ -64,11 +63,6 @@ public struct PageEditorView: View {
                               startPoint: .top, endPoint: .bottom)
             .frame(height: Metrics.Page.scrollEdgeFadeHeight)
             .allowsHitTesting(false)
-    }
-
-    private var breadcrumbTitle: String {
-        let page = document.page
-        return [page.icon, page.displayTitle].compactMap { $0 }.joined(separator: " ")
     }
 }
 

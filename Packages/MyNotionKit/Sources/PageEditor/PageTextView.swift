@@ -41,6 +41,10 @@ public final class PageTextView: NSTextView {
     let layoutDelegate = BlockLayoutDelegate()
     let popups = EditorPopupController()
     lazy var blockHandles = BlockHandlesOverlay(textView: self)
+    /// Курсор как в Notion вместо системного (`TextCaret`).
+    private(set) lazy var caret = TextCaret(textView: self)
+    /// Полосы выделения, нарисованные в последний раз: их место перерисовывается при смене выделения.
+    private(set) var drawnSelectionRects: [NSRect] = []
 
     public init(document: PageDocument, initialFocus: InitialFocus) {
         self.document = document
@@ -81,6 +85,7 @@ public final class PageTextView: NSTextView {
             self?.layoutColumn()
         }
         header.onTitleEnter = { [weak self] in self?.focusBody(at: 0) }
+        _ = caret
         layoutColumn()
     }
 
@@ -97,7 +102,9 @@ public final class PageTextView: NSTextView {
         isGrammarCheckingEnabled = false
         drawsBackground = true
         backgroundColor = Palette.pageBackground
-        insertionPointColor = Palette.textPrimary
+        // Курсор и выделение рисует сам редактор, как в Notion: системные — на всю строку и красят текст в белый.
+        insertionPointColor = .clear
+        selectedTextAttributes = [:]
         isVerticallyResizable = true
         isHorizontallyResizable = false
         autoresizingMask = [.width]
@@ -129,6 +136,7 @@ public final class PageTextView: NSTextView {
         if document.blocks.count != blockCount { redrawBlockDecorations() }
         updateEmptyParagraphHint()
         textDidChangeForPopups()
+        updateSelectionLook()
     }
 
     /// Вставка: адрес поверх выделения — ссылка, текст других программ — с поддерживаемым оформлением.
@@ -367,6 +375,7 @@ public final class PageTextView: NSTextView {
 
     public override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
         super.setSelectedRanges(ranges.map(keepingBeforeFinalNewline), affinity: affinity, stillSelecting: stillSelecting)
+        updateSelectionLook()
         guard !stillSelecting else { return }
         applyEmptyParagraphTypingAttributes()
         updateEmptyParagraphHint()
@@ -421,6 +430,7 @@ public final class PageTextView: NSTextView {
         defer {
             updateEmptyParagraphHint()
             updateSpellingMarks()
+            updateSelectionLook()
         }
         return super.becomeFirstResponder()
     }
@@ -431,6 +441,7 @@ public final class PageTextView: NSTextView {
             emptyHintBlockID = nil
             closePopups()
             updateSpellingMarks(isFocused: false)
+            updateSelectionLook(isFocused: false)
         }
         return super.resignFirstResponder()
     }
@@ -463,6 +474,7 @@ public final class PageTextView: NSTextView {
 
     @objc private func windowKeyStateDidChange(_ notification: Notification) {
         updateSpellingMarks()
+        caret.update()
     }
 
     /// Подсказка у курсора в пустом блоке: своя для каждого типа (contracts/visual-style.md, «Пустые строки»).
@@ -554,6 +566,71 @@ public final class PageTextView: NSTextView {
         }
         invalidateTextContainerOrigin()
         updateEmptyParagraphHint()
+        updateSelectionLook()
+    }
+
+    // MARK: Курсор и выделение
+
+    public override var shouldDrawInsertionPoint: Bool { false }
+
+    /// Курсор к выделению; полосы выделения перерисовать там, где они были и где стали.
+    /// `isFocused: false` — текст отдаёт фокус: окно ещё считает его первым, но курсор и выделение уже гаснут.
+    private func updateSelectionLook(isFocused: Bool? = nil) {
+        caret.update(isFocused: isFocused)
+        let rects = (isFocused ?? (window?.firstResponder === self)) ? selectionHighlightRects() : []
+        guard rects != drawnSelectionRects else { return }
+        for rect in drawnSelectionRects + rects { setNeedsDisplay(rect) }
+        drawnSelectionRects = rects
+    }
+
+    /// Выделение как в Notion: под текстом, по полосе на строку от начала до конца выделенного текста.
+    public override func drawBackground(in rect: NSRect) {
+        super.drawBackground(in: rect)
+        Palette.textSelection.setFill()
+        for highlight in drawnSelectionRects where highlight.intersects(rect) {
+            highlight.fill(using: .sourceOver)
+        }
+    }
+
+    /// Полосы выделения (координаты окна текста): на строку — от начала до конца выделенного в ней текста,
+    /// высотой в строку с серединой на середине шрифта, как строка в CSS. Номера и маркеры не закрашены, между блоками
+    /// просвет; выделенный перевод строки — полоса шириной в пробел за текстом.
+    func selectionHighlightRects() -> [NSRect] {
+        let selection = selectedRange()
+        guard selection.length > 0, let layoutManager = textLayoutManager, let storage = textContentStorage, let text = textStorage,
+              let start = storage.location(storage.documentRange.location, offsetBy: selection.location) else { return [] }
+        let string = text.string as NSString
+        let origin = textContainerOrigin
+        var rects: [NSRect] = []
+        layoutManager.enumerateTextLayoutFragments(from: start, options: [.ensuresLayout]) { fragment in
+            let fragmentStart = storage.offset(from: storage.documentRange.location, to: fragment.rangeInElement.location)
+            guard fragmentStart < NSMaxRange(selection) else { return false }
+            let frame = fragment.layoutFragmentFrame
+            for line in fragment.textLineFragments where line.characterRange.length > 0 {
+                let lineStart = fragmentStart + line.characterRange.location
+                var textEnd = lineStart + line.characterRange.length
+                let endsParagraph = string.character(at: textEnd - 1) == 0x0A
+                if endsParagraph { textEnd -= 1 }
+                let from = max(selection.location, lineStart)
+                let to = min(NSMaxRange(selection), textEnd)
+                let coversNewline = endsParagraph && selection.location <= textEnd && NSMaxRange(selection) > textEnd
+                guard to > from || coversNewline else { continue }
+                let font = text.attribute(.font, at: max(lineStart, min(to, textEnd) - (to > lineStart ? 1 : 0)), effectiveRange: nil) as? NSFont
+                    ?? Typography.line(for: .paragraph).font
+                let bounds = line.typographicBounds
+                let left = origin.x + frame.minX + bounds.minX
+                let minX = left + line.locationForCharacter(at: from - fragmentStart).x
+                var maxX = left + line.locationForCharacter(at: max(from, to) - fragmentStart).x
+                if coversNewline { maxX += (" " as NSString).size(withAttributes: [.font: font]).width }
+                let styledHeight = (text.attribute(.paragraphStyle, at: lineStart, effectiveRange: nil) as? NSParagraphStyle)?.minimumLineHeight ?? 0
+                let lineHeight = styledHeight > 0 ? styledHeight : bounds.height
+                let baseline = origin.y + frame.minY + bounds.minY + line.glyphOrigin.y
+                let top = baseline - font.ascender - (lineHeight - (font.ascender - font.descender)) / 2
+                rects.append(NSRect(x: minX, y: top, width: maxX - minX, height: lineHeight))
+            }
+            return true
+        }
+        return rects
     }
 
     // MARK: Доступность
@@ -600,9 +677,7 @@ public final class PageTextView: NSTextView {
     }
 }
 
-/// Шапка страницы над текстом: эмодзи-иконка и название (contracts/visual-style.md, «Страница»).
-@MainActor
-/// Поле названия: курсор того же цвета, что в блоках, а не системный синий.
+/// Поле названия: правится своим редактором — курсор и выделение как в блоках, а не системные.
 final class PageTitleField: NSTextField {
     override class var cellClass: AnyClass? {
         get { PageTitleFieldCell.self }
@@ -611,12 +686,22 @@ final class PageTitleField: NSTextField {
 }
 
 private final class PageTitleFieldCell: NSTextFieldCell {
+    private lazy var editor = PageTitleEditor.make()
+
+    override func fieldEditor(for controlView: NSView) -> NSTextView? { editor }
+
     override func setUpFieldEditorAttributes(_ textObj: NSText) -> NSText {
         let editor = super.setUpFieldEditorAttributes(textObj)
-        (editor as? NSTextView)?.insertionPointColor = Palette.textPrimary
+        if let editor = editor as? PageTitleEditor {
+            editor.insertionPointColor = .clear
+            editor.selectedTextAttributes = [.backgroundColor: Palette.textSelection]
+        }
         return editor
     }
 }
+
+/// Шапка страницы над текстом: эмодзи-иконка и название (contracts/visual-style.md, «Страница»).
+@MainActor
 
 public final class PageHeaderView: NSView, NSTextFieldDelegate {
     private let iconLabel = NSTextField(labelWithString: "")

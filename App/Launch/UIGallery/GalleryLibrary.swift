@@ -9,6 +9,7 @@ struct GalleryLibrary {
     struct BlockKindPage {
         let pageId: UUID
         let emptyInMiddle: UUID
+        let paragraphAfterEmpty: UUID
         let emptyAtEnd: UUID
     }
 
@@ -74,7 +75,7 @@ struct GalleryLibrary {
                     (.paragraph, "Абзац после пустого блока.", 0, false),
                     (kind, "", 0, false),
                 ])
-                blockKindPages[kind] = BlockKindPage(pageId: pageId, emptyInMiddle: ids[1], emptyAtEnd: ids[3])
+                blockKindPages[kind] = BlockKindPage(pageId: pageId, emptyInMiddle: ids[1], paragraphAfterEmpty: ids[2], emptyAtEnd: ids[3])
             }
 
             let nestedLists = try page("Вложенные списки", icon: "🧩")

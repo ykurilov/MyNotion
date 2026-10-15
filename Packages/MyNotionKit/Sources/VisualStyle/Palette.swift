@@ -16,6 +16,8 @@ public enum Palette {
     /// Линия между панелью и страницей (тёмная — по снимку Notion).
     public static let sidebarEdge = themed(light: .hex(0xE6E5E3), dark: .hex(0x2C2C2B))
     public static let pageBackground = themed(light: .hex(0xFFFFFF), dark: .hex(0x191919))
+    /// «/» между страницами пути в верхней полосе: тусклый (≈ по снимку Notion 15.10.2026).
+    public static let breadcrumbSeparator = themed(light: .rgba(55, 53, 47, 0.15), dark: .rgba(255, 255, 255, 0.1))
     public static let sidebarBackground = themed(light: .hex(0xF9F8F7), dark: .hex(0x202020))
     public static let border = themed(light: .hex(0xE6E5E3), dark: .hex(0x2F2F2F))
     /// Строка дерева под мышью или выбранная, кнопки при наведении.
@@ -29,6 +31,8 @@ public enum Palette {
     public static let handleIcon = themed(light: .rgba(55, 53, 47, 0.35), dark: .rgba(255, 255, 255, 0.3))
     /// Линия места сброса при перетаскивании блока: синий Notion в обеих темах (по снимку Notion).
     public static let dropIndicator = themed(light: .rgba(35, 131, 226, 0.43), dark: .rgba(35, 131, 226, 0.43))
+    /// Выделение текста: синий Notion поверх страницы, текст в выделении своего цвета (по снимку Notion 15.10.2026).
+    public static let textSelection = themed(light: .rgba(35, 131, 226, 0.28), dark: .rgba(35, 131, 226, 0.28))
     /// Галочка в отмеченном чекбоксе.
     public static let checkboxCheckmark = themed(light: .hex(0xFFFFFF), dark: .hex(0xFFFFFF))
     /// Подчёркивание ссылки: ≈ 40 % цвета текста.

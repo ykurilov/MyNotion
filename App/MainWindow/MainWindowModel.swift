@@ -50,9 +50,9 @@ final class MainWindowModel {
     /// Название открытой страницы прямо во время набора — для дерева.
     var liveTitleOfOpenPage: String? { openDocument?.page.title }
 
-    /// Названия предков страницы от корня — для пути в верхней полосе.
+    /// Названия предков страницы с иконками от корня — для пути в верхней полосе.
     func ancestorTitles(of pageId: UUID) -> [String] {
-        tree.ancestors(of: pageId).map(\.displayTitle)
+        tree.ancestors(of: pageId).map(\.pathTitle)
     }
 
     /// Отмена окна: общая для редактора и дерева.

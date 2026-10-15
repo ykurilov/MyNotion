@@ -1,4 +1,5 @@
 import AppKit
+import PageEditor
 
 /// Снимок окна вместе со всем, что приложение показывает поверх него: меню «/» и блока (дочерние окна),
 /// окно корзины (поповер), диалоги. Рисуется изнутри приложения, поэтому работает и при заблокированном экране.
@@ -43,9 +44,11 @@ enum CompositeWindowSnapshot {
     }
 
     /// Мигающий курсор система рисует отдельным слоем, и снимок вида его не видит: нарисовать его там,
-    /// где его ставит текст (`firstRect` пустого выделения), цветом курсора текста.
+    /// где его ставит текст (`firstRect` пустого выделения), цветом курсора текста. Курсор страницы и названия —
+    /// свой вид (`DrawsOwnCaret`), он уже на снимке.
     private static func drawInsertionPoint(of window: NSWindow) {
-        guard let textView = window.firstResponder as? NSTextView, textView.selectedRange().length == 0 else { return }
+        guard let textView = window.firstResponder as? NSTextView, !(textView is DrawsOwnCaret),
+              textView.selectedRange().length == 0 else { return }
         let caret = textView.firstRect(forCharacterRange: textView.selectedRange(), actualRange: nil)
         guard caret.height > 0 else { return }
         let rect = NSRect(x: caret.minX - window.frame.minX, y: caret.minY - window.frame.minY,

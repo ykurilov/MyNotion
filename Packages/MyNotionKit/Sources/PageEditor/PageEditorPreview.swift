@@ -38,6 +38,18 @@ public enum PageEditorPreview {
         return true
     }
 
+    /// Выделить блоки от начала `first` до конца `last` целиком.
+    @discardableResult
+    public static func selectBlocks(from first: UUID, through last: UUID, in window: NSWindow) -> Bool {
+        guard let textView = textView(in: window), let firstIndex = textView.document.index(ofBlock: first),
+              let lastIndex = textView.document.index(ofBlock: last) else { return false }
+        window.makeFirstResponder(textView)
+        let start = textView.mapper.paragraphStart(ofBlockAt: firstIndex)
+        let end = textView.mapper.paragraphStart(ofBlockAt: lastIndex) + (textView.document.blocks[lastIndex].text.string as NSString).length
+        textView.setSelectedRange(NSRange(location: start, length: end - start))
+        return true
+    }
+
     /// Набрать текст у курсора, как с клавиатуры: «/» открывает меню, дальше — фильтр.
     public static func type(_ text: String, in window: NSWindow) {
         guard let textView = textView(in: window) else { return }

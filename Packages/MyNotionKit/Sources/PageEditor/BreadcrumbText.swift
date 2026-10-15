@@ -1,9 +1,10 @@
 import AppKit
+import SwiftUI
 import VisualStyle
 
 /// Путь «Корень / … / Родитель / Страница» в заданную ширину (contracts/visual-style.md, «Страница»).
 /// Сначала прячется середина — целыми страницами, от корня вглубь; потом название страницы обрезается
-/// по границе слова. Многоточие слов не рубит.
+/// по границе слова. Многоточие слов не рубит. «/» между страницами тусклый и с просветами шире пробела, как у Notion.
 enum BreadcrumbText {
     static let separator = " / "
     static let ellipsis = "…"
@@ -32,10 +33,58 @@ enum BreadcrumbText {
         return head + truncatedByCharacter(current, width: width - measure(head), measure: measure)
     }
 
-    /// Ширина строки шрифтом пути.
+    /// Ширина строки шрифтом пути — с тем же видом «/», что на экране.
     @MainActor
     static func measure(_ text: String) -> Double {
-        NSAttributedString(string: text, attributes: [.font: Typography.breadcrumb.font]).size().width
+        attributed(text).size().width
+    }
+
+    /// Путь для AppKit: названия цвета текста, «/» — `Palette.breadcrumbSeparator`.
+    @MainActor
+    static func attributed(_ text: String) -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        for piece in pieces(of: text) {
+            var attributes: [NSAttributedString.Key: Any] = [.font: Typography.breadcrumb.font,
+                                                             .foregroundColor: piece.isSlash ? Palette.breadcrumbSeparator : Palette.textPrimary]
+            if piece.kern != 0 { attributes[.kern] = piece.kern }
+            result.append(NSAttributedString(string: piece.text, attributes: attributes))
+        }
+        return result
+    }
+
+    /// Тот же путь для SwiftUI.
+    @MainActor
+    static func styled(_ text: String) -> AttributedString {
+        var result = AttributedString()
+        for piece in pieces(of: text) {
+            var part = AttributedString(piece.text)
+            part.font = Font(Typography.breadcrumb.font)
+            part.foregroundColor = Color(nsColor: piece.isSlash ? Palette.breadcrumbSeparator : Palette.textPrimary)
+            if piece.kern != 0 { part.kern = piece.kern }
+            result += part
+        }
+        return result
+    }
+
+    private struct Piece {
+        var text: String
+        var isSlash = false
+        /// Добавка после знака: у пробела перед «/» и у самой «/» — просветы Notion.
+        var kern: CGFloat = 0
+    }
+
+    /// Названия, пробел перед «/», «/» и пробел после неё — по отдельности.
+    private static func pieces(of text: String) -> [Piece] {
+        var pieces: [Piece] = []
+        for (index, title) in text.components(separatedBy: separator).enumerated() {
+            if index > 0 {
+                pieces += [Piece(text: " ", kern: Metrics.Page.breadcrumbSpaceBeforeSeparatorKern),
+                           Piece(text: "/", isSlash: true, kern: Metrics.Page.breadcrumbSeparatorKern),
+                           Piece(text: " ")]
+            }
+            if !title.isEmpty { pieces.append(Piece(text: title)) }
+        }
+        return pieces
     }
 
     /// Самое длинное начало из целых слов с «…»; `nil` — не влезает и первое слово.

@@ -8,6 +8,9 @@ public enum Metrics {
         public static let topBarHeight: CGFloat = 44
         /// Поле пути слева в верхней полосе (≈ по снимку).
         public static let topBarHorizontalPadding: CGFloat = 12
+        /// Добавки к пробелу перед «/» пути и к самой «/»: просветы от букв ≈ 7,5 до «/» и ≈ 8,5 после, как у Notion (≈ по снимку).
+        public static let breadcrumbSpaceBeforeSeparatorKern: CGFloat = 3.25
+        public static let breadcrumbSeparatorKern: CGFloat = 4
         /// Запас справа от пути: длинный путь не упирается в край окна.
         public static let topBarTrailingInset: CGFloat = 24
         /// Затухание прокрученного текста под верхней полосой; верхние `scrollEdgeSolidHeight` — сплошной фон страницы.
@@ -18,8 +21,8 @@ public enum Metrics {
         public static let titleToFirstBlockSpacing: CGFloat = 20
         /// От верхней полосы до квадрата иконки (≈ по снимку Notion: середина иконки на 179 от верха окна).
         public static let headerTopPadding: CGFloat = 96
-        /// От верхней полосы до названия, когда иконки нет: тот же верхний отступ и место под строку кнопок.
-        public static let headerTopPaddingWithoutIcon: CGFloat = 136
+        /// От верхней полосы до названия, когда иконки нет (≈ по снимку Notion: верх букв названия на 65 от верха окна).
+        public static let headerTopPaddingWithoutIcon: CGFloat = 32
         /// Эмодзи иконки внутри квадрата `iconSize`: рисунок ≈ 61×74, как у Notion на снимке (≈ по снимку).
         public static let iconFontSize: CGFloat = 78
         /// Под иконкой — место под строку скрытых кнопок, как у Notion (≈ по снимку: верх букв названия на 267).
@@ -48,6 +51,14 @@ public enum Metrics {
         case .heading2: BlockSpacing(height: 67, topSpacing: 26)
         case .heading3: BlockSpacing(height: 58, topSpacing: 22)
         }
+    }
+
+    /// Курсор текста как в Notion (по снимку Юрия 15.10.2026): узкая черта на высоту букв шрифта строки
+    /// (от верха до низа шрифта, `ascender − descender`), а не на всю строку.
+    public enum Caret {
+        public static let width: CGFloat = 1
+        /// Курсор горит и гаснет с этим шагом, после набора и перемещения загорается сразу.
+        public static let blinkInterval: Double = 0.5
     }
 
     /// Полоса «Изменения не сохранены» над страницей.

@@ -43,6 +43,9 @@ public struct Page: Sendable, Hashable, Identifiable {
 
     public var displayTitle: String { title.isEmpty ? Self.untitledTitle : title }
 
+    /// В пути верхней полосы: иконка перед названием, как у Notion.
+    public var pathTitle: String { [icon, displayTitle].compactMap { $0 }.joined(separator: " ") }
+
     /// Синхронизируемые поля; у каждого своя метка часов.
     public enum Field: String, Sendable, Hashable, CaseIterable, Codable {
         case title
