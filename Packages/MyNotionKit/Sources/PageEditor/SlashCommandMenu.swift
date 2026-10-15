@@ -99,6 +99,7 @@ final class PopupMenuWindow: NSPanel {
     override var canBecomeMain: Bool { false }
 
     /// Показать под строкой `anchor` (координаты экрана), а если внизу места нет — над ней.
+    /// Невидимое окно страницы (модульные проверки) — только место, на экран меню не выходит.
     func show(below anchor: NSRect, parent: NSWindow) {
         let size = menuView.fittingMenuSize
         let margin = Self.shadowMargin
@@ -108,8 +109,7 @@ final class PopupMenuWindow: NSPanel {
             origin.y = anchor.maxY + spacing - margin
         }
         setFrame(NSRect(x: origin.x, y: origin.y, width: size.width + 2 * margin, height: size.height + 2 * margin), display: true)
-        if self.parent == nil { parent.addChildWindow(self, ordered: .above) }
-        orderFront(nil)
+        PopupWindows.show(self, over: parent)
     }
 
     func hide() {
@@ -372,6 +372,8 @@ final class EditorPopupController {
     private var window: PopupMenuWindow?
     /// Строка, под которой стоит меню (координаты экрана).
     private var anchor: NSRect = .zero
+    /// Приложение ушло в фон — меню закрывается.
+    private var deactivationObserver: NSObjectProtocol?
 
     var isOpen: Bool { session != nil }
     var visibleItems: [PopupMenuItem] { window?.menuView.items ?? [] }
@@ -397,11 +399,12 @@ final class EditorPopupController {
         window.menuView.onChoose = { [weak self] item in self?.choose(item) }
         window.menuView.setItems(items)
         window.show(below: anchor, parent: parent)
+        if deactivationObserver == nil { deactivationObserver = PopupWindows.onAppDeactivation { [weak self] in self?.close() } }
         textView.popupSessionDidChange()
     }
 
     func update(items: [PopupMenuItem]) {
-        guard let window, let parent = window.parent, items != window.menuView.items else { return }
+        guard let window, let parent = textView?.window, items != window.menuView.items else { return }
         window.menuView.setItems(items)
         window.show(below: anchor, parent: parent)
     }
@@ -416,6 +419,8 @@ final class EditorPopupController {
 
     func close() {
         session = nil
+        if let deactivationObserver { NotificationCenter.default.removeObserver(deactivationObserver) }
+        deactivationObserver = nil
         window?.hide()
         textView?.popupSessionDidChange()
     }

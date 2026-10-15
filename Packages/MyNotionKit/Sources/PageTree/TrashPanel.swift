@@ -30,6 +30,8 @@ final class TrashPanelController {
     /// Пока открыт вопрос, окно корзины не закрывается.
     private var isConfirming = false
     private var monitors: [Any] = []
+    /// Приложение ушло в фон — окно корзины закрывается.
+    private var deactivationObserver: NSObjectProtocol?
 
     var isShown: Bool { panel?.isVisible == true }
 
@@ -49,6 +51,8 @@ final class TrashPanelController {
         guard let panel else { return }
         monitors.forEach(NSEvent.removeMonitor)
         monitors = []
+        if let deactivationObserver { NotificationCenter.default.removeObserver(deactivationObserver) }
+        deactivationObserver = nil
         panel.parent?.removeChildWindow(panel)
         panel.orderOut(nil)
     }
@@ -59,10 +63,13 @@ final class TrashPanelController {
         self.actions = actions
         let panel = self.panel ?? makePanel()
         hosting?.rootView = makeView()
-        if panel.parent == nil { parent.addChildWindow(panel, ordered: .above) }
         place()
-        panel.orderFront(nil)
+        // Невидимое окно приложения (модульные проверки) — на экран корзина не выходит.
+        guard PopupWindows.show(panel, over: parent) else { return }
         watchOutsideClicks()
+        if deactivationObserver == nil {
+            deactivationObserver = PopupWindows.onAppDeactivation { [weak self] in self?.close() }
+        }
     }
 
     private func makePanel() -> TrashPanelWindow {
@@ -124,7 +131,7 @@ final class TrashPanelController {
         isConfirming = true
         ConfirmationDialogWindow.present(over: parent, title: title, message: message, action: action) { [weak self] confirmed in
             self?.isConfirming = false
-            self?.panel?.makeKey()
+            if self?.panel?.isVisible == true { self?.panel?.makeKey() }
             if confirmed { perform() }
         }
     }

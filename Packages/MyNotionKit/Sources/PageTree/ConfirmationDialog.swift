@@ -9,6 +9,8 @@ final class ConfirmationDialogWindow: NSWindow {
     /// Ответ — один раз: `true` — подтвердили, `false` — отменили.
     var onAnswer: ((Bool) -> Void)?
     private var isAnswered = false
+    /// Приложение в фоне — вопрос спрятан, вернулось — снова над окном.
+    private var activationObservers: [NSObjectProtocol] = []
 
     init(title: String, message: String, action: String) {
         dialog = ConfirmationDialogView(title: title, message: message, action: action)
@@ -28,14 +30,31 @@ final class ConfirmationDialogWindow: NSWindow {
         setAccessibilityIdentifier("confirmation-dialog")
     }
 
-    /// Показать над окном `parent`; ответ придёт в `onAnswer`.
+    /// Показать над окном `parent`; ответ придёт в `onAnswer`. Невидимое окно (модульные проверки) — на экран вопрос
+    /// не выходит. Приложение в фоне — вопрос прячется и возвращается вместе с ним: не висит над чужими окнами.
     static func present(over parent: NSWindow, title: String, message: String, action: String,
                         onAnswer: @escaping (Bool) -> Void) {
         let window = ConfirmationDialogWindow(title: title, message: message, action: action)
         window.onAnswer = onAnswer
         window.setFrame(overlayFrame(over: parent), display: false)
-        parent.addChildWindow(window, ordered: .above)
-        window.makeKeyAndOrderFront(nil)
+        guard PopupWindows.show(window, over: parent, makingKey: true) else { return }
+        window.followAppActivation(over: parent)
+    }
+
+    /// Не `hidesOnDeactivate`: галерея снимает окна приложения, которое не становится активным.
+    private func followAppActivation(over parent: NSWindow) {
+        let center = NotificationCenter.default
+        activationObservers = [
+            center.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.orderOut(nil) }
+            },
+            center.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self, weak parent] _ in
+                MainActor.assumeIsolated {
+                    guard let self, let parent, !self.isAnswered else { return }
+                    PopupWindows.show(self, over: parent, makingKey: true)
+                }
+            },
+        ]
     }
 
     /// Содержимое окна без заголовка (координаты экрана).
@@ -54,6 +73,8 @@ final class ConfirmationDialogWindow: NSWindow {
     private func answer(_ confirmed: Bool) {
         guard !isAnswered else { return }
         isAnswered = true
+        activationObservers.forEach(NotificationCenter.default.removeObserver)
+        activationObservers = []
         parent?.removeChildWindow(self)
         orderOut(nil)
         onAnswer?(confirmed)

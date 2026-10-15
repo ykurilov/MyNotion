@@ -197,9 +197,10 @@ extension PageTextView {
     @objc public func toggleStrikethroughStyle(_ sender: Any?) { perform(.toggleInline(.strikethrough)) }
     @objc public func toggleCodeStyle(_ sender: Any?) { perform(.toggleInline(.code)) }
 
-    /// «Формат → Ссылка»: окно с полем адреса; пустой адрес убирает ссылку.
+    /// «Формат → Ссылка»: окно с полем адреса поверх окна страницы; пустой адрес убирает ссылку.
+    /// Окно страницы не на экране (модульные проверки) — окна адреса нет: не всплывать поверх чужих программ.
     @objc public func editLink(_ sender: Any?) {
-        guard selectedRange().length > 0 else {
+        guard selectedRange().length > 0, let window, window.isVisible else {
             NSSound.beep()
             return
         }
@@ -223,13 +224,9 @@ extension PageTextView {
             } else {
                 NSSound.beep()
             }
-            window?.makeFirstResponder(self)
+            window.makeFirstResponder(self)
         }
-        if let window {
-            alert.beginSheetModal(for: window, completionHandler: apply)
-        } else {
-            apply(alert.runModal())
-        }
+        alert.beginSheetModal(for: window, completionHandler: apply)
     }
 
     // MARK: Вставка
