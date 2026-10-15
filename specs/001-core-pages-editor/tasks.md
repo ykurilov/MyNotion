@@ -125,23 +125,23 @@ description: "Задачи: минимальное ядро MyNotion для macO
 
 ### Тесты US3 (сначала, должны упасть)
 
-- [ ] T035 [P] [US3] Тест быстрых символов в `PK/Tests/PageEditorTests/MarkdownShortcutTests.swift`: `# `, `## `, `### `, `- `, `* `, `1. `, `[] `, `[ ] ` в начале пустой строки; ⌫ в начале не-абзаца → абзац; Enter в пустом пункте → абзац (contracts/editor-interactions.md)
-- [ ] T036 [P] [US3] Тест вложенности и перестановки в `PK/Tests/PageEditorTests/BlockStructureTests.swift`: Tab/⇧Tab в пределах «целое 0…8», заголовок всегда 0; ⌥⇧↑/⌥⇧↓ меняют `sortKey`; ⌘Enter переключает чекбокс
-- [ ] T037 [P] [US3] Тест оформления в строке в `PK/Tests/PageEditorTests/InlineStyleTests.swift`: ⌘B/⌘I/⇧⌘X/⌘E; вставка адреса поверх выделения создаёт ссылку; вставка из другого приложения оставляет текст и поддерживаемое оформление
-- [ ] T038 [P] [US3] Сценарий `UITests/KeyboardOnlyPageTests.swift`: ⌘N, название, Enter, `# ` заголовок, `- ` три пункта — только клавиши, укладывается в 10 с (SC-006; contracts/editor-interactions.md)
-- [ ] T039 [P] [US3] Сценарий `UITests/BlockEditingTests.swift`: все типы блоков, меню «/» с поиском, щелчок по чекбоксу, наведение показывает ручки «+ ⋮⋮», перетаскивание блока за «⋮⋮», ⌘Z/⇧⌘Z, перезапуск (сценарии 3.1–3.5)
+- [x] T035 [P] [US3] Тест быстрых символов в `PK/Tests/PageEditorTests/MarkdownShortcutTests.swift`: `# `, `## `, `### `, `- `, `* `, `1. `, `[] `, `[ ] ` в начале пустой строки; ⌫ в начале не-абзаца → абзац; Enter в пустом пункте → абзац (contracts/editor-interactions.md)
+- [x] T036 [P] [US3] Тест вложенности и перестановки в `PK/Tests/PageEditorTests/BlockStructureTests.swift`: Tab/⇧Tab в пределах «целое 0…8», заголовок всегда 0; ⌥⇧↑/⌥⇧↓ меняют `sortKey`; ⌘Enter переключает чекбокс
+- [x] T037 [P] [US3] Тест оформления в строке в `PK/Tests/PageEditorTests/InlineStyleTests.swift`: ⌘B/⌘I/⇧⌘X/⌘E; вставка адреса поверх выделения создаёт ссылку; вставка из другого приложения оставляет текст и поддерживаемое оформление
+- [x] T038 [P] [US3] Сценарий `UITests/KeyboardOnlyPageTests.swift`: ⌘N, название, Enter, `# ` заголовок, `- ` три пункта — только клавиши, укладывается в 10 с (SC-006; contracts/editor-interactions.md)
+- [x] T039 [P] [US3] Сценарий `UITests/BlockEditingTests.swift`: все типы блоков, меню «/» с поиском, щелчок по чекбоксу, наведение показывает ручки «+ ⋮⋮», перетаскивание блока за «⋮⋮», ⌘Z/⇧⌘Z, перезапуск (сценарии 3.1–3.5)
 
 ### Реализация US3
 
-- [ ] T040 [US3] Отрисовка блоков в `PK/Sources/PageEditor/BlockLayoutFragment.swift`: заголовки, маркеры и номера списков, квадраты чекбоксов (щелчок переключает), отступы; маркеры не входят в текст (R2); размеры, маркеры по уровням `•` `◦` `▪`, номера `1.` `a.` `i.`, вид чекбокса, кода и ссылок — по contracts/visual-style.md
-- [ ] T041 [US3] Быстрые символы и смена типа в `PK/Sources/PageEditor/MarkdownShortcuts.swift`
-- [ ] T042 [US3] Меню «/» с поиском по названию в `PK/Sources/PageEditor/SlashCommandMenu.swift` в виде всплывающих меню из contracts/visual-style.md; Esc закрывает, оставляя `/`
-- [ ] T043 [US3] Ручки блока при наведении в `PK/Sources/PageEditor/BlockHandlesOverlay.swift`: слой поверх текста, «+» (добавить ниже, с ⌥ — выше) и «⋮⋮» (тянуть — переставить, щелчок — меню блока: сменить тип, удалить) у абзаца под мышью; позиции и размеры по contracts/visual-style.md; перетаскивание за «⋮⋮» — через `BlockMoveController`
-- [ ] T044 [US3] Вложенность, перестановка клавишами и перетаскиванием блока в `PK/Sources/PageEditor/BlockMoveController.swift`
-- [ ] T045 [US3] Оформление в строке, меню «Формат» (включая «Формат → Ссылка») и вставка в `PK/Sources/PageEditor/InlineFormatting.swift` и `App/MyNotionApp.swift`
-- [ ] T046 [US3] Блок `pageLink`: показ названия подстраницы, переход по щелчку, в `PK/Sources/PageEditor/PageLinkAttachment.swift`
-- [ ] T047 [US3] Единая отмена для смены типа, перестановки и вложенности в `PK/Sources/PageEditor/PageTextView.swift` (FR-012)
-- [ ] T048 [P] [US3] Замер отклика в `PerformanceTests/TypingAndNavigationTests.swift`: 200 нажатий в странице на 1 000 блоков и переходы между страницами на эталонной базе, p95 ≤ 50 мс через signpost; страница на 10 000 блоков прокручивается и набирается без превышения
+- [x] T040 [US3] Отрисовка блоков в `PK/Sources/PageEditor/BlockLayoutFragment.swift`: заголовки, маркеры и номера списков, квадраты чекбоксов (щелчок переключает), отступы; маркеры не входят в текст (R2); размеры, маркеры по уровням `•` `◦` `▪`, номера `1.` `a.` `i.`, вид чекбокса, кода и ссылок — по contracts/visual-style.md
+- [x] T041 [US3] Быстрые символы и смена типа в `PK/Sources/PageEditor/MarkdownShortcuts.swift`
+- [x] T042 [US3] Меню «/» с поиском по названию в `PK/Sources/PageEditor/SlashCommandMenu.swift` в виде всплывающих меню из contracts/visual-style.md; Esc закрывает, оставляя `/`
+- [x] T043 [US3] Ручки блока при наведении в `PK/Sources/PageEditor/BlockHandlesOverlay.swift`: слой поверх текста, «+» (добавить ниже, с ⌥ — выше) и «⋮⋮» (тянуть — переставить, щелчок — меню блока: сменить тип, удалить) у абзаца под мышью; позиции и размеры по contracts/visual-style.md; перетаскивание за «⋮⋮» — через `BlockMoveController`
+- [x] T044 [US3] Вложенность, перестановка клавишами и перетаскиванием блока в `PK/Sources/PageEditor/BlockMoveController.swift`
+- [x] T045 [US3] Оформление в строке, меню «Формат» (включая «Формат → Ссылка») и вставка в `PK/Sources/PageEditor/InlineFormatting.swift` и `App/MyNotionApp.swift`
+- [x] T046 [US3] Блок `pageLink`: показ названия подстраницы, переход по щелчку, в `PK/Sources/PageEditor/PageLinkAttachment.swift`
+- [x] T047 [US3] Единая отмена для смены типа, перестановки и вложенности в `PK/Sources/PageEditor/PageTextView.swift` (FR-012)
+- [x] T048 [P] [US3] Замер отклика в `PerformanceTests/TypingAndNavigationTests.swift`: 200 нажатий в странице на 1 000 блоков и переходы между страницами на эталонной базе, p95 ≤ 50 мс через signpost; страница на 10 000 блоков прокручивается и набирается без превышения
 
 **Checkpoint**: Полноценный редактор. Сборка, затронутые тесты и замеры (`PerformanceTests`), показ Юрию, коммит.
 

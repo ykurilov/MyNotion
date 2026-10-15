@@ -17,6 +17,17 @@ public final class PageTextView: NSTextView {
     private var pendingFocus: InitialFocus?
     /// Страница показана и принимает ввод.
     public var onReady: (@MainActor () -> Void)?
+    /// Отмена, когда окна нет или оно своей не даёт (проверки без приложения).
+    public var fallbackUndoManager: UndoManager?
+    /// Названия и иконки страниц, на которые ссылаются блоки-подстраницы.
+    public var linkedPages: [UUID: LinkedPage] = [:] {
+        didSet { if linkedPages != oldValue { redrawBlockDecorations() } }
+    }
+    /// Щелчок по блоку-подстранице: открыть страницу.
+    public var onOpenPage: (@MainActor (UUID) -> Void)?
+    let layoutDelegate = BlockLayoutDelegate()
+    let popups = EditorPopupController()
+    lazy var blockHandles = BlockHandlesOverlay(textView: self)
 
     public init(document: PageDocument, initialFocus: InitialFocus) {
         self.document = document
@@ -31,10 +42,17 @@ public final class PageTextView: NSTextView {
         container.lineFragmentPadding = Metrics.Page.blockHorizontalPadding
         layoutManager.textContainer = container
         super.init(frame: NSRect(x: 0, y: 0, width: Metrics.Page.columnWidth, height: 0), textContainer: container)
+        layoutDelegate.textView = self
+        layoutManager.delegate = layoutDelegate
+        popups.textView = self
 
         configureTextBehaviour()
         mapper = PageTextStorageMapper(document: document, textStorage: textStorage!)
         mapper.load()
+        // Отмена правки текста не зовёт didChangeText: забрать её в документ сразу после ⌘Z и ⇧⌘Z.
+        for name in [NSNotification.Name.NSUndoManagerDidUndoChange, .NSUndoManagerDidRedoChange] {
+            NotificationCenter.default.addObserver(self, selector: #selector(undoManagerDidRestore(_:)), name: name, object: nil)
+        }
 
         addSubview(header)
         addSubview(emptyParagraphHint)
@@ -72,17 +90,256 @@ public final class PageTextView: NSTextView {
 
     // MARK: Правки
 
+    public override var undoManager: UndoManager? {
+        fallbackUndoManager ?? super.undoManager
+    }
+
+    @objc private func undoManagerDidRestore(_ notification: Notification) {
+        guard notification.object as? UndoManager === undoManager, mapper.hasPendingEdits else { return }
+        let blockCount = document.blocks.count
+        mapper.commitPendingEdits()
+        if document.blocks.count != blockCount { redrawBlockDecorations() }
+        updateEmptyParagraphHint()
+    }
+
     public override func didChangeText() {
         super.didChangeText()
         // Посреди набора с помощью IME текст ещё не окончательный.
         guard !hasMarkedText() else { return }
+        let blockCount = document.blocks.count
         mapper.commitPendingEdits()
+        if document.blocks.count != blockCount { redrawBlockDecorations() }
         updateEmptyParagraphHint()
+        textDidChangeForPopups()
     }
 
-    /// Вставка — простым текстом: оформление чужих программ на страницу не переносится.
+    /// Вставка: адрес поверх выделения — ссылка, текст других программ — с поддерживаемым оформлением.
     public override func paste(_ sender: Any?) {
-        pasteAsPlainText(sender)
+        paste(from: .general)
+    }
+
+    public override func pasteAsRichText(_ sender: Any?) {
+        paste(from: .general)
+    }
+
+    public override func insertText(_ string: Any, replacementRange: NSRange) {
+        let typed = (string as? NSAttributedString)?.string ?? string as? String ?? ""
+        hideBlockHandles()
+        if typed == " ", replacementRange.location == NSNotFound, !hasMarkedText(), applyMarkdownShortcut() { return }
+        if replacementRange.location == NSNotFound, !hasMarkedText(), !typed.isEmpty, !typed.hasPrefix("\n"), isCaretInPageLink {
+            // В блоке-подстранице текста нет: набранное уходит в новый абзац под ним.
+            super.insertText("\n" + typed, replacementRange: replacementRange)
+            return
+        }
+        super.insertText(string, replacementRange: replacementRange)
+        if typed == "/" { openSlashMenuAfterTypedSlash() }
+    }
+
+    /// Курсор стоит в блоке-подстранице (у него свой абзац без символов).
+    private var isCaretInPageLink: Bool {
+        let selection = selectedRange()
+        guard selection.length == 0, let position = mapper.blockPosition(at: selection.location) else { return false }
+        return document.blocks[position.index].kind == .pageLink
+    }
+
+    public override func deleteBackward(_ sender: Any?) {
+        if !hasMarkedText(), handleBackspaceAtBlockStart() { return }
+        super.deleteBackward(sender)
+    }
+
+    public override func insertNewline(_ sender: Any?) {
+        if !hasMarkedText(), handleNewlineInEmptyItem() { return }
+        super.insertNewline(sender)
+    }
+
+    public override func insertTab(_ sender: Any?) { perform(.indent) }
+    public override func insertBacktab(_ sender: Any?) { perform(.outdent) }
+    public override func moveParagraphBackwardAndModifySelection(_ sender: Any?) { perform(.moveBlocksUp) }
+    public override func moveParagraphForwardAndModifySelection(_ sender: Any?) { perform(.moveBlocksDown) }
+
+    public override func keyDown(with event: NSEvent) {
+        hideBlockHandles()
+        if !hasMarkedText(), let command = EditorKeyBindings.command(for: event) {
+            perform(command)
+            return
+        }
+        super.keyDown(with: event)
+    }
+
+    /// ⌘B, ⌘I, ⇧⌘X, ⌘E, ⌘Enter — раньше меню: окно спрашивает поле ввода первым.
+    public override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if window?.firstResponder === self, !hasMarkedText(), let command = EditorKeyBindings.command(for: event) {
+            perform(command)
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    public override func doCommand(by selector: Selector) {
+        if handlePopupCommand(selector) { return }
+        super.doCommand(by: selector)
+    }
+
+    public override func shouldChangeText(in affectedCharRange: NSRange, replacementString: String?) -> Bool {
+        // В абзац блока-подстраницы символы не попадают, кроме перевода строки в его начале.
+        if let replacement = replacementString, !replacement.isEmpty, !replacement.hasPrefix("\n"), affectedCharRange.length == 0,
+           !mapper.hasPendingEdits, let position = mapper.blockPosition(at: affectedCharRange.location),
+           document.blocks[position.index].kind == .pageLink {
+            return false
+        }
+        return super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
+    }
+
+    /// Правка текста как от пользователя: с отменой и передачей документу.
+    @discardableResult
+    func replaceText(in range: NSRange, with text: NSAttributedString) -> Bool {
+        guard let textStorage, shouldChangeText(in: range, replacementString: text.string) else { return false }
+        textStorage.replaceCharacters(in: range, with: text)
+        didChangeText()
+        return true
+    }
+
+    @discardableResult
+    func replaceText(in range: NSRange, with string: String) -> Bool {
+        replaceText(in: range, with: NSAttributedString(string: string, attributes: typingAttributes))
+    }
+
+    // MARK: Действия над блоками
+
+    /// Выполнить действие редактора над блоками под курсором или выделением.
+    public func perform(_ command: EditorCommand) {
+        guard !hasMarkedText() else { return }
+        switch command {
+        case .indent: indentSelectedBlocks(by: 1)
+        case .outdent: indentSelectedBlocks(by: -1)
+        case .moveBlocksUp: moveSelectedBlocks(by: -1)
+        case .moveBlocksDown: moveSelectedBlocks(by: 1)
+        case .toggleChecked: toggleCheckedSelectedBlocks()
+        case .toggleInline(let format): toggleInline(format)
+        case .setKind(let kind):
+            commitEdits()
+            if let selected = selectedBlockRange() { setKind(kind, ofBlocksAt: selected) }
+        }
+    }
+
+    /// Блоки под курсором или выделением.
+    func selectedBlockRange() -> Range<Int>? {
+        let selection = selectedRange()
+        guard let first = mapper.blockPosition(at: selection.location) else { return nil }
+        guard selection.length > 0, let last = mapper.blockPosition(at: NSMaxRange(selection)) else {
+            return first.index..<first.index + 1
+        }
+        // Выделение до начала следующего абзаца этот абзац не захватывает.
+        let lastIndex = last.offset == 0 && last.index > first.index ? last.index - 1 : last.index
+        return first.index..<lastIndex + 1
+    }
+
+    func setKind(_ kind: BlockKind, ofBlocksAt range: Range<Int>) {
+        guard kind != .pageLink else { return }
+        let drafts = document.blocks[range].map { block in
+            var draft = BlockDraft(block)
+            draft.kind = kind
+            if kind != .checkbox { draft.isChecked = false }
+            return draft
+        }
+        changeBlocks(range, to: drafts, actionName: "Тип блока")
+    }
+
+    func removeBlocks(at range: Range<Int>) {
+        commitEdits()
+        guard !range.isEmpty else { return }
+        if range.count >= document.blocks.count {
+            // На странице всегда остаётся хотя бы один блок: пустой абзац.
+            changeBlocks(0..<document.blocks.count, to: [BlockDraft(id: document.blocks[0].id)], actionName: "Удалить блок")
+            return
+        }
+        changeBlocks(range, to: [], actionName: "Удалить блок")
+    }
+
+    private func toggleCheckedSelectedBlocks() {
+        commitEdits()
+        guard let selected = selectedBlockRange() else { return }
+        let checkboxes = selected.filter { document.blocks[$0].kind == .checkbox }
+        guard let first = checkboxes.first, let last = checkboxes.last else { return }
+        let checked = !checkboxes.allSatisfy { document.blocks[$0].isChecked }
+        let range = first..<last + 1
+        let drafts = document.blocks[range].map { block in
+            var draft = BlockDraft(block)
+            if block.kind == .checkbox { draft.isChecked = checked }
+            return draft
+        }
+        changeBlocks(range, to: drafts, actionName: checked ? "Отметить" : "Снять отметку")
+    }
+
+    /// Переключить отметку чекбокса (щелчок по квадрату).
+    public func toggleCheckbox(ofBlock id: UUID) {
+        commitEdits()
+        guard let index = document.index(ofBlock: id), document.blocks[index].kind == .checkbox else { return }
+        var draft = BlockDraft(document.blocks[index])
+        draft.isChecked.toggle()
+        changeBlocks(index..<index + 1, to: [draft], actionName: draft.isChecked ? "Отметить" : "Снять отметку")
+    }
+
+    // MARK: Единая отмена (FR-012)
+
+    /// Заменить блоки `range` документа черновиками `drafts` одним шагом отмены: тип, вложенность,
+    /// перестановка, оформление. Текст на экране переписывается по блокам, курсор остаётся у своего блока.
+    /// ⌘Z вызывает то же самое с прежними черновиками, поэтому правки текста и блоков отменяются одной цепочкой.
+    func changeBlocks(_ range: Range<Int>, to drafts: [BlockDraft], moved: Set<UUID> = [], actionName: String) {
+        commitEdits()
+        let blocks = document.blocks
+        guard range.lowerBound >= 0, range.upperBound <= blocks.count, !(range.count == blocks.count && drafts.isEmpty) else { return }
+        let previous = blocks[range].map(BlockDraft.init)
+        guard previous != drafts || !moved.isEmpty else { return }
+        breakUndoCoalescing()
+
+        let anchors = selectionAnchors()
+        // Отрезок в конце страницы: перевод строки блока перед ним пишется заново вместе с отрезком.
+        let touchesEnd = range.upperBound == blocks.count
+        let leadingNewline = touchesEnd && range.lowerBound > 0
+        var characters = mapper.characterRange(ofBlocksAt: range)
+        if leadingNewline, !range.isEmpty {
+            characters = NSRange(location: characters.location - 1, length: characters.length + 1)
+        }
+
+        let previousId = range.lowerBound > 0 ? blocks[range.lowerBound - 1].id : nil
+        let nextId = touchesEnd ? nil : blocks[range.upperBound].id
+        let ids = document.replaceBlocks(after: previousId, before: nextId, with: drafts, movedBlockIds: moved)
+        let changed = range.lowerBound..<range.lowerBound + ids.count
+        mapper.renderBlocks(changed, replacing: characters, leadingNewline: leadingNewline)
+
+        restoreSelection(anchors, fallbackBlock: min(range.lowerBound, document.blocks.count - 1))
+        redrawBlockDecorations()
+        updateEmptyParagraphHint()
+        closePopups()
+
+        if let undoManager {
+            let restoredMoved = Set(ids).intersection(moved)
+            undoManager.registerUndo(withTarget: self) { textView in
+                textView.changeBlocks(changed, to: previous, moved: restoredMoved, actionName: actionName)
+            }
+            undoManager.setActionName(actionName)
+        }
+    }
+
+    /// Где выделение относительно блоков: id блока и смещение в его тексте для начала и конца.
+    private func selectionAnchors() -> (start: (UUID, Int), end: (UUID, Int))? {
+        let selection = selectedRange()
+        guard let start = mapper.blockPosition(at: selection.location),
+              let end = mapper.blockPosition(at: NSMaxRange(selection)) else { return nil }
+        return ((document.blocks[start.index].id, start.offset), (document.blocks[end.index].id, end.offset))
+    }
+
+    private func restoreSelection(_ anchors: (start: (UUID, Int), end: (UUID, Int))?, fallbackBlock: Int) {
+        func location(_ anchor: (UUID, Int)) -> Int? {
+            guard let index = document.index(ofBlock: anchor.0) else { return nil }
+            let length = (document.blocks[index].text.string as NSString).length
+            return mapper.paragraphStart(ofBlockAt: index) + min(anchor.1, length)
+        }
+        let fallback = mapper.paragraphStart(ofBlockAt: max(0, fallbackBlock))
+        let start = anchors.flatMap { location($0.start) } ?? fallback
+        let end = max(start, anchors.flatMap { location($0.end) } ?? start)
+        setSelectedRange(NSRange(location: start, length: end - start))
     }
 
     public override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
@@ -90,6 +347,7 @@ public final class PageTextView: NSTextView {
         guard !stillSelecting else { return }
         applyTrailingParagraphTypingAttributes()
         updateEmptyParagraphHint()
+        selectionDidChangeForPopups()
     }
 
     /// У пустого последнего абзаца нет символов, с которых `NSTextView` взял бы вид набора, — берём его блок.
@@ -107,6 +365,22 @@ public final class PageTextView: NSTextView {
         return atParagraphStart && atParagraphEnd
     }
 
+    // MARK: Мышь
+
+    public override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if let id = checkbox(at: point) {
+            toggleCheckbox(ofBlock: id)
+            return
+        }
+        if let pageId = linkedPage(at: point) {
+            onOpenPage?(pageId)
+            return
+        }
+        closePopups()
+        super.mouseDown(with: event)
+    }
+
     // MARK: Подсказка в пустом абзаце
 
     public override func becomeFirstResponder() -> Bool {
@@ -115,12 +389,15 @@ public final class PageTextView: NSTextView {
     }
 
     public override func resignFirstResponder() -> Bool {
-        defer { emptyParagraphHint.isHidden = true }
+        defer {
+            emptyParagraphHint.isHidden = true
+            closePopups()
+        }
         return super.resignFirstResponder()
     }
 
     /// «Введите «/» для выбора блока» у курсора в пустом абзаце (contracts/visual-style.md, «Пустые строки»).
-    private func updateEmptyParagraphHint() {
+    func updateEmptyParagraphHint() {
         let selection = selectedRange()
         guard window?.firstResponder === self, selection.length == 0, !hasMarkedText(),
               isAtEmptyParagraph(selection.location), let window else {

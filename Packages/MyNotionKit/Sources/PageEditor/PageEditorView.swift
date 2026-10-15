@@ -10,13 +10,19 @@ public struct PageEditorView: View {
     /// Названия страниц-предков от корня; у корневой страницы — пусто.
     let ancestorTitles: [String]
     let initialFocus: PageTextView.InitialFocus
+    /// Названия и иконки страниц для блоков-подстраниц.
+    let linkedPages: [UUID: LinkedPage]
+    let onOpenPage: @MainActor (UUID) -> Void
     let onReady: @MainActor () -> Void
 
     public init(document: PageDocument, ancestorTitles: [String] = [], initialFocus: PageTextView.InitialFocus,
+                linkedPages: [UUID: LinkedPage] = [:], onOpenPage: @escaping @MainActor (UUID) -> Void = { _ in },
                 onReady: @escaping @MainActor () -> Void = {}) {
         self.document = document
         self.ancestorTitles = ancestorTitles
         self.initialFocus = initialFocus
+        self.linkedPages = linkedPages
+        self.onOpenPage = onOpenPage
         self.onReady = onReady
     }
 
@@ -26,7 +32,8 @@ public struct PageEditorView: View {
             if case .failed(let reason) = document.saveStatus {
                 SaveStatusBanner(reason: reason)
             }
-            PageTextEditor(document: document, initialFocus: initialFocus, onReady: onReady)
+            PageTextEditor(document: document, initialFocus: initialFocus, linkedPages: linkedPages,
+                           onOpenPage: onOpenPage, onReady: onReady)
         }
         .background(Color(nsColor: Palette.pageBackground))
     }
@@ -56,11 +63,15 @@ public struct PageEditorView: View {
 struct PageTextEditor: NSViewRepresentable {
     let document: PageDocument
     let initialFocus: PageTextView.InitialFocus
+    let linkedPages: [UUID: LinkedPage]
+    let onOpenPage: @MainActor (UUID) -> Void
     let onReady: @MainActor () -> Void
 
     func makeNSView(context: Context) -> NSScrollView {
         let textView = PageTextView(document: document, initialFocus: initialFocus)
         textView.onReady = onReady
+        textView.linkedPages = linkedPages
+        textView.onOpenPage = onOpenPage
         let scrollView = NSScrollView()
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
@@ -71,7 +82,11 @@ struct PageTextEditor: NSViewRepresentable {
         return scrollView
     }
 
-    func updateNSView(_ scrollView: NSScrollView, context: Context) {}
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let textView = scrollView.documentView as? PageTextView else { return }
+        textView.linkedPages = linkedPages
+        textView.onOpenPage = onOpenPage
+    }
 
     static func dismantleNSView(_ scrollView: NSScrollView, coordinator: ()) {
         (scrollView.documentView as? PageTextView)?.commitEdits()

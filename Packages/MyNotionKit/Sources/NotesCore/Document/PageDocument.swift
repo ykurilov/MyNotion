@@ -68,8 +68,11 @@ public final class PageDocument {
     /// Заменить блоки между `after` и `before` (оба не входят; `nil` — край страницы) блоками из черновиков.
     /// Черновик с id блока из заменяемого отрезка правит этот блок; повторный, чужой или пустой id — новый блок.
     /// Неиспользованные блоки отрезка удаляются. Возвращает id блоков по порядку черновиков.
+    /// Ключи порядка меняются у как можно меньшего числа блоков; `movedBlockIds` — блоки, которые переставили,
+    /// новый ключ получают именно они, а не соседи.
     @discardableResult
-    public func replaceBlocks(after previousId: UUID?, before nextId: UUID?, with drafts: [BlockDraft]) -> [UUID] {
+    public func replaceBlocks(after previousId: UUID?, before nextId: UUID?, with drafts: [BlockDraft],
+                              movedBlockIds: Set<UUID> = []) -> [UUID] {
         let start = previousId.flatMap { indexById[$0] }.map { $0 + 1 } ?? 0
         let end = max(start, nextId.flatMap { indexById[$0] } ?? blocks.count)
         let replaced = Array(blocks[start..<end])
@@ -86,19 +89,29 @@ public final class PageDocument {
         let lowerKey = start > 0 ? blocks[start - 1].sortKey : nil
         let upperKey = end < blocks.count ? blocks[end].sortKey : nil
         let replacedById = Dictionary(uniqueKeysWithValues: replaced.map { ($0.id, $0) })
+        let existingKeys: [FractionalSortKey?] = assigned.map { id in
+            guard let id, !movedBlockIds.contains(id), let key = replacedById[id]?.sortKey else { return nil }
+            if let lowerKey, key <= lowerKey { return nil }
+            if let upperKey, key >= upperKey { return nil }
+            return key
+        }
+        let kept = Self.longestIncreasingPositions(existingKeys)
+        // Ближайший сохраняемый ключ ниже каждого места: между ним и предыдущим встают новые ключи.
+        var nextKeptKey = [FractionalSortKey?](repeating: upperKey, count: drafts.count)
+        var running = upperKey
+        for position in drafts.indices.reversed() {
+            nextKeptKey[position] = running
+            if kept.contains(position) { running = existingKeys[position] }
+        }
+
         var lastKey = lowerKey
         var newBlocks: [Block] = []
         for (position, draft) in drafts.enumerated() {
-            var block: Block
-            if let id = assigned[position], let existing = replacedById[id] {
-                block = existing
+            var block = assigned[position].flatMap { replacedById[$0] } ?? Block(pageId: pageId, sortKey: .between(lastKey, upperKey))
+            if kept.contains(position), let key = existingKeys[position] {
+                block.sortKey = key
             } else {
-                block = Block(pageId: pageId, sortKey: .between(lastKey, upperKey))
-            }
-            if let lastKey, block.sortKey <= lastKey {
-                block.sortKey = .between(lastKey, upperKey)
-            } else if let upperKey, block.sortKey >= upperKey {
-                block.sortKey = .between(lastKey, upperKey)
+                block.sortKey = .between(lastKey, nextKeptKey[position])
             }
             draft.apply(to: &block)
             lastKey = block.sortKey
@@ -118,6 +131,29 @@ public final class PageDocument {
         reindex()
         if !newBlocks.isEmpty || !replaced.isEmpty { didEdit?() }
         return newBlocks.map(\.id)
+    }
+
+    /// Места черновиков, чьи ключи можно оставить: самая длинная возрастающая цепочка ключей.
+    private static func longestIncreasingPositions(_ keys: [FractionalSortKey?]) -> Set<Int> {
+        var tails: [Int] = []
+        var previous = [Int?](repeating: nil, count: keys.count)
+        for (position, key) in keys.enumerated() {
+            guard let key else { continue }
+            var low = 0, high = tails.count
+            while low < high {
+                let middle = (low + high) / 2
+                if keys[tails[middle]]! < key { low = middle + 1 } else { high = middle }
+            }
+            previous[position] = low > 0 ? tails[low - 1] : nil
+            if low == tails.count { tails.append(position) } else { tails[low] = position }
+        }
+        var kept: Set<Int> = []
+        var position = tails.last
+        while let current = position {
+            kept.insert(current)
+            position = previous[current]
+        }
+        return kept
     }
 
     // MARK: Запись
@@ -189,6 +225,12 @@ public struct BlockDraft: Sendable, Hashable {
         self.indent = indent
         self.isChecked = isChecked
         self.linkedPageId = linkedPageId
+    }
+
+    /// Черновик, повторяющий блок.
+    public init(_ block: Block) {
+        self.init(id: block.id, kind: block.kind, text: block.text.normalized(), indent: block.indent,
+                  isChecked: block.isChecked, linkedPageId: block.linkedPageId)
     }
 
     func apply(to block: inout Block) {

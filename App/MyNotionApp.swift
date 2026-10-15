@@ -37,6 +37,7 @@ struct MyNotionApp: App {
                 Button("Новая подстраница") { (try? library.get())?.createSubpage() }
                     .keyboardShortcut("n", modifiers: [.command, .shift])
             }
+            FormatCommands()
         }
     }
 
@@ -47,6 +48,9 @@ struct MyNotionApp: App {
             // Образец сразу открыт: для сверки с Notion и снимков окна.
             let sample = try VisualSamplePage.ensure(in: store)
             try store.saveWindowState(WindowState(windowId: WindowState.mainWindowId, openPageId: sample.id))
+        }
+        if options.typingBenchmarkURL != nil {
+            try TypingBenchmark.ensureHugePage(in: store)
         }
         return store
     }

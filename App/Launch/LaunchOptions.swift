@@ -12,6 +12,8 @@ struct LaunchOptions {
     var launchReportURL: URL?
     /// `--window-snapshot <путь>`: когда страница готова, снять окно в PNG и выйти (снимок не требует экрана).
     var windowSnapshotURL: URL?
+    /// `--typing-benchmark <путь>`: замер отклика набора, переходов и прокрутки (T048), отчёт в файл и выход.
+    var typingBenchmarkURL: URL?
     /// `--appearance light|dark`: тема окна вместо системной.
     var appearanceName: NSAppearance.Name?
 
@@ -24,6 +26,7 @@ struct LaunchOptions {
             case "--generate-visual-sample": generatesVisualSample = true
             case "--launch-report": launchReportURL = remaining.popFirst().map(Self.fileURL)
             case "--window-snapshot": windowSnapshotURL = remaining.popFirst().map(Self.fileURL)
+            case "--typing-benchmark": typingBenchmarkURL = remaining.popFirst().map(Self.fileURL)
             case "--appearance":
                 switch remaining.popFirst() {
                 case "light": appearanceName = .aqua

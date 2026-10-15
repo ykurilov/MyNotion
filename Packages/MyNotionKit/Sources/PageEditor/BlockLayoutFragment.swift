@@ -1,0 +1,312 @@
+import AppKit
+import CoreText
+import NotesCore
+import VisualStyle
+
+/// Что стоит в колонке слева от текста блока. Маркеры не входят в текст (research R2): их рисует
+/// `BlockLayoutFragment` поверх места, которое оставляет отступ абзаца.
+enum BlockDecoration: Equatable {
+    case bullet(String)
+    case number(String)
+    case checkbox(checked: Bool)
+    case pageLink(LinkedPage?)
+}
+
+/// Строка блока на странице в координатах текстового контейнера.
+struct BlockLine {
+    var indent: Int
+    var top: CGFloat
+    var height: CGFloat
+    var baseline: CGFloat
+
+    /// Колонка маркера: от края вложенности на ширину `Metrics.BlockMarker.columnWidth`.
+    var markerColumn: CGRect {
+        let x = Metrics.Page.blockHorizontalPadding + CGFloat(indent) * Metrics.Page.indentPerLevel
+        return CGRect(x: x, y: top, width: Metrics.BlockMarker.columnWidth, height: height)
+    }
+
+    /// Квадрат чекбокса по середине заглавных букв первой строки, как в Notion.
+    var checkboxRect: CGRect {
+        let size = Metrics.Checkbox.size
+        let column = markerColumn
+        let centerY = baseline - Typography.line(for: .listItem).font.capHeight / 2
+        return CGRect(x: column.midX - size / 2, y: centerY - size / 2, width: size, height: size)
+    }
+
+    /// Начало текста блока за колонкой маркера.
+    var textStart: CGFloat { markerColumn.minX + Metrics.BlockMarker.textInset }
+}
+
+/// Создаёт для каждого абзаца `BlockLayoutFragment`.
+final class BlockLayoutDelegate: NSObject, NSTextLayoutManagerDelegate {
+    weak var textView: PageTextView?
+
+    func textLayoutManager(_ textLayoutManager: NSTextLayoutManager, textLayoutFragmentFor location: any NSTextLocation,
+                           in textElement: NSTextElement) -> NSTextLayoutFragment {
+        let fragment = BlockLayoutFragment(textElement: textElement, range: textElement.elementRange)
+        fragment.textView = textView
+        return fragment
+    }
+}
+
+/// Абзац страницы: текст рисует TextKit, а маркер, номер, квадрат чекбокса или подстраницу — этот фрагмент
+/// (contracts/visual-style.md, «Блоки»). Последний фрагмент рисует ещё и пустой последний блок на своей
+/// добавочной строке: своих символов у того блока нет.
+final class BlockLayoutFragment: NSTextLayoutFragment, @unchecked Sendable {
+    weak var textView: PageTextView?
+
+    override var renderingSurfaceBounds: CGRect {
+        let bounds = super.renderingSurfaceBounds
+        // Колонка маркера лежит левее текста, название подстраницы — правее пустой строки.
+        let containerWidth = textLayoutManager?.textContainer?.size.width ?? Metrics.Page.columnWidth
+        // Добавочная строка пустого последнего блока рисуется ниже, с отступами блока (`trailingBlockLine`).
+        let isLast = textLayoutManager.map { rangeInElement.endLocation.compare($0.documentRange.endLocation) != .orderedAscending } ?? false
+        let wide = CGRect(x: -layoutFragmentFrame.minX, y: 0, width: containerWidth,
+                          height: layoutFragmentFrame.height + (isLast ? Metrics.Page.bottomPadding : 0))
+        return bounds.union(wide)
+    }
+
+    override func draw(at point: CGPoint, in context: CGContext) {
+        super.draw(at: point, in: context)
+        // TextKit рисует на главном потоке; фрагмент и контекст дальше этого вызова не уходят.
+        nonisolated(unsafe) let fragment = self
+        nonisolated(unsafe) let context = context
+        MainActor.assumeIsolated { fragment.drawDecorations(at: point, in: context) }
+    }
+
+    @MainActor
+    private func drawDecorations(at point: CGPoint, in context: CGContext) {
+        guard let textView else { return }
+        let lines = textView.decoratedLines(in: self)
+        guard !lines.isEmpty else { return }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
+        let offset = CGPoint(x: point.x - layoutFragmentFrame.minX, y: point.y - layoutFragmentFrame.minY)
+        for (decoration, line) in lines {
+            BlockDecorationPainter.draw(decoration, line: line, offset: offset)
+        }
+        NSGraphicsContext.restoreGraphicsState()
+    }
+}
+
+/// Рисование маркеров (contracts/visual-style.md, «Блоки»). `offset` переводит координаты контейнера в координаты рисования.
+@MainActor
+enum BlockDecorationPainter {
+    static func draw(_ decoration: BlockDecoration, line: BlockLine, offset: CGPoint) {
+        let column = line.markerColumn.offsetBy(dx: offset.x, dy: offset.y)
+        let baseline = line.baseline + offset.y
+        switch decoration {
+        case .bullet(let marker):
+            drawBullet(marker, in: column, baseline: baseline)
+        case .number(let label):
+            drawNumber(label, in: column, baseline: baseline)
+        case .checkbox(let checked):
+            drawCheckbox(in: line.checkboxRect.offsetBy(dx: offset.x, dy: offset.y), checked: checked)
+        case .pageLink(let page):
+            PageLinkPainter.draw(page, column: column, textStart: line.textStart + offset.x, baseline: baseline,
+                                 maxX: offset.x + Metrics.Page.columnWidth)
+        }
+    }
+
+    private static var textFont: NSFont { Typography.line(for: .listItem).font }
+
+    /// `•` `◦` `▪` крупнее текста, по середине строчных букв.
+    private static func drawBullet(_ marker: String, in column: CGRect, baseline: CGFloat) {
+        let font = NSFont.systemFont(ofSize: textFont.pointSize * Metrics.BlockMarker.bulletScale)
+        let line = textLine(marker, font: font)
+        let glyph = CTLineGetImageBounds(line, nil)
+        let center = CGPoint(x: column.midX, y: baseline - textFont.xHeight / 2)
+        // Координаты перевёрнуты: середина рисунка знака выше его базовой линии на `glyph.midY`.
+        drawLine(line, color: Palette.textPrimary, baselineOrigin: CGPoint(x: center.x - glyph.midX, y: center.y + glyph.midY))
+    }
+
+    /// Номер по центру колонки; длинный — вровень с её правым краем.
+    private static func drawNumber(_ label: String, in column: CGRect, baseline: CGFloat) {
+        let line = textLine(label, font: textFont)
+        let width = CTLineGetTypographicBounds(line, nil, nil, nil)
+        let x = width <= column.width ? column.midX - width / 2 : column.maxX - width
+        drawLine(line, color: Palette.textPrimary, baselineOrigin: CGPoint(x: x, y: baseline))
+    }
+
+    /// Строка текста, цвет которой берётся при рисовании.
+    static func textLine(_ string: String, font: NSFont) -> CTLine {
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font, NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String): true,
+        ]
+        return CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: attributes))
+    }
+
+    /// Строка CoreText с базовой линией в точке, в перевёрнутых координатах окна текста.
+    static func drawLine(_ line: CTLine, color: NSColor, baselineOrigin: CGPoint) {
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        context.saveGState()
+        context.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
+        context.textPosition = baselineOrigin
+        context.setFillColor(color.cgColor)
+        CTLineDraw(line, context)
+        context.restoreGState()
+    }
+
+    private static func drawCheckbox(in rect: CGRect, checked: Bool) {
+        let radius = Metrics.Checkbox.cornerRadius
+        if checked {
+            Palette.checkboxChecked.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+            let check = NSBezierPath()
+            check.move(to: CGPoint(x: rect.minX + rect.width * 0.24, y: rect.minY + rect.height * 0.52))
+            check.line(to: CGPoint(x: rect.minX + rect.width * 0.42, y: rect.minY + rect.height * 0.70))
+            check.line(to: CGPoint(x: rect.minX + rect.width * 0.76, y: rect.minY + rect.height * 0.32))
+            check.lineWidth = Metrics.Checkbox.borderWidth + 0.3
+            check.lineCapStyle = .round
+            check.lineJoinStyle = .round
+            Palette.checkboxCheckmark.setStroke()
+            check.stroke()
+        } else {
+            let inset = Metrics.Checkbox.borderWidth / 2
+            let border = NSBezierPath(roundedRect: rect.insetBy(dx: inset, dy: inset), xRadius: radius - inset, yRadius: radius - inset)
+            border.lineWidth = Metrics.Checkbox.borderWidth
+            Palette.textPrimary.setStroke()
+            border.stroke()
+        }
+    }
+}
+
+extension PageTextView {
+    // MARK: Маркеры блоков
+
+    /// Что рисует фрагмент: свой блок и, если он последний, пустой последний блок на добавочной строке.
+    func decoratedLines(in fragment: NSTextLayoutFragment) -> [(BlockDecoration, BlockLine)] {
+        guard let paragraph = fragment.textElement as? NSTextParagraph else { return [] }
+        let text = paragraph.attributedString
+        var result: [(BlockDecoration, BlockLine)] = []
+        let ownId: UUID? = text.length > 0
+            ? text.attribute(.blockID, at: 0, effectiveRange: nil) as? UUID
+            : document.blocks.last?.id
+        if let ownId, let block = document.block(ownId), let decoration = decoration(for: block),
+           let line = fragment.textLineFragments.first {
+            result.append((decoration, blockLine(line, in: fragment, indent: block.indent)))
+        }
+        if text.length > 0, text.attribute(.trailingEmptyBlock, at: text.length - 1, effectiveRange: nil) != nil,
+           let last = document.blocks.last, let decoration = decoration(for: last),
+           let extra = fragment.textLineFragments.last, extra.characterRange.length == 0 {
+            result.append((decoration, trailingBlockLine(extra, in: fragment, block: last)))
+        }
+        return result
+    }
+
+    private func blockLine(_ line: NSTextLineFragment, in fragment: NSTextLayoutFragment, indent: Int) -> BlockLine {
+        let frame = fragment.layoutFragmentFrame
+        let top = frame.minY + line.typographicBounds.minY
+        return BlockLine(indent: indent, top: top, height: line.typographicBounds.height, baseline: top + line.glyphOrigin.y)
+    }
+
+    /// Добавочная строка пустого последнего блока. TextKit ставит её вплотную к строке выше, без отступов
+    /// абзацев, поэтому строка ниже на отступ после блока выше и отступ перед своим блоком — как у обычного блока.
+    private func trailingBlockLine(_ extra: NSTextLineFragment, in fragment: NSTextLayoutFragment, block: Block) -> BlockLine {
+        var line = blockLine(extra, in: fragment, indent: block.indent)
+        let lines = fragment.textLineFragments
+        guard lines.count > 1, let paragraph = fragment.textElement as? NSTextParagraph, paragraph.attributedString.length > 0 else {
+            return line
+        }
+        let gap = extra.typographicBounds.minY - lines[lines.count - 2].typographicBounds.maxY
+        let above = paragraph.attributedString.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
+        let own = PageTextStorageMapper.baseAttributes(for: block)[.paragraphStyle] as? NSParagraphStyle
+        let shift = max(0, (above?.paragraphSpacing ?? 0) + (own?.paragraphSpacingBefore ?? 0) - gap)
+        line.top += shift
+        line.baseline += shift
+        return line
+    }
+
+    func decoration(for block: Block) -> BlockDecoration? {
+        switch block.kind {
+        case .bulletItem: .bullet(ListMarkers.bullet(atIndent: block.indent))
+        case .numberedItem: .number(ListMarkers.number(ordinal(ofBlock: block), atIndent: block.indent))
+        case .checkbox: .checkbox(checked: block.isChecked)
+        case .pageLink: .pageLink(block.linkedPageId.flatMap { linkedPages[$0] })
+        case .paragraph, .heading1, .heading2, .heading3: nil
+        }
+    }
+
+    /// Номер пункта: считаются пункты того же уровня подряд; вложенные глубже не прерывают счёт.
+    func ordinal(ofBlock block: Block) -> Int {
+        guard var index = document.index(ofBlock: block.id) else { return 1 }
+        var ordinal = 1
+        while index > 0 {
+            index -= 1
+            let previous = document.blocks[index]
+            if previous.indent > block.indent { continue }
+            guard previous.indent == block.indent, previous.kind == .numberedItem else { break }
+            ordinal += 1
+        }
+        return ordinal
+    }
+
+    /// Строка блока с маркером в координатах контейнера: первая строка абзаца или добавочная у пустого последнего.
+    func markerLine(ofBlockAt index: Int) -> BlockLine? {
+        guard let textLayoutManager, let contentStorage = textContentStorage, document.blocks.indices.contains(index) else { return nil }
+        let block = document.blocks[index]
+        let length = textStorage?.length ?? 0
+        let start = mapper.paragraphStart(ofBlockAt: index)
+        let isTrailing = start == length && length > 0
+        let anchor = isTrailing ? length - 1 : start
+        guard let location = contentStorage.location(contentStorage.documentRange.location, offsetBy: anchor) else { return nil }
+        textLayoutManager.ensureLayout(for: NSTextRange(location: location))
+        guard let fragment = textLayoutManager.textLayoutFragment(for: location) else { return nil }
+        let line = isTrailing ? fragment.textLineFragments.last : fragment.textLineFragments.first
+        guard let line, !isTrailing || line.characterRange.length == 0 else { return nil }
+        return isTrailing ? trailingBlockLine(line, in: fragment, block: block) : blockLine(line, in: fragment, indent: block.indent)
+    }
+
+    /// Квадрат чекбокса в координатах окна текста.
+    public func checkboxRect(ofBlock id: UUID) -> NSRect? {
+        guard let index = document.index(ofBlock: id), document.blocks[index].kind == .checkbox,
+              let line = markerLine(ofBlockAt: index) else { return nil }
+        let origin = textContainerOrigin
+        return line.checkboxRect.offsetBy(dx: origin.x, dy: origin.y)
+    }
+
+    /// Чекбокс, квадрат которого под точкой (координаты окна текста).
+    public func checkbox(at point: NSPoint) -> UUID? {
+        guard let (index, line) = markerLineNear(point), document.blocks[index].kind == .checkbox else { return nil }
+        let origin = textContainerOrigin
+        // Квадрат ловит щелчок с запасом в колонку маркера: в 16 точек трудно попасть.
+        let target = line.markerColumn.offsetBy(dx: origin.x, dy: origin.y)
+        return target.contains(point) ? document.blocks[index].id : nil
+    }
+
+    /// Блок с маркером на высоте точки.
+    func markerLineNear(_ point: NSPoint) -> (Int, BlockLine)? {
+        guard let index = blockIndex(atY: point.y), let line = markerLine(ofBlockAt: index) else { return nil }
+        let origin = textContainerOrigin
+        let y = point.y - origin.y
+        return (line.top...line.top + line.height).contains(y) ? (index, line) : nil
+    }
+
+    /// Блок на высоте `y` (координаты окна текста).
+    func blockIndex(atY y: CGFloat) -> Int? {
+        guard let textLayoutManager, let contentStorage = textContentStorage else { return nil }
+        let containerY = y - textContainerOrigin.y
+        guard let fragment = textLayoutManager.textLayoutFragment(for: CGPoint(x: 0, y: containerY))
+            ?? textLayoutManager.textLayoutFragment(for: CGPoint(x: Metrics.Page.columnWidth / 2, y: containerY)) else {
+            return nil
+        }
+        let offset = contentStorage.offset(from: contentStorage.documentRange.location, to: fragment.rangeInElement.location)
+        let length = textStorage?.length ?? 0
+        // Ниже последней строки последнего абзаца — добавочная строка пустого последнего блока.
+        if let extra = fragment.textLineFragments.last, extra.characterRange.length == 0, fragment.textLineFragments.count > 1,
+           containerY >= fragment.layoutFragmentFrame.minY + extra.typographicBounds.minY {
+            return document.blocks.count - 1
+        }
+        if length == 0 { return document.blocks.isEmpty ? nil : 0 }
+        return mapper.blockPosition(at: min(offset, length - 1))?.index
+    }
+
+    /// Перерисовать маркеры видимых блоков: номера и вид зависят от соседей.
+    func redrawBlockDecorations() {
+        guard let textLayoutManager else { return }
+        let range = textLayoutManager.textViewportLayoutController.viewportRange ?? textLayoutManager.documentRange
+        textLayoutManager.invalidateLayout(for: range)
+        textLayoutManager.textViewportLayoutController.layoutViewport()
+        needsDisplay = true
+    }
+}
