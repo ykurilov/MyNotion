@@ -70,6 +70,8 @@ enum PopupMenuStyle {
     var iconSize: CGFloat { self == .slash ? Metrics.PopupMenu.slashMenuIconSize : Metrics.PopupMenu.blockMenuIconSize }
     /// Размер шрифта надписи в значке; системные значки и квадрат подгоняются под её высоту.
     var iconGlyphSize: CGFloat { self == .slash ? Metrics.PopupMenu.slashMenuIconGlyphSize : Metrics.PopupMenu.blockMenuIconGlyphSize }
+    /// Сторона квадрата, в который вписан рисунок каждого значка.
+    var iconInkSize: CGFloat { self == .slash ? Metrics.PopupMenu.slashMenuIconInkSize : Metrics.PopupMenu.blockMenuIconInkSize }
 }
 
 /// Всплывающее меню блоков (contracts/visual-style.md, «Всплывающие меню»): окно без рамки над страницей.
@@ -288,13 +290,12 @@ final class PopupMenuRowView: NSView {
             box.lineWidth = 1
             box.stroke()
         }
-        // Все значки одной высоты: надпись — по высоте заглавных, системный значок и квадрат — чуть выше.
-        let font = NSFont.systemFont(ofSize: style.iconGlyphSize, weight: .medium)
+        // Одна колонка одной ширины, как в Notion: каждый рисунок вписан в квадрат `iconInkSize` по центру места.
+        let side = style.iconInkSize
         let color = item.action == .delete ? Palette.destructiveText : Palette.textPrimary
-        let symbolHeight = font.capHeight * Metrics.PopupMenu.iconSymbolToCapHeight
         switch item.icon {
         case .label(let text):
-            let line = BlockDecorationPainter.textLine(text, font: font)
+            let line = BlockDecorationPainter.textLine(text, font: Self.labelFont(for: style))
             let ink = CTLineGetImageBounds(line, nil)
             // Перевёрнутые координаты: середина рисунка надписи выше её базовой линии на `ink.midY`.
             BlockDecorationPainter.drawLine(line, color: color,
@@ -305,11 +306,14 @@ final class PopupMenuRowView: NSView {
             guard let symbol = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(configuration) else {
                 return
             }
-            let width = symbolHeight * symbol.size.width / max(symbol.size.height, 1)
-            symbol.draw(in: NSRect(x: rect.midX - width / 2, y: rect.midY - symbolHeight / 2, width: width, height: symbolHeight),
+            // У картинки значка пустые поля разной ширины: вписывать сам рисунок, а не картинку.
+            let ink = Self.inkRect(of: symbol)
+            let scale = side / max(ink.width, ink.height, 1)
+            let origin = CGPoint(x: rect.midX - ink.midX * scale, y: rect.midY - ink.midY * scale)
+            symbol.draw(in: NSRect(x: origin.x, y: origin.y, width: symbol.size.width * scale, height: symbol.size.height * scale),
                         from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
         case .checkbox:
-            let square = NSRect(x: rect.midX - symbolHeight / 2, y: rect.midY - symbolHeight / 2, width: symbolHeight, height: symbolHeight)
+            let square = NSRect(x: rect.midX - side / 2, y: rect.midY - side / 2, width: side, height: side)
             let inset = Metrics.Checkbox.borderWidth / 2
             let path = NSBezierPath(roundedRect: square.insetBy(dx: inset, dy: inset), xRadius: Metrics.Checkbox.cornerRadius,
                                     yRadius: Metrics.Checkbox.cornerRadius)
@@ -317,6 +321,40 @@ final class PopupMenuRowView: NSView {
             color.setStroke()
             path.stroke()
         }
+    }
+
+    /// Где внутри картинки сам рисунок, в её точках сверху вниз.
+    private static func inkRect(of image: NSImage) -> NSRect {
+        let scale: CGFloat = 4
+        let width = Int((image.size.width * scale).rounded(.up)), height = Int((image.size.height * scale).rounded(.up))
+        guard width > 0, height > 0,
+              let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+              let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            return NSRect(origin: .zero, size: image.size)
+        }
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        guard let data = context.data?.assumingMemoryBound(to: UInt8.self) else { return NSRect(origin: .zero, size: image.size) }
+        var minX = width, minY = height, maxX = -1, maxY = -1
+        for row in 0..<height {
+            for column in 0..<width where data[row * context.bytesPerRow + column * 4 + 3] > 76 {
+                minX = min(minX, column); maxX = max(maxX, column); minY = min(minY, row); maxY = max(maxY, row)
+            }
+        }
+        guard maxX >= minX else { return NSRect(origin: .zero, size: image.size) }
+        // Первая строка памяти — верх картинки.
+        return NSRect(x: CGFloat(minX) / scale, y: CGFloat(minY) / scale,
+                      width: CGFloat(maxX - minX + 1) / scale, height: CGFloat(maxY - minY + 1) / scale)
+    }
+
+    /// Шрифт надписей «Aa», «H1»…: один на все, самая широкая надпись — ровно во всю ширину квадрата.
+    private static func labelFont(for style: PopupMenuStyle) -> NSFont {
+        let base = NSFont.systemFont(ofSize: style.iconGlyphSize, weight: .medium)
+        let widest = PopupMenuItem.blockKinds.compactMap { item -> CGFloat? in
+            guard case .label(let text) = item.icon else { return nil }
+            return CTLineGetImageBounds(BlockDecorationPainter.textLine(text, font: base), nil).width
+        }.max() ?? style.iconInkSize
+        return NSFont.systemFont(ofSize: style.iconGlyphSize * style.iconInkSize / max(widest, 1), weight: .medium)
     }
 }
 

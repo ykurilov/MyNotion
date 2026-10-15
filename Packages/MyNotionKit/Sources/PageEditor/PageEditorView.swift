@@ -85,7 +85,12 @@ struct PageTextEditor: NSViewRepresentable {
         textView.onReady = onReady
         textView.linkedPages = linkedPages
         textView.onOpenPage = onOpenPage
-        let scrollView = NSScrollView()
+        return Self.makeScrollView(around: textView)
+    }
+
+    /// Прокрутка страницы: полоса только у длинной страницы.
+    static func makeScrollView(around textView: PageTextView, frame: NSRect = .zero) -> NSScrollView {
+        let scrollView = NSScrollView(frame: frame)
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
         scrollView.drawsBackground = true
