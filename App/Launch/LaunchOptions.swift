@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 /// Флаги командной строки приложения (README, «Флаги запуска»).
 struct LaunchOptions {
@@ -10,6 +10,10 @@ struct LaunchOptions {
     var generatesVisualSample = false
     /// `--launch-report <путь>`: записать время запуска и память в покое.
     var launchReportURL: URL?
+    /// `--window-snapshot <путь>`: когда страница готова, снять окно в PNG и выйти (снимок не требует экрана).
+    var windowSnapshotURL: URL?
+    /// `--appearance light|dark`: тема окна вместо системной.
+    var appearanceName: NSAppearance.Name?
 
     init(arguments: [String]) {
         var remaining = arguments.dropFirst()[...]
@@ -19,6 +23,13 @@ struct LaunchOptions {
             case "--generate-reference-library": referenceLibraryURL = remaining.popFirst().map(Self.fileURL)
             case "--generate-visual-sample": generatesVisualSample = true
             case "--launch-report": launchReportURL = remaining.popFirst().map(Self.fileURL)
+            case "--window-snapshot": windowSnapshotURL = remaining.popFirst().map(Self.fileURL)
+            case "--appearance":
+                switch remaining.popFirst() {
+                case "light": appearanceName = .aqua
+                case "dark": appearanceName = .darkAqua
+                default: break
+                }
             default: continue
             }
         }

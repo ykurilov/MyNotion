@@ -6,8 +6,21 @@ public enum Metrics {
     public enum Page {
         public static let columnWidth: CGFloat = 720
         public static let topBarHeight: CGFloat = 44
+        /// Поля пути в верхней полосе (≈ по снимку).
+        public static let topBarHorizontalPadding: CGFloat = 12
         public static let iconSize: CGFloat = 78
         public static let titleToFirstBlockSpacing: CGFloat = 8
+        /// От верхней полосы до иконки страницы (≈ по снимку).
+        public static let headerTopPadding: CGFloat = 38
+        /// От верхней полосы до названия, когда иконки нет (≈ по снимку).
+        public static let headerTopPaddingWithoutIcon: CGFloat = 80
+        /// Эмодзи иконки внутри квадрата `iconSize` (≈ по снимку).
+        public static let iconFontSize: CGFloat = 64
+        public static let iconToTitleSpacing: CGFloat = 4
+        /// Поля по бокам колонки, когда окно уже колонки (≈ по снимку).
+        public static let minimumSideInset: CGFloat = 96
+        /// Пустое место под последним блоком, чтобы конец страницы не прилипал к краю окна.
+        public static let bottomPadding: CGFloat = 180
         /// Внутренний отступ блока по краям текста.
         public static let blockHorizontalPadding: CGFloat = 2
         /// Сдвиг вложенного пункта на уровень.
@@ -22,6 +35,12 @@ public enum Metrics {
         case .heading2: BlockSpacing(height: 67, topSpacing: 26)
         case .heading3: BlockSpacing(height: 58, topSpacing: 22)
         }
+    }
+
+    /// Полоса «Изменения не сохранены» над страницей.
+    public enum SaveErrorBanner {
+        public static let height: CGFloat = 36
+        public static let horizontalPadding: CGFloat = 16
     }
 
     public enum Checkbox {

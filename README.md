@@ -39,8 +39,10 @@ xcodebuild test -scheme MyNotionPerformance -configuration Release -destination 
 |------|------------|
 | `--database <путь>` | открыть базу из указанного файла вместо `~/Library/Application Support/MyNotion/MyNotion.sqlite` |
 | `--generate-reference-library <путь>` | создать эталонную базу (1 000 страниц, 100 000 блоков) и выйти |
-| `--generate-visual-sample` | добавить в открытую базу страницу «MyNotion — образец» для сверки с Notion |
+| `--generate-visual-sample` | добавить в открытую базу страницу «MyNotion — образец» для сверки с Notion и открыть её |
 | `--launch-report <путь>` | записать в файл время запуска и память в покое (для замеров) |
+| `--window-snapshot <путь>` | когда страница готова, снять окно в PNG и выйти (работает и при заблокированном экране) |
+| `--appearance light\|dark` | светлая или тёмная тема вместо системной |
 
 ## Сервер синхронизации (появится в этапе 7)
 

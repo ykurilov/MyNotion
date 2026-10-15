@@ -15,6 +15,8 @@ public enum Palette {
     public static let inlineCodeBackground = themed(light: .rgba(33, 27, 23, 0.05), dark: .rgba(255, 255, 255, 0.055))
     public static let checkboxChecked = themed(light: .hex(0x2383E2), dark: .hex(0x2383E2))
     /// «+», «⋮⋮», стрелки раскрытия.
+    /// Жёлтая полоса ошибки сохранения (желтый фон блока Notion, ≈).
+    public static let saveErrorBannerBackground = themed(light: .hex(0xFBF3DB), dark: .hex(0x3F3622))
     public static let handleIcon = themed(light: .rgba(55, 53, 47, 0.35), dark: .rgba(255, 255, 255, 0.3))
     /// Подчёркивание ссылки: ≈ 40 % цвета текста.
     public static let linkUnderline = themed(

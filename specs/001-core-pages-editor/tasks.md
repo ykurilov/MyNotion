@@ -73,20 +73,20 @@ description: "Задачи: минимальное ядро MyNotion для macO
 
 ### Тесты US1 (сначала, должны упасть)
 
-- [ ] T017 [P] [US1] Тест автосохранения в `PK/Tests/NotesCoreTests/AutosaveCoordinatorTests.swift` с подменёнными часами: запись через 300 мс после последней правки, немедленная запись при уходе в фон и выходе, не позже 1 с после окончания ввода (FR-014); пишутся только изменённые поля изменённых блоков; если в базе версия блока новее `textBaseClock` — запись не затирает её, а создаёт `Conflict`
-- [ ] T018 [P] [US1] Тест «сто циклов» в `PK/Tests/NotesCoreTests/SaveReopenCycleTests.swift`: 100 раз — случайный текст во всех типах полей → закрыть документ и базу → открыть → полное совпадение (SC-004); в браузерном тесте T021 остаётся один живой случай
-- [ ] T019 [P] [US1] Тест ошибки записи в `PK/Tests/NotesCoreTests/SaveFailureTests.swift`: при отказе диска состояние «не сохранено» с причиной, текст в памяти не теряется, повторная попытка записывает его (FR-015)
-- [ ] T020 [P] [US1] Тест разбора абзацев в `PK/Tests/PageEditorTests/PageTextMappingTests.swift`: блоки → текст с атрибутами абзацев (id блока) → блоки без потерь; Enter делит блок, ⌫ в начале склеивает
+- [x] T017 [P] [US1] Тест автосохранения в `PK/Tests/NotesCoreTests/AutosaveCoordinatorTests.swift` с подменёнными часами: запись через 300 мс после последней правки, немедленная запись при уходе в фон и выходе, не позже 1 с после окончания ввода (FR-014); пишутся только изменённые поля изменённых блоков; если в базе версия блока новее `textBaseClock` — запись не затирает её, а создаёт `Conflict`
+- [x] T018 [P] [US1] Тест «сто циклов» в `PK/Tests/NotesCoreTests/SaveReopenCycleTests.swift`: 100 раз — случайный текст во всех типах полей → закрыть документ и базу → открыть → полное совпадение (SC-004); в браузерном тесте T021 остаётся один живой случай
+- [x] T019 [P] [US1] Тест ошибки записи в `PK/Tests/NotesCoreTests/SaveFailureTests.swift`: при отказе диска состояние «не сохранено» с причиной, текст в памяти не теряется, повторная попытка записывает его (FR-015)
+- [x] T020 [P] [US1] Тест разбора абзацев в `PK/Tests/PageEditorTests/PageTextMappingTests.swift`: блоки → текст с атрибутами абзацев (id блока) → блоки без потерь; Enter делит блок, ⌫ в начале склеивает
 - [ ] T021 [P] [US1] Сценарий `UITests/NoteSurvivesRelaunchTests.swift`: новая страница, название, абзац, выход, запуск — открыта та же страница с тем же текстом; второй прогон с `kill -9` через 1,5 с после набора — текст на месте (SC-004, SC-005)
 
 ### Реализация US1
 
-- [ ] T022 [US1] `PageDocument` в `PK/Sources/NotesCore/Document/PageDocument.swift`: одна живая копия страницы в памяти; `OpenDocuments` выдаёт один и тот же объект всем окнам (R5)
-- [ ] T023 [US1] `AutosaveCoordinator` в `PK/Sources/NotesCore/Document/AutosaveCoordinator.swift` (R4: только изменённые поля с проверкой `textBaseClock`) и состояние сохранения `SaveStatus` (сохранено / сохраняется / не сохранено + причина)
-- [ ] T024 [US1] Редактор в `PK/Sources/PageEditor/PageTextView.swift` и `PageTextStorageMapper.swift`: `NSTextView` на TextKit 2, абзац = блок (атрибут id блока), проверка орфографии и системное поведение текста (FR-013); правки уходят в `PageDocument`
-- [ ] T025 [US1] Поле названия страницы и редактор в `PK/Sources/PageEditor/PageEditorView.swift` (SwiftUI-обёртка) по contracts/visual-style.md: колонка 720 по центру, эмодзи-иконка над названием, название 40/48 жирностью 700, верхняя полоса 44 с путём «Родитель / Страница»; пустое название — «Без названия» цветом textSecondary; подсказка в пустом абзаце «Введите «/» для выбора блока»
-- [ ] T026 [US1] Полоса ошибки сохранения «Изменения не сохранены — <причина>. Повторяем…» в `PK/Sources/PageEditor/SaveStatusBanner.swift` (contracts/editor-interactions.md)
-- [ ] T027 [US1] Временный плоский список страниц и ⌘N в `App/MainWindow/MainWindowView.swift`; восстановление последней открытой страницы при запуске через `WindowState` (FR-006); signpost `EditorReady` для T016
+- [x] T022 [US1] `PageDocument` в `PK/Sources/NotesCore/Document/PageDocument.swift`: одна живая копия страницы в памяти; `OpenDocuments` выдаёт один и тот же объект всем окнам (R5)
+- [x] T023 [US1] `AutosaveCoordinator` в `PK/Sources/NotesCore/Document/AutosaveCoordinator.swift` (R4: только изменённые поля с проверкой `textBaseClock`) и состояние сохранения `SaveStatus` (сохранено / сохраняется / не сохранено + причина)
+- [x] T024 [US1] Редактор в `PK/Sources/PageEditor/PageTextView.swift` и `PageTextStorageMapper.swift`: `NSTextView` на TextKit 2, абзац = блок (атрибут id блока), проверка орфографии и системное поведение текста (FR-013); правки уходят в `PageDocument`
+- [x] T025 [US1] Поле названия страницы и редактор в `PK/Sources/PageEditor/PageEditorView.swift` (SwiftUI-обёртка) по contracts/visual-style.md: колонка 720 по центру, эмодзи-иконка над названием, название 40/48 жирностью 700, верхняя полоса 44 с путём «Родитель / Страница»; пустое название — «Без названия» цветом textSecondary; подсказка в пустом абзаце «Введите «/» для выбора блока»
+- [x] T026 [US1] Полоса ошибки сохранения «Изменения не сохранены — <причина>. Повторяем…» в `PK/Sources/PageEditor/SaveStatusBanner.swift` (contracts/editor-interactions.md)
+- [x] T027 [US1] Временный плоский список страниц и ⌘N в `App/MainWindow/MainWindowView.swift`; восстановление последней открытой страницы при запуске через `WindowState` (FR-006); signpost `EditorReady` для T016
 
 **Checkpoint**: Рабочий блокнот с надёжным сохранением. Сборка, затронутые тесты и замеры, показ Юрию, коммит.
 

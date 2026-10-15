@@ -1,23 +1,40 @@
+import AppKit
 import NotesCore
 import SwiftUI
 
 @main
 struct MyNotionApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     private let options: LaunchOptions
-    private let library: Result<NotesStore, any Error>
+    private let library: Result<MainWindowModel, any Error>
 
     init() {
+        // Флаги запуска — не файлы. Иначе AppKit склеивает флаг без значения со следующим флагом в свою
+        // настройку, оставшийся путь «открывает» как документ, и окно со страницей не появляется.
+        UserDefaults.standard.register(defaults: ["NSTreatUnknownArgumentsAsOpen": "NO"])
         let options = LaunchOptions(arguments: CommandLine.arguments)
         if let referenceLibraryURL = options.referenceLibraryURL {
             Self.generateReferenceLibraryAndExit(at: referenceLibraryURL)
         }
         self.options = options
-        library = Result { try Self.openLibrary(options) }
+        if let appearanceName = options.appearanceName {
+            NSApplication.shared.appearance = NSAppearance(named: appearanceName)
+        }
+        library = Result { MainWindowModel(store: try Self.openLibrary(options)) }
+        AppDelegate.model = try? library.get()
     }
 
     var body: some Scene {
         WindowGroup {
-            MainWindowView(library: library, launchReportURL: options.launchReportURL)
+            MainWindowView(library: library, options: options)
+        }
+        .defaultSize(width: 1200, height: 800)
+        .windowStyle(.hiddenTitleBar)
+        .commands {
+            CommandGroup(replacing: .newItem) {
+                Button("Новая страница") { (try? library.get())?.createPage() }
+                    .keyboardShortcut("n")
+            }
         }
     }
 
@@ -25,7 +42,9 @@ struct MyNotionApp: App {
         let database = try AppDatabase.open(at: options.databaseURL ?? AppDatabase.defaultURL)
         let store = NotesStore(database: database, clock: HybridLogicalClock(deviceId: DeviceIdentity.deviceId()))
         if options.generatesVisualSample {
-            try VisualSamplePage.ensure(in: store)
+            // Образец сразу открыт: для сверки с Notion и снимков окна.
+            let sample = try VisualSamplePage.ensure(in: store)
+            try store.saveWindowState(WindowState(windowId: WindowState.mainWindowId, openPageId: sample.id))
         }
         return store
     }
@@ -39,5 +58,31 @@ struct MyNotionApp: App {
             FileHandle.standardError.write(Data("Эталонная база не создана: \(error.localizedDescription)\n".utf8))
             exit(1)
         }
+    }
+}
+
+/// Запись открытых страниц при уходе в фон и выходе (research R4); выход при неудачной записи — только с согласия.
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Ставится при запуске, до первого окна.
+    static var model: MainWindowModel?
+
+    func applicationWillResignActive(_ notification: Notification) {
+        Self.model?.saveAll()
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let model = Self.model, !model.saveAll() else { return .terminateNow }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Изменения не сохранены"
+        alert.informativeText = "Записать правки на диск не удалось. Если выйти сейчас, последние правки пропадут."
+        alert.addButton(withTitle: "Не выходить")
+        alert.addButton(withTitle: "Выйти без сохранения")
+        return alert.runModal() == .alertSecondButtonReturn ? .terminateNow : .terminateCancel
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        true
     }
 }
