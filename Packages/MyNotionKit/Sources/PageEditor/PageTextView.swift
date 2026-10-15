@@ -47,6 +47,12 @@ public final class PageTextView: NSTextView {
     private(set) var drawnSelectionRects: [NSRect] = []
     /// Нарисованы подложки блоков целиком, а не полосы по тексту.
     private var drawnSelectionIsBlocks = false
+    /// Режим выделения блоков (`BlockSelectionMode`): опорный блок и подвижный край; `nil` — обычное выделение.
+    var blockSelectionEnds: (anchor: Int, head: Int)?
+    /// Выделение меняет сам режим блоков — режим не снимается.
+    var isApplyingBlockSelection = false
+    /// Протяжка мышью с поля: где нажали и сдвинулась ли мышь.
+    var marginDrag: (start: NSPoint, moved: Bool)?
 
     public init(document: PageDocument, initialFocus: InitialFocus) {
         self.document = document
@@ -165,6 +171,8 @@ public final class PageTextView: NSTextView {
 
     public override func insertText(_ string: Any, replacementRange: NSRange) {
         let typed = (string as? NSAttributedString)?.string ?? string as? String ?? ""
+        // В режиме блоков набор букв блоки не заменяет, как в Notion.
+        if isBlockSelection, replacementRange.location == NSNotFound, !hasMarkedText() { return }
         hideBlockHandles()
         if typed == " ", replacementRange.location == NSNotFound, !hasMarkedText(), applyMarkdownShortcut() { return }
         if replacementRange.location == NSNotFound, !hasMarkedText(), !typed.isEmpty, !typed.hasPrefix("\n"), isCaretInPageLink {
@@ -181,6 +189,12 @@ public final class PageTextView: NSTextView {
         let selection = selectedRange()
         guard selection.length == 0, let position = mapper.blockPosition(at: selection.location) else { return false }
         return document.blocks[position.index].kind == .pageLink
+    }
+
+    /// В режиме блоков набор через способ ввода блоки тоже не заменяет.
+    public override func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
+        guard !isBlockSelection else { return }
+        super.setMarkedText(string, selectedRange: selectedRange, replacementRange: replacementRange)
     }
 
     public override func deleteBackward(_ sender: Any?) {
@@ -236,6 +250,7 @@ public final class PageTextView: NSTextView {
             return
         }
         if handlePopupCommand(selector) { return }
+        if handleBlockSelectionCommand(selector) { return }
         super.doCommand(by: selector)
     }
 
@@ -274,6 +289,10 @@ public final class PageTextView: NSTextView {
     /// Выполнить действие редактора над блоками под курсором или выделением.
     public func perform(_ command: EditorCommand) {
         guard !hasMarkedText() else { return }
+        keepingBlockSelection { performOnSelectedBlocks(command) }
+    }
+
+    private func performOnSelectedBlocks(_ command: EditorCommand) {
         switch command {
         case .indent: indentSelectedBlocks(by: 1)
         case .outdent: indentSelectedBlocks(by: -1)
@@ -403,6 +422,7 @@ public final class PageTextView: NSTextView {
     }
 
     public override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
+        if !isApplyingBlockSelection { blockSelectionEnds = nil }
         super.setSelectedRanges(ranges.map(keepingBeforeFinalNewline), affinity: affinity, stillSelecting: stillSelecting)
         updateSelectionLook()
         guard !stillSelecting else { return }
@@ -449,8 +469,22 @@ public final class PageTextView: NSTextView {
             return
         }
         if openLink(at: point, modifiers: event.modifierFlags) { return }
+        if isMarginPoint(point) {
+            beginMarginDrag(at: point)
+            return
+        }
         closePopups()
         super.mouseDown(with: event)
+    }
+
+    public override func mouseDragged(with event: NSEvent) {
+        guard marginDrag != nil else { return super.mouseDragged(with: event) }
+        continueMarginDrag(event)
+    }
+
+    public override func mouseUp(with event: NSEvent) {
+        guard marginDrag != nil else { return super.mouseUp(with: event) }
+        endMarginDrag(at: convert(event.locationInWindow, from: nil))
     }
 
     // MARK: Подсказка в пустом абзаце
@@ -604,7 +638,7 @@ public final class PageTextView: NSTextView {
 
     /// Курсор к выделению; полосы выделения перерисовать там, где они были и где стали.
     /// `isFocused: false` — текст отдаёт фокус: окно ещё считает его первым, но курсор и выделение уже гаснут.
-    private func updateSelectionLook(isFocused: Bool? = nil) {
+    func updateSelectionLook(isFocused: Bool? = nil) {
         caret.update(isFocused: isFocused)
         let rects = (isFocused ?? (window?.firstResponder === self)) ? selectionHighlightRects() : []
         let isBlocks = !rects.isEmpty && isBlockSelection
@@ -614,8 +648,8 @@ public final class PageTextView: NSTextView {
         drawnSelectionIsBlocks = isBlocks
     }
 
-    /// Выделение как в Notion: под текстом. Внутри блока — полоса на строку; через блоки — одна подложка
-    /// на все выделенные блоки, залитая разом, чтобы на стыках не темнело.
+    /// Выделение как в Notion: под текстом. Выделение текста — полоса на строку; выделенные блоки —
+    /// скруглённая подложка на блок.
     public override func drawBackground(in rect: NSRect) {
         super.drawBackground(in: rect)
         guard drawnSelectionIsBlocks else {
@@ -626,45 +660,22 @@ public final class PageTextView: NSTextView {
             return
         }
         Palette.blockSelection.setFill()
-        Self.blockSelectionPath(drawnSelectionRects).fill()
-    }
-
-    /// Подложки блоков одной фигурой: скруглены только внешние углы, на стыке соседних блоков края ровные.
-    static func blockSelectionPath(_ rects: [NSRect]) -> NSBezierPath {
-        let path = NSBezierPath()
         let radius = Metrics.BlockSelection.cornerRadius
-        for (index, rect) in rects.enumerated() {
-            let previous = index > 0 && abs(rects[index - 1].maxY - rect.minY) < 0.01 ? rects[index - 1] : nil
-            let next = index + 1 < rects.count && abs(rects[index + 1].minY - rect.maxY) < 0.01 ? rects[index + 1] : nil
-            // Угол скруглён, если соседний блок его не продолжает.
-            let corners = (topLeft: previous.map { $0.minX > rect.minX } ?? true, topRight: previous == nil,
-                           bottomLeft: next.map { $0.minX > rect.minX } ?? true, bottomRight: next == nil)
-            let r = { (rounded: Bool) in rounded ? radius : 0 }
-            path.move(to: NSPoint(x: rect.minX + r(corners.topLeft), y: rect.minY))
-            path.appendArc(from: NSPoint(x: rect.maxX, y: rect.minY), to: NSPoint(x: rect.maxX, y: rect.maxY), radius: r(corners.topRight))
-            path.appendArc(from: NSPoint(x: rect.maxX, y: rect.maxY), to: NSPoint(x: rect.minX, y: rect.maxY), radius: r(corners.bottomRight))
-            path.appendArc(from: NSPoint(x: rect.minX, y: rect.maxY), to: NSPoint(x: rect.minX, y: rect.minY), radius: r(corners.bottomLeft))
-            path.appendArc(from: NSPoint(x: rect.minX, y: rect.minY), to: NSPoint(x: rect.maxX, y: rect.minY), radius: r(corners.topLeft))
-            path.close()
+        for highlight in drawnSelectionRects where highlight.intersects(rect) {
+            NSBezierPath(roundedRect: highlight, xRadius: radius, yRadius: radius).fill()
         }
-        path.windingRule = .nonZero
-        return path
     }
 
-    /// Выделение вышло за границу блока: Notion подсвечивает блоки целиком.
-    var isBlockSelection: Bool {
-        selectedRange().length > 0 && (selectedBlockRange()?.count ?? 0) > 1
-    }
-
-    /// Подсветка выделения (координаты окна текста): внутри блока — полосы по тексту, через блоки — подложки блоков.
+    /// Подсветка выделения (координаты окна текста): выделение текста — полосы по тексту, и через блоки тоже;
+    /// режим выделения блоков — подложки блоков целиком.
     func selectionHighlightRects() -> [NSRect] {
-        guard isBlockSelection, let blocks = selectedBlockRange() else { return textSelectionRects() }
+        guard let blocks = selectedBlocks else { return textSelectionRects() }
         return blockSelectionRects(blocks)
     }
 
     /// Подложка на блок как в Notion: от края блока (у пунктов — с маркером) до края колонки с запасом по бокам,
     /// от верха первой строки до низа последней с запасом сверху и снизу. Подложка тянется вниз до следующей,
-    /// и соседние блоки сливаются.
+    /// оставляя просвет `blockGap`.
     func blockSelectionRects(_ blocks: Range<Int>) -> [NSRect] {
         guard let layoutManager = textLayoutManager, let storage = textContentStorage, let container = textContainer else { return [] }
         let origin = textContainerOrigin
@@ -682,8 +693,8 @@ public final class PageTextView: NSTextView {
             let right = origin.x + container.size.width + outset
             rects.append(NSRect(x: left, y: top, width: right - left, height: bottom - top))
         }
-        for index in rects.indices.dropLast() where rects[index].maxY < rects[index + 1].minY {
-            rects[index].size.height = rects[index + 1].minY - rects[index].minY
+        for index in rects.indices.dropLast() {
+            rects[index].size.height = rects[index + 1].minY - Metrics.BlockSelection.blockGap - rects[index].minY
         }
         return rects
     }

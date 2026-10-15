@@ -38,7 +38,17 @@ public enum PageEditorPreview {
         return true
     }
 
-    /// Выделить блоки от начала `first` до конца `last` целиком.
+    /// Режим выделения блоков: блоки от `first` до `last`, как после Esc или протяжки с поля.
+    @discardableResult
+    public static func selectWholeBlocks(from first: UUID, through last: UUID, in window: NSWindow) -> Bool {
+        guard let textView = textView(in: window), let firstIndex = textView.document.index(ofBlock: first),
+              let lastIndex = textView.document.index(ofBlock: last) else { return false }
+        window.makeFirstResponder(textView)
+        textView.selectBlocks(anchor: firstIndex, head: lastIndex)
+        return true
+    }
+
+    /// Выделить текст блоков от начала `first` до конца `last`.
     @discardableResult
     public static func selectBlocks(from first: UUID, through last: UUID, in window: NSWindow) -> Bool {
         guard let textView = textView(in: window), let firstIndex = textView.document.index(ofBlock: first),
@@ -67,7 +77,7 @@ public enum PageEditorPreview {
             return false
         }
         let handleOnScreen = window.convertToScreen(dragHandle.convert(dragHandle.bounds, to: nil))
-        textView.openBlockMenu(forBlock: blockId, below: handleOnScreen)
+        textView.selectBlockAndOpenMenu(blockId, below: handleOnScreen)
         return true
     }
 

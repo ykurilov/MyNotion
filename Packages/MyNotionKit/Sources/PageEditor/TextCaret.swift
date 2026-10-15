@@ -50,7 +50,8 @@ public final class TextCaret {
     }
 
     private func isVisible(in textView: NSTextView) -> Bool {
-        guard let window = textView.window, window.firstResponder === textView, textView.selectedRange().length == 0 else { return false }
+        guard let window = textView.window, window.firstResponder === textView, textView.selectedRange().length == 0,
+              (textView as? PageTextView)?.isBlockSelection != true else { return false }
         return window.isKeyWindow || showsWithoutKeyWindow || Self.isPreviewMode
     }
 

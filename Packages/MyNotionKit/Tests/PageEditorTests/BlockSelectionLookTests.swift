@@ -4,11 +4,12 @@ import Testing
 @testable import PageEditor
 import VisualStyle
 
-/// Выделение через несколько блоков как в Notion (снимок Юрия 15.10.2026): как только выделение выходит за блок,
-/// подсвечены блоки целиком — ровная подложка на всю ширину блока, на 6 левее текста абзаца и на 3 выше и ниже строк;
-/// соседние блоки сливаются в одну подложку, номера и маркеры внутри; синий Notion rgba(35,131,226,0.14) в обеих темах.
+/// Режим выделения блоков как в Notion (снимок Юрия и Notion 7.38.1 в виртуальном Mac, 15.10.2026): блоки подсвечены
+/// целиком — ровная подложка на всю ширину блока, на 6 левее текста абзаца и на 3 выше и ниже строк; у соседних блоков
+/// подложки отдельные, между ними просвет 3; номера и маркеры внутри; синий Notion rgba(35,131,226,0.14) в обеих темах.
+/// Выделение текста через блоки — полосы по тексту (`TextSelectionLookTests`).
 @MainActor
-@Suite("Выделение блоков целиком как в Notion")
+@Suite("Режим выделения блоков: вид как в Notion")
 struct BlockSelectionLookTests {
     static let wrapped = String(repeating: "Длинный абзац переносится на несколько строк. ", count: 5)
     static let specs: [EditorFixture.Spec] = [
@@ -16,12 +17,10 @@ struct BlockSelectionLookTests {
         .paragraph(wrapped), .paragraph("Не выделен"),
     ]
 
-    /// Выделение с середины пункта 0 до середины абзаца 3.
+    /// Выделены блоки 0…3.
     private func makeEditor() throws -> EditorFixture {
         let editor = try EditorFixture(Self.specs)
-        let start = editor.textLocation(ofBlock: 0) + 5
-        let end = editor.textLocation(ofBlock: 3) + 10
-        editor.textView.setSelectedRange(NSRange(location: start, length: end - start))
+        editor.textView.selectBlocks(0..<4)
         return editor
     }
 
@@ -42,11 +41,11 @@ struct BlockSelectionLookTests {
         return fragment.layoutFragmentFrame.minY + line.typographicBounds.minY + line.glyphOrigin.y
     }
 
-    @Test("Подложка на блок: от края блока до края колонки, сливается с соседней, по 3 над и под строками")
+    @Test("Подложка на блок: от края блока до края колонки, до соседней — просвет 3, по 3 над и под строками")
     func blocksAreCoveredWhole() throws {
         let editor = try makeEditor()
         let textView = editor.textView
-        #expect(textView.isBlockSelection, "Выделение через блоки показано полосами по тексту")
+        #expect(textView.isBlockSelection, "Режим выделения блоков не включился")
         let rects = textView.selectionHighlightRects()
         try #require(rects.count == 4, "Подложек \(rects.count): \(rects)")
         let origin = textView.textContainerOrigin
@@ -61,15 +60,17 @@ struct BlockSelectionLookTests {
         let firstTop = lineTop(baseline: try #require(textView.markerLine(ofBlockAt: 0)).baseline, in: textView)
         #expect(abs(rects[0].minY - (firstTop - 3)) <= 0.5, "Подложка с \(rects[0].minY), первая строка с \(firstTop)")
         for index in 0..<3 {
-            #expect(abs(rects[index].maxY - rects[index + 1].minY) <= 0.01, "Подложки блоков \(index) и \(index + 1) не сходятся: \(rects)")
+            let gap = rects[index + 1].minY - rects[index].maxY
+            #expect(abs(gap - Metrics.BlockSelection.blockGap) <= 0.01, "Между подложками блоков \(index) и \(index + 1) просвет \(gap): \(rects)")
         }
+        #expect(Metrics.BlockSelection.blockGap == 3)
         let lastBottom = lineTop(baseline: try lastBaseline(ofBlock: 3, in: editor), in: textView) + 24
         #expect(abs(rects[3].maxY - (lastBottom + 3)) <= 0.5, "Подложка до \(rects[3].maxY), последняя строка до \(lastBottom)")
         let lines = (lastBottom - lineTop(baseline: try #require(textView.markerLine(ofBlockAt: 3)).baseline, in: textView)) / 24
         #expect(lines >= 3, "Абзац 3 должен занимать несколько строк, а занимает \(lines)")
     }
 
-    @Test("Цвет — синий Notion 0,14 в обеих темах, ровный и на стыке блоков; номер внутри; снаружи — страница; текст своего цвета")
+    @Test("Цвет — синий Notion 0,14 в обеих темах, ровный; номер внутри; в просвете и снаружи — страница; текст своего цвета")
     func blockHighlightColors() throws {
         let editor = try makeEditor()
         let rects = editor.textView.selectionHighlightRects()
@@ -84,7 +85,7 @@ struct BlockSelectionLookTests {
             let name = appearance.rawValue
             let right = rects[1].maxX - 4
             for (place, point) in [("справа в блоке", NSPoint(x: right, y: rects[1].midY)),
-                                   ("на стыке блоков", NSPoint(x: right, y: rects[1].maxY)),
+                                   ("у нижнего края", NSPoint(x: right, y: rects[1].maxY - 1)),
                                    ("слева от номера", NSPoint(x: rects[1].minX + 2, y: rects[1].midY))] {
                 let color = pixels.color(at: point, over: page)
                 #expect(colorDistance(color, notion) <= 0.02, "\(name), \(place): \(color), ждём \(notion)")
@@ -93,6 +94,7 @@ struct BlockSelectionLookTests {
                                       "\(name): номера не видно в подложке")
             #expect(colorDistance(number, notion) > 0.2, "\(name): номер \(number) не нарисован поверх подложки")
             for (place, point) in [("над подложкой", NSPoint(x: right, y: rects[0].minY - 1.5)),
+                                   ("в просвете между блоками", NSPoint(x: right, y: rects[1].maxY + 1.5)),
                                    ("справа от подложки", NSPoint(x: rects[1].maxX + 1.5, y: rects[1].midY)),
                                    ("под подложкой", NSPoint(x: right, y: rects[3].maxY + 1.5))] {
                 let color = pixels.color(at: point, over: page)
@@ -104,8 +106,8 @@ struct BlockSelectionLookTests {
         }
     }
 
-    @Test("Выделение вернулось в один блок — снова полосы по тексту")
-    func backToOneBlock() throws {
+    @Test("Выделили текст — режим блоков снят, снова полосы по тексту")
+    func textSelectionLeavesBlockMode() throws {
         let editor = try makeEditor()
         #expect(editor.textView.isBlockSelection)
         editor.select(inBlock: 1, "Список")

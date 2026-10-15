@@ -99,7 +99,7 @@ struct SoftLineBreakTests {
         #expect(editor.texts == ["Ниже"])
     }
 
-    @Test("Выделение обеих строк блока — полосы по тексту; дальше блока — подложка на обе строки")
+    @Test("Выделение текста — полосы по строкам и внутри блока с переносом, и дальше него; выделенный блок — подложка на обе строки")
     func selectionInsideBrokenBlock() throws {
         let editor = try EditorFixture([.paragraph("Первая\nВторая"), .paragraph("Ниже")])
         let textView = editor.textView
@@ -108,9 +108,11 @@ struct SoftLineBreakTests {
         let bands = textView.selectionHighlightRects()
         #expect(bands.count == 2, "Полос \(bands.count): \(bands)")
         textView.setSelectedRange(NSRange(location: 3, length: 14))
-        #expect(textView.isBlockSelection)
+        #expect(!textView.isBlockSelection, "Выделение текста через блоки показано блоками")
+        #expect(textView.selectionHighlightRects().count == 3, "Полос \(textView.selectionHighlightRects())")
+        textView.selectBlocks(0..<1)
         let rects = textView.selectionHighlightRects()
-        try #require(rects.count == 2)
+        try #require(rects.count == 1)
         #expect(rects[0].height >= 48 + 6 - 0.5, "Подложка блока с переносом не на обе строки: \(rects[0])")
     }
 

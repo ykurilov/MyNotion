@@ -449,6 +449,14 @@ extension PageTextView {
         popups.open(.block(blockId: id), items: PopupMenuItem.blockKinds + [.delete], below: anchor)
     }
 
+    /// Щелчок по «⋮⋮», как в Notion: блок выделен целиком (режим блоков) и открыто его меню; Esc закрывает меню,
+    /// блок остаётся выделенным.
+    func selectBlockAndOpenMenu(_ id: UUID, below anchor: NSRect) {
+        window?.makeFirstResponder(self)
+        if let index = document.index(ofBlock: id) { selectBlocks(index..<index + 1) }
+        openBlockMenu(forBlock: id, below: anchor)
+    }
+
     func textDidChangeForPopups() { refreshSlashMenu() }
 
     /// Подсветка и подсказка строки с «/» пересчитываются по курсору: посреди обработки правки раскладка строки

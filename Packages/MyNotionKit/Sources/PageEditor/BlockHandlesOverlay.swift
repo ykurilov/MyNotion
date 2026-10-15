@@ -152,7 +152,7 @@ final class BlockHandlesOverlay: NSView {
         }
         guard let window else { return }
         let handleOnScreen = window.convertToScreen(dragHandle.convert(dragHandle.bounds, to: nil))
-        textView.openBlockMenu(forBlock: blockId, below: handleOnScreen)
+        textView.selectBlockAndOpenMenu(blockId, below: handleOnScreen)
     }
 }
 

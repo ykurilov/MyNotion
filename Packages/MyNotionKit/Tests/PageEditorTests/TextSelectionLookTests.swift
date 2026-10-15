@@ -4,9 +4,9 @@ import Testing
 @testable import PageEditor
 import VisualStyle
 
-/// Выделение внутри одного блока как в Notion (снимок Юрия 15.10.2026, тёмная тема): подсветка обтягивает текст
-/// каждой строки на высоту строки, номер не закрашен; синий Notion rgba(35,131,226,0.28); текст в выделении своего цвета.
-/// Выделение через несколько блоков — `BlockSelectionLookTests`.
+/// Выделение текста как в Notion (снимок Юрия 15.10.2026, тёмная тема): подсветка обтягивает текст каждой строки
+/// на высоту строки — и внутри блока, и через несколько блоков; между блоками просвет, номер не закрашен;
+/// синий Notion rgba(35,131,226,0.28); текст в выделении своего цвета. Режим выделения блоков — `BlockSelectionLookTests`.
 @MainActor
 @Suite("Выделение текста как в Notion")
 struct TextSelectionLookTests {
@@ -18,6 +18,9 @@ struct TextSelectionLookTests {
         editor.select(inBlock: 0, Self.texts[0])
         return editor
     }
+
+    /// Текст пункта правее края колонки.
+    static let textStartOffset: CGFloat = 30
 
     private func width(_ text: String) -> CGFloat {
         NSAttributedString(string: text, attributes: [.font: Typography.line(for: .paragraph).font]).size().width
@@ -41,6 +44,28 @@ struct TextSelectionLookTests {
         #expect(abs(rect.minX - start) <= 0.5, "Полоса с \(rect.minX), текст с \(start) — номер не закрашен")
         #expect(abs(rect.maxX - end) <= 1, "Полоса до \(rect.maxX), ждём \(end)")
         #expect(abs(rect.minY - top) <= 0.5 && abs(rect.height - 24) <= 0.5, "Полоса \(rect), ждём верх \(top), высоту 24")
+    }
+
+    @Test("Через несколько блоков — тоже полосы по тексту: по строке на блок, между блоками просвет, номера не закрашены")
+    func acrossBlocksStaysText() throws {
+        let editor = try EditorFixture([.numbered(Self.texts[0]), .numbered(Self.texts[1]), .paragraph(Self.texts[2]), .numbered("")])
+        let start = editor.textLocation(ofBlock: 0) + 6
+        let end = editor.textLocation(ofBlock: 2) + 5
+        let textView = editor.textView
+        textView.setSelectedRange(NSRange(location: start, length: end - start))
+        #expect(!textView.isBlockSelection, "Выделение текста через блоки показано блоками")
+        let rects = textView.selectionHighlightRects()
+        try #require(rects.count == 3, "Полос \(rects.count): \(rects)")
+        let origin = textView.textContainerOrigin
+        for (index, rect) in rects.enumerated() {
+            let line = try #require(textView.markerLine(ofBlockAt: index))
+            let textStart = line.caretX + origin.x
+            #expect(rect.minX >= textStart - 0.5, "Блок \(index): полоса с \(rect.minX), текст с \(textStart) — номер закрашен")
+            #expect(abs(rect.height - 24) <= 0.5, "Блок \(index): высота полосы \(rect.height)")
+        }
+        #expect(rects[0].minX > origin.x + Self.textStartOffset + 20, "Первая полоса не с середины текста: \(rects[0])")
+        #expect(rects[2].maxX < origin.x + width(Self.texts[2]), "Последняя полоса дальше выделенного: \(rects[2])")
+        #expect(rects[0].maxY < rects[1].minY - 4 && rects[1].maxY < rects[2].minY - 4, "Между блоками просвет: \(rects)")
     }
 
     @Test("Выделение до начала следующего блока — всё ещё один блок: полосы, перевод строки шириной в пробел")
