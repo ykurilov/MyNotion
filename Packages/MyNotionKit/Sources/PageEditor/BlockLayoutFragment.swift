@@ -106,21 +106,33 @@ enum BlockDecorationPainter {
 
     private static var textFont: NSFont { Typography.line(for: .listItem).font }
 
-    /// Шрифт знака маркера: у `•`, `◦` и `▪` один видимый размер.
+    /// Шрифт знака маркера: у `•` и `▪` один видимый размер.
     static func bulletFont(for marker: String) -> NSFont {
-        let scale = switch marker {
-        case "◦": Metrics.BlockMarker.hollowBulletScale
-        case "▪": Metrics.BlockMarker.squareBulletScale
-        default: Metrics.BlockMarker.bulletScale
-        }
+        let scale = marker == "▪" ? Metrics.BlockMarker.squareBulletScale : Metrics.BlockMarker.bulletScale
         return NSFont.systemFont(ofSize: textFont.pointSize * scale)
+    }
+
+    /// Видимый размер маркера: `◦` — кольцо размером с `•`.
+    static func bulletSize(for marker: String) -> CGSize {
+        let glyph = marker == "◦" ? "•" : marker
+        return CTLineGetImageBounds(textLine(glyph, font: bulletFont(for: glyph)), nil).size
     }
 
     /// `•` `◦` `▪` крупнее текста, по середине строчных букв.
     private static func drawBullet(_ marker: String, in column: CGRect, baseline: CGFloat) {
+        let center = CGPoint(x: column.midX, y: baseline - textFont.xHeight / 2)
+        if marker == "◦" {
+            let size = bulletSize(for: marker)
+            let lineWidth = Metrics.BlockMarker.hollowBulletLineWidth
+            let ring = CGRect(x: center.x - size.width / 2, y: center.y - size.height / 2, width: size.width, height: size.height)
+            let path = NSBezierPath(ovalIn: ring.insetBy(dx: lineWidth / 2, dy: lineWidth / 2))
+            path.lineWidth = lineWidth
+            Palette.textPrimary.setStroke()
+            path.stroke()
+            return
+        }
         let line = textLine(marker, font: bulletFont(for: marker))
         let glyph = CTLineGetImageBounds(line, nil)
-        let center = CGPoint(x: column.midX, y: baseline - textFont.xHeight / 2)
         // Координаты перевёрнуты: середина рисунка знака выше его базовой линии на `glyph.midY`.
         drawLine(line, color: Palette.textPrimary, baselineOrigin: CGPoint(x: center.x - glyph.midX, y: center.y + glyph.midY))
     }

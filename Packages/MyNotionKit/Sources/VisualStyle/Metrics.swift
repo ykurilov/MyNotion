@@ -58,8 +58,9 @@ public enum Metrics {
         /// Во сколько раз шрифт маркера крупнее текста. Видимый размер у `•`, `◦` и `▪` один, как в Notion,
         /// а знаки в шрифте разные, поэтому и множители разные (≈ по снимку).
         public static let bulletScale: CGFloat = 2.2
-        public static let hollowBulletScale: CGFloat = 2.0
         public static let squareBulletScale: CGFloat = 1.6
+        /// `◦` — тонкое кольцо размером с `•`: в шрифте этот знак жирный, поэтому он рисуется линией такой толщины (≈ по снимку).
+        public static let hollowBulletLineWidth: CGFloat = 1.2
     }
 
     public enum PageLinkBlock {

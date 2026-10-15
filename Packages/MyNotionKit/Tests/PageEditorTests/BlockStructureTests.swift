@@ -295,10 +295,7 @@ struct BlockStructureTests {
 struct ListMarkerSizeTests {
     @Test("`◦` и `▪` вложенных уровней того же видимого размера, что `•`, как в Notion")
     func nestedMarkersMatchBulletSize() {
-        func visibleSize(_ marker: String) -> CGSize {
-            let line = BlockDecorationPainter.textLine(marker, font: BlockDecorationPainter.bulletFont(for: marker))
-            return CTLineGetImageBounds(line, nil).size
-        }
+        func visibleSize(_ marker: String) -> CGSize { BlockDecorationPainter.bulletSize(for: marker) }
         let bullet = visibleSize(ListMarkers.bullet(atIndent: 0))
         for indent in 1...2 {
             let marker = ListMarkers.bullet(atIndent: indent)
@@ -306,5 +303,6 @@ struct ListMarkerSizeTests {
             #expect(abs(size.width - bullet.width) < 0.3 && abs(size.height - bullet.height) < 0.3,
                     "\(marker): \(size), а `•`: \(bullet)")
         }
+        #expect(Metrics.BlockMarker.hollowBulletLineWidth < bullet.width / 4, "`◦` — тонкое кольцо, а не жирная точка с дыркой")
     }
 }

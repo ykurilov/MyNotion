@@ -425,8 +425,11 @@ public final class PageTextView: NSTextView {
         let font = typingAttributes[.font] as? NSFont ?? Typography.line(for: .paragraph).font
         emptyParagraphHint.font = font
         emptyParagraphHint.sizeToFit()
+        // Подсказка стоит там, где встанет набранный текст: на базовой линии строки блока.
+        let baseline = markerLine(ofBlockAt: position.index).map { $0.baseline + textContainerOrigin.y } ?? caret.maxY
         let size = emptyParagraphHint.frame.size
-        emptyParagraphHint.frame = NSRect(x: caret.minX, y: caret.midY - size.height / 2, width: size.width, height: size.height)
+        emptyParagraphHint.frame = NSRect(x: caret.minX, y: baseline - emptyParagraphHint.firstBaselineOffsetFromTop,
+                                          width: size.width, height: size.height)
         emptyParagraphHint.isHidden = false
     }
 

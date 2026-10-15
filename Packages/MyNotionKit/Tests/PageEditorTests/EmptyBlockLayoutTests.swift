@@ -54,10 +54,12 @@ struct EmptyBlockLayoutTests {
                     #expect(abs(marker.baseline - filledMarker.baseline) < 0.5, "Маркер \(label) там же, где с текстом")
                 }
 
+                // Подсказка стоит там, где встал бы текст блока: на его базовой линии.
                 let hint = editor.textView.emptyParagraphHint
                 #expect(!hint.isHidden, "Подсказка видна: \(label)")
-                let caretMidY = caret.midY + editor.textView.textContainerOrigin.y
-                #expect(abs(hint.frame.midY - caretMidY) < 0.5, "Подсказка на строке курсора: \(label)")
+                let textBaseline = try #require(filled.textView.markerLine(ofBlockAt: index)).baseline + filled.textView.textContainerOrigin.y
+                let hintBaseline = hint.frame.minY + hint.firstBaselineOffsetFromTop
+                #expect(abs(hintBaseline - textBaseline) < 0.5, "Подсказка \(label): базовая линия \(hintBaseline), у текста \(textBaseline)")
             }
         }
     }
