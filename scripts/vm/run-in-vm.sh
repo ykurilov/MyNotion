@@ -61,8 +61,9 @@ run_app() {
   vm_ssh $ip "open -W -n $APP_REMOTE --stdout /tmp/mynotion.out --stderr /tmp/mynotion.err --args ${(q)@}; cat /tmp/mynotion.out /tmp/mynotion.err"
 }
 
-# Виртуальный Mac один на всех агентов: запуски идут по очереди (папка-замок; сбрасывается, если владелец умер).
-LOCK=/tmp/mynotion-vm.lock
+# Виртуальный Mac один на ВСЕ проекты и всех агентов: любые действия с ним идут по очереди через
+# общий замок (папка-замок; сбрасывается, если владелец умер). Своё действие вне обвязки — через `lock -- <команда>`.
+LOCK=/tmp/cua-vm.lock
 take_vm_lock() {
   until mkdir $LOCK 2>/dev/null; do
     local owner; owner=$(cat $LOCK/pid 2>/dev/null || true)
@@ -72,9 +73,11 @@ take_vm_lock() {
   echo $$ > $LOCK/pid
 }
 # Ловушка — на верхнем уровне: в zsh `trap ... EXIT` внутри функции срабатывает при выходе из функции.
-if [[ ${1:-} == (gallery|run|uitest) ]]; then take_vm_lock; trap 'rm -rf $LOCK' EXIT; fi
+if [[ ${1:-} == (gallery|run|uitest|lock) ]]; then take_vm_lock; trap 'rm -rf $LOCK' EXIT; fi
 
 case ${1:-} in
+  lock)
+    shift; [[ ${1:-} == -- ]] && shift; "$@";;
   gallery)
     shift; only=(); out=/tmp/mynotion-gallery-vm-$(date +%H%M%S)
     while (( $# )); do case $1 in --only) only=(--ui-gallery-only $2); shift 2;; --out) out=$2; shift 2;; *) shift;; esac; done
