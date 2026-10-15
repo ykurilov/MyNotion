@@ -11,6 +11,8 @@ public final class PageTextView: NSTextView {
     public let header: PageHeaderView
     private(set) var mapper: PageTextStorageMapper!
     let emptyParagraphHint = NSTextField(labelWithString: "Введите «/» для выбора блока")
+    /// Проверка орфографии при наборе включена в меню «Правописание» (FR-013).
+    private var spellCheckingWanted = true
     /// Подложка под «/» с поиском, пока открыто меню «/».
     let slashQueryHighlight = NSView()
 
@@ -83,7 +85,7 @@ public final class PageTextView: NSTextView {
         allowsUndo = true
         usesFindBar = true
         isIncrementalSearchingEnabled = true
-        isContinuousSpellCheckingEnabled = true
+        isContinuousSpellCheckingEnabled = spellCheckingWanted
         isGrammarCheckingEnabled = false
         drawsBackground = true
         backgroundColor = Palette.pageBackground
@@ -403,7 +405,10 @@ public final class PageTextView: NSTextView {
     // MARK: Подсказка в пустом абзаце
 
     public override func becomeFirstResponder() -> Bool {
-        defer { updateEmptyParagraphHint() }
+        defer {
+            updateEmptyParagraphHint()
+            updateSpellingMarks()
+        }
         return super.becomeFirstResponder()
     }
 
@@ -411,8 +416,39 @@ public final class PageTextView: NSTextView {
         defer {
             emptyParagraphHint.isHidden = true
             closePopups()
+            updateSpellingMarks(isFocused: false)
         }
         return super.resignFirstResponder()
+    }
+
+    // MARK: Отметки орфографии
+
+    /// Красные подчёркивания — только пока в тексте курсор и окно ключевое, как в Notion:
+    /// в неактивном окне и при курсоре в названии их не видно. Выбор в меню «Правописание» сохраняется.
+    private func updateSpellingMarks(isFocused: Bool? = nil) {
+        let focused = isFocused ?? (window?.firstResponder === self)
+        let active = spellCheckingWanted && window?.isKeyWindow == true && focused
+        if isContinuousSpellCheckingEnabled != active { super.isContinuousSpellCheckingEnabled = active }
+    }
+
+    public override func toggleContinuousSpellChecking(_ sender: Any?) {
+        spellCheckingWanted.toggle()
+        super.isContinuousSpellCheckingEnabled = spellCheckingWanted
+        updateSpellingMarks()
+    }
+
+    public override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification] {
+            if let window { NotificationCenter.default.removeObserver(self, name: name, object: window) }
+            if let newWindow {
+                NotificationCenter.default.addObserver(self, selector: #selector(windowKeyStateDidChange(_:)), name: name, object: newWindow)
+            }
+        }
+    }
+
+    @objc private func windowKeyStateDidChange(_ notification: Notification) {
+        updateSpellingMarks()
     }
 
     /// Подсказка у курсора в пустом блоке: своя для каждого типа (contracts/visual-style.md, «Пустые строки»).
