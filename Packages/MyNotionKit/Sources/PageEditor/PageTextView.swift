@@ -539,6 +539,19 @@ public final class PageTextView: NSTextView {
         updateEmptyParagraphHint()
     }
 
+    // MARK: Доступность
+
+    /// Название и ручки «+ ⋮⋮» — вложенные поля текста; доступность текстового поля сама их не показывает,
+    /// и без этого их не находят ни VoiceOver, ни UI-сценарии.
+    public override func accessibilityChildren() -> [Any]? {
+        (super.accessibilityChildren() ?? []) + NSAccessibility.unignoredChildren(from: subviews.filter { !$0.isHidden })
+    }
+
+    /// Текст блоков без служебного перевода строки в конце: строка после него — не блок.
+    public override func accessibilityValue() -> String? {
+        string.hasSuffix("\n") ? String(string.dropLast()) : string
+    }
+
     // MARK: Фокус
 
     public override func viewDidMoveToWindow() {
@@ -620,6 +633,8 @@ public final class PageHeaderView: NSView, NSTextFieldDelegate {
         titleField.maximumNumberOfLines = 0
         titleField.delegate = self
         titleField.setAccessibilityIdentifier("page-title")
+        // Элемент доступности поля — его ячейка: без метки на ней название не находится.
+        titleField.cell?.setAccessibilityIdentifier("page-title")
         addSubview(titleField)
     }
 
