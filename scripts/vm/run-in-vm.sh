@@ -5,6 +5,7 @@
 #   scripts/vm/run-in-vm.sh gallery [--only <слово>] [--out <папка на этом Mac>]
 #   scripts/vm/run-in-vm.sh run <флаги приложения...>      # любой служебный режим, вывод в консоль
 #   scripts/vm/run-in-vm.sh ssh <команда>                   # команда внутри виртуального Mac
+#   scripts/vm/run-in-vm.sh uitest [-only-testing:UITests/<Класс>]  # UI-тесты Xcode внутри
 #   scripts/vm/run-in-vm.sh status
 set -euo pipefail
 
@@ -71,7 +72,7 @@ take_vm_lock() {
   echo $$ > $LOCK/pid
   trap 'rm -rf $LOCK' EXIT
 }
-[[ ${1:-} == (gallery|run) ]] && take_vm_lock
+[[ ${1:-} == (gallery|run|uitest) ]] && take_vm_lock
 
 case ${1:-} in
   gallery)
@@ -84,6 +85,14 @@ case ${1:-} in
     echo "Галерея: $out ($(ls $out | grep -c png) снимков)";;
   run)
     shift; ip=$(ensure_vm_running); build_and_push $ip; run_app $ip "$@";;
+  uitest)
+    # Штатные UI-тесты Xcode внутри виртуального Mac: сборка здесь, прогон там.
+    #   scripts/vm/run-in-vm.sh uitest [-only-testing:UITests/<Класс>] ...
+    shift; ip=$(ensure_vm_running); set_screen $ip
+    (cd $REPO && xcodegen generate -q && xcodebuild -scheme MyNotion -derivedDataPath /tmp/mynotion-uitest-dd build-for-testing -quiet)
+    rsync -a --delete -e "ssh -i $SSH_KEY" /tmp/mynotion-uitest-dd/Build/Products/ $VM_USER@$ip:/Users/$VM_USER/uitest-products/
+    run=$(cd /tmp/mynotion-uitest-dd/Build/Products && ls *.xctestrun | head -1)
+    vm_ssh $ip "cd ~/uitest-products && xcodebuild test-without-building -xctestrun $run -destination 'platform=macOS,arch=arm64' ${(q)@} 2>&1 | grep -E 'Test Case|error:|Executed|TEST (SUCCEEDED|FAILED)|not permitted|authoriz'";;
   ssh)
     shift; ip=$(ensure_vm_running); vm_ssh $ip "$@";;
   status)
