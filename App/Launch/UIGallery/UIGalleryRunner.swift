@@ -176,6 +176,20 @@ final class UIGalleryRunner {
                 return problem
             }
 
+        case .bulletByShortcutAtEnd:
+            guard let page = library.blockKindPages[.bulletItem] else { return "нет страницы списка" }
+            await open(page.pageId)
+            // ⌫ делает последний пустой пункт абзацем, «- » — снова пунктом, как у Юрия; повторять можно.
+            PageEditorPreview.placeCaret(atEndOf: page.emptyAtEnd, in: window)
+            PageEditorPreview.textView(in: window)?.deleteBackward(nil)
+            PageEditorPreview.type("- ", in: window)
+
+        case .blockDragging:
+            await open(library.nestedLists)
+            guard PageEditorPreview.beginDrag(ofBlock: library.nestedListGroup, by: CGSize(width: 24, height: 100), in: window) else {
+                return "перетаскивание не началось"
+            }
+
         case .blockMenu:
             await open(library.sample.page.id)
             guard let block = library.sampleBlock(.heading1), GalleryTarget.scrollToBlock(block.id, in: window),
@@ -261,6 +275,8 @@ final class UIGalleryRunner {
             PageEditorPreview.textView(in: window)?.deleteBackward(nil)
             failingWrites.isBroken = false
             if !model.saveAll() { print("Галерея: полоса «Изменения не сохранены» не снялась после стирания правки") }
+        case .blockDragging:
+            PageEditorPreview.cancelDrag(in: window)
         case .trash(.confirmDeleteForever):
             GalleryInput.pressButton(titled: "Отмена")
             await settle()

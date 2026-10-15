@@ -44,19 +44,24 @@ struct EditorChromeGeometryTests {
     /// Системный курсор текста шириной ≈ 2 от своей точки вправо.
     static let caretWidth: CGFloat = 2
 
-    @Test("Между курсором и подсказкой пустого блока ≈ 1–2 pt воздуха (№ 13)")
-    func blockHintLeavesRoomForCaret() throws {
+    @Test("Подсказка под курсором начинается там же, где набранный текст того же блока (баг Юрия 15.10.2026)")
+    func blockHintStartsAtText() throws {
         let specs: [Spec] = [.paragraph(""), .heading(1, ""), .heading(2, ""), .bullet(""), .checkbox("")]
         let editor = try EditorFixture([.paragraph("Выше")] + specs)
         let textView = editor.textView
         for (offset, spec) in specs.enumerated() {
             editor.placeCaret(inBlock: offset + 1)
-            let caret = textView.convert(editor.window.convertFromScreen(
-                textView.firstRect(forCharacterRange: textView.selectedRange(), actualRange: nil)), from: nil)
             let hint = textView.emptyParagraphHint
+            let hintText = hint.stringValue
             let ink = try #require(ViewPixels(hint, appearance: .aqua).inkBounds(in: hint.bounds))
-            let gap = hint.frame.minX + ink.minX - (caret.minX + Self.caretWidth)
-            #expect(gap >= 1 && gap <= 3.5, "\(spec.kind): от курсора до подсказки \(gap)")
+            let filled = try EditorFixture([.paragraph("Выше"), Spec(kind: spec.kind, text: hintText)])
+            let line = try #require(filled.textView.markerLine(ofBlockAt: 1))
+            let origin = filled.textView.textContainerOrigin
+            let row = NSRect(x: line.caretX + origin.x - 4, y: line.top + origin.y, width: 400, height: line.height)
+            let text = try #require(ViewPixels(filled.textView, appearance: .aqua)
+                .inkBounds(in: row, over: Palette.pageBackground.resolved(in: .aqua)))
+            #expect(abs(hint.frame.minX + ink.minX - text.minX) <= 0.5,
+                    "\(spec.kind): подсказка с \(hint.frame.minX + ink.minX), текст «\(hintText)» с \(text.minX)")
         }
     }
 

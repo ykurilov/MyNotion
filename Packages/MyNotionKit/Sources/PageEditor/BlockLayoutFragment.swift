@@ -106,8 +106,8 @@ enum BlockDecorationPainter {
             PageLinkPainter.draw(page, column: column, textStart: line.textStart + offset.x, baseline: baseline,
                                  maxX: offset.x + Metrics.Page.columnWidth)
         case .placeholder(let hint, let style):
-            // Там же, где подсказка под курсором (`PageTextView.updateEmptyParagraphHint`): курсор не меняет её место.
-            let x = line.caretX + Metrics.Page.emptyHintCaretGap + PageTextView.hintLabelTextInset + offset.x
+            // С начала текста блока, как подсказка под курсором (`PageTextView.updateEmptyParagraphHint`).
+            let x = line.caretX + offset.x
             drawLine(textLine(hint, font: Typography.line(for: style).font), color: Palette.textSecondary,
                      baselineOrigin: CGPoint(x: x, y: baseline))
         }

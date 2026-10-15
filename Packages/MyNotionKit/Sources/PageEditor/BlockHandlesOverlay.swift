@@ -4,16 +4,23 @@ import VisualStyle
 
 /// Ручки блока под мышью (contracts/visual-style.md, «Ручки блока при наведении»): слой поверх текста слева
 /// от колонки. «+» добавляет блок ниже (с ⌥ — выше), «⋮⋮» тянут, чтобы переставить блок, щелчок открывает меню блока.
+/// Пока блок тянут, за мышью едет его полупрозрачная копия вместе с вложенными, место сброса — синяя линия; Esc отменяет.
 @MainActor
 final class BlockHandlesOverlay: NSView {
     private unowned let textView: PageTextView
     private let addHandle = BlockHandleButton(kind: .add)
-    private let dragHandle = BlockHandleButton(kind: .drag)
-    private let dropIndicator = NSView()
+    let dragHandle = BlockHandleButton(kind: .drag)
+    let dropIndicator = BlockDropLine()
+    let dragGhost = BlockDragGhost()
     /// Блок, у которого показаны ручки.
     private(set) var blockId: UUID?
+    /// Где нажали «⋮⋮» (координаты окна).
     private var dragStart: NSPoint?
-    private var isDragging = false
+    /// Где была мышь и призрак, когда началось перетаскивание (координаты окна текста).
+    private var ghostAnchor: (pointer: NSPoint, origin: NSPoint)?
+    private(set) var isDragging = false
+    /// Перетаскивание отменили по Esc: до отпускания мышь ничего не двигает.
+    private var isCancelled = false
 
     init(textView: PageTextView) {
         self.textView = textView
@@ -25,12 +32,15 @@ final class BlockHandlesOverlay: NSView {
         dragHandle.frame = NSRect(origin: NSPoint(x: Metrics.BlockHandles.addButtonLeadingOffset - Metrics.BlockHandles.dragHandleLeadingOffset, y: 0),
                                   size: Metrics.BlockHandles.dragHandleSize)
         addHandle.onPress = { [weak self] event in self?.addBlock(above: event.modifierFlags.contains(.option)) }
-        dragHandle.onMouseDown = { [weak self] event in self?.dragStart = event.locationInWindow }
+        dragHandle.onMouseDown = { [weak self] event in
+            self?.dragStart = event.locationInWindow
+            self?.isCancelled = false
+        }
         dragHandle.onMouseDragged = { [weak self] event in self?.drag(event) }
         dragHandle.onMouseUp = { [weak self] event in self?.endDrag(event) }
 
-        dropIndicator.wantsLayer = true
         dropIndicator.isHidden = true
+        dragGhost.isHidden = true
     }
 
     @available(*, unavailable)
@@ -43,6 +53,7 @@ final class BlockHandlesOverlay: NSView {
         guard !isDragging else { return }
         if superview == nil { textView.addSubview(self) }
         if dropIndicator.superview == nil { textView.addSubview(dropIndicator) }
+        if dragGhost.superview == nil { textView.addSubview(dragGhost) }
         let block = textView.document.blocks[index]
         blockId = block.id
         let origin = textView.textContainerOrigin
@@ -72,12 +83,20 @@ final class BlockHandlesOverlay: NSView {
     // MARK: «⋮⋮»
 
     private func drag(_ event: NSEvent) {
-        guard let start = dragStart else { return }
+        guard let start = dragStart, !isCancelled else { return }
         let distance = hypot(event.locationInWindow.x - start.x, event.locationInWindow.y - start.y)
         if !isDragging, distance < Metrics.BlockHandles.dragThreshold { return }
-        isDragging = true
+        if !isDragging { beginDrag(at: textView.convert(start, from: nil)) }
         textView.autoscroll(with: event)
         let point = textView.convert(event.locationInWindow, from: nil)
+        // Кадр за кадром без анимаций слоёв: призрак и линия не отстают от мыши и не мигают.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        if let ghostAnchor {
+            dragGhost.setFrameOrigin(NSPoint(x: ghostAnchor.origin.x + point.x - ghostAnchor.pointer.x,
+                                             y: ghostAnchor.origin.y + point.y - ghostAnchor.pointer.y))
+        }
         guard let gap = textView.dropGap(atY: point.y) else {
             dropIndicator.isHidden = true
             return
@@ -85,18 +104,45 @@ final class BlockHandlesOverlay: NSView {
         let origin = textView.textContainerOrigin
         let height = Metrics.BlockHandles.dropIndicatorHeight
         dropIndicator.frame = NSRect(x: origin.x, y: gap.y - height / 2, width: Metrics.Page.columnWidth, height: height)
-        dropIndicator.layer?.backgroundColor = textView.resolvedColor(Palette.dropIndicator)
         dropIndicator.isHidden = false
     }
 
+    /// Мышь сдвинулась дальше порога: снять копию блока с вложенными и показать её на месте блока.
+    private func beginDrag(at pointer: NSPoint) {
+        isDragging = true
+        // Esc приходит в окно текста, даже если до этого печатали в названии страницы.
+        textView.window?.makeFirstResponder(textView)
+        guard let blockId, let index = textView.document.index(ofBlock: blockId),
+              let snapshot = textView.snapshot(ofBlocks: index..<BlockMoveController.subtreeEnd(textView.document.blocks, of: index)) else { return }
+        dragGhost.image = snapshot.image
+        dragGhost.frame = snapshot.frame
+        ghostAnchor = (pointer, snapshot.frame.origin)
+        textView.addSubview(dragGhost, positioned: .above, relativeTo: nil)
+        dragGhost.isHidden = false
+    }
+
+    /// Esc во время перетаскивания: блок остаётся на месте.
+    func cancelDrag() {
+        guard isDragging else { return }
+        finishDrag()
+        isCancelled = true
+    }
+
+    private func finishDrag() {
+        dragStart = nil
+        isDragging = false
+        ghostAnchor = nil
+        dropIndicator.isHidden = true
+        dragGhost.isHidden = true
+        dragGhost.image = nil
+    }
+
     private func endDrag(_ event: NSEvent) {
-        defer {
-            dragStart = nil
-            isDragging = false
-            dropIndicator.isHidden = true
-        }
-        guard let blockId else { return }
-        if isDragging {
+        let wasDragging = isDragging, wasCancelled = isCancelled
+        finishDrag()
+        isCancelled = false
+        guard let blockId, !wasCancelled else { return }
+        if wasDragging {
             let point = textView.convert(event.locationInWindow, from: nil)
             if let gap = textView.dropGap(atY: point.y) {
                 textView.window?.makeFirstResponder(textView)
@@ -107,6 +153,39 @@ final class BlockHandlesOverlay: NSView {
         guard let window else { return }
         let handleOnScreen = window.convertToScreen(dragHandle.convert(dragHandle.bounds, to: nil))
         textView.openBlockMenu(forBlock: blockId, below: handleOnScreen)
+    }
+}
+
+/// Линия места сброса цвета dropIndicator во всю ширину колонки.
+@MainActor
+final class BlockDropLine: NSView {
+    override func draw(_ dirtyRect: NSRect) {
+        Palette.dropIndicator.setFill()
+        bounds.fill(using: .sourceOver)
+    }
+}
+
+/// Копия блока с вложенными, которая едет за мышью, в dragGhostOpacity цвета, как в Notion.
+/// Слой рисуется один раз: при сдвиге рамки картинка не перерисовывается.
+@MainActor
+final class BlockDragGhost: NSView {
+    var image: NSImage? { didSet { needsDisplay = true } }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layerContentsRedrawPolicy = .onSetNeedsDisplay
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
+
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func draw(_ dirtyRect: NSRect) {
+        image?.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: Metrics.BlockHandles.dragGhostOpacity,
+                    respectFlipped: true, hints: nil)
     }
 }
 
@@ -253,6 +332,27 @@ extension PageTextView {
         if openingSlashMenu {
             insertText("/", replacementRange: NSRange(location: NSNotFound, length: 0))
         }
+    }
+
+    /// Снимок блоков `range` без фона страницы, курсора и ручек — картинка для призрака и её рамка (координаты окна текста).
+    func snapshot(ofBlocks range: Range<Int>) -> (image: NSImage, frame: NSRect)? {
+        let frames = visibleBlockFrames().filter { range.contains($0.index) }.map(\.frame)
+        guard let top = frames.map(\.lowerBound).min(), let bottom = frames.map(\.upperBound).max() else { return nil }
+        let rect = NSRect(x: textContainerOrigin.x, y: top, width: Metrics.Page.columnWidth, height: bottom - top)
+        guard let bitmap = bitmapImageRepForCachingDisplay(in: rect) else { return nil }
+        let chrome = ([blockHandles, emptyParagraphHint, slashQueryHighlight] + insertionIndicators(in: self)).filter { !$0.isHidden }
+        chrome.forEach { $0.isHidden = true }
+        drawsBackground = false
+        cacheDisplay(in: rect, to: bitmap)
+        drawsBackground = true
+        chrome.forEach { $0.isHidden = false }
+        let image = NSImage(size: rect.size)
+        image.addRepresentation(bitmap)
+        return (image, rect)
+    }
+
+    private func insertionIndicators(in view: NSView) -> [NSView] {
+        view.subviews.flatMap { ($0 is NSTextInsertionIndicator ? [$0] : []) + insertionIndicators(in: $0) }
     }
 
     /// Зазор для сброса блока на высоте `y` и линия зазора (координаты окна текста).

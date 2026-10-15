@@ -59,6 +59,30 @@ public enum PageEditorPreview {
         return true
     }
 
+    /// Взять блок за «⋮⋮» и сдвинуть мышь на `offset` (вниз — плюс), не отпуская кнопку: идёт перетаскивание.
+    @discardableResult
+    public static func beginDrag(ofBlock blockId: UUID, by offset: CGSize, in window: NSWindow) -> Bool {
+        guard hoverBlock(blockId, in: window), let textView = textView(in: window) else { return false }
+        let handle = textView.blockHandles.dragHandle
+        let start = handle.convert(NSPoint(x: handle.bounds.midX, y: handle.bounds.midY), to: nil)
+        for step in 0...2 {
+            let fraction = CGFloat(step) / 2
+            let point = NSPoint(x: start.x + offset.width * fraction, y: start.y - offset.height * fraction)
+            guard let event = NSEvent.mouseEvent(with: step == 0 ? .leftMouseDown : .leftMouseDragged, location: point, modifierFlags: [],
+                                                 timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0,
+                                                 clickCount: 1, pressure: 1) else { return false }
+            if step == 0 { handle.mouseDown(with: event) } else { handle.mouseDragged(with: event) }
+        }
+        return !textView.blockHandles.dragGhost.isHidden
+    }
+
+    /// Отменить перетаскивание, как Esc, и убрать ручки.
+    public static func cancelDrag(in window: NSWindow) {
+        guard let textView = textView(in: window) else { return }
+        textView.blockHandles.cancelDrag()
+        textView.hideBlockHandles()
+    }
+
     /// Прокрутить страницу до конца.
     public static func scrollToEnd(in window: NSWindow) {
         guard let textView = textView(in: window), let textLayoutManager = textView.textLayoutManager else { return }

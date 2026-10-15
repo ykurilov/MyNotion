@@ -78,6 +78,25 @@ struct ViewPixels {
         return best
     }
 
+    /// Как выглядит `color` поверх сплошного `background` в теме `appearance`, если смешать их так же, как смешивает снимок
+    /// (в его цветовом пространстве). Эталон для полупрозрачных цветов.
+    func blend(_ color: NSColor, over background: NSColor, in appearance: NSAppearance.Name) -> (red: CGFloat, green: CGFloat, blue: CGFloat) {
+        let sample = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 1, pixelsHigh: 1, bitsPerSample: 8, samplesPerPixel: 4,
+                                      hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+            .retagging(with: bitmap.colorSpace)!
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: sample)
+        NSAppearance(named: appearance)?.performAsCurrentDrawingAppearance {
+            background.setFill()
+            NSRect(x: 0, y: 0, width: 1, height: 1).fill()
+            color.setFill()
+            NSRect(x: 0, y: 0, width: 1, height: 1).fill(using: .sourceOver)
+        }
+        NSGraphicsContext.restoreGraphicsState()
+        let pixel = sample.colorAt(x: 0, y: 0)!.usingColorSpace(.sRGB)!
+        return (pixel.redComponent, pixel.greenComponent, pixel.blueComponent)
+    }
+
     /// Средний цвет нарисованного внутри `area`.
     func averageInkColor(in area: NSRect, threshold: CGFloat = 0.5) -> (red: CGFloat, green: CGFloat, blue: CGFloat)? {
         var sum = (red: CGFloat(0), green: CGFloat(0), blue: CGFloat(0)), count: CGFloat = 0
