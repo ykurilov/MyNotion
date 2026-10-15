@@ -3,7 +3,7 @@ import NotesCore
 
 /// Быстрые символы в начале строки (contracts/editor-interactions.md, «Быстрые символы»; FR-009).
 public enum MarkdownShortcuts {
-    /// Тип блока, в который превращается абзац, если перед курсором ровно эти символы и нажат пробел.
+    /// Тип блока, в который превращается блок, если перед курсором ровно эти символы и нажат пробел.
     public static func kind(forTypedPrefix prefix: String) -> BlockKind? {
         switch prefix {
         case "#": .heading1
@@ -23,12 +23,13 @@ public enum MarkdownShortcuts {
 }
 
 extension PageTextView {
-    /// Пробел после быстрых символов: символы убираются, абзац меняет тип. Одно действие для ⌘Z.
+    /// Пробел после быстрых символов в начале любого блока, как в Notion: символы убираются, блок меняет тип,
+    /// вложенность остаётся (у заголовков её нет). Одно действие для ⌘Z.
     func applyMarkdownShortcut() -> Bool {
         let selection = selectedRange()
         guard selection.length == 0, let position = mapper.blockPosition(at: selection.location) else { return false }
         let block = document.blocks[position.index]
-        guard block.kind == .paragraph, position.offset > 0 else { return false }
+        guard block.kind != .pageLink, position.offset > 0 else { return false }
         let prefix = (block.text.string as NSString).substring(to: min(position.offset, (block.text.string as NSString).length))
         guard let kind = MarkdownShortcuts.kind(forTypedPrefix: prefix) else { return false }
 

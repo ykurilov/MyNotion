@@ -48,15 +48,28 @@ struct MarkdownShortcutTests {
         #expect(editor.texts == ["a#  # "])
     }
 
-    @Test("Быстрые символы не трогают пункты списка: «- » в пункте — текст")
-    func shortcutOnlyFromParagraph() throws {
-        let editor = try EditorFixture([.bullet("")])
-        editor.placeCaret(inBlock: 0)
+    @Test("Быстрые символы работают и в пунктах списков, и в чекбоксах; вложенность остаётся, у заголовков — 0", arguments: [
+        (EditorFixture.Spec.bullet("", indent: 2), "1.", BlockKind.numberedItem, 2),
+        (.bullet("", indent: 1), "[]", .checkbox, 1),
+        (.numbered("", indent: 1), "[ ]", .checkbox, 1),
+        (.checkbox("", indent: 1, checked: true), "-", .bulletItem, 1),
+        (.checkbox(""), "*", .bulletItem, 0),
+        (.numbered("", indent: 3), "#", .heading1, 0),
+        (.bullet("", indent: 1), "###", .heading3, 0),
+        (.heading(1, ""), "##", .heading2, 0),
+    ])
+    func shortcutInAnyBlock(spec: EditorFixture.Spec, prefix: String, kind: BlockKind, indent: Int) throws {
+        let editor = try EditorFixture([.bullet("выше"), spec])
+        editor.placeCaret(inBlock: 1)
 
-        editor.type("# ")
+        editor.type(prefix + " ")
+        editor.type("дело")
 
-        #expect(editor.kinds == [.bulletItem])
-        #expect(editor.texts == ["# "])
+        #expect(editor.kinds == [.bulletItem, kind])
+        #expect(editor.texts == ["выше", "дело"], "Символы быстрого ввода в текст не попадают")
+        #expect(editor.indents == [0, indent])
+        let saved = try editor.savedBlocks()
+        #expect(saved.map(\.isChecked) == [false, false], "Новый тип — не отмеченный чекбокс")
     }
 
     @Test("⌘Z после быстрого символа возвращает набранные символы и абзац")
