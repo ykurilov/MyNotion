@@ -34,23 +34,36 @@ public struct PageEditorView: View {
             }
             PageTextEditor(document: document, initialFocus: initialFocus, linkedPages: linkedPages,
                            onOpenPage: onOpenPage, onReady: onReady)
+                .overlay(alignment: .top) { scrollEdgeFade }
         }
         .background(Color(nsColor: Palette.pageBackground))
     }
 
-    /// Путь «Родитель / Страница» шрифтом 14.
+    /// Путь «Родитель / Страница» шрифтом 14; длинный — без середины и с обрезанным по слову названием.
     private var topBar: some View {
-        HStack(spacing: 0) {
-            Text((ancestorTitles + [breadcrumbTitle]).joined(separator: " / "))
+        GeometryReader { proxy in
+            let width = proxy.size.width - Metrics.Page.topBarHorizontalPadding - Metrics.Page.topBarTrailingInset
+            Text(BreadcrumbText.fitting(ancestorTitles + [breadcrumbTitle], width: width, measure: BreadcrumbText.measure))
                 .font(Font(Typography.breadcrumb.font))
                 .foregroundStyle(Color(nsColor: Palette.textPrimary))
                 .lineLimit(1)
-                .truncationMode(.middle)
                 .accessibilityIdentifier("page-breadcrumb")
-            Spacer(minLength: 0)
+                .padding(.leading, Metrics.Page.topBarHorizontalPadding)
+                .padding(.trailing, Metrics.Page.topBarTrailingInset)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, Metrics.Page.topBarHorizontalPadding)
         .frame(height: Metrics.Page.topBarHeight)
+    }
+
+    /// Прокрученный текст уходит под верхнюю полосу плавно, а не обрезанной строкой.
+    private var scrollEdgeFade: some View {
+        let background = Color(nsColor: Palette.pageBackground)
+        let solid = Metrics.Page.scrollEdgeSolidHeight / Metrics.Page.scrollEdgeFadeHeight
+        return LinearGradient(stops: [.init(color: background, location: 0), .init(color: background, location: solid),
+                                      .init(color: background.opacity(0), location: 1)],
+                              startPoint: .top, endPoint: .bottom)
+            .frame(height: Metrics.Page.scrollEdgeFadeHeight)
+            .allowsHitTesting(false)
     }
 
     private var breadcrumbTitle: String {

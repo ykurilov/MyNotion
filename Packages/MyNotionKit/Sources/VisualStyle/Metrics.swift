@@ -6,17 +6,24 @@ public enum Metrics {
     public enum Page {
         public static let columnWidth: CGFloat = 720
         public static let topBarHeight: CGFloat = 44
-        /// Поля пути в верхней полосе (≈ по снимку).
+        /// Поле пути слева в верхней полосе (≈ по снимку).
         public static let topBarHorizontalPadding: CGFloat = 12
+        /// Запас справа от пути: длинный путь не упирается в край окна.
+        public static let topBarTrailingInset: CGFloat = 24
+        /// Затухание прокрученного текста под верхней полосой; верхние `scrollEdgeSolidHeight` — сплошной фон страницы.
+        public static let scrollEdgeFadeHeight: CGFloat = 16
+        public static let scrollEdgeSolidHeight: CGFloat = 4
         public static let iconSize: CGFloat = 78
-        public static let titleToFirstBlockSpacing: CGFloat = 8
-        /// От верхней полосы до иконки страницы (≈ по снимку).
-        public static let headerTopPadding: CGFloat = 38
-        /// От верхней полосы до названия, когда иконки нет (≈ по снимку).
-        public static let headerTopPaddingWithoutIcon: CGFloat = 80
+        /// От названия до первого блока (≈ по снимку Notion: верх букв абзаца на 68 ниже верха букв названия).
+        public static let titleToFirstBlockSpacing: CGFloat = 20
+        /// От верхней полосы до квадрата иконки (≈ по снимку Notion: середина иконки на 179 от верха окна).
+        public static let headerTopPadding: CGFloat = 96
+        /// От верхней полосы до названия, когда иконки нет: тот же верхний отступ и место под строку кнопок.
+        public static let headerTopPaddingWithoutIcon: CGFloat = 136
         /// Эмодзи иконки внутри квадрата `iconSize` (≈ по снимку).
         public static let iconFontSize: CGFloat = 64
-        public static let iconToTitleSpacing: CGFloat = 4
+        /// Под иконкой — место под строку скрытых кнопок, как у Notion (≈ по снимку: верх букв названия на 267).
+        public static let iconToTitleSpacing: CGFloat = 40
         /// Поля по бокам колонки, когда окно уже колонки (≈ по снимку).
         public static let minimumSideInset: CGFloat = 96
         /// Пустое место под последним блоком, чтобы конец страницы не прилипал к краю окна.
