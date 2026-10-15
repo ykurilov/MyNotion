@@ -3,6 +3,7 @@ import Foundation
 import Testing
 @testable import NotesCore
 @testable import PageEditor
+import VisualStyle
 
 /// Вложенность, перестановка, чекбоксы, смена типа и их отмена (FR-008, FR-011, FR-012).
 @MainActor
@@ -286,5 +287,24 @@ struct BlockStructureTests {
         editor.undo()
         #expect(editor.kinds == [.paragraph, .paragraph])
         #expect(editor.textView.string == "текст\n\n")
+    }
+}
+
+@MainActor
+@Suite("Маркеры списков")
+struct ListMarkerSizeTests {
+    @Test("`◦` и `▪` вложенных уровней того же видимого размера, что `•`, как в Notion")
+    func nestedMarkersMatchBulletSize() {
+        func visibleSize(_ marker: String) -> CGSize {
+            let line = BlockDecorationPainter.textLine(marker, font: BlockDecorationPainter.bulletFont(for: marker))
+            return CTLineGetImageBounds(line, nil).size
+        }
+        let bullet = visibleSize(ListMarkers.bullet(atIndent: 0))
+        for indent in 1...2 {
+            let marker = ListMarkers.bullet(atIndent: indent)
+            let size = visibleSize(marker)
+            #expect(abs(size.width - bullet.width) < 0.3 && abs(size.height - bullet.height) < 0.3,
+                    "\(marker): \(size), а `•`: \(bullet)")
+        }
     }
 }

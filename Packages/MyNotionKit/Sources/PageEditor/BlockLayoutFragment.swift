@@ -106,10 +106,19 @@ enum BlockDecorationPainter {
 
     private static var textFont: NSFont { Typography.line(for: .listItem).font }
 
+    /// Шрифт знака маркера: у `•`, `◦` и `▪` один видимый размер.
+    static func bulletFont(for marker: String) -> NSFont {
+        let scale = switch marker {
+        case "◦": Metrics.BlockMarker.hollowBulletScale
+        case "▪": Metrics.BlockMarker.squareBulletScale
+        default: Metrics.BlockMarker.bulletScale
+        }
+        return NSFont.systemFont(ofSize: textFont.pointSize * scale)
+    }
+
     /// `•` `◦` `▪` крупнее текста, по середине строчных букв.
     private static func drawBullet(_ marker: String, in column: CGRect, baseline: CGFloat) {
-        let font = NSFont.systemFont(ofSize: textFont.pointSize * Metrics.BlockMarker.bulletScale)
-        let line = textLine(marker, font: font)
+        let line = textLine(marker, font: bulletFont(for: marker))
         let glyph = CTLineGetImageBounds(line, nil)
         let center = CGPoint(x: column.midX, y: baseline - textFont.xHeight / 2)
         // Координаты перевёрнуты: середина рисунка знака выше его базовой линии на `glyph.midY`.
