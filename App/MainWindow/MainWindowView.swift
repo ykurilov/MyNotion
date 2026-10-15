@@ -54,12 +54,27 @@ private struct PagesWindow: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            sidebar
-                .frame(width: model.sidebarWidth)
-            sidebarEdge
-            pageArea
-                .frame(maxWidth: .infinity)
+            if !model.isSidebarCollapsed {
+                HStack(spacing: 0) {
+                    sidebar
+                        .frame(width: model.sidebarWidth)
+                    sidebarEdge
+                }
+                .transition(.move(edge: .leading))
+            }
+            VStack(spacing: 0) {
+                // Панель спрятана: над страницей строка светофора со шторкой, путь страницы — под ней.
+                if model.isSidebarCollapsed {
+                    Color(nsColor: Palette.pageBackground)
+                        .frame(height: Metrics.Window.titleBarHeight)
+                }
+                pageArea
+            }
+            .frame(maxWidth: .infinity)
         }
+        // Шторка — у светофора и не двигается, когда панель уезжает.
+        .overlay(alignment: .topLeading) { sidebarToggle }
+        .animation(.easeInOut(duration: Metrics.Window.sidebarToggleDuration), value: model.isSidebarCollapsed)
         // Путь страницы — в самой верхней полосе окна, как в Notion; кнопки окна — над боковой панелью.
         .ignoresSafeArea(.container, edges: .top)
         .onAppear { model.attachUndoManager(undoManager) }
@@ -89,14 +104,24 @@ private struct PagesWindow: View {
                 deleteForever: { model.deleteForever($0) },
                 emptyTrash: { model.emptyTrash() }
             ),
-            topInset: Metrics.Page.topBarHeight
+            newPage: { model.createPage() }
         )
     }
 
-    /// Край панели: линия цвета border; за полосу шириной `resizeHandleWidth` панель тянут.
+    /// Шторка: середина — на `sidebarToggleCenterX` от левого края, в строке светофора.
+    private var sidebarToggle: some View {
+        WindowToolbarButton(symbol: "sidebar.left", symbolSize: Metrics.Window.sidebarToggleSymbolSize,
+                            label: model.isSidebarCollapsed ? "Показать боковую панель" : "Скрыть боковую панель",
+                            action: { model.toggleSidebar() })
+            .accessibilityIdentifier("sidebar-toggle")
+            .padding(.leading, Metrics.Window.sidebarToggleCenterX - Metrics.Window.toolbarButtonSize / 2)
+            .padding(.top, (Metrics.Window.titleBarHeight - Metrics.Window.toolbarButtonSize) / 2)
+    }
+
+    /// Край панели: линия цвета sidebarEdge; за полосу шириной `resizeHandleWidth` панель тянут.
     private var sidebarEdge: some View {
         Rectangle()
-            .fill(Color(nsColor: Palette.border))
+            .fill(Color(nsColor: Palette.sidebarEdge))
             .frame(width: 1)
             .overlay {
                 Color.clear

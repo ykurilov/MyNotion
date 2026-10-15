@@ -9,11 +9,15 @@ public struct WindowState: Sendable, Hashable {
     public var openPageId: UUID?
     public var collapsedPageIds: Set<UUID>
     public var sidebarWidth: Double
+    /// Боковая панель спрятана шторкой (⌘⌥S).
+    public var isSidebarCollapsed: Bool
 
-    public init(windowId: UUID, openPageId: UUID? = nil, collapsedPageIds: Set<UUID> = [], sidebarWidth: Double = 270) {
+    public init(windowId: UUID, openPageId: UUID? = nil, collapsedPageIds: Set<UUID> = [], sidebarWidth: Double = 270,
+                isSidebarCollapsed: Bool = false) {
         self.windowId = windowId
         self.openPageId = openPageId
         self.collapsedPageIds = collapsedPageIds
         self.sidebarWidth = sidebarWidth
+        self.isSidebarCollapsed = isSidebarCollapsed
     }
 }

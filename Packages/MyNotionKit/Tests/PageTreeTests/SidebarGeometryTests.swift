@@ -167,6 +167,70 @@ struct SidebarGeometryTests {
         #expect(during.minX >= Metrics.Sidebar.rowHorizontalPadding + Metrics.Sidebar.rowIconSize + 1, "текст залез на иконку: \(during)")
     }
 
+    // MARK: Как в Notion для Mac (снимок 15.10.2026, тёмная тема)
+
+    @Test("Строка дерева: шаг 31, подсветка 30, квадрат иконки 22, текст через 8 от него, обычная жирность")
+    func rowMatchesNotion() throws {
+        let (outline, _) = Self.outline(pages: [Self.page("Первая", key: "1"), Self.page("Вторая", key: "2")])
+        #expect(outline.rect(ofRow: 1).minY - outline.rect(ofRow: 0).minY == 31)
+        let rowView = try #require(outline.rowView(atRow: 0, makeIfNecessary: true) as? PageTreeRowView)
+        #expect(rowView.highlightRect.height == 30)
+        #expect(rowView.highlightRect.midY == rowView.bounds.midY)
+        let cell = try #require(outline.view(atColumn: 0, row: 0, makeIfNecessary: true) as? PageTreeCellView)
+        cell.layoutSubtreeIfNeeded()
+        // Отступ панели 8 + поле строки 8: квадрат иконки 16…38, текст с 46 от края панели.
+        #expect(cell.documentIcon.frame == NSRect(x: 8, y: (cell.bounds.height - 22) / 2, width: 22, height: 22))
+        #expect(abs(cell.titleLabel.alignmentRect(forFrame: cell.titleLabel.frame).minX - (8 + 22 + 8)) <= 0.01)
+        #expect(cell.titleLabel.font == NSFont.systemFont(ofSize: 14, weight: .regular))
+    }
+
+    @Test("Цвета панели в тёмной теме — по снимку Notion: текст строк, значки, заголовок группы")
+    func darkColorsMatchNotion() {
+        let dark = NSAppearance(named: .darkAqua)!
+        func hex(_ color: NSColor) -> String {
+            var result = ""
+            dark.performAsCurrentDrawingAppearance {
+                let rgb = color.usingColorSpace(.sRGB)!
+                result = String(format: "%02X%02X%02X", Int((rgb.redComponent * 255).rounded()),
+                                Int((rgb.greenComponent * 255).rounded()), Int((rgb.blueComponent * 255).rounded()))
+            }
+            return result
+        }
+        #expect(hex(Palette.sidebarText) == "BCBAB7")
+        #expect(hex(Palette.sidebarIcon) == "9B9A97")
+        #expect(hex(Palette.sidebarGroupHeader) == "7C7A76")
+        #expect(hex(Palette.windowToolbarIcon) == "ACA9A4")
+    }
+
+    @Test("Верхняя строка панели — в линию со светофором: «✎» справа; заголовок группы и дерево сразу под ней")
+    func topRowMatchesNotion() throws {
+        let width = Metrics.Sidebar.defaultWidth
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: 400), styleMask: [.borderless],
+                              backing: .buffered, defer: false)
+        let host = NSHostingView(rootView: Self.sidebar([Self.page("Проекты", key: "1")], revision: 0, actions: Self.noActions))
+        window.contentView = host
+        host.layoutSubtreeIfNeeded()
+
+        let titleBar = Metrics.Window.titleBarHeight
+        #expect(titleBar == 32)
+        // «✎»: нарисованный значок по центру квадрата у правого края, на середине строки светофора.
+        let bitmap = try Self.render(host)
+        let button = Metrics.Window.toolbarButtonSize
+        let box = NSRect(x: width - Metrics.Sidebar.panelInset - button, y: (titleBar - button) / 2, width: button, height: button)
+        let background = bitmap.color(atX: width / 2, y: 2, flipped: true).brightness
+        let ink = try #require(bitmap.bounds(in: NSRect(x: width / 2, y: 0, width: width / 2, height: titleBar), flipped: true) {
+            abs($0.brightness - background) > 0.15
+        })
+        #expect(abs(ink.midX - box.midX) <= 1, "«✎» \(ink), квадрат \(box)")
+        #expect(abs(ink.midY - box.midY) <= 1, "«✎» \(ink), квадрат \(box)")
+        #expect((12...15).contains(ink.width) && (12...15).contains(ink.height), "«✎» \(ink.size), у Notion 13,5 × 13,5")
+
+        let outline = try #require(Self.find(PageOutlineView.self, in: host))
+        let scroll = try #require(outline.enclosingScrollView)
+        let listTop = 400 - scroll.convert(scroll.bounds, to: nil).maxY
+        #expect(abs(listTop - (titleBar + Metrics.Sidebar.rowHeight)) <= 0.5, "дерево начинается на \(listTop)")
+    }
+
     // MARK: Помощники
 
     private static func trashRowFrame(sidebarWidth: CGFloat) -> NSRect {
@@ -202,11 +266,15 @@ struct SidebarGeometryTests {
     /// Источник данных дерева держится слабо: живёт до конца прогона.
     private static var retained: [AnyObject] = []
 
-    private static func sidebar(_ pages: [Page], revision: Int, actions: PageTreeActions) -> PageTreeSidebar {
+    private static func sidebar(_ pages: [Page], revision: Int, actions: PageTreeActions,
+                                newPage: @escaping () -> Void = {}) -> PageTreeSidebar {
         PageTreeSidebar(tree: PageTreeSnapshot(allPages: pages), treeRevision: revision, collapsedPageIds: [],
                         selectedPageId: pages.last?.id, liveTitle: nil, trashEntries: [], actions: actions,
-                        trashActions: TrashActions(restore: { _ in }, deleteForever: { _ in }, emptyTrash: {}), topInset: 0)
+                        trashActions: TrashActions(restore: { _ in }, deleteForever: { _ in }, emptyTrash: {}), newPage: newPage)
     }
+
+    private static let noActions = PageTreeActions(select: { _ in }, rename: { _, _ in }, move: { _, _, _ in },
+                                                   moveToTrash: { _ in }, addSubpage: { _ in }, collapsedPagesChanged: { _ in })
 
     private static func find<View: NSView>(_ type: View.Type, in view: NSView) -> View? {
         (view as? View) ?? view.subviews.lazy.compactMap { find(type, in: $0) }.first
@@ -281,13 +349,18 @@ struct Bitmap {
 
     /// Рамка нарисованного (непрозрачного) внутри `rect`, в точках вида.
     func inkBounds(in rect: NSRect, flipped: Bool) -> NSRect? {
+        bounds(in: rect, flipped: flipped) { $0.alphaComponent > 0.3 }
+    }
+
+    /// Рамка пикселей внутри `rect`, подходящих под `isInk`, в точках вида.
+    func bounds(in rect: NSRect, flipped: Bool, where isInk: (NSColor) -> Bool) -> NSRect? {
         let step = 1 / scale
         var minX = CGFloat.infinity, maxX = -CGFloat.infinity, minY = CGFloat.infinity, maxY = -CGFloat.infinity
         var y = rect.minY
         while y < rect.maxY {
             var x = rect.minX
             while x < rect.maxX {
-                if alpha(atX: x, y: y, flipped: flipped) > 0.3 {
+                if isInk(color(atX: x, y: y, flipped: flipped)) {
                     minX = min(minX, x); maxX = max(maxX, x + step)
                     minY = min(minY, y); maxY = max(maxY, y + step)
                 }

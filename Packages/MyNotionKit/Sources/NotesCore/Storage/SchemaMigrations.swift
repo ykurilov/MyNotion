@@ -13,6 +13,7 @@ public struct SchemaMigrations: Sendable {
     public static let current = SchemaMigrations(steps: [
         Step(version: "v1", migrate: createInitialSchema),
         Step(version: "v2", migrate: addPageTombstones),
+        Step(version: "v3", migrate: addSidebarCollapsed),
     ])
 
     /// Та же схема плюс ещё один шаг — для проверки миграций.
@@ -126,4 +127,8 @@ private func addPageTombstones(_ db: Database) throws {
             erasedAt TEXT NOT NULL
         );
         """)
+}
+
+private func addSidebarCollapsed(_ db: Database) throws {
+    try db.execute(sql: "ALTER TABLE window_state ADD COLUMN isSidebarCollapsed BOOLEAN NOT NULL DEFAULT 0")
 }

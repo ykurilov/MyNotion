@@ -53,6 +53,7 @@ struct MyNotionApp: App {
                 Button("Новая подстраница") { (try? library.get())?.createSubpage() }
                     .keyboardShortcut("n", modifiers: [.command, .shift])
             }
+            SidebarToggleCommands(model: try? library.get())
             FormatCommands()
         }
     }
@@ -93,6 +94,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static var presence = LaunchPresence.foreground
     static var backgroundActivity: (any NSObjectProtocol)?
 
+    private var sidebarShortcutMonitor: Any?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // ⌘⌥S — по клавише S, а не по букве: с ⌥ и на русской раскладке буква другая, и меню сочетание не узнаёт.
+        sidebarShortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let modifiers = event.modifierFlags.intersection([.command, .option, .shift, .control])
+            guard event.keyCode == Self.sKeyCode, modifiers == [.command, .option], let model = Self.model else { return event }
+            model.toggleSidebar()
+            return nil
+        }
+    }
+
+    /// Клавиша S на любой раскладке (kVK_ANSI_S).
+    private static let sKeyCode: UInt16 = 1
+
     func applicationWillResignActive(_ notification: Notification) {
         Self.model?.saveAll()
     }
@@ -115,5 +131,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+}
+
+/// «Вид → Скрыть/Показать боковую панель», ⌘⌥S (contracts/editor-interactions.md).
+private struct SidebarToggleCommands: Commands {
+    let model: MainWindowModel?
+
+    var body: some Commands {
+        CommandGroup(before: .sidebar) {
+            Button(model?.isSidebarCollapsed == true ? "Показать боковую панель" : "Скрыть боковую панель") {
+                model?.toggleSidebar()
+            }
+            .keyboardShortcut("s", modifiers: [.command, .option])
+            .disabled(model == nil)
+        }
     }
 }

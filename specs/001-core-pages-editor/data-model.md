@@ -78,6 +78,7 @@
 | openPageId | UUID? |
 | collapsedPageIds | набор UUID |
 | sidebarWidth | число |
+| isSidebarCollapsed | да/нет — панель спрятана шторкой (схема v3) |
 
 Локальное, не синхронизируется: у каждого Mac своё.
 

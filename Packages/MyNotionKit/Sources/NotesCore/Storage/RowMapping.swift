@@ -194,7 +194,8 @@ extension WindowState {
             windowId: try RowDecoding.uuid(row, "windowId"),
             openPageId: RowDecoding.optionalUUID(row, "openPageId"),
             collapsedPageIds: Set(collapsed),
-            sidebarWidth: row["sidebarWidth"]
+            sidebarWidth: row["sidebarWidth"],
+            isSidebarCollapsed: row["isSidebarCollapsed"]
         )
     }
 
@@ -202,11 +203,14 @@ extension WindowState {
         let collapsed = collapsedPageIds.map(\.databaseText).sorted()
         try db.execute(
             sql: """
-                INSERT INTO window_state (windowId, openPageId, collapsedPageIds, sidebarWidth) VALUES (?, ?, ?, ?)
+                INSERT INTO window_state (windowId, openPageId, collapsedPageIds, sidebarWidth, isSidebarCollapsed)
+                VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(windowId) DO UPDATE SET openPageId = excluded.openPageId,
-                    collapsedPageIds = excluded.collapsedPageIds, sidebarWidth = excluded.sidebarWidth
+                    collapsedPageIds = excluded.collapsedPageIds, sidebarWidth = excluded.sidebarWidth,
+                    isSidebarCollapsed = excluded.isSidebarCollapsed
                 """,
-            arguments: [windowId.databaseText, openPageId?.databaseText, try JSONColumn.encode(collapsed), sidebarWidth]
+            arguments: [windowId.databaseText, openPageId?.databaseText, try JSONColumn.encode(collapsed), sidebarWidth,
+                        isSidebarCollapsed]
         )
     }
 }

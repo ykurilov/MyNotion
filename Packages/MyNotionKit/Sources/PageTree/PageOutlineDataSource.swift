@@ -176,7 +176,7 @@ final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineV
     }
 
     func outlineView(_ outlineView: NSOutlineView, heightOfRowByItem item: Any) -> CGFloat {
-        Metrics.Sidebar.rowHeight
+        Metrics.Sidebar.rowPitch
     }
 
     func outlineViewSelectionDidChange(_ notification: Notification) {

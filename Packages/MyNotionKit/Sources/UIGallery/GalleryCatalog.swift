@@ -34,6 +34,8 @@ public enum GalleryScene: Hashable, Sendable {
     case sidebarSelectedRow
     /// Строка дерева в режиме переименования.
     case sidebarRenaming
+    /// Боковая панель свёрнута шторкой: шторка у светофора над страницей.
+    case sidebarHidden
     case trash(GalleryTrash)
     /// Полоса «Изменения не сохранены…» над страницей.
     case saveErrorBanner
@@ -190,6 +192,9 @@ public enum GalleryCatalog {
                      "Открыта страница четвёртого уровня: её строка выбрана", section: "Боковая панель"),
         GalleryState("sidebar-renaming", .sidebarRenaming,
                      "Переименование строки дерева: название выделено в поле", section: "Боковая панель"),
+        GalleryState("sidebar-hidden", .sidebarHidden,
+                     "Боковая панель свёрнута шторкой: шторка у светофора, страница во всю ширину", section: "Боковая панель",
+                     narrowToo: true),
     ]
 
     private static let trashStates: [GalleryState] = [

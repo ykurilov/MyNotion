@@ -16,8 +16,10 @@ struct WindowStateTests {
             let store = NotesStore(database: database, clock: HybridLogicalClock(deviceId: UUID()))
             #expect(try store.windowState(WindowState.mainWindowId) == nil)
             try store.saveWindowState(WindowState(windowId: WindowState.mainWindowId, openPageId: UUID()))
+            #expect(try store.windowState(WindowState.mainWindowId)?.isSidebarCollapsed == false)
             try store.saveWindowState(WindowState(windowId: WindowState.mainWindowId, openPageId: pageId,
-                                                  collapsedPageIds: collapsed, sidebarWidth: 310))
+                                                  collapsedPageIds: collapsed, sidebarWidth: 310,
+                                                  isSidebarCollapsed: true))
             database.close()
         }
 
@@ -28,5 +30,6 @@ struct WindowStateTests {
         #expect(restored.openPageId == pageId)
         #expect(restored.collapsedPageIds == collapsed)
         #expect(restored.sidebarWidth == 310)
+        #expect(restored.isSidebarCollapsed)
     }
 }
