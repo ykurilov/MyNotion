@@ -174,7 +174,7 @@ public final class TextCaret {
     private static func caretFont(at location: Int, in textView: NSTextView) -> NSFont {
         let fallback = textView.typingAttributes[.font] as? NSFont ?? textView.font ?? Typography.line(for: .paragraph).font
         guard let storage = textView.textStorage, location > 0, location <= storage.length,
-              (storage.string as NSString).character(at: location - 1) != 0x0A else { return fallback }
+              ![0x0A, 0x2028].contains((storage.string as NSString).character(at: location - 1)) else { return fallback }
         return storage.attribute(.font, at: location - 1, effectiveRange: nil) as? NSFont ?? fallback
     }
 

@@ -45,6 +45,12 @@ public enum EditorKeyBindings {
         }
     }
 
+    /// Shift+Enter (и Enter цифровой клавиатуры с Shift) — перенос строки внутри блока (FR-032).
+    static func isLineBreak(_ event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection([.command, .option, .shift, .control])
+        return modifiers == [.shift] && ["\r", "\u{3}"].contains(event.charactersIgnoringModifiers ?? "")
+    }
+
     /// Клавиши события. В русской раскладке буквы берутся по месту клавиши, как у системных меню.
     static func command(for event: NSEvent) -> EditorCommand? {
         let characters = event.charactersIgnoringModifiers ?? ""

@@ -303,6 +303,21 @@ public final class PageTextStorageMapper: NSObject {
     // MARK: Блоки ⇄ текст
 
     static let newline = unichar(0x0A)
+    /// Перенос строки внутри блока на странице (FR-032): разрыв строки, а не абзаца — TextKit оставляет обе строки
+    /// в одном абзаце. В тексте блока тот же перенос — `\n` (data-model.md, «Перенос строки»); длина одна и та же,
+    /// и отрезки оформления не сдвигаются.
+    static let lineSeparator = unichar(0x2028)
+    static let lineSeparatorString = "\u{2028}"
+
+    /// Текст блока для страницы: переносы строк — разрывы строки.
+    static func pageString(ofBlockText string: String) -> String {
+        string.replacingOccurrences(of: "\n", with: lineSeparatorString)
+    }
+
+    /// Текст блока со страницы: разрывы строки — переносы `\n`.
+    static func blockString(ofPageText string: String) -> String {
+        string.replacingOccurrences(of: lineSeparatorString, with: "\n")
+    }
 
     /// Текст страницы: абзацы блоков, каждый с переводом строки.
     public static func attributedText(for blocks: [Block]) -> NSAttributedString {
@@ -350,7 +365,7 @@ public final class PageTextStorageMapper: NSObject {
 
     static func inlineText(in text: NSAttributedString, range: Range<Int>) -> InlineText {
         let nsRange = NSRange(location: range.lowerBound, length: range.count)
-        let string = (text.string as NSString).substring(with: nsRange)
+        let string = blockString(ofPageText: (text.string as NSString).substring(with: nsRange))
         var runs: [StyledRun] = []
         text.enumerateAttributes(in: nsRange) { attributes, run, _ in
             let start = run.location - range.lowerBound
@@ -439,7 +454,7 @@ public final class PageTextStorageMapper: NSObject {
     static func paragraph(_ block: Block, withNewline: Bool, after previous: BlockKind? = nil) -> NSAttributedString {
         let base = baseAttributes(for: block, after: previous)
         let line = Typography.line(for: textStyle(of: block.kind))
-        let text = NSMutableAttributedString(string: block.text.string, attributes: base)
+        let text = NSMutableAttributedString(string: pageString(ofBlockText: block.text.string), attributes: base)
         let length = text.length
         for run in block.text.normalized().runs {
             let range = NSRange(location: run.start, length: run.length)

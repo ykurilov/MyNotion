@@ -150,6 +150,19 @@ public final class PageTextView: NSTextView {
         paste(from: .general)
     }
 
+    /// Копирование: в простом тексте для других программ перенос строки внутри блока — обычный перевод строки.
+    public override func writeSelection(to pboard: NSPasteboard, type: NSPasteboard.PasteboardType) -> Bool {
+        guard type == .string else { return super.writeSelection(to: pboard, type: type) }
+        let text = selectedRanges.map { (string as NSString).substring(with: $0.rangeValue) }.joined(separator: "\n")
+        guard !text.isEmpty else { return false }
+        return pboard.setString(PageTextStorageMapper.blockString(ofPageText: text), forType: .string)
+    }
+
+    public override func writeSelection(to pboard: NSPasteboard, types: [NSPasteboard.PasteboardType]) -> Bool {
+        pboard.declareTypes(types, owner: nil)
+        return types.map { writeSelection(to: pboard, type: $0) }.contains(true)
+    }
+
     public override func insertText(_ string: Any, replacementRange: NSRange) {
         let typed = (string as? NSAttributedString)?.string ?? string as? String ?? ""
         hideBlockHandles()
@@ -180,6 +193,15 @@ public final class PageTextView: NSTextView {
         super.insertNewline(sender)
     }
 
+    /// Shift+Enter — перенос строки внутри блока (FR-032). В блоке-подстранице текста нет: как Enter.
+    public override func insertLineBreak(_ sender: Any?) {
+        guard !isCaretInPageLink else {
+            insertNewline(sender)
+            return
+        }
+        insertText(PageTextStorageMapper.lineSeparatorString, replacementRange: NSRange(location: NSNotFound, length: 0))
+    }
+
     public override func insertTab(_ sender: Any?) { perform(.indent) }
     public override func insertBacktab(_ sender: Any?) { perform(.outdent) }
     public override func moveParagraphBackwardAndModifySelection(_ sender: Any?) { perform(.moveBlocksUp) }
@@ -189,6 +211,11 @@ public final class PageTextView: NSTextView {
         hideBlockHandles()
         if !hasMarkedText(), let command = EditorKeyBindings.command(for: event) {
             perform(command)
+            return
+        }
+        // С открытым меню «/» Shift+Enter выбирает пункт, как Enter.
+        if !hasMarkedText(), !popups.isOpen, EditorKeyBindings.isLineBreak(event) {
+            insertLineBreak(nil)
             return
         }
         super.keyDown(with: event)
@@ -690,7 +717,7 @@ public final class PageTextView: NSTextView {
             for line in fragment.textLineFragments where line.characterRange.length > 0 {
                 let lineStart = fragmentStart + line.characterRange.location
                 var textEnd = lineStart + line.characterRange.length
-                let endsParagraph = string.character(at: textEnd - 1) == 0x0A
+                let endsParagraph = [PageTextStorageMapper.newline, PageTextStorageMapper.lineSeparator].contains(string.character(at: textEnd - 1))
                 if endsParagraph { textEnd -= 1 }
                 let from = max(selection.location, lineStart)
                 let to = min(NSMaxRange(selection), textEnd)
