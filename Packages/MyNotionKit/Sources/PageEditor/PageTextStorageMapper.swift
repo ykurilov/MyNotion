@@ -118,13 +118,22 @@ public final class PageTextStorageMapper: NSObject {
     /// Какой блок стал каждым абзацем. Абзац остаётся своим блоком, если на его символах есть id
     /// заменяемого блока, ещё не занятый абзацем выше. Абзац без такого id берёт по порядку блок,
     /// оставшийся без абзаца (набор в пустом последнем абзаце), иначе это новый блок —
-    /// того же вида, что блок, от которого он отделился (Enter).
+    /// того же вида, что блок, от которого он отделился (Enter). Enter в начале блока оставляет блок
+    /// с его текстом, а новым становится пустой абзац над ним.
     private func blockDrafts(for paragraphs: [NSRange], replacing replaced: [Block]) -> [BlockDraft] {
+        let string = textStorage.string as NSString
         let replacedIds = Set(replaced.map(\.id))
+        let paragraphIds = paragraphs.map(blockIds(in:))
+        let isEmpty = paragraphs.map { Self.contentRange(of: $0, in: string).isEmpty }
         var used: Set<UUID> = []
-        var assigned: [UUID?] = paragraphs.map { paragraph in
-            let candidate = blockIds(in: paragraph).first { replacedIds.contains($0) && !used.contains($0) }
-            if let candidate { used.insert(candidate) }
+        var assigned: [UUID?] = paragraphs.indices.map { index in
+            let candidate = paragraphIds[index].first { replacedIds.contains($0) && !used.contains($0) }
+            guard let candidate else { return nil }
+            let next = index + 1
+            // Enter в начале непустого блока: пустой абзац сверху — новый блок, а прежний id остаётся у текста.
+            if isEmpty[index], next < paragraphs.count, !isEmpty[next], paragraphIds[next].first == candidate,
+               let block = document.block(candidate), !block.text.string.isEmpty, block.kind != .pageLink { return nil }
+            used.insert(candidate)
             return candidate
         }
         var spare = replaced.filter { !used.contains($0.id) }[...]
@@ -132,15 +141,29 @@ public final class PageTextStorageMapper: NSObject {
             assigned[index] = spare.popFirst()?.id
         }
 
-        return zip(paragraphs, assigned).map { paragraph, id in
-            let text = Self.inlineText(in: textStorage, range: Self.contentRange(of: paragraph, in: textStorage.string as NSString))
+        return zip(paragraphs, assigned).enumerated().map { position, pair in
+            let (paragraph, id) = pair
+            let text = Self.inlineText(in: textStorage, range: Self.contentRange(of: paragraph, in: string))
             if let id, let block = document.block(id) {
                 return BlockDraft(id: id, kind: block.kind, text: text, indent: block.indent,
                                   isChecked: block.isChecked, linkedPageId: block.linkedPageId)
             }
-            let source = blockIds(in: paragraph).lazy.compactMap(document.block).first
+            // Возврат удалённого абзаца (⌘Z): у его символов id блока, которого в документе уже нет.
+            if let firstId = paragraphIds[position].first, document.block(firstId) == nil, paragraph.length > 0 {
+                var draft = Self.blockDrafts(in: textStorage.attributedSubstring(from: paragraph)).first ?? BlockDraft(id: nil)
+                draft.id = nil
+                draft.text = text
+                return draft
+            }
+            let source = sourceIds(of: paragraph, ids: paragraphIds[position], in: string).lazy.compactMap(document.block).first
             return BlockDraft(id: nil, kind: Self.kindAfterSplit(of: source?.kind ?? .paragraph), text: text, indent: source?.indent ?? 0)
         }
+    }
+
+    /// Откуда новый блок берёт тип и вложенность. У пустого последнего абзаца символов нет — берём блок перевода строки перед ним.
+    private func sourceIds(of paragraph: NSRange, ids: [UUID], in string: NSString) -> [UUID] {
+        guard ids.isEmpty, paragraph.length == 0, paragraph.location == string.length, paragraph.location > 0 else { return ids }
+        return blockIds(in: NSRange(location: paragraph.location - 1, length: 1))
     }
 
     private func blockIds(in paragraph: NSRange) -> [UUID] {
@@ -192,9 +215,87 @@ public final class PageTextStorageMapper: NSObject {
         isApplying = false
     }
 
+    // MARK: Блоки по месту в тексте
+
+    /// Последний найденный абзац: следующий поиск идёт от него, а не от начала страницы.
+    private var paragraphHint: (index: Int, location: Int) = (0, 0)
+
+    /// Есть ли у последнего блока свой абзац без символов (пустой текст или текст кончается переводом строки).
+    private var hasTrailingEmptyParagraph: Bool {
+        let length = textStorage.length
+        return length == 0 || (textStorage.string as NSString).character(at: length - 1) == Self.newline
+    }
+
+    /// Блок под местом текста и смещение от начала его абзаца.
+    func blockPosition(at location: Int) -> (index: Int, offset: Int)? {
+        let string = textStorage.string as NSString
+        let length = string.length
+        guard !document.blocks.isEmpty else { return nil }
+        if location >= length, hasTrailingEmptyParagraph { return (document.blocks.count - 1, 0) }
+        let paragraph = string.paragraphRange(for: NSRange(location: min(location, length), length: 0))
+        guard paragraph.location < length,
+              let id = textStorage.attribute(.blockID, at: paragraph.location, effectiveRange: nil) as? UUID,
+              let index = document.index(ofBlock: id) else { return nil }
+        paragraphHint = (index, paragraph.location)
+        return (index, min(location, length) - paragraph.location)
+    }
+
+    /// Начало абзаца блока `index`.
+    func paragraphStart(ofBlockAt index: Int) -> Int {
+        let string = textStorage.string as NSString
+        let length = string.length
+        let count = document.blocks.count
+        if index >= count - 1, hasTrailingEmptyParagraph { return length }
+        guard index > 0 else { return 0 }
+
+        var (current, location) = paragraphHint
+        let hintIsValid = current < count && location < length
+            && (location == 0 || string.character(at: location - 1) == Self.newline)
+            && textStorage.attribute(.blockID, at: location, effectiveRange: nil) as? UUID == document.blocks[current].id
+        if !hintIsValid || index < current / 2 { (current, location) = (0, 0) }
+        while current < index, location < length {
+            location = NSMaxRange(string.paragraphRange(for: NSRange(location: location, length: 0)))
+            current += 1
+        }
+        while current > index, location > 0 {
+            location = string.paragraphRange(for: NSRange(location: location - 1, length: 0)).location
+            current -= 1
+        }
+        paragraphHint = (current, location)
+        return location
+    }
+
+    /// Символы абзацев блоков `range`: от начала первого до начала следующего за последним.
+    func characterRange(ofBlocksAt range: Range<Int>) -> NSRange {
+        let start = paragraphStart(ofBlockAt: range.lowerBound)
+        let end = range.upperBound < document.blocks.count ? paragraphStart(ofBlockAt: range.upperBound) : textStorage.length
+        return NSRange(location: start, length: max(0, end - start))
+    }
+
+    /// Переписать символы `characters` абзацами блоков `range` документа — после правки блоков
+    /// не через текст (тип, вложенность, перестановка). `leadingNewline` — перевод строки блока
+    /// перед отрезком, когда отрезок стоит в конце страницы.
+    func renderBlocks(_ range: Range<Int>, replacing characters: NSRange, leadingNewline: Bool) {
+        let blocks = document.blocks
+        let text = NSMutableAttributedString()
+        if leadingNewline, !range.isEmpty, range.lowerBound > 0 {
+            text.append(NSAttributedString(string: "\n", attributes: Self.baseAttributes(for: blocks[range.lowerBound - 1])))
+        }
+        for index in range {
+            text.append(Self.paragraph(blocks[index], withNewline: index < blocks.count - 1))
+        }
+        applying {
+            textStorage.beginEditing()
+            textStorage.replaceCharacters(in: characters, with: text)
+            markTrailingEmptyBlock()
+            textStorage.endEditing()
+        }
+        paragraphHint = (0, 0)
+    }
+
     // MARK: Блоки ⇄ текст
 
-    private static let newline = unichar(0x0A)
+    static let newline = unichar(0x0A)
 
     /// Текст страницы: абзацы блоков через перевод строки.
     public static func attributedText(for blocks: [Block]) -> NSAttributedString {
@@ -250,13 +351,13 @@ public final class PageTextStorageMapper: NSObject {
     }
 
     /// Абзац без завершающего перевода строки.
-    private static func contentRange(of paragraph: NSRange, in string: NSString) -> Range<Int> {
+    static func contentRange(of paragraph: NSRange, in string: NSString) -> Range<Int> {
         var end = NSMaxRange(paragraph)
         if end > paragraph.location, string.character(at: end - 1) == newline { end -= 1 }
         return paragraph.location..<end
     }
 
-    private static func inlineText(in text: NSAttributedString, range: Range<Int>) -> InlineText {
+    static func inlineText(in text: NSAttributedString, range: Range<Int>) -> InlineText {
         let nsRange = NSRange(location: range.lowerBound, length: range.count)
         let string = (text.string as NSString).substring(with: nsRange)
         var runs: [StyledRun] = []
@@ -274,7 +375,7 @@ public final class PageTextStorageMapper: NSObject {
 
     // MARK: Вид
 
-    private static func paragraphAttributes(of block: Block) -> [NSAttributedString.Key: Any] {
+    static func paragraphAttributes(of block: Block) -> [NSAttributedString.Key: Any] {
         var attributes: [NSAttributedString.Key: Any] = [
             .blockID: block.id,
             .blockKind: block.kind.rawValue,
@@ -290,7 +391,16 @@ public final class PageTextStorageMapper: NSObject {
         baseAttributes(for: block)
     }
 
-    private static func textStyle(of kind: BlockKind) -> BlockTextStyle {
+    /// Атрибуты набора блока с оформлением в строке из `inline` (жирный, курсив и т. д.).
+    static func typingAttributes(for block: Block, inline: [NSAttributedString.Key: Any]) -> [NSAttributedString.Key: Any] {
+        var attributes = baseAttributes(for: block)
+        for key in inlineKeys { attributes[key] = inline[key] }
+        return attributes.merging(inlineRendering(attributes, line: Typography.line(for: textStyle(of: block.kind)))) { $1 }
+    }
+
+    static let inlineKeys: [NSAttributedString.Key] = [.inlineBold, .inlineItalic, .inlineStrikethrough, .inlineCode, .inlineLink]
+
+    static func textStyle(of kind: BlockKind) -> BlockTextStyle {
         switch kind {
         case .heading1: .heading1
         case .heading2: .heading2
@@ -300,14 +410,15 @@ public final class PageTextStorageMapper: NSObject {
         }
     }
 
-    private static func baseAttributes(for block: Block) -> [NSAttributedString.Key: Any] {
+    static func baseAttributes(for block: Block) -> [NSAttributedString.Key: Any] {
         let style = textStyle(of: block.kind)
         let line = Typography.line(for: style)
         let spacing = Metrics.block(style)
         let paragraphStyle = (line.paragraphStyle.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
         paragraphStyle.paragraphSpacingBefore = spacing.topSpacing
         paragraphStyle.paragraphSpacing = max(0, spacing.height - line.lineHeight - spacing.topSpacing)
-        let indent = CGFloat(block.indent) * Metrics.Page.indentPerLevel
+        let marker: CGFloat = block.kind.hasMarkerColumn ? Metrics.BlockMarker.textInset : 0
+        let indent = CGFloat(block.indent) * Metrics.Page.indentPerLevel + marker
         paragraphStyle.firstLineHeadIndent = indent
         paragraphStyle.headIndent = indent
 
@@ -372,5 +483,15 @@ public final class PageTextStorageMapper: NSObject {
             rendering[.underlineColor] = Palette.linkUnderline
         }
         return rendering
+    }
+}
+
+extension BlockKind {
+    /// Слева от текста — колонка маркера, номера, квадрата чекбокса или значка подстраницы.
+    var hasMarkerColumn: Bool {
+        switch self {
+        case .bulletItem, .numberedItem, .checkbox, .pageLink: true
+        case .paragraph, .heading1, .heading2, .heading3: false
+        }
     }
 }

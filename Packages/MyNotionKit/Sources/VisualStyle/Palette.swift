@@ -18,6 +18,10 @@ public enum Palette {
     /// Жёлтая полоса ошибки сохранения (желтый фон блока Notion, ≈).
     public static let saveErrorBannerBackground = themed(light: .hex(0xFBF3DB), dark: .hex(0x3F3622))
     public static let handleIcon = themed(light: .rgba(55, 53, 47, 0.35), dark: .rgba(255, 255, 255, 0.3))
+    /// Линия места сброса при перетаскивании блока (≈ по Notion).
+    public static let dropIndicator = themed(light: .rgba(35, 131, 226, 0.43), dark: .rgba(35, 131, 226, 0.6))
+    /// Галочка в отмеченном чекбоксе.
+    public static let checkboxCheckmark = themed(light: .hex(0xFFFFFF), dark: .hex(0xFFFFFF))
     /// Подчёркивание ссылки: ≈ 40 % цвета текста.
     public static let linkUnderline = themed(
         light: .hex(0x2C2C2B).withAlphaComponent(0.4),

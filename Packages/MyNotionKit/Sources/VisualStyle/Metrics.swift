@@ -49,8 +49,21 @@ public enum Metrics {
         public static let borderWidth: CGFloat = 1.5
     }
 
+    /// Колонка слева от текста пункта, чекбокса и подстраницы: маркер, номер, квадрат или значок.
+    /// Текст блока начинается за колонкой и промежутком (≈ по снимку).
+    public enum BlockMarker {
+        public static let columnWidth: CGFloat = 24
+        public static let textSpacing: CGFloat = 2
+        public static var textInset: CGFloat { columnWidth + textSpacing }
+        /// Маркеры `•` `◦` `▪` крупнее текста (≈ по снимку).
+        public static let bulletScale: CGFloat = 1.5
+    }
+
     public enum PageLinkBlock {
         public static let iconSize: CGFloat = 20
+        /// Подчёркивание названия: толщина и отступ под базовой линией (≈ по снимку).
+        public static let underlineThickness: CGFloat = 1
+        public static let underlineOffset: CGFloat = 3
     }
 
     public enum InlineCode {
@@ -66,6 +79,10 @@ public enum Metrics {
         public static let dragHandleSize = CGSize(width: 18, height: 24)
         public static let dragHandleLeadingOffset: CGFloat = 28
         public static let cornerRadius: CGFloat = 4
+        /// Линия места сброса при перетаскивании блока (≈ по Notion).
+        public static let dropIndicatorHeight: CGFloat = 4
+        /// Сдвиг мыши, после которого щелчок по «⋮⋮» становится перетаскиванием.
+        public static let dragThreshold: CGFloat = 3
     }
 
     public enum Sidebar {
@@ -93,6 +110,21 @@ public enum Metrics {
         public static let slashMenuWidth: CGFloat = 324
         public static let slashMenuRowHeight: CGFloat = 46
         public static let slashMenuIconSize: CGFloat = 46
+        public static let slashMenuIconCornerRadius: CGFloat = 4
+        /// Поля меню: сверху и снизу, строк от краёв меню, текста от значка (≈ по снимку).
+        public static let verticalPadding: CGFloat = 6
+        public static let rowInset: CGFloat = 4
+        public static let rowHorizontalPadding: CGFloat = 6
+        public static let rowCornerRadius: CGFloat = 6
+        public static let iconToTitleSpacing: CGFloat = 10
+        /// Меню блока: строки без пояснений.
+        public static let blockMenuWidth: CGFloat = 240
+        public static let blockMenuRowHeight: CGFloat = 28
+        public static let blockMenuIconSize: CGFloat = 20
+        /// Сколько строк видно без прокрутки.
+        public static let maximumVisibleRows = 8
+        /// Зазор между строкой текста и меню.
+        public static let anchorSpacing: CGFloat = 4
     }
 }
 
