@@ -5,7 +5,7 @@ import NotesCore
 enum ReferenceLibrary {
     static func url() throws -> URL {
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("MyNotion-reference-library-v1", isDirectory: true)
+            .appendingPathComponent("MyNotion-reference-library-v2", isDirectory: true)
             .appendingPathComponent("MyNotion.sqlite")
         if !FileManager.default.fileExists(atPath: url.path) {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)

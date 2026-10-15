@@ -31,7 +31,7 @@ let package = Package(
         .testTarget(name: "VisualStyleTests", dependencies: ["VisualStyle"]),
         .testTarget(name: "NotesCoreTests", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "PageTreeTests", dependencies: ["PageTree"]),
-        .testTarget(name: "PageEditorTests", dependencies: ["PageEditor"]),
+        .testTarget(name: "PageEditorTests", dependencies: ["PageEditor", "NotesCore"]),
         .testTarget(name: "PageSearchTests", dependencies: ["PageSearch"]),
         .testTarget(name: "MarkdownExportTests", dependencies: ["MarkdownExport"]),
         .testTarget(name: "NotionImportTests", dependencies: ["NotionImport"]),

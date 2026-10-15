@@ -23,6 +23,11 @@ public final class NotesTransaction {
         try Self.fetchBlocks(ofPage: pageId, in: db)
     }
 
+    /// Блок как он лежит в базе сейчас; `nil`, если его нет.
+    public func block(_ id: UUID) throws -> Block? {
+        try storedBlock(id)
+    }
+
     static func fetchPage(_ id: UUID, in db: Database) throws -> Page? {
         try Row.fetchOne(db, sql: "SELECT * FROM page WHERE id = ?", arguments: [id.databaseText]).map(Page.init(row:))
     }
@@ -134,6 +139,29 @@ public final class NotesTransaction {
         try db.execute(sql: "DELETE FROM block WHERE id = ?", arguments: [blockId.databaseText])
         touchedPageIds.insert(stored.pageId)
         changes.blocks.append(.erased(blockId: blockId, pageId: stored.pageId))
+    }
+
+    // MARK: Конфликты
+
+    /// Записать конфликт текста блока. Если по блоку уже ждёт неразрешённый конфликт,
+    /// обновляется его своя версия: на один блок — одно ожидающее решение.
+    @discardableResult
+    public func recordConflict(blockId: UUID, localVersion: InlineText, remoteVersion: InlineText,
+                               remoteDeviceName: String) throws -> Conflict {
+        if var pending = try Row.fetchOne(
+            db, sql: "SELECT * FROM conflict WHERE blockId = ? AND resolvedAt IS NULL ORDER BY detectedAt DESC LIMIT 1",
+            arguments: [blockId.databaseText]
+        ).map(Conflict.init(row:)) {
+            pending.localVersion = localVersion
+            pending.remoteVersion = remoteVersion
+            pending.remoteDeviceName = remoteDeviceName
+            try pending.update(in: db)
+            return pending
+        }
+        let conflict = Conflict(blockId: blockId, localVersion: localVersion, remoteVersion: remoteVersion,
+                                remoteDeviceName: remoteDeviceName)
+        try conflict.insert(into: db)
+        return conflict
     }
 
     // MARK: Подписчики

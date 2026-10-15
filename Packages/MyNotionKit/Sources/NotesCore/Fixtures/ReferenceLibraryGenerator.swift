@@ -38,6 +38,8 @@ public struct ReferenceLibraryGenerator: Sendable {
         }
         let database = try AppDatabase.open(at: draftURL)
         try generate(into: NotesStore(database: database, clock: HybridLogicalClock(deviceId: UUID())))
+        // Всё из журнала WAL — в основной файл: переносится только он.
+        try database.dbWriter.writeWithoutTransaction { try $0.checkpoint(.truncate) }
         database.close()
         try FileManager.default.moveItem(at: draftURL, to: url)
     }
@@ -47,7 +49,7 @@ public struct ReferenceLibraryGenerator: Sendable {
         var random = SeededRandom(seed: seed)
         let plan = TreePlan(random: &random)
 
-        try store.write { transaction in
+        let largePageId = try store.write { transaction in
             let now = Date()
             var pageIds: [UUID] = []
             var lastChildKey: [Int: FractionalSortKey] = [:]
@@ -89,7 +91,10 @@ public struct ReferenceLibraryGenerator: Sendable {
                     try transaction.insertBlock(Block(pageId: pageId, kind: .pageLink, linkedPageId: pageIds[childIndex], sortKey: sortKey!))
                 }
             }
+            return pageIds[Self.pageCount - 1]
         }
+        // Условие замеров (research R13): при запуске открыта страница на 1 000 блоков.
+        try store.saveWindowState(WindowState(windowId: WindowState.mainWindowId, openPageId: largePageId))
     }
 }
 

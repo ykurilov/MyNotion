@@ -153,3 +153,60 @@ extension Block {
         )
     }
 }
+
+extension Conflict {
+    init(row: Row) throws {
+        self.init(
+            id: try RowDecoding.uuid(row, "id"),
+            blockId: try RowDecoding.uuid(row, "blockId"),
+            localVersion: try RowDecoding.json(InlineText.self, row, "localVersion"),
+            remoteVersion: try RowDecoding.json(InlineText.self, row, "remoteVersion"),
+            remoteDeviceName: row["remoteDeviceName"],
+            detectedAt: row["detectedAt"],
+            resolvedAt: row["resolvedAt"]
+        )
+    }
+
+    func insert(into db: Database) throws {
+        try db.execute(
+            sql: """
+                INSERT INTO conflict (id, blockId, localVersion, remoteVersion, remoteDeviceName, detectedAt, resolvedAt)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+            arguments: [id.databaseText, blockId.databaseText, try JSONColumn.encode(localVersion),
+                        try JSONColumn.encode(remoteVersion), remoteDeviceName, detectedAt, resolvedAt]
+        )
+    }
+
+    func update(in db: Database) throws {
+        try db.execute(
+            sql: "UPDATE conflict SET localVersion = ?, remoteVersion = ?, remoteDeviceName = ?, resolvedAt = ? WHERE id = ?",
+            arguments: [try JSONColumn.encode(localVersion), try JSONColumn.encode(remoteVersion), remoteDeviceName,
+                        resolvedAt, id.databaseText]
+        )
+    }
+}
+
+extension WindowState {
+    init(row: Row) throws {
+        let collapsed = try RowDecoding.json([UUID].self, row, "collapsedPageIds")
+        self.init(
+            windowId: try RowDecoding.uuid(row, "windowId"),
+            openPageId: RowDecoding.optionalUUID(row, "openPageId"),
+            collapsedPageIds: Set(collapsed),
+            sidebarWidth: row["sidebarWidth"]
+        )
+    }
+
+    func save(in db: Database) throws {
+        let collapsed = collapsedPageIds.map(\.databaseText).sorted()
+        try db.execute(
+            sql: """
+                INSERT INTO window_state (windowId, openPageId, collapsedPageIds, sidebarWidth) VALUES (?, ?, ?, ?)
+                ON CONFLICT(windowId) DO UPDATE SET openPageId = excluded.openPageId,
+                    collapsedPageIds = excluded.collapsedPageIds, sidebarWidth = excluded.sidebarWidth
+                """,
+            arguments: [windowId.databaseText, openPageId?.databaseText, try JSONColumn.encode(collapsed), sidebarWidth]
+        )
+    }
+}

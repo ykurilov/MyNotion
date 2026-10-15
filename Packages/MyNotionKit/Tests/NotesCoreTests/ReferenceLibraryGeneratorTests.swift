@@ -53,6 +53,10 @@ struct ReferenceLibraryGeneratorTests {
 
         #expect(stats.sampleText.contains { ("а"..."я").contains($0) })
         #expect(stats.sampleText.contains { ("a"..."z").contains($0) })
+
+        // Условие замеров (research R13): при запуске открыта страница на 1 000 блоков.
+        let openPageId = try #require(try store.windowState(WindowState.mainWindowId)?.openPageId)
+        #expect(try store.pageContent(openPageId)?.blocks.count == 1_000)
     }
 
     @Test("Генератор не трогает уже существующий файл")

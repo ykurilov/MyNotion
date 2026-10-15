@@ -36,6 +36,30 @@ public final class NotesStore: Sendable {
         }
     }
 
+    /// Неразрешённые конфликты текста в блоках страницы.
+    public func unresolvedConflicts(ofPage pageId: UUID) throws -> [Conflict] {
+        try database.dbWriter.read { db in
+            try Row.fetchAll(db, sql: """
+                SELECT conflict.* FROM conflict JOIN block ON block.id = conflict.blockId
+                WHERE block.pageId = ? AND conflict.resolvedAt IS NULL
+                ORDER BY conflict.detectedAt, conflict.id
+                """, arguments: [pageId.databaseText]).map(Conflict.init(row:))
+        }
+    }
+
+    // MARK: Вид окна (локально, без меток часов и подписчиков)
+
+    public func windowState(_ windowId: UUID) throws -> WindowState? {
+        try database.dbWriter.read { db in
+            try Row.fetchOne(db, sql: "SELECT * FROM window_state WHERE windowId = ?", arguments: [windowId.databaseText])
+                .map(WindowState.init(row:))
+        }
+    }
+
+    public func saveWindowState(_ state: WindowState) throws {
+        try database.dbWriter.write { db in try state.save(in: db) }
+    }
+
     // MARK: Запись
 
     /// Одна транзакция: всё внутри `body` и записи подписчиков фиксируются вместе или не фиксируются вовсе.
