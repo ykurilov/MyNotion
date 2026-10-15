@@ -14,6 +14,7 @@ extension NSAttributedString.Key {
     static let inlineItalic = NSAttributedString.Key("MyNotion.inlineItalic")
     static let inlineStrikethrough = NSAttributedString.Key("MyNotion.inlineStrikethrough")
     static let inlineCode = NSAttributedString.Key("MyNotion.inlineCode")
+    static let inlineUnderline = NSAttributedString.Key("MyNotion.inlineUnderline")
     static let inlineLink = NSAttributedString.Key("MyNotion.inlineLink")
 }
 
@@ -374,6 +375,7 @@ public final class PageTextStorageMapper: NSObject {
             if attributes[.inlineItalic] as? Bool == true { add(.italic) }
             if attributes[.inlineStrikethrough] as? Bool == true { add(.strikethrough) }
             if attributes[.inlineCode] as? Bool == true { add(.code) }
+            if attributes[.inlineUnderline] as? Bool == true { add(.underline) }
             if let url = attributes[.inlineLink] as? URL { add(.link(url)) }
         }
         return InlineText(string, runs: runs).normalized()
@@ -405,7 +407,7 @@ public final class PageTextStorageMapper: NSObject {
         return attributes.merging(inlineRendering(attributes, line: Typography.line(for: textStyle(of: block.kind)))) { $1 }
     }
 
-    static let inlineKeys: [NSAttributedString.Key] = [.inlineBold, .inlineItalic, .inlineStrikethrough, .inlineCode, .inlineLink]
+    static let inlineKeys: [NSAttributedString.Key] = [.inlineBold, .inlineItalic, .inlineStrikethrough, .inlineCode, .inlineUnderline, .inlineLink]
 
     static func textStyle(of kind: BlockKind) -> BlockTextStyle {
         switch kind {
@@ -464,6 +466,7 @@ public final class PageTextStorageMapper: NSObject {
             case .italic: text.addAttribute(.inlineItalic, value: true, range: range)
             case .strikethrough: text.addAttribute(.inlineStrikethrough, value: true, range: range)
             case .code: text.addAttribute(.inlineCode, value: true, range: range)
+            case .underline: text.addAttribute(.inlineUnderline, value: true, range: range)
             case .link(let url): text.addAttribute(.inlineLink, value: url, range: range)
             }
         }
@@ -495,7 +498,10 @@ public final class PageTextStorageMapper: NSObject {
         if attributes[.inlineStrikethrough] as? Bool == true {
             rendering[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
         }
-        if attributes[.inlineLink] is URL {
+        // Подчёркнутый — линия цвета текста; у подчёркнутой ссылки тоже, вместо серой линии ссылки.
+        if attributes[.inlineUnderline] as? Bool == true {
+            rendering[.underlineStyle] = NSUnderlineStyle.single.rawValue
+        } else if attributes[.inlineLink] is URL {
             rendering[.underlineStyle] = NSUnderlineStyle.single.rawValue
             rendering[.underlineColor] = Palette.linkUnderline
         }

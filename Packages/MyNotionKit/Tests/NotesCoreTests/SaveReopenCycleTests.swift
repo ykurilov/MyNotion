@@ -102,7 +102,7 @@ private struct CycleRandom {
         let length = (string as NSString).length
         guard length > 0 else { return InlineText(string) }
         var runs: [StyledRun] = []
-        let styles: [InlineStyle] = [.bold, .italic, .strikethrough, .code, .link(URL(string: "https://kurilov.cloud/\(int(1...9))")!)]
+        let styles: [InlineStyle] = [.bold, .italic, .strikethrough, .code, .underline, .link(URL(string: "https://kurilov.cloud/\(int(1...9))")!)]
         for style in styles where bool() {
             let start = int(0...(length - 1))
             runs.append(StyledRun(start: start, length: int(1...(length - start)), style: style))

@@ -69,7 +69,7 @@ public enum InlineFormatting {
 
     // MARK: Вставка из других программ
 
-    /// Текст из другой программы с оформлением, которое есть на странице: жирный, курсив, зачёркнутый,
+    /// Текст из другой программы с оформлением, которое есть на странице: жирный, курсив, зачёркнутый, подчёркнутый,
     /// моноширинный шрифт как код, ссылки. Остальное (шрифты, размеры, цвета) отбрасывается.
     static func pastedText(from source: NSAttributedString) -> NSAttributedString {
         let result = NSMutableAttributedString()
@@ -85,6 +85,7 @@ public enum InlineFormatting {
                 }
             }
             if let strike = attributes[.strikethroughStyle] as? Int, strike != 0 { inline[.inlineStrikethrough] = true }
+            if let underline = attributes[.underlineStyle] as? Int, underline != 0, attributes[.link] == nil { inline[.inlineUnderline] = true }
             let link = (attributes[.link] as? URL) ?? (attributes[.link] as? String).flatMap(URL.init(string:))
             if let link, let scheme = link.scheme?.lowercased(), linkSchemes.contains(scheme) { inline[.inlineLink] = link }
             let piece = normalizedNewlines((source.string as NSString).substring(with: range))
@@ -135,6 +136,7 @@ extension PageTextView {
         case .italic: .inlineItalic
         case .strikethrough: .inlineStrikethrough
         case .code: .inlineCode
+        case .underline: .inlineUnderline
         }
         var inline = typingAttributes
         inline[key] = inline[key] as? Bool == true ? nil : true
@@ -196,6 +198,7 @@ extension PageTextView {
     @objc public func toggleItalicStyle(_ sender: Any?) { perform(.toggleInline(.italic)) }
     @objc public func toggleStrikethroughStyle(_ sender: Any?) { perform(.toggleInline(.strikethrough)) }
     @objc public func toggleCodeStyle(_ sender: Any?) { perform(.toggleInline(.code)) }
+    @objc public func toggleUnderlineStyle(_ sender: Any?) { perform(.toggleInline(.underline)) }
 
     /// «Формат → Ссылка»: окно с полем адреса поверх окна страницы; пустой адрес убирает ссылку.
     /// Окно страницы не на экране (модульные проверки) — окна адреса нет: не всплывать поверх чужих программ.

@@ -11,6 +11,8 @@ struct FormatCommands: Commands {
                 .keyboardShortcut("b")
             Button("Курсив") { send(#selector(PageTextView.toggleItalicStyle(_:))) }
                 .keyboardShortcut("i")
+            Button("Подчёркнутый") { send(#selector(PageTextView.toggleUnderlineStyle(_:))) }
+                .keyboardShortcut("u")
             Button("Зачёркнутый") { send(#selector(PageTextView.toggleStrikethroughStyle(_:))) }
                 .keyboardShortcut("x", modifiers: [.command, .shift])
             Button("Код") { send(#selector(PageTextView.toggleCodeStyle(_:))) }

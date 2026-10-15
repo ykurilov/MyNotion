@@ -37,6 +37,7 @@ public struct StyledRun: Sendable, Hashable, Codable {
         case "italic": style = .italic
         case "strikethrough": style = .strikethrough
         case "code": style = .code
+        case "underline": style = .underline
         case "link": style = .link(try container.decode(URL.self, forKey: .url))
         case let unknown:
             throw DecodingError.dataCorruptedError(forKey: .style, in: container, debugDescription: "Неизвестное оформление: \(unknown)")
@@ -52,6 +53,7 @@ public struct StyledRun: Sendable, Hashable, Codable {
         case .italic: try container.encode("italic", forKey: .style)
         case .strikethrough: try container.encode("strikethrough", forKey: .style)
         case .code: try container.encode("code", forKey: .style)
+        case .underline: try container.encode("underline", forKey: .style)
         case .link(let url):
             try container.encode("link", forKey: .style)
             try container.encode(url, forKey: .url)
@@ -64,6 +66,7 @@ public enum InlineStyle: Sendable, Hashable {
     case italic
     case strikethrough
     case code
+    case underline
     case link(URL)
 }
 
@@ -113,7 +116,7 @@ extension InlineText {
 
 extension InlineStyle {
     /// Стили-признаки без значения, по порядку их места в записи.
-    static let flagStyles: [InlineStyle] = [.bold, .italic, .strikethrough, .code]
+    static let flagStyles: [InlineStyle] = [.bold, .italic, .strikethrough, .code, .underline]
 
     var rank: Int {
         switch self {
@@ -121,7 +124,8 @@ extension InlineStyle {
         case .italic: 1
         case .strikethrough: 2
         case .code: 3
-        case .link: 4
+        case .underline: 4
+        case .link: 5
         }
     }
 }

@@ -7,6 +7,7 @@ public enum InlineFormat: Sendable, Hashable, CaseIterable {
     case italic
     case strikethrough
     case code
+    case underline
 
     var style: InlineStyle {
         switch self {
@@ -14,6 +15,7 @@ public enum InlineFormat: Sendable, Hashable, CaseIterable {
         case .italic: .italic
         case .strikethrough: .strikethrough
         case .code: .code
+        case .underline: .underline
         }
     }
 }
@@ -38,6 +40,7 @@ public enum EditorKeyBindings {
         case ("i", [.command]): return .toggleInline(.italic)
         case ("x", [.command, .shift]): return .toggleInline(.strikethrough)
         case ("e", [.command]): return .toggleInline(.code)
+        case ("u", [.command]): return .toggleInline(.underline)
         case ("\r", [.command]), ("\u{3}", [.command]): return .toggleChecked
         case ("\u{F700}", [.option, .shift]): return .moveBlocksUp
         case ("\u{F701}", [.option, .shift]): return .moveBlocksDown
@@ -59,13 +62,14 @@ public enum EditorKeyBindings {
         return command(characters: latin, modifiers: event.modifierFlags)
     }
 
-    /// Клавиши B, I, X, E на месте букв латинской раскладки.
+    /// Клавиши B, I, X, E, U на месте букв латинской раскладки.
     private static func latinLetter(forKeyCode keyCode: UInt16) -> String? {
         switch keyCode {
         case 11: "b"
         case 34: "i"
         case 7: "x"
         case 14: "e"
+        case 32: "u"
         default: nil
         }
     }
