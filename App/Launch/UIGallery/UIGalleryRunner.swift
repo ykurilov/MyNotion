@@ -218,6 +218,11 @@ final class UIGalleryRunner {
             guard PageTreePreview.beginRenaming(page: library.projectBranch[1], in: window) else { return "строку не переименовать" }
             if let problem = GalleryTarget.rowProblem("строка дерева", row, in: window) { return problem }
 
+        case .sidebarHidden:
+            await open(library.sample.page.id)
+            model.toggleSidebar()
+            await settle()
+
         case .trash(let trash):
             await open(library.sample.page.id)
             switch trash {
@@ -263,6 +268,9 @@ final class UIGalleryRunner {
             if !model.saveAll() { print("Галерея: полоса «Изменения не сохранены» не снялась после стирания правки") }
         case .trash(.confirmDeleteForever):
             GalleryInput.pressButton(titled: "Отмена")
+            await settle()
+        case .sidebarHidden:
+            model.toggleSidebar()
             await settle()
         default:
             break

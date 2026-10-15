@@ -3,7 +3,7 @@ import NotesCore
 import SwiftUI
 import VisualStyle
 
-/// Боковая панель: заголовок «Страницы», дерево и строка «Корзина» внизу.
+/// Боковая панель: верхняя строка в линию со светофором с «✎» справа, заголовок «Страницы», дерево и «Корзина» внизу.
 public struct PageTreeSidebar: View {
     let tree: PageTreeSnapshot
     /// Меняется, когда дерево нужно перечитать.
@@ -15,14 +15,14 @@ public struct PageTreeSidebar: View {
     let trashEntries: [Page]
     let actions: PageTreeActions
     let trashActions: TrashActions
-    /// Место сверху под кнопками окна.
-    let topInset: CGFloat
+    /// «✎» в верхней строке — то же, что ⌘N.
+    let newPage: () -> Void
 
     @State private var trashPanel = TrashPanelController()
 
     public init(tree: PageTreeSnapshot, treeRevision: Int, collapsedPageIds: Set<UUID>, selectedPageId: UUID?,
                 liveTitle: String?, trashEntries: [Page], actions: PageTreeActions, trashActions: TrashActions,
-                topInset: CGFloat) {
+                newPage: @escaping () -> Void) {
         self.tree = tree
         self.treeRevision = treeRevision
         self.collapsedPageIds = collapsedPageIds
@@ -31,11 +31,12 @@ public struct PageTreeSidebar: View {
         self.trashEntries = trashEntries
         self.actions = actions
         self.trashActions = trashActions
-        self.topInset = topInset
+        self.newPage = newPage
     }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            topRow
             groupHeader("Страницы")
             PageOutline(tree: tree, treeRevision: treeRevision, collapsedPageIds: collapsedPageIds,
                         selectedPageId: selectedPageId, liveTitle: liveTitle, actions: actions)
@@ -43,15 +44,25 @@ public struct PageTreeSidebar: View {
             trashRow
         }
         .padding(.horizontal, Metrics.Sidebar.panelInset)
-        .padding(.top, topInset)
         .padding(.bottom, Metrics.Sidebar.footerBottomInset)
         .background(Color(nsColor: Palette.sidebarBackground))
+    }
+
+    /// Строка светофора: слева место под кнопки окна и шторку (её рисует окно), справа «✎».
+    private var topRow: some View {
+        HStack(spacing: 0) {
+            Spacer(minLength: 0)
+            WindowToolbarButton(symbol: "square.and.pencil", symbolSize: Metrics.Window.newPageSymbolSize,
+                                label: "Новая страница", action: newPage)
+                .accessibilityIdentifier("sidebar-new-page")
+        }
+        .frame(height: Metrics.Window.titleBarHeight)
     }
 
     private func groupHeader(_ title: String) -> some View {
         Text(title)
             .font(Font(Typography.sidebarGroupHeader.font))
-            .foregroundStyle(Color(nsColor: Palette.textSecondary))
+            .foregroundStyle(Color(nsColor: Palette.sidebarGroupHeader))
             .padding(.horizontal, Metrics.Sidebar.rowHorizontalPadding)
             .frame(height: Metrics.Sidebar.rowHeight, alignment: .leading)
     }
@@ -65,13 +76,13 @@ public struct PageTreeSidebar: View {
             .padding(.vertical, Metrics.Sidebar.footerDividerSpacing)
     }
 
-    /// «Корзина» — обычная строка панели: те же высота, поля, иконка 20×20 на вертикали иконок страниц.
+    /// «Корзина» — обычная строка панели: те же высота, поля, квадрат иконки и цвета, что у строк страниц.
     private var trashRow: some View {
         Button { trashPanel.toggle(entries: trashEntries, actions: trashActions) } label: {
             HStack(spacing: Metrics.Sidebar.rowIconSpacing) {
                 Image(systemName: "trash")
-                    .font(.system(size: Metrics.Sidebar.rowEmojiFontSize - 1, weight: .medium))
-                    .foregroundStyle(Color(nsColor: Palette.sidebarText))
+                    .font(.system(size: Metrics.Sidebar.rowEmojiFontSize - 1, weight: .regular))
+                    .foregroundStyle(Color(nsColor: Palette.sidebarIcon))
                     .frame(width: Metrics.Sidebar.rowIconSize, height: Metrics.Sidebar.rowIconSize)
                 Text("Корзина")
                     .font(Font(Typography.sidebarRow.font))

@@ -4,7 +4,7 @@ import AppKit
 public enum Typography {
     public static let pageTitle = TextLineStyle(fontSize: 40, lineHeight: 48, weight: .bold)
     public static let breadcrumb = TextLineStyle(fontSize: 14, lineHeight: 20, weight: .regular)
-    public static let sidebarRow = TextLineStyle(fontSize: 14, lineHeight: 20, weight: .medium)
+    public static let sidebarRow = TextLineStyle(fontSize: 14, lineHeight: 20, weight: .regular)
     public static let sidebarGroupHeader = TextLineStyle(fontSize: 12, lineHeight: 16, weight: .medium)
     public static let pageLinkTitle = TextLineStyle(fontSize: 16, lineHeight: 24, weight: .medium)
     public static let slashMenuTitle = TextLineStyle(fontSize: 14, lineHeight: 20, weight: .regular)

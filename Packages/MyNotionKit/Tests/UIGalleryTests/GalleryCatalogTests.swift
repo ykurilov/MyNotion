@@ -59,7 +59,7 @@ struct GalleryCatalogTests {
     func sidebarAndTrashStatesPresent() {
         let required: [GalleryScene] = [
             .sidebarTree(collapsed: false), .sidebarTree(collapsed: true), .sidebarRowHover(longTitle: false),
-            .sidebarRowHover(longTitle: true), .sidebarSelectedRow, .sidebarRenaming,
+            .sidebarRowHover(longTitle: true), .sidebarSelectedRow, .sidebarRenaming, .sidebarHidden,
         ] + GalleryTrash.allCases.map(GalleryScene.trash)
         for scene in required { #expect(scenes.contains(scene), "\(scene)") }
     }

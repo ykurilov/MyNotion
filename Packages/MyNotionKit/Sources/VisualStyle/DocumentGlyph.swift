@@ -4,7 +4,7 @@ import AppKit
 /// Рисуется вектором и сам перекрашивается вместе с темой Mac.
 public enum DocumentGlyph {
     /// Квадрат `size` × `size`; лист занимает его середину.
-    public static func image(size: CGFloat, color: NSColor = Palette.sidebarText) -> NSImage {
+    public static func image(size: CGFloat, color: NSColor = Palette.sidebarIcon) -> NSImage {
         let image = NSImage(size: NSSize(width: size, height: size), flipped: true) { rect in
             let sheetWidth = rect.width * 0.62
             let sheetHeight = rect.height * 0.78

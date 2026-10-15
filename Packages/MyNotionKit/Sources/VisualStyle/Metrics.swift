@@ -109,17 +109,21 @@ public enum Metrics {
         public static let maximumWidth: CGFloat = 480
         /// Полоса у края панели, за которую её тянут.
         public static let resizeHandleWidth: CGFloat = 6
+        /// Высота строки и её подсветки.
         public static let rowHeight: CGFloat = 30
+        /// Шаг строк дерева: подсветка 30 и зазор 1 между соседними, как у Notion (по снимку).
+        public static let rowPitch: CGFloat = 31
         public static let rowVerticalPadding: CGFloat = 5
         public static let rowHorizontalPadding: CGFloat = 8
         public static let rowCornerRadius: CGFloat = 6
         /// Отступ строк от краёв панели.
         public static let panelInset: CGFloat = 8
-        public static let rowIconSize: CGFloat = 20
+        /// Квадрат иконки: 16…38 от края панели, как у Notion (по снимку).
+        public static let rowIconSize: CGFloat = 22
         /// Эмодзи иконки внутри квадрата `rowIconSize` (≈ по Notion).
         public static let rowEmojiFontSize: CGFloat = 15
-        /// Промежуток между иконкой и названием (≈ по Notion).
-        public static let rowIconSpacing: CGFloat = 6
+        /// Промежуток между иконкой и названием: текст с 46 от края панели (по снимку Notion).
+        public static let rowIconSpacing: CGFloat = 8
         /// Стрелка раскрытия внутри квадрата иконки.
         public static let disclosureSymbolSize: CGFloat = 11
         public static let indentPerLevel: CGFloat = 9
@@ -136,6 +140,22 @@ public enum Metrics {
         /// Нижние строки панели («Корзина»): воздух над разделителем и под ним, отступ от нижнего края окна.
         public static let footerDividerSpacing: CGFloat = 6
         public static let footerBottomInset: CGFloat = 10
+    }
+
+    /// Верхняя строка окна — в линию со светофором: шторка панели и «✎» (по снимку Notion для Mac).
+    public enum Window {
+        /// Высота строки светофора; середина — на 16 от верха окна, как у системных кнопок.
+        public static let titleBarHeight: CGFloat = 32
+        /// Кнопки строки: квадрат, значок внутри, скругление фона при наведении.
+        public static let toolbarButtonSize: CGFloat = 28
+        /// Значки по снимку Notion: шторка ≈ 16,5 × 13,5, «✎» ≈ 13,5 × 13,5.
+        public static let sidebarToggleSymbolSize: CGFloat = 15
+        public static let newPageSymbolSize: CGFloat = 13
+        public static let toolbarButtonCornerRadius: CGFloat = 6
+        /// Середина шторки от левого края окна: на 28 правее середины зелёной кнопки, как у Notion.
+        public static let sidebarToggleCenterX: CGFloat = 90
+        /// Сворачивание и разворот панели.
+        public static let sidebarToggleDuration: Double = 0.2
     }
 
     /// Окно корзины: всплывающая панель справа от боковой панели, у строки «Корзина».

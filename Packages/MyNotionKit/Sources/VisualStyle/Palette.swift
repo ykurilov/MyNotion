@@ -5,7 +5,16 @@ import AppKit
 public enum Palette {
     public static let textPrimary = themed(light: .hex(0x2C2C2B), dark: .hex(0xF0EFED))
     public static let textSecondary = themed(light: .hex(0x7D7A75), dark: .hex(0x9B9A97))
-    public static let sidebarText = themed(light: .hex(0x5F5E59), dark: .hex(0x9B9A97))
+    /// Названия строк панели. Тёмная — по снимку Notion для Mac 15.10.2026; светлая — прежняя, снимка нет.
+    public static let sidebarText = themed(light: .hex(0x5F5E59), dark: .hex(0xBCBAB7))
+    /// Значок документа и «Корзины» в строках панели: тусклее названия, как у Notion.
+    public static let sidebarIcon = themed(light: .hex(0x5F5E59), dark: .hex(0x9B9A97))
+    /// Заголовок группы «Страницы» (тёмная — по снимку Notion).
+    public static let sidebarGroupHeader = themed(light: .hex(0x7D7A75), dark: .hex(0x7C7A76))
+    /// Шторка панели и «✎» в верхней строке окна (тёмная — по снимку Notion).
+    public static let windowToolbarIcon = themed(light: .hex(0x7D7A75), dark: .hex(0xACA9A4))
+    /// Линия между панелью и страницей (тёмная — по снимку Notion).
+    public static let sidebarEdge = themed(light: .hex(0xE6E5E3), dark: .hex(0x2C2C2B))
     public static let pageBackground = themed(light: .hex(0xFFFFFF), dark: .hex(0x191919))
     public static let sidebarBackground = themed(light: .hex(0xF9F8F7), dark: .hex(0x202020))
     public static let border = themed(light: .hex(0xE6E5E3), dark: .hex(0x2F2F2F))

@@ -19,7 +19,7 @@ final class PageOutlineView: NSOutlineView {
         headerView = nil
         style = .plain
         backgroundColor = .clear
-        rowHeight = Metrics.Sidebar.rowHeight
+        rowHeight = Metrics.Sidebar.rowPitch
         intercellSpacing = .zero
         indentationPerLevel = Metrics.Sidebar.indentPerLevel
         // Колонка — ровно по панели: иначе раскрытие ветки расширяет её на отступ, и «⋯ +» уезжают за край.
@@ -106,10 +106,15 @@ final class PageTreeRowView: NSTableRowView {
         drawRoundedFill()
     }
 
+    /// Подсветка высотой `rowHeight` посередине шага строк: между соседними подсветками зазор, как у Notion.
+    var highlightRect: NSRect {
+        bounds.insetBy(dx: 0, dy: (bounds.height - Metrics.Sidebar.rowHeight) / 2)
+    }
+
     private func drawRoundedFill() {
         Palette.hoverBackground.setFill()
         let radius = Metrics.Sidebar.rowCornerRadius
-        NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).fill()
+        NSBezierPath(roundedRect: highlightRect, xRadius: radius, yRadius: radius).fill()
     }
 
     override func updateTrackingAreas() {
@@ -138,7 +143,7 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
     var onRenameCommitted: ((String) -> Void)?
 
     private let iconLabel = NSTextField(labelWithString: "")
-    private let documentIcon = NSImageView()
+    let documentIcon = NSImageView()
     private let disclosureButton = RowAccessoryButton()
     let titleLabel = NSTextField(labelWithString: "")
     let menuButton = RowAccessoryButton()

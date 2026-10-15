@@ -19,6 +19,8 @@ final class MainWindowModel {
     private(set) var trashEntries: [Page] = []
     private(set) var collapsedPageIds: Set<UUID> = []
     private(set) var sidebarWidth: Double = Metrics.Sidebar.defaultWidth
+    /// Боковая панель спрятана шторкой (⌘⌥S).
+    private(set) var isSidebarCollapsed = false
     private(set) var openDocument: PageDocument?
     /// Куда поставить курсор в только что открытой странице.
     private(set) var initialFocus: PageTextView.InitialFocus = .body
@@ -31,6 +33,7 @@ final class MainWindowModel {
         let windowState = try? store.windowState(WindowState.mainWindowId)
         collapsedPageIds = windowState?.collapsedPageIds ?? []
         sidebarWidth = windowState?.sidebarWidth ?? Metrics.Sidebar.defaultWidth
+        isSidebarCollapsed = windowState?.isSidebarCollapsed ?? false
         reloadTree()
         treeOperations.onChange = { [weak self] touched in self?.treeDidChange(touched) }
         treeOperations.onUndoFailure = { [weak self] error in
@@ -127,6 +130,12 @@ final class MainWindowModel {
     /// Пока тянут край панели; записывается в `saveSidebarWidth`, когда отпустили.
     func setSidebarWidth(_ width: Double) {
         sidebarWidth = min(max(width, Metrics.Sidebar.minimumWidth), Metrics.Sidebar.maximumWidth)
+    }
+
+    /// Шторка: спрятать или показать боковую панель; состояние переживает перезапуск.
+    func toggleSidebar() {
+        isSidebarCollapsed.toggle()
+        saveWindowState { $0.isSidebarCollapsed = isSidebarCollapsed }
     }
 
     func saveSidebarWidth() {
