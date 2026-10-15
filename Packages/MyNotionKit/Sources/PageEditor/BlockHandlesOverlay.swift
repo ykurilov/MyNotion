@@ -43,13 +43,16 @@ final class BlockHandlesOverlay: NSView {
         guard !isDragging else { return }
         if superview == nil { textView.addSubview(self) }
         if dropIndicator.superview == nil { textView.addSubview(dropIndicator) }
-        blockId = textView.document.blocks[index].id
+        let block = textView.document.blocks[index]
+        blockId = block.id
         let origin = textView.textContainerOrigin
         let columnLeft = origin.x
         let height = Metrics.BlockHandles.addButtonSize.height
         let width = Metrics.BlockHandles.addButtonLeadingOffset - Metrics.BlockHandles.dragHandleLeadingOffset + Metrics.BlockHandles.dragHandleSize.width
-        frame = NSRect(x: columnLeft - Metrics.BlockHandles.addButtonLeadingOffset, y: origin.y + line.top + (line.height - height) / 2,
-                       width: width, height: height)
+        // По середине строчных букв первой строки, как маркер списка: середина строки с отступом абзаца выше на 3–5.
+        let font = Typography.line(for: PageTextStorageMapper.textStyle(of: block.kind)).font
+        let centerY = origin.y + line.baseline - font.xHeight / 2
+        frame = NSRect(x: columnLeft - Metrics.BlockHandles.addButtonLeadingOffset, y: centerY - height / 2, width: width, height: height)
         isHidden = false
     }
 
