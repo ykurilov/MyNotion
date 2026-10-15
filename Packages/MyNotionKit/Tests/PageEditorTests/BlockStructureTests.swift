@@ -123,6 +123,70 @@ struct BlockStructureTests {
         #expect(editor.textView.string == "А\nБ\nВ\nГ\n")
     }
 
+    /// А с двумя вложенными, Б с одним вложенным, В.
+    static let nestedPage: [EditorFixture.Spec] = [
+        .bullet("А"), .bullet("а1", indent: 1), .bullet("а2", indent: 1), .bullet("Б"), .bullet("б1", indent: 1), .paragraph("В"),
+    ]
+
+    @Test("⌥⇧↓ и ⌥⇧↑ переносят пункт вместе с вложенными, через соседа с его вложенными")
+    func moveCarriesNestedItems() throws {
+        let editor = try EditorFixture(Self.nestedPage)
+        editor.placeCaret(inBlock: 0)
+
+        editor.perform(.moveBlocksDown)
+        #expect(editor.texts == ["Б", "б1", "А", "а1", "а2", "В"])
+        #expect(editor.indents == [0, 1, 0, 1, 1, 0], "Вложенность едет вместе с пунктом")
+        #expect(editor.document.blocks.map(\.sortKey) == editor.document.blocks.map(\.sortKey).sorted())
+        #expect(editor.textView.selectedRange().location == editor.textLocation(ofBlock: 2), "Курсор едет вместе с пунктом")
+
+        editor.perform(.moveBlocksUp)
+        #expect(editor.texts == ["А", "а1", "а2", "Б", "б1", "В"])
+
+        editor.undo()
+        #expect(editor.texts == ["Б", "б1", "А", "а1", "а2", "В"])
+        editor.undo()
+        #expect(editor.texts == ["А", "а1", "а2", "Б", "б1", "В"])
+
+        let saved = try editor.savedBlocks()
+        #expect(saved.map(\.text.string) == ["А", "а1", "а2", "Б", "б1", "В"])
+    }
+
+    @Test("Вложенный пункт переставляется среди своих соседей")
+    func nestedItemMovesAmongSiblings() throws {
+        let editor = try EditorFixture(Self.nestedPage)
+        editor.placeCaret(inBlock: 2)
+
+        editor.perform(.moveBlocksUp)
+        #expect(editor.texts == ["А", "а2", "а1", "Б", "б1", "В"])
+        #expect(editor.indents == [0, 1, 1, 0, 1, 0])
+    }
+
+    @Test("Перетаскивание за «⋮⋮» переносит пункт вместе с вложенными")
+    func dragCarriesNestedItems() throws {
+        let editor = try EditorFixture(Self.nestedPage)
+        let parent = editor.document.blocks[0].id
+
+        editor.step { editor.textView.moveBlock(parent, toGap: 5) }
+        #expect(editor.texts == ["Б", "б1", "А", "а1", "а2", "В"])
+        #expect(editor.indents == [0, 1, 0, 1, 1, 0])
+
+        editor.step { editor.textView.moveBlock(parent, toGap: 0) }
+        #expect(editor.texts == ["А", "а1", "а2", "Б", "б1", "В"])
+
+        editor.step { editor.textView.moveBlock(parent, toGap: 2) }
+        #expect(editor.texts == ["А", "а1", "а2", "Б", "б1", "В"], "В свои же вложенные пункт не переносится")
+
+        let child = editor.document.blocks[4].id
+        editor.step { editor.textView.moveBlock(child, toGap: 6) }
+        #expect(editor.texts == ["А", "а1", "а2", "Б", "В", "б1"], "Вложенный пункт без своих вложенных едет один")
+
+        editor.undo()
+        editor.undo() // шаг без перестановки
+        editor.undo()
+        #expect(editor.texts == ["Б", "б1", "А", "а1", "а2", "В"])
+        #expect(editor.textView.string == "Б\nб1\nА\nа1\nа2\nВ\n")
+    }
+
     @Test("Место сброса при перетаскивании: зазор ближе к середине блока")
     func dropGapFollowsPointer() {
         let frames: [ClosedRange<CGFloat>] = [0...30, 30...60, 60...90]

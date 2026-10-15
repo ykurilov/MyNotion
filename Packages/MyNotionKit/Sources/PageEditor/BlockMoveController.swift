@@ -44,27 +44,45 @@ public enum BlockMoveController {
         return (range, drafts)
     }
 
-    /// Перестановка выделенных блоков на одно место выше (`delta` = −1) или ниже (`delta` = 1).
-    static func moving(_ blocks: [Block], selected: Range<Int>, by delta: Int) -> (range: Range<Int>, drafts: [BlockDraft])? {
-        guard !selected.isEmpty else { return nil }
-        if delta < 0 {
-            guard selected.lowerBound > 0 else { return nil }
-            let range = selected.lowerBound - 1..<selected.upperBound
-            return (range, blocks[selected].map(BlockDraft.init) + [BlockDraft(blocks[range.lowerBound])])
-        }
-        guard selected.upperBound < blocks.count else { return nil }
-        let range = selected.lowerBound..<selected.upperBound + 1
-        return (range, [BlockDraft(blocks[selected.upperBound])] + blocks[selected].map(BlockDraft.init))
+    /// Конец вложенных пунктов блока `index`: следующие блоки глубже него едут вместе с ним.
+    static func subtreeEnd(_ blocks: [Block], of index: Int) -> Int {
+        var end = index + 1
+        while end < blocks.count, blocks[end].indent > blocks[index].indent { end += 1 }
+        return end
     }
 
-    /// Перенос блока `index` в зазор `gap` (0…count).
-    static func moving(_ blocks: [Block], blockAt index: Int, toGap gap: Int) -> (range: Range<Int>, drafts: [BlockDraft])? {
-        guard blocks.indices.contains(index), (0...blocks.count).contains(gap), gap != index, gap != index + 1 else { return nil }
-        let moved = BlockDraft(blocks[index])
-        if gap < index {
-            return (gap..<index + 1, [moved] + blocks[gap..<index].map(BlockDraft.init))
+    /// Перестановка выделенных блоков вместе с вложенными на одно место выше (`delta` = −1) или ниже (`delta` = 1),
+    /// как в Notion: сосед переступается целиком, со своими вложенными.
+    static func moving(_ blocks: [Block], selected: Range<Int>, by delta: Int) -> (range: Range<Int>, drafts: [BlockDraft])? {
+        guard !selected.isEmpty else { return nil }
+        let group = selected.lowerBound..<subtreeEnd(blocks, of: selected.upperBound - 1)
+        let groupIndent = blocks[group.lowerBound].indent
+        if delta < 0 {
+            // Сосед выше — ближайший блок не глубже группы; всё между ним и группой — его вложенные.
+            guard let above = blocks[..<group.lowerBound].lastIndex(where: { $0.indent <= groupIndent }) else { return nil }
+            let range = above..<group.upperBound
+            return (range, blocks[group].map(BlockDraft.init) + blocks[above..<group.lowerBound].map(BlockDraft.init))
         }
-        return (index..<gap, blocks[index + 1..<gap].map(BlockDraft.init) + [moved])
+        guard group.upperBound < blocks.count else { return nil }
+        let below = group.upperBound..<subtreeEnd(blocks, of: group.upperBound)
+        return (group.lowerBound..<below.upperBound, blocks[below].map(BlockDraft.init) + blocks[group].map(BlockDraft.init))
+    }
+
+    /// Блоки, которые едут при перестановке выделенных: выделенные и вложенные под последним.
+    static func movedGroup(_ blocks: [Block], selected: Range<Int>) -> Range<Int> {
+        selected.isEmpty ? selected : selected.lowerBound..<subtreeEnd(blocks, of: selected.upperBound - 1)
+    }
+
+    /// Перенос блока `index` вместе с вложенными в зазор `gap` (0…count). В свои же вложенные блок не переносится.
+    static func moving(_ blocks: [Block], blockAt index: Int, toGap gap: Int) -> (range: Range<Int>, drafts: [BlockDraft])? {
+        guard blocks.indices.contains(index), (0...blocks.count).contains(gap) else { return nil }
+        let group = index..<subtreeEnd(blocks, of: index)
+        guard gap < group.lowerBound || gap > group.upperBound else { return nil }
+        let moved = blocks[group].map(BlockDraft.init)
+        if gap < index {
+            return (gap..<group.upperBound, moved + blocks[gap..<index].map(BlockDraft.init))
+        }
+        return (index..<gap, blocks[group.upperBound..<gap].map(BlockDraft.init) + moved)
     }
 }
 
@@ -82,15 +100,16 @@ extension PageTextView {
         commitEdits()
         guard let selected = selectedBlockRange(),
               let change = BlockMoveController.moving(document.blocks, selected: selected, by: delta) else { return }
-        let moved = Set(document.blocks[selected].map(\.id))
+        let moved = Set(document.blocks[BlockMoveController.movedGroup(document.blocks, selected: selected)].map(\.id))
         changeBlocks(change.range, to: change.drafts, moved: moved, actionName: "Переставить блок")
     }
 
-    /// Перетащить блок за «⋮⋮» в зазор `gap` между блоками (0 — в начало страницы).
+    /// Перетащить блок за «⋮⋮» вместе с вложенными в зазор `gap` между блоками (0 — в начало страницы).
     public func moveBlock(_ id: UUID, toGap gap: Int) {
         commitEdits()
         guard let index = document.index(ofBlock: id),
               let change = BlockMoveController.moving(document.blocks, blockAt: index, toGap: gap) else { return }
-        changeBlocks(change.range, to: change.drafts, moved: [id], actionName: "Переставить блок")
+        let moved = Set(document.blocks[index..<BlockMoveController.subtreeEnd(document.blocks, of: index)].map(\.id))
+        changeBlocks(change.range, to: change.drafts, moved: moved, actionName: "Переставить блок")
     }
 }
