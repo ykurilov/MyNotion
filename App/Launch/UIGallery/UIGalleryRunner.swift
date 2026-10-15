@@ -141,8 +141,10 @@ final class UIGalleryRunner {
             await open(page.pageId)
             switch caret {
             case .none: break
-            case .inMiddle: PageEditorPreview.placeCaret(atEndOf: page.emptyInMiddle, in: window)
-            case .atEnd: PageEditorPreview.placeCaret(atEndOf: page.emptyAtEnd, in: window)
+            case .inMiddle, .atEnd:
+                PageEditorPreview.placeCaret(atEndOf: caret == .inMiddle ? page.emptyInMiddle : page.emptyAtEnd, in: window)
+                GalleryTarget.scrollToSelection(in: window)
+                if let problem = GalleryTarget.selectionProblem("курсор", in: window) { return problem }
             }
 
         case .emptyPage:
@@ -157,21 +159,31 @@ final class UIGalleryRunner {
 
         case .blockHover(let kind):
             await open(library.sample.page.id)
-            guard let block = library.sampleBlock(kind), PageEditorPreview.hoverBlock(block.id, in: window) else {
+            guard let block = library.sampleBlock(kind), GalleryTarget.scrollToBlock(block.id, in: window),
+                  PageEditorPreview.hoverBlock(block.id, in: window) else {
                 return "нет блока \(kind.rawValue) в образце"
             }
+            if let problem = GalleryTarget.handlesProblem("ручки блока \(kind.rawValue)", in: window) { return problem }
 
         case .slashMenu(let filter):
             guard let page = library.blockKindPages[.paragraph] else { return "нет страницы абзацев" }
             await open(page.pageId)
             PageEditorPreview.placeCaret(atEndOf: page.emptyInMiddle, in: window)
+            GalleryTarget.scrollToSelection(in: window)
             PageEditorPreview.type("/" + filter, in: window)
             if window.childWindows?.contains(where: \.isVisible) != true { return "меню «/» не открылось" }
+            if let problem = GalleryTarget.selectionProblem("курсор", in: window) ?? GalleryTarget.popupsProblem("меню «/»", in: window) {
+                return problem
+            }
 
         case .blockMenu:
             await open(library.sample.page.id)
-            guard let block = library.sampleBlock(.heading1), PageEditorPreview.openBlockMenu(forBlock: block.id, in: window) else {
+            guard let block = library.sampleBlock(.heading1), GalleryTarget.scrollToBlock(block.id, in: window),
+                  PageEditorPreview.openBlockMenu(forBlock: block.id, in: window) else {
                 return "меню блока не открылось"
+            }
+            if let problem = GalleryTarget.handlesProblem("ручки блока", in: window) ?? GalleryTarget.popupsProblem("меню блока", in: window) {
+                return problem
             }
 
         case .formattedSelection:
@@ -181,6 +193,8 @@ final class UIGalleryRunner {
             let start = text.range(of: "жирный").location, end = NSMaxRange(text.range(of: "зачёркнутый"))
             guard start != NSNotFound, end <= text.length else { return "в первом абзаце нет оформления" }
             PageEditorPreview.select(NSRange(location: start, length: end - start), inBlock: block.id, in: window)
+            GalleryTarget.scrollToSelection(in: window)
+            if let problem = GalleryTarget.selectionProblem("выделение", in: window) { return problem }
 
         case .sidebarTree(let collapsed):
             await open(library.sample.page.id)
@@ -189,16 +203,20 @@ final class UIGalleryRunner {
         case .sidebarRowHover(let longTitle):
             await open(library.sample.page.id)
             let pageId = longTitle ? library.longTitlePage : library.projects
-            guard let row = PageTreePreview.row(ofPage: pageId, in: window), PageTreeHoverPreview.hoverRow(row, in: window) else {
-                return "строки дерева не видно"
-            }
+            guard let row = PageTreePreview.row(ofPage: pageId, in: window) else { return "строки дерева нет" }
+            GalleryTarget.scrollToRow(row, in: window)
+            guard PageTreeHoverPreview.hoverRow(row, in: window) else { return "строки дерева не видно" }
+            if let problem = GalleryTarget.rowProblem("строка дерева", row, in: window) { return problem }
 
         case .sidebarSelectedRow:
             await open(library.deepPage)
 
         case .sidebarRenaming:
             await open(library.sample.page.id)
+            guard let row = PageTreePreview.row(ofPage: library.projectBranch[1], in: window) else { return "строки дерева нет" }
+            GalleryTarget.scrollToRow(row, in: window)
             guard PageTreePreview.beginRenaming(page: library.projectBranch[1], in: window) else { return "строку не переименовать" }
+            if let problem = GalleryTarget.rowProblem("строка дерева", row, in: window) { return problem }
 
         case .trash(let trash):
             await open(library.sample.page.id)
@@ -207,6 +225,7 @@ final class UIGalleryRunner {
             case .open:
                 await toggleTrash()
                 guard isTrashShown else { return "окно корзины не открылось" }
+                if let problem = GalleryTarget.popupsProblem("окно корзины", in: window) { return problem }
             case .confirmDeleteForever:
                 await toggleTrash()
                 guard GalleryInput.clickFirstDeleteForever() else { return "окно корзины не открылось" }
@@ -216,6 +235,7 @@ final class UIGalleryRunner {
                 await settle()
                 await toggleTrash()
                 guard isTrashShown else { return "окно корзины не открылось" }
+                if let problem = GalleryTarget.popupsProblem("окно корзины", in: window) { return problem }
             }
 
         case .saveErrorBanner:
