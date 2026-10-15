@@ -46,19 +46,19 @@ struct SidebarGeometryTests {
     @Test("Окно корзины рисует скругление, рамку и тень вокруг карточки")
     func trashPanelDrawsChrome() throws {
         let surface = TrashPanelSurfaceView(cardSize: NSSize(width: Metrics.TrashPanel.width, height: 200))
-        surface.appearance = NSAppearance(named: .darkAqua)
-        let bitmap = try Self.render(surface)
         let card = surface.cardRect
-        let margin = Metrics.TrashPanel.shadowMargin
         // Тень под карточкой: пиксели ниже карточки не пустые.
-        #expect(bitmap.alpha(atX: card.midX, y: card.maxY + 4, flipped: surface.isFlipped) > 0.005, "нет тени")
+        let shadowed = try Self.render(surface)
+        #expect(shadowed.alpha(atX: card.midX, y: card.maxY + 4, flipped: true) > 0.005, "нет тени")
         // В самом углу карточки — скругление: пиксель угла пустой или почти.
-        #expect(bitmap.alpha(atX: card.minX + 0.5, y: card.minY + 0.5, flipped: surface.isFlipped) < 0.5, "нет скругления")
-        // Рамка в тёмной теме видна: край карточки отличается от её середины.
-        let edge = bitmap.color(atX: card.minX - 0.5, y: card.midY, flipped: surface.isFlipped)
-        let middle = bitmap.color(atX: card.midX, y: card.midY, flipped: surface.isFlipped)
-        #expect(abs(edge.brightness - middle.brightness) > 0.03, "рамки не видно: \(edge) и \(middle)")
-        #expect(margin > 0)
+        #expect(shadowed.alpha(atX: card.minX + 0.5, y: card.minY + 0.5, flipped: true) < 0.5, "нет скругления")
+        // Рамка в тёмной теме видна: на странице, как её видит глаз, край ярче страницы рядом за ним.
+        let onPage = PageBackdrop(surface: surface)
+        onPage.appearance = NSAppearance(named: .darkAqua)
+        let bitmap = try Self.render(onPage)
+        let ring = bitmap.color(atX: card.minX - 0.5, y: card.midY, flipped: true)
+        let outside = bitmap.color(atX: card.minX - 3, y: card.midY, flipped: true)
+        #expect(ring.brightness - outside.brightness > 0.03, "рамки не видно: \(ring) и \(outside)")
     }
 
     // MARK: Строки дерева (№16, 17)
@@ -189,6 +189,24 @@ struct SidebarGeometryTests {
 }
 
 /// Пиксели снимка вида в точках вида.
+/// Окно корзины поверх страницы: так его видит глаз (на прозрачном фоне тёмная тень искажает край).
+final class PageBackdrop: NSView {
+    init(surface: NSView) {
+        super.init(frame: surface.bounds)
+        addSubview(surface)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
+
+    override var isFlipped: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        Palette.pageBackground.setFill()
+        bounds.fill()
+    }
+}
+
 struct Bitmap {
     let rep: NSBitmapImageRep
     let size: NSSize

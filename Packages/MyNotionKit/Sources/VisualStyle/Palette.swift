@@ -28,13 +28,9 @@ public enum Palette {
         dark: .hex(0xF0EFED).withAlphaComponent(0.4)
     )
 
-    /// Фон всплывающих панелей (окно корзины): в тёмной теме светлее страницы, как в Notion (≈).
-    public static let popupPanelBackground = themed(light: .hex(0xFFFFFF), dark: .hex(0x252525))
-    /// Рамка всплывающих панелей: в светлой — из тени меню, в тёмной — видимая светлая (≈ по Notion).
-    public static let popupPanelRing = themed(light: .rgba(42, 28, 0, 0.07), dark: .rgba(255, 255, 255, 0.094))
     /// Разрушающие действия: «Удалить» в меню блока, «Очистить корзину» под мышью — красный Notion (≈).
     public static let destructiveText = themed(light: .hex(0xD44C47), dark: .hex(0xFF7369))
-    /// Фон всплывающих меню: в тёмной теме светлее страницы, как в Notion (≈ по Notion).
+    /// Фон всплывающих панелей (меню, окно корзины): в тёмной теме светлее страницы, как в Notion (≈ по Notion).
     public static let popupMenuBackground = themed(light: .hex(0xFFFFFF), dark: .hex(0x252525))
 
     /// Тень всплывающих меню: три слоя, последний — тонкая рамка. В тёмной теме тень гуще, а рамка светлая:

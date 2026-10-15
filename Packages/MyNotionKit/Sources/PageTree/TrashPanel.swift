@@ -186,7 +186,7 @@ final class TrashPanelWindow: NSPanel {
     }
 }
 
-/// Карточка всплывающей панели (contracts/visual-style.md, «Всплывающие меню»): скругление 10, фон, тень и рамка.
+/// Карточка окна корзины: рисуется как всплывающие меню (`PopupSurface`), содержимое обрезано по скруглению.
 final class TrashPanelSurfaceView: NSView {
     var cardSize: NSSize { didSet { needsLayout = true; needsDisplay = true } }
     private var content: NSView?
@@ -223,25 +223,6 @@ final class TrashPanelSurfaceView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        let radius = Metrics.PopupMenu.cornerRadius
-        let card = cardRect
-        let path = NSBezierPath(roundedRect: card, xRadius: radius, yRadius: radius)
-        for layer in Palette.popupMenuShadow where layer.spread == 0 {
-            NSGraphicsContext.saveGraphicsState()
-            let shadow = NSShadow()
-            // Сдвиг тени — в неперевёрнутых координатах: вниз — отрицательный.
-            shadow.shadowOffset = NSSize(width: 0, height: -layer.offsetY)
-            shadow.shadowBlurRadius = layer.blurRadius
-            shadow.shadowColor = layer.color
-            shadow.set()
-            Palette.popupPanelBackground.setFill()
-            path.fill()
-            NSGraphicsContext.restoreGraphicsState()
-        }
-        // Рамка 1 снаружи карточки, затем сама карточка.
-        Palette.popupPanelRing.setFill()
-        NSBezierPath(roundedRect: card.insetBy(dx: -1, dy: -1), xRadius: radius + 1, yRadius: radius + 1).fill()
-        Palette.popupPanelBackground.setFill()
-        path.fill()
+        PopupSurface.draw(card: cardRect)
     }
 }

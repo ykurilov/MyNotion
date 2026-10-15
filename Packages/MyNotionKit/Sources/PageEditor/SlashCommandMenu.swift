@@ -199,30 +199,7 @@ final class PopupMenuView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        let radius = Metrics.PopupMenu.cornerRadius
-        let path = NSBezierPath(roundedRect: menuRect, xRadius: radius, yRadius: radius)
-        for layer in Palette.popupMenuShadow {
-            NSGraphicsContext.saveGraphicsState()
-            let shadow = NSShadow()
-            // Окно меню не перевёрнуто для теней: вниз — отрицательный сдвиг.
-            shadow.shadowOffset = NSSize(width: 0, height: -layer.offsetY)
-            shadow.shadowBlurRadius = layer.blurRadius
-            shadow.shadowColor = layer.color
-            shadow.set()
-            Palette.popupMenuBackground.setFill()
-            if layer.spread > 0 {
-                let spread = NSBezierPath(roundedRect: menuRect.insetBy(dx: -layer.spread, dy: -layer.spread),
-                                          xRadius: radius + layer.spread, yRadius: radius + layer.spread)
-                NSShadow().set()
-                layer.color.setFill()
-                spread.fill()
-            } else {
-                path.fill()
-            }
-            NSGraphicsContext.restoreGraphicsState()
-        }
-        Palette.popupMenuBackground.setFill()
-        path.fill()
+        PopupSurface.draw(card: menuRect)
     }
 }
 
