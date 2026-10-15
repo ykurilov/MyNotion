@@ -25,6 +25,9 @@ public enum Metrics {
         public static let bottomPadding: CGFloat = 180
         /// Внутренний отступ блока по краям текста.
         public static let blockHorizontalPadding: CGFloat = 2
+        /// Добавка к отступу между абзацем и пунктом списка, чекбоксом или подстраницей, в обе стороны:
+        /// шаг строк ≈ 40 вместо 30, как у Notion (≈ по снимку).
+        public static let paragraphListSpacing: CGFloat = 10
         /// Сдвиг вложенного пункта на уровень.
         public static let indentPerLevel: CGFloat = 32
     }

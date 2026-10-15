@@ -138,7 +138,8 @@ extension PageTextView {
         }
         var inline = typingAttributes
         inline[key] = inline[key] as? Bool == true ? nil : true
-        typingAttributes = PageTextStorageMapper.typingAttributes(for: document.blocks[position.index], inline: inline)
+        typingAttributes = PageTextStorageMapper.typingAttributes(for: document.blocks[position.index],
+                                                                 after: mapper.previousKind(ofBlockAt: position.index), inline: inline)
     }
 
     /// Ссылка на выделенном тексте; `nil` — убрать (меню «Формат → Ссылка»).

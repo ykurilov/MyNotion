@@ -381,7 +381,8 @@ public final class PageTextView: NSTextView {
         let selection = selectedRange()
         guard selection.length == 0, isAtEmptyParagraph(selection.location),
               let position = mapper.blockPosition(at: selection.location) else { return }
-        typingAttributes = PageTextStorageMapper.typingAttributes(for: document.blocks[position.index])
+        typingAttributes = PageTextStorageMapper.typingAttributes(for: document.blocks[position.index],
+                                                                 after: mapper.previousKind(ofBlockAt: position.index))
     }
 
     private func isAtEmptyParagraph(_ location: Int) -> Bool {
