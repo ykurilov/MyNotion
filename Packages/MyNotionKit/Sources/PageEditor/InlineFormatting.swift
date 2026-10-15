@@ -155,6 +155,25 @@ extension PageTextView {
         changeBlocks(blocks, to: drafts, actionName: "Ссылка")
     }
 
+    /// ⌘-щелчок по тексту ссылки открывает её адрес, как в Notion. Простой щелчок ставит курсор.
+    func openLink(at point: NSPoint, modifiers: NSEvent.ModifierFlags) -> Bool {
+        guard modifiers.contains(.command), let url = link(at: point) else { return false }
+        openURL(url)
+        return true
+    }
+
+    /// Ссылка под точкой (координаты окна текста): знак ссылки, рамка которого содержит точку.
+    private func link(at point: NSPoint) -> URL? {
+        guard let storage = textStorage, let window else { return nil }
+        let index = characterIndexForInsertion(at: point)
+        for candidate in [index, index - 1] where candidate >= 0 && candidate < storage.length {
+            guard let url = storage.attribute(.inlineLink, at: candidate, effectiveRange: nil) as? URL else { continue }
+            let onScreen = firstRect(forCharacterRange: NSRange(location: candidate, length: 1), actualRange: nil)
+            if convert(window.convertFromScreen(onScreen), from: nil).contains(point) { return url }
+        }
+        return nil
+    }
+
     /// Ссылка, которая уже стоит на выделении.
     private var selectedLink: URL? {
         let selection = selectedRange()

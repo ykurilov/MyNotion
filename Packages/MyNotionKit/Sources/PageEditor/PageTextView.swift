@@ -25,6 +25,8 @@ public final class PageTextView: NSTextView {
     }
     /// Щелчок по блоку-подстранице: открыть страницу.
     public var onOpenPage: (@MainActor (UUID) -> Void)?
+    /// ⌘-щелчок по ссылке: открыть адрес (по умолчанию — в браузере по умолчанию).
+    public var openURL: @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) }
     let layoutDelegate = BlockLayoutDelegate()
     let popups = EditorPopupController()
     lazy var blockHandles = BlockHandlesOverlay(textView: self)
@@ -387,6 +389,7 @@ public final class PageTextView: NSTextView {
             onOpenPage?(pageId)
             return
         }
+        if openLink(at: point, modifiers: event.modifierFlags) { return }
         closePopups()
         super.mouseDown(with: event)
     }

@@ -87,6 +87,30 @@ struct InlineStyleTests {
         #expect(editor.document.blocks[0].text == InlineText("Смотри сайт тут"))
     }
 
+    @Test("⌘-щелчок по ссылке открывает её в браузере, простой щелчок — нет")
+    func commandClickOpensLink() throws {
+        let editor = try EditorFixture([.paragraph("Смотри сайт тут")])
+        let url = try #require(URL(string: "https://kurilov.cloud/notes"))
+        editor.select(inBlock: 0, "сайт")
+        editor.step { editor.textView.setLink(url) }
+        var opened: [URL] = []
+        editor.textView.openURL = { opened.append($0) }
+
+        let textView = editor.textView
+        func center(of substring: String) -> NSPoint {
+            let found = (textView.string as NSString).range(of: substring)
+            let onScreen = textView.firstRect(forCharacterRange: NSRange(location: found.location + 1, length: 1), actualRange: nil)
+            let rect = textView.convert(editor.window.convertFromScreen(onScreen), from: nil)
+            return NSPoint(x: rect.midX, y: rect.midY)
+        }
+
+        #expect(!textView.openLink(at: center(of: "сайт"), modifiers: []), "Простой щелчок ставит курсор")
+        #expect(!textView.openLink(at: center(of: "тут"), modifiers: .command), "Мимо ссылки ничего не открывается")
+        #expect(opened.isEmpty)
+        #expect(textView.openLink(at: center(of: "сайт"), modifiers: .command))
+        #expect(opened == [url])
+    }
+
     @Test("Адрес без выделения вставляется текстом")
     func pastingURLWithoutSelectionInsertsText() throws {
         let editor = try EditorFixture([.paragraph("см. ")])
