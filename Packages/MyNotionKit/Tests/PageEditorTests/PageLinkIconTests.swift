@@ -20,7 +20,7 @@ private final class DrawingView: NSView {
 @MainActor
 @Suite("Значок подстраницы без иконки")
 struct PageLinkIconTests {
-    @Test("Подстраница без иконки — тот же пустой лист, что в дереве слева (№ 18)")
+    @Test("Подстраница без иконки — тот же лист со строчками, что в дереве слева (№ 18)")
     func pageLinkWithoutIconUsesDocumentGlyph() throws {
         let column = CGRect(x: 0, y: 0, width: 24, height: 30)
         let baseline: CGFloat = 20
@@ -40,8 +40,5 @@ struct PageLinkIconTests {
         #expect(abs(linkInk.minX - glyphInk.minX) <= 0.5 && abs(linkInk.maxX - glyphInk.maxX) <= 0.5
                 && abs(linkInk.minY - glyphInk.minY) <= 0.5 && abs(linkInk.maxY - glyphInk.maxY) <= 0.5,
                 "Значок подстраницы \(linkInk), лист из дерева \(glyphInk)")
-        // Лист пустой: без строчек текста внутри.
-        let inside = NSRect(x: box.midX - 2, y: box.midY - 2, width: 4, height: 4)
-        #expect(try ViewPixels(link, appearance: .aqua).inkBounds(in: inside, threshold: 0.1) == nil, "Внутри значка линии")
     }
 }
