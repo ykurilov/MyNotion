@@ -14,6 +14,8 @@ struct LaunchOptions {
     var windowSnapshotURL: URL?
     /// `--typing-benchmark <путь>`: замер отклика набора, переходов и прокрутки (T048), отчёт в файл и выход.
     var typingBenchmarkURL: URL?
+    /// `--hover-sidebar-row <номер>`: на снимке окна строка дерева с этим номером (с нуля) — как под мышью.
+    var hoveredSidebarRow: Int?
     /// `--appearance light|dark`: тема окна вместо системной.
     var appearanceName: NSAppearance.Name?
 
@@ -27,6 +29,7 @@ struct LaunchOptions {
             case "--launch-report": launchReportURL = remaining.popFirst().map(Self.fileURL)
             case "--window-snapshot": windowSnapshotURL = remaining.popFirst().map(Self.fileURL)
             case "--typing-benchmark": typingBenchmarkURL = remaining.popFirst().map(Self.fileURL)
+            case "--hover-sidebar-row": hoveredSidebarRow = remaining.popFirst().flatMap { Int($0) }
             case "--appearance":
                 switch remaining.popFirst() {
                 case "light": appearanceName = .aqua

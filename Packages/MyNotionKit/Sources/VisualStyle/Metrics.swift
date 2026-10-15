@@ -113,9 +113,15 @@ public enum Metrics {
         public static let indentPerLevel: CGFloat = 9
         /// «⋯» и «+» справа в строке при наведении.
         public static let rowAccessorySize: CGFloat = 20
+        /// Промежуток между «⋯» и «+»; их фон при наведении — со скруглением `rowAccessoryCornerRadius`.
+        public static let rowAccessorySpacing: CGFloat = 2
+        public static let rowAccessoryCornerRadius: CGFloat = 4
         public static let searchFieldHeight: CGFloat = 32
         public static let searchFieldCornerRadius: CGFloat = 6
         public static let syncStatusRowHeight: CGFloat = 30
+        /// Нижние строки панели («Корзина»): воздух над разделителем и под ним, отступ от нижнего края окна.
+        public static let footerDividerSpacing: CGFloat = 6
+        public static let footerBottomInset: CGFloat = 10
         /// Окно корзины над строкой «Корзина» (в contracts/visual-style.md не задано).
         public static let trashPopoverWidth: CGFloat = 360
         public static let trashPopoverMaxHeight: CGFloat = 420

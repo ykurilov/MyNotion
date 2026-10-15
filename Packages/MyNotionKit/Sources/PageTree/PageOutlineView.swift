@@ -137,10 +137,10 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
 
     private let iconLabel = NSTextField(labelWithString: "")
     private let documentIcon = NSImageView()
-    private let disclosureButton = NSButton()
+    private let disclosureButton = RowAccessoryButton()
     private let titleLabel = NSTextField(labelWithString: "")
-    private let menuButton = NSButton()
-    private let addButton = NSButton()
+    private let menuButton = RowAccessoryButton()
+    private let addButton = RowAccessoryButton()
     private var title = ""
     private var hasChildren = false
     private var isExpanded = false
@@ -204,17 +204,18 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
             titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
             titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -padding),
 
-            addButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -padding / 2),
+            addButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -padding),
             addButton.centerYAnchor.constraint(equalTo: centerYAnchor),
             addButton.widthAnchor.constraint(equalToConstant: accessorySize),
             addButton.heightAnchor.constraint(equalToConstant: accessorySize),
-            menuButton.trailingAnchor.constraint(equalTo: addButton.leadingAnchor),
+            menuButton.trailingAnchor.constraint(equalTo: addButton.leadingAnchor, constant: -Metrics.Sidebar.rowAccessorySpacing),
             menuButton.centerYAnchor.constraint(equalTo: centerYAnchor),
             menuButton.widthAnchor.constraint(equalToConstant: accessorySize),
             menuButton.heightAnchor.constraint(equalToConstant: accessorySize),
         ])
         titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        titleBeforeAccessories = titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: menuButton.leadingAnchor)
+        titleBeforeAccessories = titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: menuButton.leadingAnchor,
+                                                                      constant: -Metrics.Sidebar.rowAccessorySpacing)
         updateHoverState()
     }
 
@@ -322,4 +323,34 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
     @objc private func toggleExpanded() { onToggleExpanded?() }
     @objc private func addSubpage() { onAddSubpage?() }
     @objc private func showMenu() { onShowMenu?(menuButton) }
+}
+
+/// Кнопка строки («⋯», «+», стрелка): под мышью — фон hoverBackground со скруглением, как в Notion.
+final class RowAccessoryButton: NSButton {
+    var isHovered = false {
+        didSet { if isHovered != oldValue { needsDisplay = true } }
+    }
+
+    override var isHidden: Bool {
+        didSet { if isHidden { isHovered = false } }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        if isHovered {
+            Palette.hoverBackground.setFill()
+            let radius = Metrics.Sidebar.rowAccessoryCornerRadius
+            NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).fill()
+        }
+        super.draw(dirtyRect)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
+                                       owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) { isHovered = true }
+    override func mouseExited(with event: NSEvent) { isHovered = false }
 }

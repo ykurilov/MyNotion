@@ -4,6 +4,8 @@ options:
   deploymentTarget:
     macOS: "26.0"
   createIntermediateGroups: true
+  # Приложение русское: системные пункты меню («Файл», «Правка», «Окно») — тоже по-русски.
+  developmentLanguage: ru
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -48,6 +50,7 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: MyNotion
+        INFOPLIST_KEY_CFBundleDevelopmentRegion: ru
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
         INFOPLIST_KEY_NSHumanReadableCopyright: ""
         MARKETING_VERSION: "0.1.0"
