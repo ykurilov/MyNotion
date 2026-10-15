@@ -37,8 +37,8 @@ final class BlockEditingTests: XCTestCase {
 
         // Esc закрывает меню и оставляет набранное.
         app.typeKey(.return, modifierFlags: [])
-        app.typeText("/зат")
-        XCTAssertTrue(app.popupItem("heading1").waitForExistence(timeout: 2), "Поиск «зат» не нашёл заголовки")
+        app.typeText("/заг")
+        XCTAssertTrue(app.popupItem("heading1").waitForExistence(timeout: 2), "Поиск «заг» не нашёл заголовки")
         app.typeKey(.escape, modifierFlags: [])
         XCTAssertFalse(app.popupItem("heading1").waitForExistence(timeout: 1), "Esc не закрыл меню")
 
@@ -52,13 +52,13 @@ final class BlockEditingTests: XCTestCase {
             .init(kind: "checkbox", text: "дело"),
             .init(kind: "paragraph", text: "абзац"),
             .init(kind: "checkbox", text: "из меню"),
-            .init(kind: "checkbox", text: "/зат"),
+            .init(kind: "checkbox", text: "/заг"),
         ]
         XCTAssertEqual(try library.savedBlocks(ofPage: "Все блоки"), expected)
 
         app = library.launchApp()
         XCTAssertTrue(app.pageBody.waitForExistence(timeout: 10))
-        XCTAssertEqual(app.pageBody.value as? String, "Первый\nВторой\nТретий\nпункт\nномер\nдело\nабзац\nиз меню\n/зат")
+        XCTAssertEqual(app.pageBody.value as? String, "Первый\nВторой\nТретий\nпункт\nномер\nдело\nабзац\nиз меню\n/заг")
         app.terminate()
     }
 
