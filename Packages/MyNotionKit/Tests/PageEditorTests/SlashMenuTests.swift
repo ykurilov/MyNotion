@@ -98,7 +98,7 @@ struct SlashMenuPlacementTests {
                 "Верх меню \(menu.maxY), низ строки \(line.minY): зазор должен быть \(Metrics.PopupMenu.anchorSpacing)")
     }
 
-    @Test("Пустая строка с «/»: подсказка «Найти тип блока» за «/», строка подсвечена hoverBackground")
+    @Test("Пустая строка с «/»: подсказка «Начните вводить для поиска» сразу за «/», как «Type to search» у Notion; строка подсвечена hoverBackground")
     func slashLineShowsHint() throws {
         let editor = try EditorFixture([.paragraph("Выше"), .paragraph(), .paragraph("Ниже")])
         editor.placeCaret(inBlock: 1)
@@ -109,8 +109,9 @@ struct SlashMenuPlacementTests {
         let slash = textView.convert(editor.window.convertFromScreen(Self.screenRect(of: NSRange(location: start, length: 1), in: editor)), from: nil)
 
         #expect(!hint.isHidden)
-        #expect(hint.stringValue == "Найти тип блока")
-        #expect(hint.frame.minX >= slash.maxX, "Подсказка с \(hint.frame.minX), «/» до \(slash.maxX)")
+        #expect(hint.stringValue == "Начните вводить для поиска")
+        let hintTextStart = hint.frame.minX + PageTextView.hintLabelTextInset
+        #expect(abs(hintTextStart - slash.maxX) <= 1, "Текст подсказки с \(hintTextStart), «/» до \(slash.maxX): без сдвига, как у Notion")
         let baseline = try #require(textView.markerLine(ofBlockAt: 1)).baseline + textView.textContainerOrigin.y
         #expect(abs(hint.frame.minY + hint.firstBaselineOffsetFromTop - baseline) < 0.5)
         let highlight = try #require(textView.slashQueryHighlightFrame, "Подсветки нет")

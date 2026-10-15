@@ -570,10 +570,11 @@ public final class PageTextView: NSTextView {
         let line = markerLine(ofBlockAt: position.index)
         let textStart = line.map { $0.caretX + textContainerOrigin.x } ?? caret.minX
         let baseline = line.map { $0.baseline + textContainerOrigin.y } ?? caret.maxY
-        // «Найти тип блока» — за «/», чуть правее курсора; `firstRect` поправлен на тот же потерянный отступ.
+        // «Начните вводить для поиска» — сразу за «/», с места курсора, как «Type to search» у Notion;
+        // `firstRect` поправлен на тот же потерянный отступ.
         let blockStart = convert(window.convertFromScreen(firstRect(forCharacterRange: NSRange(location: selection.location - position.offset, length: 0),
                                                                     actualRange: nil)), from: nil)
-        let x = isSlashLine ? caret.minX + (textStart - blockStart.minX) + Metrics.Page.emptyHintCaretGap : textStart - Self.hintLabelTextInset
+        let x = (isSlashLine ? caret.minX + (textStart - blockStart.minX) : textStart) - Self.hintLabelTextInset
         let size = emptyParagraphHint.frame.size
         emptyParagraphHint.frame = NSRect(x: x, y: baseline - emptyParagraphHint.firstBaselineOffsetFromTop, width: size.width, height: size.height)
         emptyParagraphHint.isHidden = false

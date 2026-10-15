@@ -27,8 +27,8 @@ public enum Metrics {
         public static let iconFontSize: CGFloat = 78
         /// Под иконкой — место под строку скрытых кнопок, как у Notion (≈ по снимку: верх букв названия на 267).
         public static let iconToTitleSpacing: CGFloat = 40
-        /// «Без названия» и «Найти тип блока» за «/» правее курсора: курсор не налезает на первую букву (≈ по снимку).
-        /// Подсказка пустого блока — без зазора, с начала текста блока.
+        /// «Без названия» правее курсора: курсор не налезает на первую букву (≈ по снимку).
+        /// Подсказка пустого блока и «Начните вводить для поиска» за «/» — без зазора, с места курсора.
         public static let emptyHintCaretGap: CGFloat = 1.5
         /// Поля по бокам колонки, когда окно уже колонки (≈ по снимку).
         public static let minimumSideInset: CGFloat = 96
@@ -210,30 +210,29 @@ public enum Metrics {
         public static let buttonCornerRadius: CGFloat = 6
     }
 
-    /// Меню «/», меню блока, выдача поиска.
+    /// Меню «/», меню блока, выдача поиска: плотный список как в Notion 7.38.1 (снимок 15.10.2026, точность ±1,2).
     public enum PopupMenu {
         public static let cornerRadius: CGFloat = 10
         public static let slashMenuWidth: CGFloat = 324
-        public static let slashMenuRowHeight: CGFloat = 46
-        public static let slashMenuIconSize: CGFloat = 46
-        public static let slashMenuIconCornerRadius: CGFloat = 4
-        /// Поля меню: сверху и снизу, строк от краёв меню, текста от значка (≈ по снимку).
+        public static let blockMenuWidth: CGFloat = 240
+        /// Шаг строк; подсветка выбранной строки — на 1 меньше сверху и снизу, скругление 6.
+        public static let rowHeight: CGFloat = 33
+        public static let rowHighlightInset: CGFloat = 1
+        public static let rowCornerRadius: CGFloat = 6
+        /// Поля меню сверху; строка отступает 4 от краёв меню; значок и быстрые символы — в 8 от краёв строки.
         public static let verticalPadding: CGFloat = 6
         public static let rowInset: CGFloat = 4
-        public static let rowHorizontalPadding: CGFloat = 6
-        public static let rowCornerRadius: CGFloat = 6
-        public static let iconToTitleSpacing: CGFloat = 10
-        /// Меню блока: строки без пояснений.
-        public static let blockMenuWidth: CGFloat = 240
-        public static let blockMenuRowHeight: CGFloat = 28
-        public static let blockMenuIconSize: CGFloat = 20
-        /// Исходный размер шрифта надписи в значке («Aa», «H1») и системных значков; на экране они подогнаны под `…IconInkSize`.
-        public static let slashMenuIconGlyphSize: CGFloat = 18
-        public static let blockMenuIconGlyphSize: CGFloat = 14
-        /// Квадрат рисунка значка: все значки вписаны в него и стоят по его центру — одна колонка одной ширины,
-        /// как в Notion (раунд 2, № 6; ≈ по снимку).
-        public static let slashMenuIconInkSize: CGFloat = 24
-        public static let blockMenuIconInkSize: CGFloat = 16
+        public static let rowHorizontalPadding: CGFloat = 8
+        /// Место значка 20 без рамки; рисунок вписан в квадрат 16 по центру; между значком и названием 8.
+        public static let iconSize: CGFloat = 20
+        public static let iconInkSize: CGFloat = 16
+        public static let iconToTitleSpacing: CGFloat = 8
+        /// Размер шрифта надписей «T», «H₁»… и системных значков до вписывания в квадрат.
+        public static let iconGlyphSize: CGFloat = 16
+        /// Заголовок раздела «Основные блоки» над строками меню «/».
+        public static let sectionHeaderHeight: CGFloat = 27
+        /// Под строкой «Закрыть меню» до низа меню.
+        public static let bottomPadding: CGFloat = 2
         /// Сколько строк видно без прокрутки.
         public static let maximumVisibleRows = 8
         /// Зазор между строкой текста и меню.

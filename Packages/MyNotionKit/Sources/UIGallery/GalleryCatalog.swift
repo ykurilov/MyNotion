@@ -26,8 +26,10 @@ public enum GalleryScene: Hashable, Sendable {
     case blockDragging
     /// Выделенный текст с жирным, курсивом и кодом.
     case formattedSelection
-    /// Выделены два пункта нумерованного списка и абзац под ними: блоки целиком.
+    /// Выделен текст двух пунктов нумерованного списка и абзаца под ними: полосы по тексту построчно.
     case selectionAcrossBlocks
+    /// Те же блоки в режиме выделения блоков (Esc, «⋮⋮», протяжка с поля): прямоугольник на каждый блок.
+    case blockSelection
     /// Блоки с переносами строк (Shift+Enter); курсор во второй строке пункта.
     case softLineBreaks
     /// Выделение через блоки с переносами строк: одна подложка на все строки.
@@ -182,7 +184,10 @@ public enum GalleryCatalog {
         GalleryState("formatted-selection", .formattedSelection,
                      "Выделенный текст с жирным, курсивом и зачёркнутым", section: "Правка"),
         GalleryState("selection-across-blocks", .selectionAcrossBlocks,
-                     "Выделение нескольких блоков: блоки целиком, одна ровная подложка, номера внутри", section: "Правка"),
+                     "Выделение текста через блоки: полосы по тексту построчно, между блоками просвет, номера не закрашены", section: "Правка"),
+        GalleryState("block-selection", .blockSelection,
+                     "Режим выделения блоков: светлый прямоугольник на каждый блок целиком, между блоками просвет, курсора нет",
+                     section: "Правка"),
         GalleryState("soft-line-breaks", .softLineBreaks,
                      "Блоки с переносами строк (Shift+Enter): маркер, номер и квадрат у первой строки, следующие — с отступом текста; курсор во второй строке",
                      section: "Правка"),

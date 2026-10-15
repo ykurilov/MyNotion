@@ -7,8 +7,10 @@ public enum Typography {
     public static let sidebarRow = TextLineStyle(fontSize: 14, lineHeight: 20, weight: .regular)
     public static let sidebarGroupHeader = TextLineStyle(fontSize: 12, lineHeight: 16, weight: .medium)
     public static let pageLinkTitle = TextLineStyle(fontSize: 16, lineHeight: 24, weight: .medium)
-    public static let slashMenuTitle = TextLineStyle(fontSize: 14, lineHeight: 20, weight: .regular)
-    public static let slashMenuSubtitle = TextLineStyle(fontSize: 12, lineHeight: 16, weight: .regular)
+    public static let popupMenuTitle = TextLineStyle(fontSize: 14, lineHeight: 20, weight: .regular)
+    /// Заголовок раздела меню «/» и быстрые символы справа в строке.
+    public static let popupMenuSectionHeader = TextLineStyle(fontSize: 12, lineHeight: 16, weight: .medium)
+    public static let popupMenuShortcut = TextLineStyle(fontSize: 12, lineHeight: 16, weight: .regular)
 
     /// Жирный в строке — 600.
     public static let inlineBoldWeight = NSFont.Weight.semibold

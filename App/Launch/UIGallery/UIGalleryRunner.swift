@@ -222,6 +222,16 @@ final class UIGalleryRunner {
             GalleryTarget.scrollToSelection(in: window)
             if let problem = GalleryTarget.selectionProblem("выделение", in: window) { return problem }
 
+        case .blockSelection:
+            guard let page = library.blockKindPages[.numberedItem] else { return "нет страницы нумерованного списка" }
+            await open(page.pageId)
+            guard let textView = PageEditorPreview.textView(in: window), let first = textView.document.blocks.first?.id,
+                  PageEditorPreview.selectWholeBlocks(from: first, through: page.paragraphAfterEmpty, in: window) else {
+                return "блоки не выделены"
+            }
+            GalleryTarget.scrollToSelection(in: window)
+            if let problem = GalleryTarget.selectionProblem("выделение", in: window) { return problem }
+
         case .softLineBreaks:
             guard let item = library.softBreaks.dropFirst().first else { return "нет блоков с переносами" }
             await open(library.softBreaksPage)
