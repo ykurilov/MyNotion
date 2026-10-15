@@ -45,6 +45,8 @@ public final class PageTextView: NSTextView {
     private(set) lazy var caret = TextCaret(textView: self)
     /// Полосы выделения, нарисованные в последний раз: их место перерисовывается при смене выделения.
     private(set) var drawnSelectionRects: [NSRect] = []
+    /// Нарисованы подложки блоков целиком, а не полосы по тексту.
+    private var drawnSelectionIsBlocks = false
 
     public init(document: PageDocument, initialFocus: InitialFocus) {
         self.document = document
@@ -578,34 +580,113 @@ public final class PageTextView: NSTextView {
     private func updateSelectionLook(isFocused: Bool? = nil) {
         caret.update(isFocused: isFocused)
         let rects = (isFocused ?? (window?.firstResponder === self)) ? selectionHighlightRects() : []
-        guard rects != drawnSelectionRects else { return }
+        let isBlocks = !rects.isEmpty && isBlockSelection
+        guard rects != drawnSelectionRects || isBlocks != drawnSelectionIsBlocks else { return }
         for rect in drawnSelectionRects + rects { setNeedsDisplay(rect) }
         drawnSelectionRects = rects
+        drawnSelectionIsBlocks = isBlocks
     }
 
-    /// Выделение как в Notion: под текстом, по полосе на строку от начала до конца выделенного текста.
+    /// Выделение как в Notion: под текстом. Внутри блока — полоса на строку; через блоки — одна подложка
+    /// на все выделенные блоки, залитая разом, чтобы на стыках не темнело.
     public override func drawBackground(in rect: NSRect) {
         super.drawBackground(in: rect)
-        Palette.textSelection.setFill()
-        for highlight in drawnSelectionRects where highlight.intersects(rect) {
-            highlight.fill(using: .sourceOver)
+        guard drawnSelectionIsBlocks else {
+            Palette.textSelection.setFill()
+            for highlight in drawnSelectionRects where highlight.intersects(rect) {
+                highlight.fill(using: .sourceOver)
+            }
+            return
         }
+        Palette.blockSelection.setFill()
+        Self.blockSelectionPath(drawnSelectionRects).fill()
     }
 
-    /// Полосы выделения (координаты окна текста): на строку — от начала до конца выделенного в ней текста,
-    /// высотой в строку с серединой на середине шрифта, как строка в CSS. Номера и маркеры не закрашены, между блоками
-    /// просвет; выделенный перевод строки — полоса шириной в пробел за текстом.
+    /// Подложки блоков одной фигурой: скруглены только внешние углы, на стыке соседних блоков края ровные.
+    static func blockSelectionPath(_ rects: [NSRect]) -> NSBezierPath {
+        let path = NSBezierPath()
+        let radius = Metrics.BlockSelection.cornerRadius
+        for (index, rect) in rects.enumerated() {
+            let previous = index > 0 && abs(rects[index - 1].maxY - rect.minY) < 0.01 ? rects[index - 1] : nil
+            let next = index + 1 < rects.count && abs(rects[index + 1].minY - rect.maxY) < 0.01 ? rects[index + 1] : nil
+            // Угол скруглён, если соседний блок его не продолжает.
+            let corners = (topLeft: previous.map { $0.minX > rect.minX } ?? true, topRight: previous == nil,
+                           bottomLeft: next.map { $0.minX > rect.minX } ?? true, bottomRight: next == nil)
+            let r = { (rounded: Bool) in rounded ? radius : 0 }
+            path.move(to: NSPoint(x: rect.minX + r(corners.topLeft), y: rect.minY))
+            path.appendArc(from: NSPoint(x: rect.maxX, y: rect.minY), to: NSPoint(x: rect.maxX, y: rect.maxY), radius: r(corners.topRight))
+            path.appendArc(from: NSPoint(x: rect.maxX, y: rect.maxY), to: NSPoint(x: rect.minX, y: rect.maxY), radius: r(corners.bottomRight))
+            path.appendArc(from: NSPoint(x: rect.minX, y: rect.maxY), to: NSPoint(x: rect.minX, y: rect.minY), radius: r(corners.bottomLeft))
+            path.appendArc(from: NSPoint(x: rect.minX, y: rect.minY), to: NSPoint(x: rect.maxX, y: rect.minY), radius: r(corners.topLeft))
+            path.close()
+        }
+        path.windingRule = .nonZero
+        return path
+    }
+
+    /// Выделение вышло за границу блока: Notion подсвечивает блоки целиком.
+    var isBlockSelection: Bool {
+        selectedRange().length > 0 && (selectedBlockRange()?.count ?? 0) > 1
+    }
+
+    /// Подсветка выделения (координаты окна текста): внутри блока — полосы по тексту, через блоки — подложки блоков.
     func selectionHighlightRects() -> [NSRect] {
+        guard isBlockSelection, let blocks = selectedBlockRange() else { return textSelectionRects() }
+        return blockSelectionRects(blocks)
+    }
+
+    /// Подложка на блок как в Notion: от края блока (у пунктов — с маркером) до края колонки с запасом по бокам,
+    /// от верха первой строки до низа последней с запасом сверху и снизу. Подложка тянется вниз до следующей,
+    /// и соседние блоки сливаются.
+    func blockSelectionRects(_ blocks: Range<Int>) -> [NSRect] {
+        guard let layoutManager = textLayoutManager, let storage = textContentStorage, let container = textContainer else { return [] }
+        let origin = textContainerOrigin
+        let outset = Metrics.BlockSelection.horizontalOutset
+        var rects: [NSRect] = []
+        for index in blocks {
+            guard let location = storage.location(storage.documentRange.location, offsetBy: mapper.paragraphStart(ofBlockAt: index)),
+                  let fragment = layoutManager.textLayoutFragment(for: location) else { continue }
+            let fragmentStart = storage.offset(from: storage.documentRange.location, to: fragment.rangeInElement.location)
+            let lines = fragment.textLineFragments.filter { $0.characterRange.length > 0 }
+            guard let first = lines.first, let last = lines.last else { continue }
+            let top = lineBox(first, in: fragment, startingAt: fragmentStart).minY - Metrics.BlockSelection.verticalOutset
+            let bottom = lineBox(last, in: fragment, startingAt: fragmentStart).maxY + Metrics.BlockSelection.verticalOutset
+            let left = origin.x + CGFloat(document.blocks[index].indent) * Metrics.Page.indentPerLevel - outset
+            let right = origin.x + container.size.width + outset
+            rects.append(NSRect(x: left, y: top, width: right - left, height: bottom - top))
+        }
+        for index in rects.indices.dropLast() where rects[index].maxY < rects[index + 1].minY {
+            rects[index].size.height = rects[index + 1].minY - rects[index].minY
+        }
+        return rects
+    }
+
+    /// Строка текста в высоту строки абзаца с серединой на середине шрифта, как строка в CSS (координаты окна текста).
+    private func lineBox(_ line: NSTextLineFragment, in fragment: NSTextLayoutFragment, startingAt fragmentStart: Int,
+                         font knownFont: NSFont? = nil) -> NSRect {
+        let lineStart = fragmentStart + line.characterRange.location
+        let font = knownFont ?? textStorage?.attribute(.font, at: lineStart, effectiveRange: nil) as? NSFont ?? Typography.line(for: .paragraph).font
+        let bounds = line.typographicBounds
+        let styledHeight = (textStorage?.attribute(.paragraphStyle, at: lineStart, effectiveRange: nil) as? NSParagraphStyle)?.minimumLineHeight ?? 0
+        let lineHeight = styledHeight > 0 ? styledHeight : bounds.height
+        let origin = textContainerOrigin
+        let frame = fragment.layoutFragmentFrame
+        let baseline = origin.y + frame.minY + bounds.minY + line.glyphOrigin.y
+        let top = baseline - font.ascender - (lineHeight - (font.ascender - font.descender)) / 2
+        return NSRect(x: origin.x + frame.minX + bounds.minX, y: top, width: bounds.width, height: lineHeight)
+    }
+
+    /// Полосы выделения внутри блока: на строку — от начала до конца выделенного в ней текста, высотой в строку.
+    /// Номера и маркеры не закрашены; выделенный перевод строки — полоса шириной в пробел за текстом.
+    private func textSelectionRects() -> [NSRect] {
         let selection = selectedRange()
         guard selection.length > 0, let layoutManager = textLayoutManager, let storage = textContentStorage, let text = textStorage,
               let start = storage.location(storage.documentRange.location, offsetBy: selection.location) else { return [] }
         let string = text.string as NSString
-        let origin = textContainerOrigin
         var rects: [NSRect] = []
         layoutManager.enumerateTextLayoutFragments(from: start, options: [.ensuresLayout]) { fragment in
             let fragmentStart = storage.offset(from: storage.documentRange.location, to: fragment.rangeInElement.location)
             guard fragmentStart < NSMaxRange(selection) else { return false }
-            let frame = fragment.layoutFragmentFrame
             for line in fragment.textLineFragments where line.characterRange.length > 0 {
                 let lineStart = fragmentStart + line.characterRange.location
                 var textEnd = lineStart + line.characterRange.length
@@ -617,16 +698,11 @@ public final class PageTextView: NSTextView {
                 guard to > from || coversNewline else { continue }
                 let font = text.attribute(.font, at: max(lineStart, min(to, textEnd) - (to > lineStart ? 1 : 0)), effectiveRange: nil) as? NSFont
                     ?? Typography.line(for: .paragraph).font
-                let bounds = line.typographicBounds
-                let left = origin.x + frame.minX + bounds.minX
-                let minX = left + line.locationForCharacter(at: from - fragmentStart).x
-                var maxX = left + line.locationForCharacter(at: max(from, to) - fragmentStart).x
+                let box = lineBox(line, in: fragment, startingAt: fragmentStart, font: font)
+                let minX = box.minX + line.locationForCharacter(at: from - fragmentStart).x
+                var maxX = box.minX + line.locationForCharacter(at: max(from, to) - fragmentStart).x
                 if coversNewline { maxX += (" " as NSString).size(withAttributes: [.font: font]).width }
-                let styledHeight = (text.attribute(.paragraphStyle, at: lineStart, effectiveRange: nil) as? NSParagraphStyle)?.minimumLineHeight ?? 0
-                let lineHeight = styledHeight > 0 ? styledHeight : bounds.height
-                let baseline = origin.y + frame.minY + bounds.minY + line.glyphOrigin.y
-                let top = baseline - font.ascender - (lineHeight - (font.ascender - font.descender)) / 2
-                rects.append(NSRect(x: minX, y: top, width: maxX - minX, height: lineHeight))
+                rects.append(NSRect(x: minX, y: box.minY, width: maxX - minX, height: box.height))
             }
             return true
         }

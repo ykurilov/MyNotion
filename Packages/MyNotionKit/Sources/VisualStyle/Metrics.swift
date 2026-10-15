@@ -53,6 +53,15 @@ public enum Metrics {
         }
     }
 
+    /// Выделение через несколько блоков как в Notion (по снимку Юрия 15.10.2026): подложка на блок целиком —
+    /// от края блока до края колонки с запасом `horizontalOutset` (текст абзаца на 6 от края подложки),
+    /// на `verticalOutset` выше первой и ниже последней строки, со скруглением `cornerRadius`.
+    public enum BlockSelection {
+        public static let horizontalOutset: CGFloat = 4
+        public static let verticalOutset: CGFloat = 3
+        public static let cornerRadius: CGFloat = 2.5
+    }
+
     /// Курсор текста как в Notion (по снимку Юрия 15.10.2026): узкая черта на высоту букв шрифта строки
     /// (от верха до низа шрифта, `ascender − descender`), а не на всю строку.
     public enum Caret {

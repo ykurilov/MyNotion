@@ -33,6 +33,8 @@ public enum Palette {
     public static let dropIndicator = themed(light: .rgba(35, 131, 226, 0.43), dark: .rgba(35, 131, 226, 0.43))
     /// Выделение текста: синий Notion поверх страницы, текст в выделении своего цвета (по снимку Notion 15.10.2026).
     public static let textSelection = themed(light: .rgba(35, 131, 226, 0.28), dark: .rgba(35, 131, 226, 0.28))
+    /// Выделение блоков целиком: тот же синий Notion, вдвое прозрачнее (по снимку Notion 15.10.2026).
+    public static let blockSelection = themed(light: .rgba(35, 131, 226, 0.14), dark: .rgba(35, 131, 226, 0.14))
     /// Галочка в отмеченном чекбоксе.
     public static let checkboxCheckmark = themed(light: .hex(0xFFFFFF), dark: .hex(0xFFFFFF))
     /// Подчёркивание ссылки: ≈ 40 % цвета текста.
