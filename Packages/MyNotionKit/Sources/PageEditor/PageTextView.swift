@@ -465,8 +465,13 @@ public final class PageTextView: NSTextView {
     func updateEmptyParagraphHint() {
         let selection = selectedRange()
         guard window?.firstResponder === self, selection.length == 0, !hasMarkedText(), let window,
-              let position = mapper.blockPosition(at: selection.location),
-              let hint = isBareSlashLine(caret: selection.location, blockAt: position.index)
+              let position = mapper.blockPosition(at: selection.location) else {
+            emptyParagraphHint.isHidden = true
+            emptyHintBlockID = nil
+            return
+        }
+        let isSlashLine = isBareSlashLine(caret: selection.location, blockAt: position.index)
+        guard let hint = isSlashLine
                 ? Self.slashQueryHint
                 : isAtEmptyParagraph(selection.location) ? Self.emptyBlockHint(for: document.blocks[position.index].kind) : nil else {
             emptyParagraphHint.isHidden = true
@@ -480,11 +485,18 @@ public final class PageTextView: NSTextView {
         let font = typingAttributes[.font] as? NSFont ?? Typography.line(for: .paragraph).font
         emptyParagraphHint.font = font
         emptyParagraphHint.sizeToFit()
-        // Подсказка стоит там, где встанет набранный текст: на базовой линии строки блока.
-        let baseline = markerLine(ofBlockAt: position.index).map { $0.baseline + textContainerOrigin.y } ?? caret.maxY
+        // Подсказка стоит там, где встанет набранный текст: с начала текста блока, на базовой линии его строки.
+        // Начало — по раскладке блока, а не по `firstRect`: у последнего блока страницы в одном фрагменте с ним
+        // лежит пустая строка за финальным переводом строки, и `firstRect` теряет отступ пункта.
+        let line = markerLine(ofBlockAt: position.index)
+        let textStart = line.map { $0.caretX + textContainerOrigin.x } ?? caret.minX
+        let baseline = line.map { $0.baseline + textContainerOrigin.y } ?? caret.maxY
+        // «Найти тип блока» — за «/», чуть правее курсора; `firstRect` поправлен на тот же потерянный отступ.
+        let blockStart = convert(window.convertFromScreen(firstRect(forCharacterRange: NSRange(location: selection.location - position.offset, length: 0),
+                                                                    actualRange: nil)), from: nil)
+        let x = isSlashLine ? caret.minX + (textStart - blockStart.minX) + Metrics.Page.emptyHintCaretGap : textStart - Self.hintLabelTextInset
         let size = emptyParagraphHint.frame.size
-        emptyParagraphHint.frame = NSRect(x: caret.minX + Metrics.Page.emptyHintCaretGap, y: baseline - emptyParagraphHint.firstBaselineOffsetFromTop,
-                                          width: size.width, height: size.height)
+        emptyParagraphHint.frame = NSRect(x: x, y: baseline - emptyParagraphHint.firstBaselineOffsetFromTop, width: size.width, height: size.height)
         emptyParagraphHint.isHidden = false
     }
 
