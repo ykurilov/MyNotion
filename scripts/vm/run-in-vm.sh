@@ -92,7 +92,18 @@ case ${1:-} in
     (cd $REPO && xcodegen generate -q && xcodebuild -scheme MyNotion -derivedDataPath /tmp/mynotion-uitest-dd build-for-testing -quiet)
     rsync -a --delete -e "ssh -i $SSH_KEY" /tmp/mynotion-uitest-dd/Build/Products/ $VM_USER@$ip:/Users/$VM_USER/uitest-products/
     run=$(cd /tmp/mynotion-uitest-dd/Build/Products && ls *.xctestrun | head -1)
-    vm_ssh $ip "cd ~/uitest-products && xcodebuild test-without-building -xctestrun $run -destination 'platform=macOS,arch=arm64' ${(q)@} 2>&1 | grep -E 'Test Case|error:|Executed|TEST (SUCCEEDED|FAILED)|not permitted|authoriz'";;
+    # UI-тестам нужен режим автоматизации, а его можно включить только из GUI-сессии, не из SSH:
+    # кладём сценарий .command и открываем его в Терминале виртуального Mac, ждём файл-итог.
+    vm_ssh $ip "cat > ~/run-uitest.command <<SCRIPT
+#!/bin/zsh
+cd ~/uitest-products
+xcodebuild test-without-building -xctestrun $run -destination 'platform=macOS,arch=arm64' ${(q)@} > ~/uitest.log 2>&1
+echo \\\$? > ~/uitest.done
+osascript -e 'tell application \"Terminal\" to quit' &
+SCRIPT
+chmod +x ~/run-uitest.command; rm -f ~/uitest.done ~/uitest.log; open ~/run-uitest.command"
+    for _ in {1..360}; do vm_ssh $ip "test -f ~/uitest.done" && break; perl -e 'select(undef,undef,undef,5)'; done
+    vm_ssh $ip "grep -E 'Test Case .*(passed|failed)|error:|Executed|TEST (EXECUTE )?(SUCCEEDED|FAILED)' ~/uitest.log | tail -40; echo exit=\$(cat ~/uitest.done 2>/dev/null)";;
   ssh)
     shift; ip=$(ensure_vm_running); vm_ssh $ip "$@";;
   status)
