@@ -17,6 +17,8 @@ public enum Metrics {
         /// Эмодзи иконки внутри квадрата `iconSize`: рисунок ≈ 61×74, как у Notion на снимке (≈ по снимку).
         public static let iconFontSize: CGFloat = 78
         public static let iconToTitleSpacing: CGFloat = 4
+        /// Подсказка пустого блока и «Без названия» правее курсора: курсор не налезает на первую букву (≈ по снимку).
+        public static let emptyHintCaretGap: CGFloat = 1.5
         /// Поля по бокам колонки, когда окно уже колонки (≈ по снимку).
         public static let minimumSideInset: CGFloat = 96
         /// Пустое место под последним блоком, чтобы конец страницы не прилипал к краю окна.

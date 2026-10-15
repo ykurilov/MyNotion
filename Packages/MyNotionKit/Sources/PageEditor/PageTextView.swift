@@ -435,7 +435,7 @@ public final class PageTextView: NSTextView {
         // Подсказка стоит там, где встанет набранный текст: на базовой линии строки блока.
         let baseline = markerLine(ofBlockAt: position.index).map { $0.baseline + textContainerOrigin.y } ?? caret.maxY
         let size = emptyParagraphHint.frame.size
-        emptyParagraphHint.frame = NSRect(x: caret.minX, y: baseline - emptyParagraphHint.firstBaselineOffsetFromTop,
+        emptyParagraphHint.frame = NSRect(x: caret.minX + Metrics.Page.emptyHintCaretGap, y: baseline - emptyParagraphHint.firstBaselineOffsetFromTop,
                                           width: size.width, height: size.height)
         emptyParagraphHint.isHidden = false
     }
@@ -518,9 +518,25 @@ public final class PageTextView: NSTextView {
 
 /// Шапка страницы над текстом: эмодзи-иконка и название (contracts/visual-style.md, «Страница»).
 @MainActor
+/// Поле названия: курсор того же цвета, что в блоках, а не системный синий.
+final class PageTitleField: NSTextField {
+    override class var cellClass: AnyClass? {
+        get { PageTitleFieldCell.self }
+        set {}
+    }
+}
+
+private final class PageTitleFieldCell: NSTextFieldCell {
+    override func setUpFieldEditorAttributes(_ textObj: NSText) -> NSText {
+        let editor = super.setUpFieldEditorAttributes(textObj)
+        (editor as? NSTextView)?.insertionPointColor = Palette.textPrimary
+        return editor
+    }
+}
+
 public final class PageHeaderView: NSView, NSTextFieldDelegate {
     private let iconLabel = NSTextField(labelWithString: "")
-    let titleField = NSTextField(string: "")
+    let titleField = PageTitleField(string: "")
     var onTitleChange: ((String) -> Void)?
     var onTitleEnter: (() -> Void)?
 
@@ -536,8 +552,10 @@ public final class PageHeaderView: NSView, NSTextFieldDelegate {
         titleField.stringValue = page.title
         titleField.font = titleStyle.font
         titleField.textColor = Palette.textPrimary
+        let placeholderStyle = NSMutableParagraphStyle()
+        placeholderStyle.firstLineHeadIndent = Metrics.Page.emptyHintCaretGap
         titleField.placeholderAttributedString = NSAttributedString(string: Page.untitledTitle, attributes: [
-            .font: titleStyle.font, .foregroundColor: Palette.textSecondary,
+            .font: titleStyle.font, .foregroundColor: Palette.textSecondary, .paragraphStyle: placeholderStyle,
         ])
         titleField.isBordered = false
         titleField.drawsBackground = false
