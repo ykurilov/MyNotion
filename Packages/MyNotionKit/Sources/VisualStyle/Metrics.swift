@@ -47,9 +47,9 @@ public enum Metrics {
     public static func block(_ style: BlockTextStyle) -> BlockSpacing {
         switch style {
         case .paragraph, .listItem: BlockSpacing(height: 30, topSpacing: 3)
-        case .heading1: BlockSpacing(height: 79, topSpacing: 32)
-        case .heading2: BlockSpacing(height: 67, topSpacing: 26)
-        case .heading3: BlockSpacing(height: 58, topSpacing: 22)
+        case .heading1: BlockSpacing(height: 90, topSpacing: 38)
+        case .heading2: BlockSpacing(height: 76.4, topSpacing: 33)
+        case .heading3: BlockSpacing(height: 67, topSpacing: 30)
         }
     }
 
@@ -60,6 +60,8 @@ public enum Metrics {
         public static let horizontalOutset: CGFloat = 4
         public static let verticalOutset: CGFloat = 3
         public static let cornerRadius: CGFloat = 2.5
+        /// Просвет между подложками соседних блоков (Notion 7.38.1 в виртуальном Mac, 15.10.2026: ≈ 3).
+        public static let blockGap: CGFloat = 3
     }
 
     /// Курсор текста как в Notion (по снимку Юрия 15.10.2026): узкая черта на высоту букв шрифта строки
