@@ -20,7 +20,7 @@ struct MarkdownShortcutTests {
 
         #expect(editor.kinds == [.paragraph, kind, .paragraph])
         #expect(editor.texts == ["Выше", "", "Ниже"], "Символы быстрого ввода в текст не попадают")
-        #expect(editor.textView.string == "Выше\n\nНиже")
+        #expect(editor.textView.string == "Выше\n\nНиже\n")
     }
 
     @Test("Быстрый символ в единственном пустом блоке новой страницы")

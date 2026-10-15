@@ -10,7 +10,7 @@ public final class PageTextView: NSTextView {
     public let document: PageDocument
     public let header: PageHeaderView
     private(set) var mapper: PageTextStorageMapper!
-    private let emptyParagraphHint = NSTextField(labelWithString: "Введите «/» для выбора блока")
+    let emptyParagraphHint = NSTextField(labelWithString: "Введите «/» для выбора блока")
 
     /// Куда поставить курсор, когда страница появится в окне.
     public enum InitialFocus { case title, body }
@@ -181,6 +181,12 @@ public final class PageTextView: NSTextView {
     }
 
     public override func shouldChangeText(in affectedCharRange: NSRange, replacementString: String?) -> Bool {
+        // Последний перевод строки остаётся: на нём держится вид последнего блока (PageTextStorageMapper).
+        let length = textStorage?.length ?? 0
+        if let replacement = replacementString, affectedCharRange.length > 0, NSMaxRange(affectedCharRange) == length,
+           !replacement.hasSuffix("\n") {
+            return false
+        }
         // В абзац блока-подстраницы символы не попадают, кроме перевода строки в его начале.
         if let replacement = replacementString, !replacement.isEmpty, !replacement.hasPrefix("\n"), affectedCharRange.length == 0,
            !mapper.hasPendingEdits, let position = mapper.blockPosition(at: affectedCharRange.location),
@@ -294,19 +300,14 @@ public final class PageTextView: NSTextView {
         breakUndoCoalescing()
 
         let anchors = selectionAnchors()
-        // Отрезок в конце страницы: перевод строки блока перед ним пишется заново вместе с отрезком.
         let touchesEnd = range.upperBound == blocks.count
-        let leadingNewline = touchesEnd && range.lowerBound > 0
-        var characters = mapper.characterRange(ofBlocksAt: range)
-        if leadingNewline, !range.isEmpty {
-            characters = NSRange(location: characters.location - 1, length: characters.length + 1)
-        }
+        let characters = mapper.characterRange(ofBlocksAt: range)
 
         let previousId = range.lowerBound > 0 ? blocks[range.lowerBound - 1].id : nil
         let nextId = touchesEnd ? nil : blocks[range.upperBound].id
         let ids = document.replaceBlocks(after: previousId, before: nextId, with: drafts, movedBlockIds: moved)
         let changed = range.lowerBound..<range.lowerBound + ids.count
-        mapper.renderBlocks(changed, replacing: characters, leadingNewline: leadingNewline)
+        mapper.renderBlocks(changed, replacing: characters)
 
         restoreSelection(anchors, fallbackBlock: min(range.lowerBound, document.blocks.count - 1))
         redrawBlockDecorations()
@@ -343,26 +344,35 @@ public final class PageTextView: NSTextView {
     }
 
     public override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
-        super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
+        super.setSelectedRanges(ranges.map(keepingBeforeFinalNewline), affinity: affinity, stillSelecting: stillSelecting)
         guard !stillSelecting else { return }
-        applyTrailingParagraphTypingAttributes()
+        applyEmptyParagraphTypingAttributes()
         updateEmptyParagraphHint()
         selectionDidChangeForPopups()
     }
 
-    /// У пустого последнего абзаца нет символов, с которых `NSTextView` взял бы вид набора, — берём его блок.
-    private func applyTrailingParagraphTypingAttributes() {
-        let length = textStorage?.length ?? 0
-        guard selectedRange().length == 0, selectedRange().location == length, isAtEmptyParagraph(length),
-              let last = document.blocks.last else { return }
-        typingAttributes = PageTextStorageMapper.typingAttributes(for: last)
+    /// Выделение не заходит за последний перевод строки: строка после него — не блок.
+    private func keepingBeforeFinalNewline(_ value: NSValue) -> NSValue {
+        let last = max(0, (textStorage?.length ?? 0) - 1)
+        let range = value.rangeValue
+        guard NSMaxRange(range) > last else { return value }
+        let location = min(range.location, last)
+        return NSValue(range: NSRange(location: location, length: last - location))
+    }
+
+    /// В пустом абзаце набор идёт видом его блока, а не блока выше, с перевода строки которого начат абзац.
+    private func applyEmptyParagraphTypingAttributes() {
+        let selection = selectedRange()
+        guard selection.length == 0, isAtEmptyParagraph(selection.location),
+              let position = mapper.blockPosition(at: selection.location) else { return }
+        typingAttributes = PageTextStorageMapper.typingAttributes(for: document.blocks[position.index])
     }
 
     private func isAtEmptyParagraph(_ location: Int) -> Bool {
         let string = (textStorage?.string ?? "") as NSString
+        guard location < string.length else { return false }
         let atParagraphStart = location == 0 || string.character(at: location - 1) == 0x0A
-        let atParagraphEnd = location == string.length || string.character(at: location) == 0x0A
-        return atParagraphStart && atParagraphEnd
+        return atParagraphStart && string.character(at: location) == 0x0A
     }
 
     // MARK: Мышь
@@ -396,14 +406,17 @@ public final class PageTextView: NSTextView {
         return super.resignFirstResponder()
     }
 
-    /// «Введите «/» для выбора блока» у курсора в пустом абзаце (contracts/visual-style.md, «Пустые строки»).
+    /// Подсказка у курсора в пустом блоке: своя для каждого типа (contracts/visual-style.md, «Пустые строки»).
     func updateEmptyParagraphHint() {
         let selection = selectedRange()
         guard window?.firstResponder === self, selection.length == 0, !hasMarkedText(),
-              isAtEmptyParagraph(selection.location), let window else {
+              isAtEmptyParagraph(selection.location), let window,
+              let position = mapper.blockPosition(at: selection.location),
+              let hint = Self.emptyBlockHint(for: document.blocks[position.index].kind) else {
             emptyParagraphHint.isHidden = true
             return
         }
+        emptyParagraphHint.stringValue = hint
         let caretOnScreen = firstRect(forCharacterRange: selection, actualRange: nil)
         let caret = convert(window.convertFromScreen(caretOnScreen), from: nil)
         let font = typingAttributes[.font] as? NSFont ?? Typography.line(for: .paragraph).font
@@ -412,6 +425,18 @@ public final class PageTextView: NSTextView {
         let size = emptyParagraphHint.frame.size
         emptyParagraphHint.frame = NSRect(x: caret.minX, y: caret.midY - size.height / 2, width: size.width, height: size.height)
         emptyParagraphHint.isHidden = false
+    }
+
+    static func emptyBlockHint(for kind: BlockKind) -> String? {
+        switch kind {
+        case .paragraph: "Введите «/» для выбора блока"
+        case .bulletItem, .numberedItem: "Список"
+        case .checkbox: "Задача"
+        case .heading1: "Заголовок 1"
+        case .heading2: "Заголовок 2"
+        case .heading3: "Заголовок 3"
+        case .pageLink: nil
+        }
     }
 
     // MARK: Колонка и шапка

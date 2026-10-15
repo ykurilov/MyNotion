@@ -90,9 +90,9 @@ struct PageTextMappingTests {
         let text = PageTextStorageMapper.attributedText(for: blocks)
         let string = text.string as NSString
 
-        #expect(text.string == blocks.map(\.text.string).joined(separator: "\n"))
+        #expect(text.string == blocks.map { $0.text.string + "\n" }.joined(), "Перевод строки есть у каждого абзаца, и у последнего")
         var location = 0
-        for block in blocks.dropLast() {
+        for block in blocks {
             let paragraph = string.paragraphRange(for: NSRange(location: location, length: 0))
             for index in paragraph.location..<NSMaxRange(paragraph) {
                 #expect(text.attribute(.blockID, at: index, effectiveRange: nil) as? UUID == block.id)
@@ -191,7 +191,8 @@ struct PageTextMappingTests {
         let blocks = try pageWithEveryKind()
         let (document, storage, mapper) = try openEditor()
 
-        storage.replaceCharacters(in: NSRange(location: storage.length, length: 0), with: "конец")
+        // Пустой последний абзац — его перевод строки в конце текста.
+        storage.replaceCharacters(in: NSRange(location: storage.length - 1, length: 0), with: "конец")
         mapper.commitPendingEdits()
 
         #expect(document.blocks.map(\.id) == blocks.map(\.id))

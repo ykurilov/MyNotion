@@ -9,8 +9,6 @@ extension NSAttributedString.Key {
     static let blockIndent = NSAttributedString.Key("MyNotion.blockIndent")
     static let blockChecked = NSAttributedString.Key("MyNotion.blockChecked")
     static let blockLinkedPage = NSAttributedString.Key("MyNotion.blockLinkedPage")
-    /// На последнем переводе строки: блок пустого последнего абзаца, у которого своих символов нет.
-    static let trailingEmptyBlock = NSAttributedString.Key("MyNotion.trailingEmptyBlock")
 
     static let inlineBold = NSAttributedString.Key("MyNotion.inlineBold")
     static let inlineItalic = NSAttributedString.Key("MyNotion.inlineItalic")
@@ -22,6 +20,10 @@ extension NSAttributedString.Key {
 /// Связь текста страницы с её блоками (research R2): один `NSTextStorage` на страницу, абзац = блок,
 /// id блока лежит атрибутом на символах абзаца. Правки текста превращаются в правки блоков `PageDocument`:
 /// меняются только абзацы рядом с правкой, остальные блоки не трогаются.
+///
+/// Перевод строки есть у каждого абзаца, и у последнего тоже: так у пустого блока есть свой символ с видом блока.
+/// Без него пустой последний блок стал бы добавочной строкой TextKit, а её TextKit ставит без отступов абзаца
+/// и с атрибутами по умолчанию — курсор уезжает с места блока. Строку после последнего перевода курсор не занимает.
 @MainActor
 public final class PageTextStorageMapper: NSObject {
     public let document: PageDocument
@@ -82,6 +84,7 @@ public final class PageTextStorageMapper: NSObject {
     // MARK: Правка → блоки
 
     private func commit(around edited: NSRange, wholeText: Bool = false) -> Bool {
+        restoreFinalNewline()
         let string = textStorage.string as NSString
         let length = string.length
         let clamped = NSRange(location: min(edited.location, length), length: 0)
@@ -115,9 +118,20 @@ public final class PageTextStorageMapper: NSObject {
         return true
     }
 
+    /// Набор после последнего перевода строки (правка текста в обход `PageTextView`) или удалённый весь текст:
+    /// последний абзац снова получает перевод строки.
+    private func restoreFinalNewline() {
+        let length = textStorage.length
+        guard length == 0 || (textStorage.string as NSString).character(at: length - 1) != Self.newline else { return }
+        let attributes = length > 0
+            ? textStorage.attributes(at: length - 1, effectiveRange: nil)
+            : document.blocks.last.map(Self.baseAttributes(for:)) ?? [:]
+        applying { textStorage.append(NSAttributedString(string: "\n", attributes: attributes)) }
+    }
+
     /// Какой блок стал каждым абзацем. Абзац остаётся своим блоком, если на его символах есть id
     /// заменяемого блока, ещё не занятый абзацем выше. Абзац без такого id берёт по порядку блок,
-    /// оставшийся без абзаца (набор в пустом последнем абзаце), иначе это новый блок —
+    /// оставшийся без абзаца, иначе это новый блок —
     /// того же вида, что блок, от которого он отделился (Enter). Enter в начале блока оставляет блок
     /// с его текстом, а новым становится пустой абзац над ним.
     private func blockDrafts(for paragraphs: [NSRange], replacing replaced: [Block]) -> [BlockDraft] {
@@ -155,15 +169,9 @@ public final class PageTextStorageMapper: NSObject {
                 draft.text = text
                 return draft
             }
-            let source = sourceIds(of: paragraph, ids: paragraphIds[position], in: string).lazy.compactMap(document.block).first
+            let source = paragraphIds[position].lazy.compactMap(document.block).first
             return BlockDraft(id: nil, kind: Self.kindAfterSplit(of: source?.kind ?? .paragraph), text: text, indent: source?.indent ?? 0)
         }
-    }
-
-    /// Откуда новый блок берёт тип и вложенность. У пустого последнего абзаца символов нет — берём блок перевода строки перед ним.
-    private func sourceIds(of paragraph: NSRange, ids: [UUID], in string: NSString) -> [UUID] {
-        guard ids.isEmpty, paragraph.length == 0, paragraph.location == string.length, paragraph.location > 0 else { return ids }
-        return blockIds(in: NSRange(location: paragraph.location - 1, length: 1))
     }
 
     private func blockIds(in paragraph: NSRange) -> [UUID] {
@@ -193,19 +201,7 @@ public final class PageTextStorageMapper: NSObject {
                     textStorage.setAttributes(attributes, range: NSRange(location: paragraph.location + range.location, length: range.length))
                 }
             }
-            markTrailingEmptyBlock()
             textStorage.endEditing()
-        }
-    }
-
-    /// Последний перевод строки помнит блок пустого последнего абзаца, а все прочие символы — нет.
-    private func markTrailingEmptyBlock() {
-        let length = textStorage.length
-        guard length > 0 else { return }
-        textStorage.removeAttribute(.trailingEmptyBlock, range: NSRange(location: 0, length: length))
-        if (textStorage.string as NSString).character(at: length - 1) == Self.newline, let last = document.blocks.last {
-            textStorage.addAttribute(.trailingEmptyBlock, value: Self.paragraphAttributes(of: last) as NSDictionary,
-                                     range: NSRange(location: length - 1, length: 1))
         }
     }
 
@@ -220,24 +216,18 @@ public final class PageTextStorageMapper: NSObject {
     /// Последний найденный абзац: следующий поиск идёт от него, а не от начала страницы.
     private var paragraphHint: (index: Int, location: Int) = (0, 0)
 
-    /// Есть ли у последнего блока свой абзац без символов (пустой текст или текст кончается переводом строки).
-    private var hasTrailingEmptyParagraph: Bool {
-        let length = textStorage.length
-        return length == 0 || (textStorage.string as NSString).character(at: length - 1) == Self.newline
-    }
-
     /// Блок под местом текста и смещение от начала его абзаца.
     func blockPosition(at location: Int) -> (index: Int, offset: Int)? {
         let string = textStorage.string as NSString
         let length = string.length
-        guard !document.blocks.isEmpty else { return nil }
-        if location >= length, hasTrailingEmptyParagraph { return (document.blocks.count - 1, 0) }
-        let paragraph = string.paragraphRange(for: NSRange(location: min(location, length), length: 0))
-        guard paragraph.location < length,
-              let id = textStorage.attribute(.blockID, at: paragraph.location, effectiveRange: nil) as? UUID,
+        guard !document.blocks.isEmpty, length > 0 else { return nil }
+        // Строка после последнего перевода строки — конец последнего блока.
+        let clamped = min(location, length - 1)
+        let paragraph = string.paragraphRange(for: NSRange(location: clamped, length: 0))
+        guard let id = textStorage.attribute(.blockID, at: paragraph.location, effectiveRange: nil) as? UUID,
               let index = document.index(ofBlock: id) else { return nil }
         paragraphHint = (index, paragraph.location)
-        return (index, min(location, length) - paragraph.location)
+        return (index, clamped - paragraph.location)
     }
 
     /// Начало абзаца блока `index`.
@@ -245,7 +235,7 @@ public final class PageTextStorageMapper: NSObject {
         let string = textStorage.string as NSString
         let length = string.length
         let count = document.blocks.count
-        if index >= count - 1, hasTrailingEmptyParagraph { return length }
+        if index >= count { return length }
         guard index > 0 else { return 0 }
 
         var (current, location) = paragraphHint
@@ -273,23 +263,14 @@ public final class PageTextStorageMapper: NSObject {
     }
 
     /// Переписать символы `characters` абзацами блоков `range` документа — после правки блоков
-    /// не через текст (тип, вложенность, перестановка). `leadingNewline` — перевод строки блока
-    /// перед отрезком, когда отрезок стоит в конце страницы.
-    func renderBlocks(_ range: Range<Int>, replacing characters: NSRange, leadingNewline: Bool) {
+    /// не через текст (тип, вложенность, перестановка).
+    func renderBlocks(_ range: Range<Int>, replacing characters: NSRange) {
         let blocks = document.blocks
         let text = NSMutableAttributedString()
-        if leadingNewline, !range.isEmpty, range.lowerBound > 0 {
-            text.append(NSAttributedString(string: "\n", attributes: Self.baseAttributes(for: blocks[range.lowerBound - 1])))
-        }
         for index in range {
-            text.append(Self.paragraph(blocks[index], withNewline: index < blocks.count - 1))
+            text.append(Self.paragraph(blocks[index], withNewline: true))
         }
-        applying {
-            textStorage.beginEditing()
-            textStorage.replaceCharacters(in: characters, with: text)
-            markTrailingEmptyBlock()
-            textStorage.endEditing()
-        }
+        applying { textStorage.replaceCharacters(in: characters, with: text) }
         paragraphHint = (0, 0)
     }
 
@@ -297,32 +278,20 @@ public final class PageTextStorageMapper: NSObject {
 
     static let newline = unichar(0x0A)
 
-    /// Текст страницы: абзацы блоков через перевод строки.
+    /// Текст страницы: абзацы блоков, каждый с переводом строки.
     public static func attributedText(for blocks: [Block]) -> NSAttributedString {
         let text = NSMutableAttributedString()
-        for (index, block) in blocks.enumerated() {
-            text.append(paragraph(block, withNewline: index < blocks.count - 1))
-        }
-        if blocks.count > 1, let last = blocks.last, last.text.string.isEmpty {
-            text.addAttribute(.trailingEmptyBlock, value: paragraphAttributes(of: last) as NSDictionary,
-                              range: NSRange(location: text.length - 1, length: 1))
+        for block in blocks {
+            text.append(paragraph(block, withNewline: true))
         }
         return text
     }
 
-    /// Блоки, записанные в тексте: по черновику на абзац, включая пустой последний.
+    /// Блоки, записанные в тексте: по черновику на абзац.
     public static func blockDrafts(in text: NSAttributedString) -> [BlockDraft] {
         let string = text.string as NSString
         return paragraphRanges(in: string, from: 0, to: string.length).map { paragraph in
-            let attributes: [NSAttributedString.Key: Any]
-            if paragraph.length > 0 {
-                attributes = text.attributes(at: paragraph.location, effectiveRange: nil)
-            } else if paragraph.location > 0 {
-                let trailing = text.attribute(.trailingEmptyBlock, at: paragraph.location - 1, effectiveRange: nil) as? NSDictionary
-                attributes = trailing as? [NSAttributedString.Key: Any] ?? [:]
-            } else {
-                attributes = [:]
-            }
+            let attributes = text.attributes(at: paragraph.location, effectiveRange: nil)
             return BlockDraft(
                 id: attributes[.blockID] as? UUID,
                 kind: (attributes[.blockKind] as? String).flatMap(BlockKind.init(rawValue:)) ?? .paragraph,
@@ -334,7 +303,7 @@ public final class PageTextStorageMapper: NSObject {
         }
     }
 
-    /// Абзацы между `lower` и `upper` (границы абзацев). Пустой последний абзац текста — тоже абзац.
+    /// Абзацы между `lower` и `upper` (границы абзацев).
     private static func paragraphRanges(in string: NSString, from lower: Int, to upper: Int) -> [NSRange] {
         var ranges: [NSRange] = []
         var location = lower
@@ -342,10 +311,6 @@ public final class PageTextStorageMapper: NSObject {
             let paragraph = string.paragraphRange(for: NSRange(location: location, length: 0))
             ranges.append(paragraph)
             location = NSMaxRange(paragraph)
-        }
-        let length = string.length
-        if upper == length, length == 0 || string.character(at: length - 1) == newline {
-            ranges.append(NSRange(location: length, length: 0))
         }
         return ranges
     }
@@ -386,7 +351,7 @@ public final class PageTextStorageMapper: NSObject {
         return attributes
     }
 
-    /// Атрибуты, с которыми набирается текст абзаца блока (пустой абзац — без символов).
+    /// Атрибуты, с которыми набирается текст абзаца блока.
     public static func typingAttributes(for block: Block) -> [NSAttributedString.Key: Any] {
         baseAttributes(for: block)
     }

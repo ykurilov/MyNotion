@@ -275,16 +275,13 @@ extension PageTextView {
             let frame = fragment.layoutFragmentFrame
             if frame.minY + originY > visible.maxY { return false }
             guard let index = blockIndex(atY: frame.minY + originY + 1) else { return true }
-            var lines = fragment.textLineFragments
+            // Добавочная строка после последнего перевода строки — не блок.
+            let lines = fragment.textLineFragments
             var bottom = frame.maxY
             if let extra = lines.last, extra.characterRange.length == 0, lines.count > 1 {
-                lines.removeLast()
                 bottom = frame.minY + extra.typographicBounds.minY
-                frames.append((index, frame.minY + originY...bottom + originY))
-                frames.append((document.blocks.count - 1, bottom + originY...frame.maxY + originY))
-            } else {
-                frames.append((index, frame.minY + originY...bottom + originY))
             }
+            frames.append((index, frame.minY + originY...bottom + originY))
             return true
         }
         return frames

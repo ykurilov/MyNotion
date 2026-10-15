@@ -50,8 +50,7 @@ final class BlockLayoutDelegate: NSObject, NSTextLayoutManagerDelegate {
 }
 
 /// Абзац страницы: текст рисует TextKit, а маркер, номер, квадрат чекбокса или подстраницу — этот фрагмент
-/// (contracts/visual-style.md, «Блоки»). Последний фрагмент рисует ещё и пустой последний блок на своей
-/// добавочной строке: своих символов у того блока нет.
+/// (contracts/visual-style.md, «Блоки»).
 final class BlockLayoutFragment: NSTextLayoutFragment, @unchecked Sendable {
     weak var textView: PageTextView?
 
@@ -59,10 +58,7 @@ final class BlockLayoutFragment: NSTextLayoutFragment, @unchecked Sendable {
         let bounds = super.renderingSurfaceBounds
         // Колонка маркера лежит левее текста, название подстраницы — правее пустой строки.
         let containerWidth = textLayoutManager?.textContainer?.size.width ?? Metrics.Page.columnWidth
-        // Добавочная строка пустого последнего блока рисуется ниже, с отступами блока (`trailingBlockLine`).
-        let isLast = textLayoutManager.map { rangeInElement.endLocation.compare($0.documentRange.endLocation) != .orderedAscending } ?? false
-        let wide = CGRect(x: -layoutFragmentFrame.minX, y: 0, width: containerWidth,
-                          height: layoutFragmentFrame.height + (isLast ? Metrics.Page.bottomPadding : 0))
+        let wide = CGRect(x: -layoutFragmentFrame.minX, y: 0, width: containerWidth, height: layoutFragmentFrame.height)
         return bounds.union(wide)
     }
 
@@ -174,47 +170,19 @@ enum BlockDecorationPainter {
 extension PageTextView {
     // MARK: Маркеры блоков
 
-    /// Что рисует фрагмент: свой блок и, если он последний, пустой последний блок на добавочной строке.
+    /// Что рисует фрагмент: маркер своего блока на первой строке.
     func decoratedLines(in fragment: NSTextLayoutFragment) -> [(BlockDecoration, BlockLine)] {
-        guard let paragraph = fragment.textElement as? NSTextParagraph else { return [] }
-        let text = paragraph.attributedString
-        var result: [(BlockDecoration, BlockLine)] = []
-        let ownId: UUID? = text.length > 0
-            ? text.attribute(.blockID, at: 0, effectiveRange: nil) as? UUID
-            : document.blocks.last?.id
-        if let ownId, let block = document.block(ownId), let decoration = decoration(for: block),
-           let line = fragment.textLineFragments.first {
-            result.append((decoration, blockLine(line, in: fragment, indent: block.indent)))
-        }
-        if text.length > 0, text.attribute(.trailingEmptyBlock, at: text.length - 1, effectiveRange: nil) != nil,
-           let last = document.blocks.last, let decoration = decoration(for: last),
-           let extra = fragment.textLineFragments.last, extra.characterRange.length == 0 {
-            result.append((decoration, trailingBlockLine(extra, in: fragment, block: last)))
-        }
-        return result
+        guard let paragraph = fragment.textElement as? NSTextParagraph, paragraph.attributedString.length > 0,
+              let id = paragraph.attributedString.attribute(.blockID, at: 0, effectiveRange: nil) as? UUID,
+              let block = document.block(id), let decoration = decoration(for: block),
+              let line = fragment.textLineFragments.first else { return [] }
+        return [(decoration, blockLine(line, in: fragment, indent: block.indent))]
     }
 
     private func blockLine(_ line: NSTextLineFragment, in fragment: NSTextLayoutFragment, indent: Int) -> BlockLine {
         let frame = fragment.layoutFragmentFrame
         let top = frame.minY + line.typographicBounds.minY
         return BlockLine(indent: indent, top: top, height: line.typographicBounds.height, baseline: top + line.glyphOrigin.y)
-    }
-
-    /// Добавочная строка пустого последнего блока. TextKit ставит её вплотную к строке выше, без отступов
-    /// абзацев, поэтому строка ниже на отступ после блока выше и отступ перед своим блоком — как у обычного блока.
-    private func trailingBlockLine(_ extra: NSTextLineFragment, in fragment: NSTextLayoutFragment, block: Block) -> BlockLine {
-        var line = blockLine(extra, in: fragment, indent: block.indent)
-        let lines = fragment.textLineFragments
-        guard lines.count > 1, let paragraph = fragment.textElement as? NSTextParagraph, paragraph.attributedString.length > 0 else {
-            return line
-        }
-        let gap = extra.typographicBounds.minY - lines[lines.count - 2].typographicBounds.maxY
-        let above = paragraph.attributedString.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
-        let own = PageTextStorageMapper.baseAttributes(for: block)[.paragraphStyle] as? NSParagraphStyle
-        let shift = max(0, (above?.paragraphSpacing ?? 0) + (own?.paragraphSpacingBefore ?? 0) - gap)
-        line.top += shift
-        line.baseline += shift
-        return line
     }
 
     func decoration(for block: Block) -> BlockDecoration? {
@@ -241,20 +209,14 @@ extension PageTextView {
         return ordinal
     }
 
-    /// Строка блока с маркером в координатах контейнера: первая строка абзаца или добавочная у пустого последнего.
+    /// Строка блока с маркером в координатах контейнера: первая строка его абзаца.
     func markerLine(ofBlockAt index: Int) -> BlockLine? {
-        guard let textLayoutManager, let contentStorage = textContentStorage, document.blocks.indices.contains(index) else { return nil }
-        let block = document.blocks[index]
-        let length = textStorage?.length ?? 0
-        let start = mapper.paragraphStart(ofBlockAt: index)
-        let isTrailing = start == length && length > 0
-        let anchor = isTrailing ? length - 1 : start
-        guard let location = contentStorage.location(contentStorage.documentRange.location, offsetBy: anchor) else { return nil }
+        guard let textLayoutManager, let contentStorage = textContentStorage, document.blocks.indices.contains(index),
+              let location = contentStorage.location(contentStorage.documentRange.location, offsetBy: mapper.paragraphStart(ofBlockAt: index))
+        else { return nil }
         textLayoutManager.ensureLayout(for: NSTextRange(location: location))
-        guard let fragment = textLayoutManager.textLayoutFragment(for: location) else { return nil }
-        let line = isTrailing ? fragment.textLineFragments.last : fragment.textLineFragments.first
-        guard let line, !isTrailing || line.characterRange.length == 0 else { return nil }
-        return isTrailing ? trailingBlockLine(line, in: fragment, block: block) : blockLine(line, in: fragment, indent: block.indent)
+        guard let fragment = textLayoutManager.textLayoutFragment(for: location), let line = fragment.textLineFragments.first else { return nil }
+        return blockLine(line, in: fragment, indent: document.blocks[index].indent)
     }
 
     /// Квадрат чекбокса в координатах окна текста.
@@ -291,14 +253,7 @@ extension PageTextView {
             return nil
         }
         let offset = contentStorage.offset(from: contentStorage.documentRange.location, to: fragment.rangeInElement.location)
-        let length = textStorage?.length ?? 0
-        // Ниже последней строки последнего абзаца — добавочная строка пустого последнего блока.
-        if let extra = fragment.textLineFragments.last, extra.characterRange.length == 0, fragment.textLineFragments.count > 1,
-           containerY >= fragment.layoutFragmentFrame.minY + extra.typographicBounds.minY {
-            return document.blocks.count - 1
-        }
-        if length == 0 { return document.blocks.isEmpty ? nil : 0 }
-        return mapper.blockPosition(at: min(offset, length - 1))?.index
+        return mapper.blockPosition(at: offset)?.index
     }
 
     /// Перерисовать маркеры видимых блоков: номера и вид зависят от соседей.

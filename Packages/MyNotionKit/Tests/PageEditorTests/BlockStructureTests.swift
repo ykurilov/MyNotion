@@ -82,7 +82,7 @@ struct BlockStructureTests {
         #expect(moved.id == original[2].id && moved.sortKey != original[2].sortKey)
         #expect(editor.document.blocks[0].sortKey == original[0].sortKey && editor.document.blocks[2].sortKey == original[1].sortKey)
         #expect(editor.document.blocks.map(\.sortKey) == editor.document.blocks.map(\.sortKey).sorted())
-        #expect(editor.textView.string == "А\nВ\nБ")
+        #expect(editor.textView.string == "А\nВ\nБ\n")
         #expect(editor.textView.selectedRange() == NSRange(location: 3, length: 0), "Курсор едет вместе с блоком")
 
         editor.perform(.moveBlocksUp)
@@ -120,7 +120,7 @@ struct BlockStructureTests {
         editor.undo()
         editor.undo()
         #expect(editor.texts == ["А", "Б", "В", "Г"])
-        #expect(editor.textView.string == "А\nБ\nВ\nГ")
+        #expect(editor.textView.string == "А\nБ\nВ\nГ\n")
     }
 
     @Test("Место сброса при перетаскивании: зазор ближе к середине блока")
@@ -205,11 +205,11 @@ struct BlockStructureTests {
 
         for _ in 0..<5 { editor.undo() }
         #expect(editor.document.blocks.map { BlockDraft($0) } == original)
-        #expect(editor.textView.string == "А\nБ\nВ")
+        #expect(editor.textView.string == "А\nБ\nВ\n")
 
         for _ in 0..<5 { editor.redo() }
         #expect(editor.document.blocks.map { BlockDraft($0) } == changed)
-        #expect(editor.textView.string == "А\nВ!\nБ")
+        #expect(editor.textView.string == "А\nВ!\nБ\n")
     }
 
     @Test("Отмена смены типа пустого последнего блока")
@@ -221,6 +221,6 @@ struct BlockStructureTests {
         #expect(editor.kinds == [.paragraph, .checkbox])
         editor.undo()
         #expect(editor.kinds == [.paragraph, .paragraph])
-        #expect(editor.textView.string == "текст\n")
+        #expect(editor.textView.string == "текст\n\n")
     }
 }
