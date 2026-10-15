@@ -20,7 +20,13 @@ struct MyNotionApp: App {
         if let appearanceName = options.appearanceName {
             NSApplication.shared.appearance = NSAppearance(named: appearanceName)
         }
-        library = Result { MainWindowModel(store: try Self.openLibrary(options)) }
+        var galleryLibrary: (GalleryLibrary, FailingWrites)?
+        library = Result {
+            let store = try Self.openLibrary(options)
+            if options.uiGalleryURL != nil { galleryLibrary = try UIGalleryRunner.prepareLibrary(in: store) }
+            return MainWindowModel(store: store)
+        }
+        AppDelegate.galleryLibrary = galleryLibrary
         AppDelegate.model = try? library.get()
     }
 
@@ -72,6 +78,8 @@ struct MyNotionApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Ставится при запуске, до первого окна.
     static var model: MainWindowModel?
+    /// Страницы временной базы галереи (`--ui-gallery`).
+    static var galleryLibrary: (GalleryLibrary, FailingWrites)?
 
     func applicationWillResignActive(_ notification: Notification) {
         Self.model?.saveAll()

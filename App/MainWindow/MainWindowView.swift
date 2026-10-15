@@ -28,6 +28,15 @@ struct MainWindowView: View {
         if let snapshotURL = options.windowSnapshotURL {
             WindowSnapshot.capture(to: snapshotURL, hoveredSidebarRow: options.hoveredSidebarRow)
         }
+        if let galleryURL = options.uiGalleryURL {
+            switch library {
+            case .success(let model): UIGalleryRunner.editorReady(model: model, prepared: AppDelegate.galleryLibrary, folder: galleryURL,
+                                                                  filter: options.uiGalleryFilter)
+            case .failure(let error):
+                FileHandle.standardError.write(Data("Галерея: база не открылась: \(error)\n".utf8))
+                NSApp.terminate(nil)
+            }
+        }
         if let benchmarkURL = options.typingBenchmarkURL, case .success(let model) = library {
             TypingBenchmark.editorReady(model: model, reportTo: benchmarkURL)
         }

@@ -43,6 +43,8 @@ targets:
         product: NotionImport
       - package: MyNotionKit
         product: Sync
+      - package: MyNotionKit
+        product: UIGallery
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion

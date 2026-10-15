@@ -1,0 +1,195 @@
+import NotesCore
+
+/// Что показать в окне на одном снимке галереи (флаг `--ui-gallery`, plan.md, «Проверка интерфейса»).
+/// Приложение приводит окно в каждую сцену по очереди; `switch` по сцене там полный, поэтому новая сцена
+/// без способа её снять не соберётся.
+public enum GalleryScene: Hashable, Sendable {
+    /// Страница «MyNotion — образец» сверху или прокрученная до конца (там блоки-подстраницы).
+    case samplePage(scrolledToBottom: Bool)
+    /// Страница одного типа блока: заполненный блок, пустой в середине и пустой в конце.
+    case block(BlockKind, GalleryCaret)
+    /// Страница из одного пустого абзаца, курсор в нём.
+    case emptyPage
+    /// Страница без названия, курсор в названии.
+    case untitledPage
+    /// Списки и чекбоксы трёх уровней, отмеченные чекбоксы.
+    case nestedLists
+    /// Ручки «+ ⋮⋮» у блока под мышью.
+    case blockHover(BlockKind)
+    /// Меню «/» в пустом абзаце; `filter` — набранное после «/».
+    case slashMenu(filter: String)
+    /// Меню блока по щелчку на «⋮⋮».
+    case blockMenu
+    /// Выделенный текст с жирным, курсивом и кодом.
+    case formattedSelection
+    /// Дерево четырёх уровней: ветка развёрнута или свёрнута.
+    case sidebarTree(collapsed: Bool)
+    /// Строка дерева под мышью: «⋯ +» справа; у длинного названия — обрезка перед ними.
+    case sidebarRowHover(longTitle: Bool)
+    /// Открыта вложенная страница: её строка выбрана.
+    case sidebarSelectedRow
+    /// Строка дерева в режиме переименования.
+    case sidebarRenaming
+    case trash(GalleryTrash)
+    /// Полоса «Изменения не сохранены…» над страницей.
+    case saveErrorBanner
+    /// Верхняя полоса с длинным путём страницы четвёртого уровня.
+    case longBreadcrumb
+}
+
+/// Где курсор на странице типа блока.
+public enum GalleryCaret: String, Hashable, Sendable, CaseIterable {
+    case none
+    case inMiddle
+    case atEnd
+}
+
+public enum GalleryTrash: String, Hashable, Sendable, CaseIterable {
+    /// Строка «Корзина» внизу панели.
+    case rowAtBottom
+    /// Окно корзины с записями.
+    case open
+    /// Диалог «Удалить навсегда?».
+    case confirmDeleteForever
+    /// Окно пустой корзины. Очищает корзину, поэтому снимается последним.
+    case openEmpty
+}
+
+public enum GalleryTheme: String, Hashable, Sendable, CaseIterable, Codable {
+    case light
+    case dark
+
+    public var title: String { self == .light ? "светлая" : "тёмная" }
+}
+
+public struct GalleryWindowSize: Hashable, Sendable, Codable {
+    public let width: Int
+    public let height: Int
+
+    public static let wide = GalleryWindowSize(width: 1440, height: 900)
+    public static let narrow = GalleryWindowSize(width: 900, height: 700)
+
+    public var name: String { "\(width)x\(height)" }
+}
+
+/// Состояние галереи: сцена, имя файла и описание для проверяющего.
+public struct GalleryState: Hashable, Sendable {
+    public let id: String
+    public let scene: GalleryScene
+    public let summary: String
+    /// Раздел в index.html.
+    public let section: String
+    public let sizes: [GalleryWindowSize]
+
+    init(_ id: String, _ scene: GalleryScene, _ summary: String, section: String, narrowToo: Bool = false) {
+        self.id = id
+        self.scene = scene
+        self.summary = summary
+        self.section = section
+        sizes = narrowToo ? [.wide, .narrow] : [.wide]
+    }
+}
+
+/// Один снимок: состояние в теме и размере окна.
+public struct GalleryShot: Hashable, Sendable {
+    public let state: GalleryState
+    public let theme: GalleryTheme
+    public let size: GalleryWindowSize
+
+    public var fileName: String { "\(state.id)--\(size.name)--\(theme.rawValue).png" }
+}
+
+public enum GalleryCatalog {
+    /// Все состояния по порядку съёмки.
+    public static let states: [GalleryState] = pageStates + blockStates + editingStates + sidebarStates + trashStates
+
+    /// Все снимки: каждое состояние в каждом размере, светлая и тёмная тема подряд.
+    public static var shots: [GalleryShot] {
+        states.flatMap { state in
+            state.sizes.flatMap { size in GalleryTheme.allCases.map { GalleryShot(state: state, theme: $0, size: size) } }
+        }
+    }
+
+    /// Типы блоков с текстом (у блока-подстраницы текста нет).
+    public static let textBlockKinds: [BlockKind] = [.paragraph, .heading1, .heading2, .heading3, .bulletItem, .numberedItem, .checkbox]
+
+    static func name(of kind: BlockKind) -> String {
+        switch kind {
+        case .paragraph: "абзац"
+        case .heading1: "заголовок 1"
+        case .heading2: "заголовок 2"
+        case .heading3: "заголовок 3"
+        case .bulletItem: "маркированный пункт"
+        case .numberedItem: "нумерованный пункт"
+        case .checkbox: "чекбокс"
+        case .pageLink: "подстраница"
+        }
+    }
+
+    private static let pageStates: [GalleryState] = [
+        GalleryState("sample-top", .samplePage(scrolledToBottom: false),
+                     "«MyNotion — образец» сверху: оформление текста, заголовки, списки", section: "Страница", narrowToo: true),
+        GalleryState("sample-bottom", .samplePage(scrolledToBottom: true),
+                     "«MyNotion — образец» прокручена вниз: чекбоксы, блоки-подстраницы с иконкой и без", section: "Страница"),
+        GalleryState("empty-page", .emptyPage,
+                     "Пустая страница: один пустой абзац с курсором и подсказкой", section: "Страница", narrowToo: true),
+        GalleryState("untitled-page", .untitledPage,
+                     "Пустое название: курсор в названии, подсказка «Без названия»", section: "Страница"),
+        GalleryState("nested-lists", .nestedLists,
+                     "Маркированные, нумерованные списки и чекбоксы трёх уровней, отмеченные чекбоксы", section: "Страница"),
+        GalleryState("long-breadcrumb", .longBreadcrumb,
+                     "Верхняя полоса с длинным путём страницы четвёртого уровня", section: "Страница", narrowToo: true),
+        GalleryState("save-error-banner", .saveErrorBanner,
+                     "Полоса «Изменения не сохранены…» над страницей", section: "Страница", narrowToo: true),
+    ]
+
+    private static let blockStates: [GalleryState] = textBlockKinds.flatMap { kind in
+        GalleryCaret.allCases.map { caret in
+            let place = switch caret {
+            case .none: "без курсора"
+            case .inMiddle: "курсор в пустом блоке в середине"
+            case .atEnd: "курсор в пустом блоке в конце страницы"
+            }
+            return GalleryState("block-\(kind.rawValue)-caret-\(caret.rawValue)", .block(kind, caret),
+                                "Тип «\(name(of: kind))»: с текстом, пустой в середине и в конце; \(place)", section: "Типы блоков")
+        }
+    }
+
+    private static let editingStates: [GalleryState] = [BlockKind.paragraph, .heading1, .bulletItem, .checkbox].map { kind in
+        GalleryState("hover-block-\(kind.rawValue)", .blockHover(kind),
+                     "Наведение на блок «\(name(of: kind))»: ручки «+ ⋮⋮» слева", section: "Правка",
+                     narrowToo: kind == .paragraph)
+    } + [
+        GalleryState("slash-menu", .slashMenu(filter: ""), "Меню «/» в пустом абзаце, все типы", section: "Правка", narrowToo: true),
+        GalleryState("slash-menu-filtered", .slashMenu(filter: "заг"), "Меню «/» с фильтром «заг»", section: "Правка"),
+        GalleryState("block-menu", .blockMenu, "Меню блока по щелчку на «⋮⋮»", section: "Правка"),
+        GalleryState("formatted-selection", .formattedSelection,
+                     "Выделенный текст с жирным, курсивом и зачёркнутым", section: "Правка"),
+    ]
+
+    private static let sidebarStates: [GalleryState] = [
+        GalleryState("sidebar-tree-expanded", .sidebarTree(collapsed: false),
+                     "Дерево четырёх уровней, ветка «Проекты» развёрнута, длинное название в дереве", section: "Боковая панель",
+                     narrowToo: true),
+        GalleryState("sidebar-tree-collapsed", .sidebarTree(collapsed: true),
+                     "Ветка «Проекты» свёрнута", section: "Боковая панель"),
+        GalleryState("sidebar-row-hover", .sidebarRowHover(longTitle: false),
+                     "Наведение на строку дерева: «⋯ +» справа, стрелка вместо иконки", section: "Боковая панель"),
+        GalleryState("sidebar-row-hover-long-title", .sidebarRowHover(longTitle: true),
+                     "Наведение на строку с длинным названием: название обрезано перед «⋯ +»", section: "Боковая панель",
+                     narrowToo: true),
+        GalleryState("sidebar-selected-row", .sidebarSelectedRow,
+                     "Открыта страница четвёртого уровня: её строка выбрана", section: "Боковая панель"),
+        GalleryState("sidebar-renaming", .sidebarRenaming,
+                     "Переименование строки дерева: название выделено в поле", section: "Боковая панель"),
+    ]
+
+    private static let trashStates: [GalleryState] = [
+        GalleryState("trash-row", .trash(.rowAtBottom), "Строка «Корзина» внизу панели в низком окне", section: "Корзина",
+                     narrowToo: true),
+        GalleryState("trash-open", .trash(.open), "Окно корзины с записями", section: "Корзина", narrowToo: true),
+        GalleryState("trash-confirm-delete-forever", .trash(.confirmDeleteForever),
+                     "Диалог подтверждения «Удалить навсегда»", section: "Корзина"),
+        GalleryState("trash-open-empty", .trash(.openEmpty), "Окно пустой корзины", section: "Корзина"),
+    ]
+}

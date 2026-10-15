@@ -18,6 +18,10 @@ struct LaunchOptions {
     var hoveredSidebarRow: Int?
     /// `--appearance light|dark`: тема окна вместо системной.
     var appearanceName: NSAppearance.Name?
+    /// `--ui-gallery <папка>`: на временной базе снять все состояния интерфейса в PNG и выйти.
+    var uiGalleryURL: URL?
+    /// `--ui-gallery-only <часть имени>`: снять только состояния, в имени которых есть эта строка.
+    var uiGalleryFilter: String?
 
     init(arguments: [String]) {
         var remaining = arguments.dropFirst()[...]
@@ -29,6 +33,8 @@ struct LaunchOptions {
             case "--launch-report": launchReportURL = remaining.popFirst().map(Self.fileURL)
             case "--window-snapshot": windowSnapshotURL = remaining.popFirst().map(Self.fileURL)
             case "--typing-benchmark": typingBenchmarkURL = remaining.popFirst().map(Self.fileURL)
+            case "--ui-gallery": uiGalleryURL = remaining.popFirst().map(Self.fileURL)
+            case "--ui-gallery-only": uiGalleryFilter = remaining.popFirst()
             case "--hover-sidebar-row": hoveredSidebarRow = remaining.popFirst().flatMap { Int($0) }
             case "--appearance":
                 switch remaining.popFirst() {
@@ -38,6 +44,10 @@ struct LaunchOptions {
                 }
             default: continue
             }
+        }
+        if uiGalleryURL != nil {
+            // Галерея пишет в базу (набор «/», очистка корзины): только своя временная база, не основная.
+            databaseURL = FileManager.default.temporaryDirectory.appending(path: "MyNotion-gallery-\(UUID().uuidString).sqlite")
         }
     }
 
