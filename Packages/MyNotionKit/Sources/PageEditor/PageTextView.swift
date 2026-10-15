@@ -11,6 +11,8 @@ public final class PageTextView: NSTextView {
     public let header: PageHeaderView
     private(set) var mapper: PageTextStorageMapper!
     let emptyParagraphHint = NSTextField(labelWithString: "Введите «/» для выбора блока")
+    /// Подложка под «/» с поиском, пока открыто меню «/».
+    let slashQueryHighlight = NSView()
 
     /// Куда поставить курсор, когда страница появится в окне.
     public enum InitialFocus { case title, body }
@@ -57,6 +59,10 @@ public final class PageTextView: NSTextView {
         }
 
         addSubview(header)
+        slashQueryHighlight.wantsLayer = true
+        slashQueryHighlight.layer?.cornerRadius = Metrics.PopupMenu.slashQueryCornerRadius
+        slashQueryHighlight.isHidden = true
+        addSubview(slashQueryHighlight)
         addSubview(emptyParagraphHint)
         emptyParagraphHint.textColor = Palette.textSecondary
         emptyParagraphHint.isHidden = true
@@ -412,10 +418,11 @@ public final class PageTextView: NSTextView {
     /// Подсказка у курсора в пустом блоке: своя для каждого типа (contracts/visual-style.md, «Пустые строки»).
     func updateEmptyParagraphHint() {
         let selection = selectedRange()
-        guard window?.firstResponder === self, selection.length == 0, !hasMarkedText(),
-              isAtEmptyParagraph(selection.location), let window,
+        guard window?.firstResponder === self, selection.length == 0, !hasMarkedText(), let window,
               let position = mapper.blockPosition(at: selection.location),
-              let hint = Self.emptyBlockHint(for: document.blocks[position.index].kind) else {
+              let hint = isBareSlashLine(caret: selection.location, blockAt: position.index)
+                ? Self.slashQueryHint
+                : isAtEmptyParagraph(selection.location) ? Self.emptyBlockHint(for: document.blocks[position.index].kind) : nil else {
             emptyParagraphHint.isHidden = true
             return
         }
@@ -432,6 +439,9 @@ public final class PageTextView: NSTextView {
                                           width: size.width, height: size.height)
         emptyParagraphHint.isHidden = false
     }
+
+    /// Подсветка «/» с набранным поиском, пока открыто меню «/» (координаты окна текста).
+    var slashQueryHighlightFrame: NSRect? { slashQueryHighlight.isHidden ? nil : slashQueryHighlight.frame }
 
     static func emptyBlockHint(for kind: BlockKind) -> String? {
         switch kind {

@@ -144,10 +144,18 @@ public enum Metrics {
         public static let blockMenuWidth: CGFloat = 240
         public static let blockMenuRowHeight: CGFloat = 28
         public static let blockMenuIconSize: CGFloat = 20
+        /// Шрифт надписи в значке («Aa», «H1»): в меню «/» и в меню блока. Системные значки и квадрат чекбокса —
+        /// в `iconSymbolToCapHeight` раза выше заглавных этого шрифта, чтобы все значки были одной высоты (≈ по снимку).
+        public static let slashMenuIconGlyphSize: CGFloat = 18
+        public static let blockMenuIconGlyphSize: CGFloat = 14
+        public static let iconSymbolToCapHeight: CGFloat = 1.2
         /// Сколько строк видно без прокрутки.
         public static let maximumVisibleRows = 8
         /// Зазор между строкой текста и меню.
         public static let anchorSpacing: CGFloat = 4
+        /// Подложка под «/» с поиском в строке, пока открыто меню «/»: скругление и поля по бокам (≈ по Notion).
+        public static let slashQueryCornerRadius: CGFloat = 4
+        public static let slashQueryHorizontalPadding: CGFloat = 2
     }
 }
 

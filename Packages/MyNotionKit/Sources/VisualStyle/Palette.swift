@@ -14,6 +14,8 @@ public enum Palette {
     public static let inlineCodeText = themed(light: .hex(0xCF5148), dark: .hex(0xCF5148))
     public static let inlineCodeBackground = themed(light: .rgba(33, 27, 23, 0.05), dark: .rgba(255, 255, 255, 0.055))
     public static let checkboxChecked = themed(light: .hex(0x2383E2), dark: .hex(0x2383E2))
+    /// «Удалить» в меню блока: надпись и значок.
+    public static let destructiveText = themed(light: .hex(0xCF5148), dark: .hex(0xCF5148))
     /// «+», «⋮⋮», стрелки раскрытия.
     /// Жёлтая полоса ошибки сохранения (желтый фон блока Notion, ≈).
     public static let saveErrorBannerBackground = themed(light: .hex(0xFBF3DB), dark: .hex(0x3F3622))
@@ -28,11 +30,15 @@ public enum Palette {
         dark: .hex(0xF0EFED).withAlphaComponent(0.4)
     )
 
-    /// Тень всплывающих меню: три слоя, последний — тонкая рамка.
+    /// Фон всплывающих меню: в тёмной теме светлее страницы, как в Notion (≈ по Notion).
+    public static let popupMenuBackground = themed(light: .hex(0xFFFFFF), dark: .hex(0x252525))
+
+    /// Тень всплывающих меню: три слоя, последний — тонкая рамка. В тёмной теме тень гуще, а рамка светлая:
+    /// тёмная тень на тёмной странице не видна (≈ по Notion).
     public static let popupMenuShadow: [ShadowLayer] = [
-        ShadowLayer(offsetY: 20, blurRadius: 24, spread: 0, color: .rgba(25, 25, 25, 0.05)),
-        ShadowLayer(offsetY: 5, blurRadius: 8, spread: 0, color: .rgba(25, 25, 25, 0.027)),
-        ShadowLayer(offsetY: 0, blurRadius: 0, spread: 1, color: .rgba(42, 28, 0, 0.07)),
+        ShadowLayer(offsetY: 20, blurRadius: 24, spread: 0, color: themed(light: .rgba(25, 25, 25, 0.05), dark: .rgba(0, 0, 0, 0.4))),
+        ShadowLayer(offsetY: 5, blurRadius: 8, spread: 0, color: themed(light: .rgba(25, 25, 25, 0.027), dark: .rgba(0, 0, 0, 0.2))),
+        ShadowLayer(offsetY: 0, blurRadius: 0, spread: 1, color: themed(light: .rgba(42, 28, 0, 0.07), dark: .rgba(255, 255, 255, 0.094))),
     ]
 
     private static func themed(light: NSColor, dark: NSColor) -> NSColor {

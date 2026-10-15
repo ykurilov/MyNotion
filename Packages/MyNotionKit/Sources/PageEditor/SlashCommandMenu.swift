@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 import NotesCore
 import VisualStyle
 
@@ -9,10 +10,16 @@ struct PopupMenuItem: Equatable {
         case delete
     }
 
+    /// Значок строки: короткая надпись, системный значок или квадрат чекбокса.
+    enum Icon: Equatable {
+        case label(String)
+        case symbol(String)
+        case checkbox
+    }
+
     var title: String
     var subtitle: String
-    /// Что нарисовать в значке: короткая надпись или квадрат чекбокса.
-    var iconLabel: String
+    var icon: Icon
     var keywords: [String]
     var action: Action
 
@@ -25,23 +32,23 @@ struct PopupMenuItem: Equatable {
 
     /// Типы блоков меню «/» и «Превратить в». Подстраница создаётся в боковом дереве (US2), здесь её нет.
     static let blockKinds: [PopupMenuItem] = [
-        PopupMenuItem(title: "Текст", subtitle: "Обычный текст", iconLabel: "Aa",
+        PopupMenuItem(title: "Текст", subtitle: "Обычный текст", icon: .label("Aa"),
                       keywords: ["text", "paragraph", "абзац", "текст"], action: .setKind(.paragraph)),
-        PopupMenuItem(title: "Заголовок 1", subtitle: "Крупный заголовок раздела", iconLabel: "H1",
+        PopupMenuItem(title: "Заголовок 1", subtitle: "Крупный заголовок раздела", icon: .label("H1"),
                       keywords: ["h1", "heading", "#"], action: .setKind(.heading1)),
-        PopupMenuItem(title: "Заголовок 2", subtitle: "Средний заголовок", iconLabel: "H2",
+        PopupMenuItem(title: "Заголовок 2", subtitle: "Средний заголовок", icon: .label("H2"),
                       keywords: ["h2", "heading", "##"], action: .setKind(.heading2)),
-        PopupMenuItem(title: "Заголовок 3", subtitle: "Малый заголовок", iconLabel: "H3",
+        PopupMenuItem(title: "Заголовок 3", subtitle: "Малый заголовок", icon: .label("H3"),
                       keywords: ["h3", "heading", "###"], action: .setKind(.heading3)),
-        PopupMenuItem(title: "Маркированный список", subtitle: "Простой список", iconLabel: "•",
+        PopupMenuItem(title: "Маркированный список", subtitle: "Простой список", icon: .symbol("list.bullet"),
                       keywords: ["bullet", "list", "ul", "-", "пункт"], action: .setKind(.bulletItem)),
-        PopupMenuItem(title: "Нумерованный список", subtitle: "Список с номерами", iconLabel: "1.",
+        PopupMenuItem(title: "Нумерованный список", subtitle: "Список с номерами", icon: .symbol("list.number"),
                       keywords: ["numbered", "ordered", "list", "ol", "1.", "номер"], action: .setKind(.numberedItem)),
-        PopupMenuItem(title: "Чекбокс", subtitle: "Список дел с отметками", iconLabel: "☐",
+        PopupMenuItem(title: "Чекбокс", subtitle: "Список дел с отметками", icon: .checkbox,
                       keywords: ["todo", "to-do", "checkbox", "task", "[]", "дело", "задача"], action: .setKind(.checkbox)),
     ]
 
-    static let delete = PopupMenuItem(title: "Удалить", subtitle: "", iconLabel: "🗑", keywords: [], action: .delete)
+    static let delete = PopupMenuItem(title: "Удалить", subtitle: "", icon: .symbol("trash"), keywords: [], action: .delete)
 
     /// Меню «/»: поиск по названию и словам-подсказкам без учёта регистра.
     static func slashItems(matching query: String) -> [PopupMenuItem] {
@@ -61,6 +68,8 @@ enum PopupMenuStyle {
     var width: CGFloat { self == .slash ? Metrics.PopupMenu.slashMenuWidth : Metrics.PopupMenu.blockMenuWidth }
     var rowHeight: CGFloat { self == .slash ? Metrics.PopupMenu.slashMenuRowHeight : Metrics.PopupMenu.blockMenuRowHeight }
     var iconSize: CGFloat { self == .slash ? Metrics.PopupMenu.slashMenuIconSize : Metrics.PopupMenu.blockMenuIconSize }
+    /// Размер шрифта надписи в значке; системные значки и квадрат подгоняются под её высоту.
+    var iconGlyphSize: CGFloat { self == .slash ? Metrics.PopupMenu.slashMenuIconGlyphSize : Metrics.PopupMenu.blockMenuIconGlyphSize }
 }
 
 /// Всплывающее меню блоков (contracts/visual-style.md, «Всплывающие меню»): окно без рамки над страницей.
@@ -200,7 +209,7 @@ final class PopupMenuView: NSView {
             shadow.shadowBlurRadius = layer.blurRadius
             shadow.shadowColor = layer.color
             shadow.set()
-            Palette.pageBackground.setFill()
+            Palette.popupMenuBackground.setFill()
             if layer.spread > 0 {
                 let spread = NSBezierPath(roundedRect: menuRect.insetBy(dx: -layer.spread, dy: -layer.spread),
                                           xRadius: radius + layer.spread, yRadius: radius + layer.spread)
@@ -212,7 +221,7 @@ final class PopupMenuView: NSView {
             }
             NSGraphicsContext.restoreGraphicsState()
         }
-        Palette.pageBackground.setFill()
+        Palette.popupMenuBackground.setFill()
         path.fill()
     }
 }
@@ -273,7 +282,7 @@ final class PopupMenuRowView: NSView {
         let textX = icon.maxX + Metrics.PopupMenu.iconToTitleSpacing
         let titleStyle = Typography.slashMenuTitle
         let title = NSAttributedString(string: item.title, attributes: [
-            .font: titleStyle.font, .foregroundColor: item.action == .delete ? Palette.inlineCodeText : Palette.textPrimary,
+            .font: titleStyle.font, .foregroundColor: item.action == .delete ? Palette.destructiveText : Palette.textPrimary,
         ])
         if style == .slash, !item.subtitle.isEmpty {
             let subtitleStyle = Typography.slashMenuSubtitle
@@ -296,29 +305,41 @@ final class PopupMenuRowView: NSView {
         if style == .slash {
             let radius = Metrics.PopupMenu.slashMenuIconCornerRadius
             let box = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), xRadius: radius, yRadius: radius)
-            Palette.pageBackground.setFill()
+            Palette.popupMenuBackground.setFill()
             box.fill()
             Palette.border.setStroke()
             box.lineWidth = 1
             box.stroke()
         }
-        if case .setKind(.checkbox) = item.action {
-            let size = Metrics.Checkbox.size * (style == .slash ? 1 : 0.8)
-            let square = NSRect(x: rect.midX - size / 2, y: rect.midY - size / 2, width: size, height: size)
+        // Все значки одной высоты: надпись — по высоте заглавных, системный значок и квадрат — чуть выше.
+        let font = NSFont.systemFont(ofSize: style.iconGlyphSize, weight: .medium)
+        let color = item.action == .delete ? Palette.destructiveText : Palette.textPrimary
+        let symbolHeight = font.capHeight * Metrics.PopupMenu.iconSymbolToCapHeight
+        switch item.icon {
+        case .label(let text):
+            let line = BlockDecorationPainter.textLine(text, font: font)
+            let ink = CTLineGetImageBounds(line, nil)
+            // Перевёрнутые координаты: середина рисунка надписи выше её базовой линии на `ink.midY`.
+            BlockDecorationPainter.drawLine(line, color: color,
+                                            baselineOrigin: CGPoint(x: rect.midX - ink.midX, y: rect.midY + ink.midY))
+        case .symbol(let name):
+            let configuration = NSImage.SymbolConfiguration(pointSize: style.iconGlyphSize, weight: .medium)
+                .applying(.init(paletteColors: [color]))
+            guard let symbol = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(configuration) else {
+                return
+            }
+            let width = symbolHeight * symbol.size.width / max(symbol.size.height, 1)
+            symbol.draw(in: NSRect(x: rect.midX - width / 2, y: rect.midY - symbolHeight / 2, width: width, height: symbolHeight),
+                        from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        case .checkbox:
+            let square = NSRect(x: rect.midX - symbolHeight / 2, y: rect.midY - symbolHeight / 2, width: symbolHeight, height: symbolHeight)
             let inset = Metrics.Checkbox.borderWidth / 2
             let path = NSBezierPath(roundedRect: square.insetBy(dx: inset, dy: inset), xRadius: Metrics.Checkbox.cornerRadius,
                                     yRadius: Metrics.Checkbox.cornerRadius)
             path.lineWidth = Metrics.Checkbox.borderWidth
-            Palette.textPrimary.setStroke()
+            color.setStroke()
             path.stroke()
-            return
         }
-        let fontSize = style == .slash ? rect.height * 0.4 : rect.height * 0.7
-        let label = NSAttributedString(string: item.iconLabel, attributes: [
-            .font: NSFont.systemFont(ofSize: fontSize, weight: .medium), .foregroundColor: Palette.textPrimary,
-        ])
-        let size = label.size()
-        label.draw(at: NSPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2))
     }
 }
 
@@ -341,6 +362,13 @@ final class EditorPopupController {
     var visibleItems: [PopupMenuItem] { window?.menuView.items ?? [] }
     var selectedItem: PopupMenuItem? { window?.menuView.selectedItem }
 
+    /// Рамка меню без места под тень, в координатах экрана; `nil` — меню закрыто.
+    var menuFrame: NSRect? {
+        guard isOpen, let window else { return nil }
+        let margin = PopupMenuWindow.shadowMargin
+        return window.frame.insetBy(dx: margin, dy: margin)
+    }
+
     func open(_ session: Session, items: [PopupMenuItem], below anchor: NSRect) {
         guard let textView, let parent = textView.window else { return }
         let style: PopupMenuStyle = if case .slash = session { .slash } else { .block }
@@ -354,6 +382,7 @@ final class EditorPopupController {
         window.menuView.onChoose = { [weak self] item in self?.choose(item) }
         window.menuView.setItems(items)
         window.show(below: anchor, parent: parent)
+        textView.popupSessionDidChange()
     }
 
     func update(items: [PopupMenuItem]) {
@@ -373,6 +402,7 @@ final class EditorPopupController {
     func close() {
         session = nil
         window?.hide()
+        textView?.popupSessionDidChange()
     }
 }
 
@@ -389,7 +419,9 @@ extension PageTextView {
         let slash = caret.location - 1
         let startsWord = position.offset == 1 || Character(UnicodeScalar(string.character(at: slash - 1)) ?? " ").isWhitespace
         guard startsWord else { return }
-        popups.open(.slash(blockId: block.id, slashLocation: slash), items: PopupMenuItem.blockKinds, below: caretLineRect())
+        // Меню — от левого края «/», а не от курсора за ним: иначе из-под меню торчит начало следующего абзаца.
+        let slashOnScreen = firstRect(forCharacterRange: NSRange(location: slash, length: 1), actualRange: nil)
+        popups.open(.slash(blockId: block.id, slashLocation: slash), items: PopupMenuItem.blockKinds, below: slashOnScreen)
     }
 
     /// Открыть меню «⋮⋮» у блока: сменить тип или удалить.
@@ -398,7 +430,13 @@ extension PageTextView {
     }
 
     func textDidChangeForPopups() { refreshSlashMenu() }
-    func selectionDidChangeForPopups() { refreshSlashMenu() }
+
+    /// Подсветка и подсказка строки с «/» пересчитываются по курсору: посреди обработки правки раскладка строки
+    /// ещё не окончательная и сдвинута на отступ абзаца, а к смене курсора — уже верная.
+    func selectionDidChangeForPopups() {
+        refreshSlashMenu()
+        if popups.isOpen { popupSessionDidChange() }
+    }
 
     /// Меню «/» следует за набором: фильтрует по набранному после «/» и закрывается, если курсор ушёл
     /// из абзаца, «/» стёрт или ничего не подходит.
@@ -451,8 +489,41 @@ extension PageTextView {
         window?.makeFirstResponder(self)
     }
 
-    /// Строка с курсором в координатах экрана.
-    private func caretLineRect() -> NSRect {
-        firstRect(forCharacterRange: selectedRange(), actualRange: nil)
+    // MARK: Строка с «/»
+
+    /// Меню открылось, сменило список или закрылось: подсказка и подсветка строки с «/» следуют за ним.
+    func popupSessionDidChange() {
+        updateEmptyParagraphHint()
+        updateSlashQueryHighlight()
+    }
+
+    /// Где стоит «/» открытого меню «/»; `nil` — меню закрыто или «/» уже стёрт.
+    var openSlashLocation: Int? {
+        guard case .slash(_, let slash)? = popups.session, slash < (textStorage?.length ?? 0) else { return nil }
+        return slash
+    }
+
+    /// Строка блока — только «/», курсор сразу за ним: здесь вместо подсказки пустого блока «Найти тип блока».
+    func isBareSlashLine(caret location: Int, blockAt index: Int) -> Bool {
+        guard case .slash(let blockId, let slash)? = popups.session, document.blocks[index].id == blockId else { return false }
+        return location == slash + 1 && document.blocks[index].text.string == "/"
+    }
+
+    static let slashQueryHint = "Найти тип блока"
+
+    /// Подсветка hoverBackground под «/» с набранным поиском и подсказкой (contracts/visual-style.md, «Всплывающие меню»).
+    private func updateSlashQueryHighlight() {
+        let caret = selectedRange()
+        guard let slash = openSlashLocation, let window, caret.location > slash else {
+            slashQueryHighlight.isHidden = true
+            return
+        }
+        let typedOnScreen = firstRect(forCharacterRange: NSRange(location: slash, length: caret.location - slash), actualRange: nil)
+        var frame = convert(window.convertFromScreen(typedOnScreen), from: nil)
+        if !emptyParagraphHint.isHidden { frame = frame.union(NSRect(x: frame.minX, y: frame.minY, width: emptyParagraphHint.frame.maxX - frame.minX, height: frame.height)) }
+        let padding = Metrics.PopupMenu.slashQueryHorizontalPadding
+        slashQueryHighlight.frame = frame.insetBy(dx: -padding, dy: 0)
+        slashQueryHighlight.layer?.backgroundColor = resolvedColor(Palette.hoverBackground)
+        slashQueryHighlight.isHidden = false
     }
 }
