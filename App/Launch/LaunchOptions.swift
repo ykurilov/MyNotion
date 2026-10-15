@@ -1,4 +1,5 @@
 import AppKit
+import ServiceLaunch
 
 /// Флаги командной строки приложения (README, «Флаги запуска»).
 struct LaunchOptions {
@@ -22,8 +23,11 @@ struct LaunchOptions {
     var uiGalleryURL: URL?
     /// `--ui-gallery-only <часть имени>`: снять только состояния, в имени которых есть эта строка.
     var uiGalleryFilter: String?
+    /// Служебный запуск — в фоне: не забирает фокус и не всплывает.
+    let presence: LaunchPresence
 
     init(arguments: [String]) {
+        presence = LaunchPresence(arguments: arguments)
         var remaining = arguments.dropFirst()[...]
         while let argument = remaining.popFirst() {
             switch argument {

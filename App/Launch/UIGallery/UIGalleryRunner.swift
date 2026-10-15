@@ -69,8 +69,6 @@ final class UIGalleryRunner {
             return
         }
         self.window = window
-        NSApp.activate()
-        window.makeKeyAndOrderFront(nil)
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         } catch {

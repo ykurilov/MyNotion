@@ -15,6 +15,7 @@ let package = Package(
         .library(name: "NotionImport", targets: ["NotionImport"]),
         .library(name: "Sync", targets: ["Sync"]),
         .library(name: "UIGallery", targets: ["UIGallery"]),
+        .library(name: "ServiceLaunch", targets: ["ServiceLaunch"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.11.1"),
@@ -29,6 +30,7 @@ let package = Package(
         .target(name: "NotionImport", dependencies: ["NotesCore"]),
         .target(name: "Sync", dependencies: ["NotesCore"]),
         .target(name: "UIGallery", dependencies: ["NotesCore"]),
+        .target(name: "ServiceLaunch"),
 
         .testTarget(name: "VisualStyleTests", dependencies: ["VisualStyle"]),
         .testTarget(name: "NotesCoreTests", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
@@ -39,6 +41,7 @@ let package = Package(
         .testTarget(name: "NotionImportTests", dependencies: ["NotionImport"]),
         .testTarget(name: "SyncTests", dependencies: ["Sync"]),
         .testTarget(name: "UIGalleryTests", dependencies: ["UIGallery", "NotesCore"]),
+        .testTarget(name: "ServiceLaunchTests", dependencies: ["ServiceLaunch"]),
     ],
     swiftLanguageModes: [.v6]
 )

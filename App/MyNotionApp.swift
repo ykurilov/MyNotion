@@ -1,5 +1,6 @@
 import AppKit
 import NotesCore
+import ServiceLaunch
 import SwiftUI
 
 @main
@@ -13,6 +14,14 @@ struct MyNotionApp: App {
         // настройку, оставшийся путь «открывает» как документ, и окно со страницей не появляется.
         UserDefaults.standard.register(defaults: ["NSTreatUnknownArgumentsAsOpen": "NO"])
         let options = LaunchOptions(arguments: CommandLine.arguments)
+        // До первого окна: служебный запуск не появляется в Dock и не может стать активным.
+        NSApplication.shared.setActivationPolicy(options.presence.activationPolicy)
+        if options.presence == .background {
+            // Окна под всеми окнами — система бы усыпила приложение и растянула паузы галереи и замеров.
+            AppDelegate.backgroundActivity = ProcessInfo.processInfo.beginActivity(
+                options: .userInitiated, reason: "Служебный запуск MyNotion")
+        }
+        AppDelegate.presence = options.presence
         if let referenceLibraryURL = options.referenceLibraryURL {
             Self.generateReferenceLibraryAndExit(at: referenceLibraryURL)
         }
@@ -36,6 +45,7 @@ struct MyNotionApp: App {
         }
         .defaultSize(width: 1200, height: 800)
         .windowStyle(.hiddenTitleBar)
+        .windowLevel(options.presence.windowLevel)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("Новая страница") { (try? library.get())?.createPage() }
@@ -80,6 +90,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static var model: MainWindowModel?
     /// Страницы временной базы галереи (`--ui-gallery`).
     static var galleryLibrary: (GalleryLibrary, FailingWrites)?
+    static var presence = LaunchPresence.foreground
+    static var backgroundActivity: (any NSObjectProtocol)?
 
     func applicationWillResignActive(_ notification: Notification) {
         Self.model?.saveAll()
@@ -87,6 +99,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let model = Self.model, !model.saveAll() else { return .terminateNow }
+        if Self.presence == .background {
+            // Служебный запуск окон с вопросами не показывает: база у него своя или эталонная.
+            FileHandle.standardError.write(Data("Выход без сохранения: записать правки на диск не удалось\n".utf8))
+            return .terminateNow
+        }
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Изменения не сохранены"

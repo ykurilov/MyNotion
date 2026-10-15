@@ -45,6 +45,8 @@ targets:
         product: Sync
       - package: MyNotionKit
         product: UIGallery
+      - package: MyNotionKit
+        product: ServiceLaunch
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion

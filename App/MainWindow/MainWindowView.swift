@@ -24,6 +24,7 @@ struct MainWindowView: View {
 
     /// Окно на экране и принимает ввод: метка для замеров и, по флагу, снимок окна.
     private func editorReady() {
+        if options.presence == .background { BackgroundWindows.orderInBehindEverything() }
         LaunchMilestones.editorReady(reportTo: options.launchReportURL)
         if let snapshotURL = options.windowSnapshotURL {
             WindowSnapshot.capture(to: snapshotURL, hoveredSidebarRow: options.hoveredSidebarRow)
