@@ -61,15 +61,24 @@ struct SidebarGeometryTests {
         #expect(ring.brightness - outside.brightness > 0.03, "рамки не видно: \(ring) и \(outside)")
     }
 
-    // MARK: Строки дерева (№16, 17)
-
-    @Test("Вопрос перед удалением: «Отмена» первой и по Enter, стирающая кнопка — красная")
-    func destructiveConfirmationButtons() {
-        let alert = DestructiveConfirmation.alert(title: "Удалить?", message: "", action: "Удалить навсегда")
-        #expect(alert.buttons.map(\.title) == ["Отмена", "Удалить навсегда"])
-        #expect(alert.buttons[0].keyEquivalent == "\r")
-        #expect(alert.buttons[1].hasDestructiveAction)
+    @Test("Верхний край окна корзины отделён от страницы: тень над краем и видимая рамка (№ 26)",
+          arguments: [NSAppearance.Name.aqua, .darkAqua])
+    func trashPanelTopEdgeStandsOut(_ theme: NSAppearance.Name) throws {
+        let surface = TrashPanelSurfaceView(cardSize: NSSize(width: Metrics.TrashPanel.width, height: 200))
+        let onPage = PageBackdrop(surface: surface)
+        onPage.appearance = NSAppearance(named: theme)
+        let bitmap = try Self.render(onPage)
+        let card = surface.cardRect
+        let page = bitmap.color(atX: 2, y: 2, flipped: true).brightness
+        let ring = bitmap.color(atX: card.midX, y: card.minY - 0.5, flipped: true).brightness
+        let halo = bitmap.color(atX: card.midX, y: card.minY - 2, flipped: true).brightness
+        // Рамка заметно отличается от страницы (в светлой — темнее, в тёмной — светлее).
+        #expect(abs(ring - page) > 0.05, "рамка сливается со страницей: \(ring) и \(page)")
+        // Над краем — мягкая тень, а не резкий срез строки: страница у края темнее, чем вдали.
+        #expect(page - halo > 0.02, "над краем нет тени: \(halo) и \(page)")
     }
+
+    // MARK: Строки дерева (№16, 17)
 
     @Test("Значок документа и эмодзи — центры на одной вертикали")
     func iconsShareCenter() throws {
@@ -247,7 +256,7 @@ struct Bitmap {
     }
 }
 
-private extension NSColor {
+extension NSColor {
     var brightness: CGFloat {
         let rgb = usingColorSpace(.deviceRGB) ?? self
         return (rgb.redComponent + rgb.greenComponent + rgb.blueComponent) / 3 * rgb.alphaComponent

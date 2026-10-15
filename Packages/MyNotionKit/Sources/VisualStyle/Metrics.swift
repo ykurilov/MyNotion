@@ -152,6 +152,19 @@ public enum Metrics {
         public static let shadowMargin: CGFloat = 32
     }
 
+    /// Вопрос перед необратимым действием: карточка по центру содержимого окна.
+    public enum Confirmation {
+        public static let width: CGFloat = 300
+        public static let padding: CGFloat = 20
+        /// Между заголовком и пояснением.
+        public static let textSpacing: CGFloat = 6
+        /// Между текстом и кнопками.
+        public static let buttonsSpacing: CGFloat = 16
+        public static let buttonHeight: CGFloat = 32
+        public static let buttonSpacing: CGFloat = 8
+        public static let buttonCornerRadius: CGFloat = 6
+    }
+
     /// Меню «/», меню блока, выдача поиска.
     public enum PopupMenu {
         public static let cornerRadius: CGFloat = 10

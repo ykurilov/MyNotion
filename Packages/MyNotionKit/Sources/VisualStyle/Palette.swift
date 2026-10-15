@@ -30,14 +30,20 @@ public enum Palette {
 
     /// Разрушающие действия: «Удалить» в меню блока, «Очистить корзину» под мышью — красный Notion (≈).
     public static let destructiveText = themed(light: .hex(0xD44C47), dark: .hex(0xFF7369))
+    /// Кнопка необратимого действия в вопросе («Удалить навсегда»): насыщенный красный под белый текст в обеих темах (≈ по Notion).
+    public static let destructiveButtonFill = NSColor.hex(0xD44C47)
+    /// Затемнение под вопросом: над содержимым окна и всеми панелями (≈ по Notion).
+    public static let modalBackdrop = themed(light: .rgba(15, 15, 15, 0.6), dark: .rgba(0, 0, 0, 0.6))
     /// Фон всплывающих панелей (меню, окно корзины): в тёмной теме светлее страницы, как в Notion (≈ по Notion).
     public static let popupMenuBackground = themed(light: .hex(0xFFFFFF), dark: .hex(0x252525))
 
-    /// Тень всплывающих меню: три слоя, последний — тонкая рамка. В тёмной теме тень гуще, а рамка светлая:
+    /// Тень всплывающих панелей: четыре слоя, последний — тонкая рамка. В тёмной теме тень гуще, а рамка светлая:
     /// тёмная тень на тёмной странице не видна (≈ по Notion).
     public static let popupMenuShadow: [ShadowLayer] = [
         ShadowLayer(offsetY: 20, blurRadius: 24, spread: 0, color: themed(light: .rgba(25, 25, 25, 0.05), dark: .rgba(0, 0, 0, 0.4))),
         ShadowLayer(offsetY: 5, blurRadius: 8, spread: 0, color: themed(light: .rgba(25, 25, 25, 0.027), dark: .rgba(0, 0, 0, 0.2))),
+        // Мягкая тень со всех сторон: верхний край не выглядит срезом строки страницы.
+        ShadowLayer(offsetY: 0, blurRadius: 8, spread: 0, color: themed(light: .rgba(15, 15, 15, 0.1), dark: .rgba(0, 0, 0, 0.6))),
         ShadowLayer(offsetY: 0, blurRadius: 0, spread: 1, color: themed(light: .rgba(42, 28, 0, 0.07), dark: .rgba(255, 255, 255, 0.094))),
     ]
 
