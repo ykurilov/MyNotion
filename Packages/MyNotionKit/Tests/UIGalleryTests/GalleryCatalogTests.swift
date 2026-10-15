@@ -45,11 +45,11 @@ struct GalleryCatalogTests {
         }
     }
 
-    @Test("Правка: ручки у абзаца, заголовка 1, пункта и чекбокса, меню «/» с фильтром и без, меню блока, выделение")
+    @Test("Правка: ручки у абзаца, заголовка 1, пункта и чекбокса, меню «/» с фильтром и без, меню блока, выделение, переносы строк")
     func editingStatesPresent() {
         let required: [GalleryScene] = [
             .blockHover(.paragraph), .blockHover(.heading1), .blockHover(.bulletItem), .blockHover(.checkbox),
-            .slashMenu(filter: ""), .blockMenu, .formattedSelection,
+            .slashMenu(filter: ""), .blockMenu, .formattedSelection, .selectionAcrossBlocks, .softLineBreaks, .selectionAcrossSoftBreaks,
         ]
         for scene in required { #expect(scenes.contains(scene), "\(scene)") }
         #expect(scenes.contains { if case .slashMenu(let filter) = $0 { !filter.isEmpty } else { false } })

@@ -16,6 +16,9 @@ struct GalleryLibrary {
     let sample: PageContent
     let blockKindPages: [BlockKind: BlockKindPage]
     let nestedLists: UUID
+    /// Блоки с переносами строк (Shift+Enter): абзац, пункты и чекбокс в несколько строк.
+    let softBreaksPage: UUID
+    let softBreaks: [UUID]
     /// «Первый уровень» маркированного списка: у него два вложенных пункта.
     let nestedListGroup: UUID
     let emptyPage: UUID
@@ -78,6 +81,16 @@ struct GalleryLibrary {
                 blockKindPages[kind] = BlockKindPage(pageId: pageId, emptyInMiddle: ids[1], paragraphAfterEmpty: ids[2], emptyAtEnd: ids[3])
             }
 
+            let softBreaksPage = try page("Переносы строк", parent: kindsParent)
+            let softBreaks = try blocks(softBreaksPage, [
+                (.paragraph, "Абзац в три строки:\nвторая строка после Shift+Enter\nи третья.", 0, false),
+                (.bulletItem, "Пункт списка\nс продолжением на второй строке", 0, false),
+                (.numberedItem, "Нумерованный пункт\nв две строки", 0, false),
+                (.numberedItem, "Второй пункт", 0, false),
+                (.checkbox, "Задача\nс пояснением ниже", 0, false),
+                (.paragraph, "Абзац в одну строку.", 0, false),
+            ])
+
             let nestedLists = try page("Вложенные списки", icon: "🧩")
             let nestedListIds = try blocks(nestedLists, [
                 (.heading2, "Маркированный", 0, false),
@@ -118,6 +131,7 @@ struct GalleryLibrary {
             _ = try page("Цели на год", icon: "🎯", trashed: true)
 
             return GalleryLibrary(sample: sample, blockKindPages: blockKindPages, nestedLists: nestedLists,
+                                  softBreaksPage: softBreaksPage, softBreaks: softBreaks,
                                   nestedListGroup: nestedListIds[1], emptyPage: emptyPage,
                                   untitledPage: untitledPage, projects: projects, projectBranch: [projects, work, report],
                                   deepPage: deepPage, longTitlePage: longTitlePage, archive: archive,

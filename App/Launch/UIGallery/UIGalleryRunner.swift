@@ -222,6 +222,19 @@ final class UIGalleryRunner {
             GalleryTarget.scrollToSelection(in: window)
             if let problem = GalleryTarget.selectionProblem("выделение", in: window) { return problem }
 
+        case .softLineBreaks:
+            guard let item = library.softBreaks.dropFirst().first else { return "нет блоков с переносами" }
+            await open(library.softBreaksPage)
+            PageEditorPreview.placeCaret(atEndOf: item, in: window)
+            GalleryTarget.scrollToSelection(in: window)
+
+        case .selectionAcrossSoftBreaks:
+            guard let first = library.softBreaks.first, let last = library.softBreaks.dropFirst(2).first else { return "нет блоков с переносами" }
+            await open(library.softBreaksPage)
+            guard PageEditorPreview.selectBlocks(from: first, through: last, in: window) else { return "блоки не выделены" }
+            GalleryTarget.scrollToSelection(in: window)
+            if let problem = GalleryTarget.selectionProblem("выделение", in: window) { return problem }
+
         case .sidebarTree(let collapsed):
             await open(library.sample.page.id)
             if collapsed { PageTreePreview.setExpanded(false, page: library.projects, in: window) }
