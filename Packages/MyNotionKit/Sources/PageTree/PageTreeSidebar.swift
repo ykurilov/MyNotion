@@ -18,7 +18,7 @@ public struct PageTreeSidebar: View {
     /// Место сверху под кнопками окна.
     let topInset: CGFloat
 
-    @State private var isTrashShown = false
+    @State private var trashPanel = TrashPanelController()
 
     public init(tree: PageTreeSnapshot, treeRevision: Int, collapsedPageIds: Set<UUID>, selectedPageId: UUID?,
                 liveTitle: String?, trashEntries: [Page], actions: PageTreeActions, trashActions: TrashActions,
@@ -67,7 +67,7 @@ public struct PageTreeSidebar: View {
 
     /// «Корзина» — обычная строка панели: те же высота, поля, иконка 20×20 на вертикали иконок страниц.
     private var trashRow: some View {
-        Button { isTrashShown.toggle() } label: {
+        Button { trashPanel.toggle(entries: trashEntries, actions: trashActions) } label: {
             HStack(spacing: Metrics.Sidebar.rowIconSpacing) {
                 Image(systemName: "trash")
                     .font(.system(size: Metrics.Sidebar.rowEmojiFontSize - 1, weight: .medium))
@@ -85,26 +85,44 @@ public struct PageTreeSidebar: View {
         }
         .buttonStyle(SidebarRowButtonStyle())
         .accessibilityIdentifier("sidebar-trash")
-        .popover(isPresented: $isTrashShown, arrowEdge: .trailing) {
-            TrashView(entries: trashEntries, actions: trashActions)
-        }
+        .background(TrashPanelAnchor(controller: trashPanel))
+        .onChange(of: trashEntries) { _, entries in trashPanel.update(entries: entries, actions: trashActions) }
+        .onDisappear { trashPanel.close() }
+    }
+}
+
+/// Строка «Корзина» для окна корзины: по ней окно находит своё место.
+private struct TrashPanelAnchor: NSViewRepresentable {
+    let controller: TrashPanelController
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        controller.anchorView = view
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        controller.anchorView = view
     }
 }
 
 /// Строка панели: при наведении — фон hoverBackground со скруглением, как у строк дерева.
 struct SidebarRowButtonStyle: ButtonStyle {
+    var cornerRadius = Metrics.Sidebar.rowCornerRadius
+
     func makeBody(configuration: Configuration) -> some View {
-        HoverRow(configuration: configuration)
+        HoverRow(configuration: configuration, cornerRadius: cornerRadius)
     }
 
     private struct HoverRow: View {
         let configuration: Configuration
+        let cornerRadius: CGFloat
         @State private var isHovered = false
 
         var body: some View {
             configuration.label
                 .background(
-                    RoundedRectangle(cornerRadius: Metrics.Sidebar.rowCornerRadius)
+                    RoundedRectangle(cornerRadius: cornerRadius)
                         .fill(isHovered || configuration.isPressed ? Color(nsColor: Palette.hoverBackground) : .clear)
                 )
                 .onHover { isHovered = $0 }

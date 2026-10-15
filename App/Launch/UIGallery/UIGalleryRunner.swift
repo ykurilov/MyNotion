@@ -114,8 +114,9 @@ final class UIGalleryRunner {
 
     /// Окно в исходное состояние: без меню, поповеров и подсветки, ветки «Проекты» развёрнуты, открыта страница «Буфер».
     private func reset() async {
+        // Окно корзины — тоже дочернее окно: убирается вместе с меню, повторный щелчок его бы снова открыл.
         for child in window.childWindows ?? [] { child.orderOut(nil) }
-        if isTrashShown { await toggleTrash() }
+        isTrashShown = false
         PageTreePreview.clearHover(in: window)
         window.makeFirstResponder(nil)
         if let buffer = model.tree.page(library.sample.page.id)?.parentId { model.select(buffer) }
@@ -314,22 +315,20 @@ enum GalleryInput {
         click(at: point, in: window)
     }
 
-    /// Окно корзины (поповер), если открыто.
+    /// Окно корзины, если открыто.
     static var trashPopoverWindow: NSWindow? {
-        NSApp.windows.first { $0.isVisible && String(describing: type(of: $0)).contains("Popover") }
+        NSApp.windows.first { $0.isVisible && $0.accessibilityIdentifier() == "trash-panel" }
     }
 
     /// Кнопка «Удалить навсегда» первой записи корзины: последняя кнопка справа в первой строке под заголовком.
     @discardableResult
     static func clickFirstDeleteForever() -> Bool {
-        guard let popover = trashPopoverWindow, let content = popover.contentView.flatMap(hostingView) else { return false }
-        let sidebar = Metrics.Sidebar.self
-        // Окно поповера шире содержимого на поле со всех сторон: там рисуется стрелка.
-        let margin = (content.bounds.width - sidebar.trashPopoverWidth) / 2
-        let x = margin + sidebar.trashPopoverWidth - sidebar.panelInset - sidebar.rowHorizontalPadding - sidebar.rowAccessorySize / 2
-        let yFromTop = margin + sidebar.panelInset + sidebar.rowHeight * 1.5
+        guard let panel = trashPopoverWindow, let content = panel.contentView.flatMap(hostingView) else { return false }
+        let sidebar = Metrics.Sidebar.self, trash = Metrics.TrashPanel.self
+        let x = content.bounds.width - trash.contentInset - sidebar.rowHorizontalPadding / 2 - sidebar.rowAccessorySize / 2
+        let yFromTop = trash.contentInset + sidebar.rowHeight * 1.5
         let local = NSPoint(x: x, y: content.isFlipped ? yFromTop : content.bounds.height - yFromTop)
-        click(at: content.convert(local, to: nil), in: popover)
+        click(at: content.convert(local, to: nil), in: panel)
         return true
     }
 

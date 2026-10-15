@@ -123,15 +123,28 @@ public enum Metrics {
         /// Промежуток между «⋯» и «+»; их фон при наведении — со скруглением `rowAccessoryCornerRadius`.
         public static let rowAccessorySpacing: CGFloat = 2
         public static let rowAccessoryCornerRadius: CGFloat = 4
+        /// Значки «⋯», «+», «вернуть», «удалить»: один размер (≈ по Notion).
+        public static let accessorySymbolSize: CGFloat = 13
         public static let searchFieldHeight: CGFloat = 32
         public static let searchFieldCornerRadius: CGFloat = 6
         public static let syncStatusRowHeight: CGFloat = 30
         /// Нижние строки панели («Корзина»): воздух над разделителем и под ним, отступ от нижнего края окна.
         public static let footerDividerSpacing: CGFloat = 6
         public static let footerBottomInset: CGFloat = 10
-        /// Окно корзины над строкой «Корзина» (в contracts/visual-style.md не задано).
-        public static let trashPopoverWidth: CGFloat = 360
-        public static let trashPopoverMaxHeight: CGFloat = 420
+    }
+
+    /// Окно корзины: всплывающая панель справа от боковой панели, у строки «Корзина».
+    public enum TrashPanel {
+        public static let width: CGFloat = 360
+        public static let maxHeight: CGFloat = 420
+        /// Зазор между боковой панелью и окном корзины.
+        public static let sidebarGap: CGFloat = 4
+        /// Окно корзины не подходит к краям окна приложения ближе этого.
+        public static let windowMargin: CGFloat = 8
+        /// Поле карточки вокруг строк (как у строк меню).
+        public static let contentInset: CGFloat = 4
+        /// Место под тени вокруг карточки в окне панели.
+        public static let shadowMargin: CGFloat = 32
     }
 
     /// Меню «/», меню блока, выдача поиска.
