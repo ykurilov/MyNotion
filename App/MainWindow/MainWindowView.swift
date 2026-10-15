@@ -27,6 +27,9 @@ struct MainWindowView: View {
         if let snapshotURL = options.windowSnapshotURL {
             WindowSnapshot.capture(to: snapshotURL)
         }
+        if let benchmarkURL = options.typingBenchmarkURL, case .success(let model) = library {
+            TypingBenchmark.editorReady(model: model, reportTo: benchmarkURL)
+        }
     }
 }
 
@@ -49,6 +52,11 @@ private struct PagesWindow: View {
         .onDisappear { model.saveAll() }
     }
 
+    /// Что показать в блоках-подстраницах открытой страницы.
+    private var linkedPages: [UUID: LinkedPage] {
+        Dictionary(model.pages.map { ($0.id, LinkedPage(title: $0.title, icon: $0.icon)) }) { first, _ in first }
+    }
+
     @ViewBuilder
     private var pageArea: some View {
         if let document = model.openDocument {
@@ -56,6 +64,8 @@ private struct PagesWindow: View {
                 document: document,
                 ancestorTitles: model.ancestorTitles(of: document.pageId),
                 initialFocus: model.initialFocus,
+                linkedPages: linkedPages,
+                onOpenPage: { model.select($0) },
                 onReady: onEditorReady
             )
             .id(document.pageId)
