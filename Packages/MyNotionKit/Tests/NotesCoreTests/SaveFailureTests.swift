@@ -73,6 +73,61 @@ struct SaveFailureTests {
         #expect(!document.hasUnsavedChanges)
     }
 
+    @Test("Правку стёрли после неудачной записи — «не сохранено» снимается, выход не спрашивает")
+    func revertedEditClearsFailure() throws {
+        let document = try documents.open(pageId)
+        disk.isBroken = true
+        document.setText(InlineText("!"), ofBlock: document.blocks[0].id)
+        scheduler.advance(by: .milliseconds(300))
+        #expect(document.saveStatus.isFailed)
+
+        // Диск всё ещё недоступен, но на нём уже то же, что в окне.
+        document.setText(InlineText(""), ofBlock: document.blocks[0].id)
+
+        #expect(!document.hasUnsavedChanges)
+        #expect(document.saveStatus == .saved)
+        #expect(documents.saveAll(), "Выход не спрашивает про несохранённое")
+        scheduler.advance(by: .seconds(3))
+        #expect(document.saveStatus == .saved, "Повтор не возвращает ошибку")
+        #expect(try storedText() == "")
+    }
+
+    @Test("Вернули прежнее название после неудачной записи — «не сохранено» снимается")
+    func revertedTitleClearsFailure() throws {
+        let document = try documents.open(pageId)
+        disk.isBroken = true
+        document.setTitle("Черновик 2")
+        scheduler.advance(by: .milliseconds(300))
+        #expect(document.saveStatus.isFailed)
+
+        document.setTitle("Черновик")
+
+        #expect(document.saveStatus == .saved)
+        #expect(documents.saveAll())
+    }
+
+    @Test("Стёрли одну из несохранённых правок — «не сохранено» остаётся, другая запишется после починки")
+    func partlyRevertedEditsStayFailed() throws {
+        let content = try #require(try store.pageContent(pageId))
+        let second = Block(pageId: pageId, sortKey: .between(content.blocks[0].sortKey, nil))
+        _ = try store.write { try $0.insertBlock(second) }
+        let secondId = second.id
+        let document = try documents.open(pageId)
+        disk.isBroken = true
+        document.setText(InlineText("стереть"), ofBlock: document.blocks[0].id)
+        document.setText(InlineText("оставить"), ofBlock: secondId)
+        scheduler.advance(by: .milliseconds(300))
+
+        document.setText(InlineText(""), ofBlock: document.blocks[0].id)
+        #expect(document.saveStatus.isFailed)
+        #expect(!documents.saveAll())
+
+        disk.isBroken = false
+        scheduler.advance(by: AutosaveCoordinator.retryDelay)
+        #expect(document.saveStatus == .saved)
+        #expect(try store.pageContent(pageId)?.blocks.map(\.text.string) == ["", "оставить"])
+    }
+
     @Test("Причина отказа SQLite понятна человеку")
     func sqliteFailureReasons() {
         #expect(SaveStatus.reason(for: DatabaseError(resultCode: .SQLITE_FULL)) == "на диске нет места")

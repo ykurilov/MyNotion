@@ -231,11 +231,10 @@ final class UIGalleryRunner {
         case .slashMenu(let filter):
             for _ in 0...filter.count { PageEditorPreview.textView(in: window)?.deleteBackward(nil) }
         case .saveErrorBanner:
-            // Сначала записать «!»: если стереть его до записи, правок не останется и ошибка не снимется.
-            failingWrites.isBroken = false
-            model.saveAll()
+            // Стереть «!», пока диск ещё «сломан»: несохранённого не остаётся, и полоса снимается сама.
             PageEditorPreview.textView(in: window)?.deleteBackward(nil)
-            model.saveAll()
+            failingWrites.isBroken = false
+            if !model.saveAll() { print("Галерея: полоса «Изменения не сохранены» не снялась после стирания правки") }
         case .trash(.confirmDeleteForever):
             GalleryInput.pressButton(titled: "Отмена")
             await settle()

@@ -24,7 +24,11 @@ public final class AutosaveCoordinator {
     }
 
     private func documentDidEdit() {
-        guard document.hasUnsavedChanges else { return }
+        guard document.hasUnsavedChanges else {
+            // Правки вернули к записанному: на диске то же, что в окне, писать и повторять нечего.
+            markNothingUnsaved()
+            return
+        }
         if document.saveStatus == .saved { document.saveStatus = .saving }
         let now = scheduler.now
         let firstEdit = firstUnsavedEditAt ?? now
@@ -40,9 +44,8 @@ public final class AutosaveCoordinator {
         scheduledSave = nil
         let changes = document.unsavedChanges()
         guard !changes.isEmpty else {
-            firstUnsavedEditAt = nil
-            if case .saving = document.saveStatus { document.saveStatus = .saved }
-            return !isFailed
+            markNothingUnsaved()
+            return true
         }
         do {
             let pageId = document.pageId
@@ -65,8 +68,12 @@ public final class AutosaveCoordinator {
         document.didEdit = nil
     }
 
-    private var isFailed: Bool {
-        if case .failed = document.saveStatus { true } else { false }
+    /// Несохранённого нет — и «не сохранено» снимается, даже если диск всё ещё недоступен.
+    private func markNothingUnsaved() {
+        scheduledSave?.cancel()
+        scheduledSave = nil
+        firstUnsavedEditAt = nil
+        document.saveStatus = .saved
     }
 
     private func schedule(after delay: Duration) {
