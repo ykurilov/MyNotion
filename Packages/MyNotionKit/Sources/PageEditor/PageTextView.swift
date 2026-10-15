@@ -576,7 +576,11 @@ public final class PageHeaderView: NSView, NSTextFieldDelegate {
 
     public override func layout() {
         super.layout()
-        iconLabel.frame = NSRect(x: 0, y: Metrics.Page.headerTopPadding, width: Metrics.Page.iconSize, height: Metrics.Page.iconSize)
+        // Строка эмодзи выше и шире квадрата иконки, хотя рисунок в нём помещается: поле по размеру строки
+        // с серединой в середине квадрата, иначе рисунок обрезается или съезжает.
+        let square = NSRect(x: 0, y: Metrics.Page.headerTopPadding, width: Metrics.Page.iconSize, height: Metrics.Page.iconSize)
+        let line = iconLabel.intrinsicContentSize
+        iconLabel.frame = NSRect(x: square.midX - line.width / 2, y: square.midY - line.height / 2, width: line.width, height: line.height)
         titleField.frame = NSRect(x: 0, y: titleTop, width: bounds.width, height: titleHeight(forWidth: bounds.width))
     }
 

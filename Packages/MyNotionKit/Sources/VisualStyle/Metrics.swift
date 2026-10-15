@@ -14,8 +14,8 @@ public enum Metrics {
         public static let headerTopPadding: CGFloat = 38
         /// От верхней полосы до названия, когда иконки нет (≈ по снимку).
         public static let headerTopPaddingWithoutIcon: CGFloat = 80
-        /// Эмодзи иконки внутри квадрата `iconSize` (≈ по снимку).
-        public static let iconFontSize: CGFloat = 64
+        /// Эмодзи иконки внутри квадрата `iconSize`: рисунок ≈ 61×74, как у Notion на снимке (≈ по снимку).
+        public static let iconFontSize: CGFloat = 78
         public static let iconToTitleSpacing: CGFloat = 4
         /// Поля по бокам колонки, когда окно уже колонки (≈ по снимку).
         public static let minimumSideInset: CGFloat = 96

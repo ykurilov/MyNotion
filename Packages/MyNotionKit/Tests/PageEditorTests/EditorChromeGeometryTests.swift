@@ -25,4 +25,19 @@ struct EditorChromeGeometryTests {
             #expect(abs(handles.midY - expected) < 0.5, "\(spec.kind): середина ручек \(handles.midY), середина строчных \(expected)")
         }
     }
+
+    @Test("Эмодзи страницы как в Notion: рисунок ≈ 61×74 по середине квадрата 78 (№ 11)")
+    func pageIconMatchesNotion() throws {
+        let page = Page(title: "Страница", icon: "📘", sortKey: .between(nil, nil), createdAt: Date(), updatedAt: Date())
+        let header = PageHeaderView(page: page)
+        header.frame = NSRect(x: 0, y: 0, width: Metrics.Page.columnWidth, height: header.height(forWidth: Metrics.Page.columnWidth))
+        header.layoutSubtreeIfNeeded()
+        let square = NSRect(x: 0, y: Metrics.Page.headerTopPadding, width: Metrics.Page.iconSize, height: Metrics.Page.iconSize)
+        let pixels = try ViewPixels(header, appearance: .aqua)
+        // Под иконкой — название: мерить только полосу иконки с запасом.
+        let ink = try #require(pixels.inkBounds(in: NSRect(x: 0, y: 0, width: 200, height: square.maxY + 2)))
+        #expect(ink.height >= 71 && ink.height <= 77, "Высота рисунка \(ink.height), у Notion ≈ 74")
+        #expect(abs(ink.midY - square.midY) <= 3 && abs(ink.midX - square.midX) <= 3, "Рисунок \(ink) не по середине квадрата \(square)")
+        #expect(ink.minY > 0.5 && ink.maxY < square.maxY + 2, "Рисунок обрезан: \(ink)")
+    }
 }
