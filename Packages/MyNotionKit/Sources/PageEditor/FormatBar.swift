@@ -303,16 +303,12 @@ final class FormatBarController {
     var kindMenuItems: [PopupMenuItem] { kindMenu?.menuView.items ?? [] }
     var checkedKindItem: PopupMenuItem? { kindMenu?.menuView.checkedItem }
 
-    /// Показать над первой строкой выделения `top`; не помещается в `visible` сверху — под последней строкой `bottom`.
+    /// Показать под строкой выделения `line`, левым краем у `anchorX` (см. `FormatBarPlacement`).
     /// Все места — в координатах экрана.
-    func show(_ state: FormatBarState, top: NSRect, bottom: NSRect, visible: NSRect) {
+    func show(_ state: FormatBarState, line: NSRect, anchorX: CGFloat, visible: NSRect) {
         guard let parent = textView?.window else { return }
         let size = NSSize(width: Metrics.FormatBar.width, height: Metrics.FormatBar.height)
-        let spacing = Metrics.FormatBar.selectionSpacing
-        var origin = NSPoint(x: top.minX, y: top.maxY + spacing)
-        if origin.y + size.height > visible.maxY { origin.y = bottom.minY - spacing - size.height }
-        origin.x = max(visible.minX, min(origin.x, visible.maxX - size.width))
-        let card = NSRect(origin: origin, size: size)
+        let card = FormatBarPlacement.card(size: size, line: line, anchorX: anchorX, visible: visible)
 
         let window = window ?? makeWindow()
         self.state = state
@@ -412,6 +408,18 @@ final class FormatBarController {
     }
 }
 
+/// Место карточки панели, как у Notion: под строкой выделения на `selectionSpacing`, левым краем в `pointerOffset`
+/// правее `anchorX`; внизу не помещается — над строкой; у края окна прижимается к нему. Координаты экрана.
+enum FormatBarPlacement {
+    static func card(size: NSSize, line: NSRect, anchorX: CGFloat, visible: NSRect) -> NSRect {
+        let spacing = Metrics.FormatBar.selectionSpacing
+        var origin = NSPoint(x: anchorX + Metrics.FormatBar.pointerOffset, y: line.minY - spacing - size.height)
+        if origin.y < visible.minY { origin.y = line.maxY + spacing }
+        origin.x = max(visible.minX, min(origin.x, visible.maxX - size.width))
+        return NSRect(origin: origin, size: size)
+    }
+}
+
 extension PageTextView {
     // MARK: Панель форматирования
 
@@ -424,10 +432,21 @@ extension PageTextView {
             formatBar.hide()
             return
         }
-        let top = firstRect(forCharacterRange: NSRange(location: selection.location, length: 1), actualRange: nil)
-        let bottom = firstRect(forCharacterRange: NSRange(location: NSMaxRange(selection) - 1, length: 1), actualRange: nil)
+        let first = firstRect(forCharacterRange: NSRange(location: selection.location, length: 1), actualRange: nil)
+        let last = firstRect(forCharacterRange: NSRange(location: NSMaxRange(selection) - 1, length: 1), actualRange: nil)
         let visible = window.convertToScreen(convert(visibleRect, to: nil))
-        formatBar.show(formatBarState(for: selection, blocks: blocks), top: top, bottom: bottom, visible: visible)
+        // Как у Notion: у указателя мыши, если он над страницей (и при выделении клавиатурой), иначе — у конца выделения.
+        let pointer = pointerLocation()
+        let line: NSRect
+        let anchorX: CGFloat
+        if visible.contains(pointer) {
+            line = abs(pointer.y - first.midY) < abs(pointer.y - last.midY) ? first : last
+            anchorX = pointer.x
+        } else {
+            line = last
+            anchorX = last.maxX
+        }
+        formatBar.show(formatBarState(for: selection, blocks: blocks), line: line, anchorX: anchorX, visible: visible)
     }
 
     /// Тип выделенных блоков и оформление, которое есть у всего выделенного текста.

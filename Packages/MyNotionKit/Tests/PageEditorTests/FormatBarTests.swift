@@ -4,7 +4,7 @@ import Testing
 @testable import PageEditor
 import VisualStyle
 
-/// Панель форматирования над выделенным текстом, как в Notion (FR-033; contracts/editor-interactions.md,
+/// Панель форматирования у выделенного текста, как в Notion (FR-033; contracts/editor-interactions.md,
 /// «Панель форматирования»): тип блока с выпадающим списком, жирный, курсив, подчёркнутый, зачёркнутый, код, ссылка.
 @MainActor
 @Suite("Панель форматирования")
@@ -155,16 +155,60 @@ struct FormatBarTests {
 
     // MARK: Место
 
-    @Test("Карточка над первой строкой выделения, с её левого края, на расстоянии selectionSpacing")
-    func placedAboveSelection() throws {
+    // Как у Notion: карточка под строкой выделения, левым краем у указателя мыши (и при выделении клавиатурой);
+    // внизу не помещается — над строкой; у края окна прижимается к нему.
+    static let line = NSRect(x: 300, y: 500, width: 120, height: 20)
+    static let visible = NSRect(x: 100, y: 100, width: 800, height: 700)
+    static let size = NSSize(width: Metrics.FormatBar.width, height: Metrics.FormatBar.height)
+
+    @Test("Под строкой на selectionSpacing, левый край — у указателя со сдвигом pointerOffset")
+    func placedBelowLineAtPointer() {
+        let card = FormatBarPlacement.card(size: Self.size, line: Self.line, anchorX: 350, visible: Self.visible)
+        #expect(card.size == Self.size)
+        #expect(card.maxY == Self.line.minY - Metrics.FormatBar.selectionSpacing)
+        #expect(card.minX == 350 + Metrics.FormatBar.pointerOffset)
+    }
+
+    @Test("Внизу нет места — над строкой")
+    func flipsAboveWithoutRoomBelow() {
+        let line = NSRect(x: 300, y: 150, width: 120, height: 20)
+        let card = FormatBarPlacement.card(size: Self.size, line: line, anchorX: 350, visible: Self.visible)
+        #expect(card.minY == line.maxY + Metrics.FormatBar.selectionSpacing)
+    }
+
+    @Test("У правого и левого края окна карточка прижимается к краю")
+    func clampedToVisibleEdges() {
+        let right = FormatBarPlacement.card(size: Self.size, line: Self.line, anchorX: 890, visible: Self.visible)
+        #expect(right.maxX == Self.visible.maxX)
+        let left = FormatBarPlacement.card(size: Self.size, line: Self.line, anchorX: 20, visible: Self.visible)
+        #expect(left.minX == Self.visible.minX)
+    }
+
+    @Test("Указатель над страницей — карточка у указателя, под строкой выделения рядом с ним")
+    func editorPlacesCardAtPointer() throws {
         let editor = try EditorFixture([.paragraph("первый абзац"), .paragraph("Выделяем слово в середине второго абзаца")])
+        let view = editor.textView
+        let word = (view.string as NSString).range(of: "слово")
+        let wordRect = view.firstRect(forCharacterRange: word, actualRange: nil)
+        let pointer = NSPoint(x: wordRect.minX + 40, y: wordRect.midY)
+        view.pointerLocation = { pointer }
         editor.select(inBlock: 1, "слово")
-        let card = try #require(editor.textView.formatBar.cardFrame)
-        let selection = editor.textView.firstRect(forCharacterRange: editor.textView.selectedRange(), actualRange: nil)
-        #expect(card.size == NSSize(width: Metrics.FormatBar.width, height: Metrics.FormatBar.height))
-        #expect(abs(card.minX - selection.minX) <= 1, "Левый край \(card.minX), выделение с \(selection.minX)")
-        #expect(abs(card.minY - selection.maxY - Metrics.FormatBar.selectionSpacing) <= 1,
-                "Низ карточки \(card.minY), верх строки выделения \(selection.maxY)")
+        let card = try #require(view.formatBar.cardFrame)
+        #expect(card.minX == pointer.x + Metrics.FormatBar.pointerOffset, "Левый край \(card.minX), указатель \(pointer.x)")
+        #expect(abs(card.maxY - (wordRect.minY - Metrics.FormatBar.selectionSpacing)) <= 1,
+                "Верх карточки \(card.maxY), низ строки \(wordRect.minY)")
+    }
+
+    @Test("Указатель не над страницей — карточка у конца выделения")
+    func editorPlacesCardAtSelectionEndWithoutPointer() throws {
+        let editor = try EditorFixture([.paragraph("первый абзац"), .paragraph("Выделяем слово в середине второго абзаца")])
+        let view = editor.textView
+        view.pointerLocation = { NSPoint(x: -10_000, y: -10_000) }
+        editor.select(inBlock: 1, "слово")
+        let word = (view.string as NSString).range(of: "слово")
+        let end = view.firstRect(forCharacterRange: NSRange(location: NSMaxRange(word) - 1, length: 1), actualRange: nil)
+        let card = try #require(view.formatBar.cardFrame)
+        #expect(abs(card.minX - (end.maxX + Metrics.FormatBar.pointerOffset)) <= 1, "Левый край \(card.minX), конец выделения \(end.maxX)")
     }
 
     // MARK: Вид

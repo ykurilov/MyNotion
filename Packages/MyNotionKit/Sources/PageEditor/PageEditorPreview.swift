@@ -34,6 +34,8 @@ public enum PageEditorPreview {
         guard let textView = textView(in: window), let index = textView.document.index(ofBlock: blockId) else { return false }
         window.makeFirstResponder(textView)
         let start = textView.mapper.paragraphStart(ofBlockAt: index)
+        // Настоящая мышь в снимке ни при чём: панель форматирования — у конца выделения, как после протяжки мышью.
+        textView.pointerLocation = { NSPoint(x: -1_000_000, y: -1_000_000) }
         textView.setSelectedRange(NSRange(location: start + range.location, length: range.length))
         return true
     }

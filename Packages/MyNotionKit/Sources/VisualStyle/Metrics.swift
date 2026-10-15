@@ -272,8 +272,10 @@ public enum Metrics {
         public static let buttonHighlightSize = CGSize(width: 32, height: 28)
         public static let buttonCornerRadius: CGFloat = 6
         public static let height: CGFloat = 2 * verticalPadding + kindRowHeight + dividerBandHeight + buttonRowHeight
-        /// Между верхом первой строки выделения и низом карточки.
-        public static let selectionSpacing: CGFloat = 6
+        /// Между строкой выделения и карточкой (под строкой, а если внизу нет места — над ней).
+        public static let selectionSpacing: CGFloat = 8
+        /// Левый край карточки правее указателя мыши (или конца выделения, если указатель не над страницей).
+        public static let pointerOffset: CGFloat = 14
     }
 }
 

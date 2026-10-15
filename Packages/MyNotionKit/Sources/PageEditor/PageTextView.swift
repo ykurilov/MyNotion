@@ -41,6 +41,8 @@ public final class PageTextView: NSTextView {
     let layoutDelegate = BlockLayoutDelegate()
     let popups = EditorPopupController()
     let formatBar = FormatBarController()
+    /// Где указатель мыши на экране; тесты подменяют.
+    var pointerLocation: () -> NSPoint = { NSEvent.mouseLocation }
     lazy var blockHandles = BlockHandlesOverlay(textView: self)
     /// Курсор как в Notion вместо системного (`TextCaret`).
     private(set) lazy var caret = TextCaret(textView: self)

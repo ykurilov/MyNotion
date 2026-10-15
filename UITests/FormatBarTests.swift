@@ -1,7 +1,7 @@
 import AppKit
 import XCTest
 
-/// Панель форматирования вживую, как в Notion (FR-033): выделил слово — над ним панель; кнопка панели и ⌘U
+/// Панель форматирования вживую, как в Notion (FR-033): выделил слово — под строкой панель; кнопка панели и ⌘U
 /// оформляют выделение, кнопки подсвечиваются, список типов меняет тип блока; после перезапуска всё на месте.
 /// Логика панели проверена модульными тестами `FormatBarTests`; здесь — что части работают вместе.
 final class FormatBarTests: XCTestCase {
@@ -21,7 +21,9 @@ final class FormatBarTests: XCTestCase {
 
         // Выделить «три»: панель всплывает, кнопка «Жирный» оформляет и подсвечивается, ⌘U — подчёркивает.
         app.typeKey(.leftArrow, modifierFlags: [.option, .shift])
-        XCTAssertTrue(app.formatButton(.bold).waitForExistence(timeout: 5), "Панель не всплыла над выделением")
+        XCTAssertTrue(app.formatButton(.bold).waitForExistence(timeout: 5), "Панель не всплыла у выделения")
+        // Как у Notion — под строкой выделения (первая строка текста — у верха поля страницы), не над ней.
+        XCTAssertGreaterThan(app.formatKind.frame.minY, app.pageBody.frame.minY + 16, "Панель не под строкой выделения")
         XCTAssertFalse(app.formatButton(.bold).isSelected)
         app.formatButton(.bold).click()
         XCTAssertTrue(app.formatButton(.bold).waitForSelected(), "Кнопка «Жирный» не подсветилась")
@@ -44,7 +46,7 @@ final class FormatBarTests: XCTestCase {
         let runs = try XCTUnwrap(library.savedTextStyles(ofPage: "Оформление").first.map(Self.styleRuns))
         XCTAssertEqual(runs, [StyleRun(start: 8, length: 3, style: "bold"), StyleRun(start: 8, length: 3, style: "underline")])
 
-        // Перезапуск: то же оформление, панель над тем же словом снова показывает нажатые кнопки.
+        // Перезапуск: то же оформление, панель у того же слова снова показывает нажатые кнопки.
         app = library.launchApp()
         XCTAssertTrue(app.pageBody.waitForExistence(timeout: 10))
         XCTAssertEqual(app.pageBody.value as? String, "раз два три")
