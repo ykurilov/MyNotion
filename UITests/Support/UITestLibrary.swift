@@ -49,6 +49,23 @@ struct UITestLibrary {
         try rows(ofPage: title, columns: "block.textStyles") { String(cString: sqlite3_column_text($0, 0)) }
     }
 
+    /// Иконка страницы в базе; `nil` — без иконки. Читать после выхода.
+    func savedIcon(ofPage title: String) throws -> String? {
+        var database: OpaquePointer?
+        guard sqlite3_open_v2(databaseURL.path, &database, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
+            throw SQLiteFailure(message: "база не открылась: \(databaseURL.path)")
+        }
+        defer { sqlite3_close(database) }
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, "SELECT icon FROM page WHERE title = ? AND trashedAt IS NULL", -1, &statement, nil) == SQLITE_OK else {
+            throw SQLiteFailure(message: String(cString: sqlite3_errmsg(database)))
+        }
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_text(statement, 1, title, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
+        guard sqlite3_step(statement) == SQLITE_ROW else { throw SQLiteFailure(message: "нет страницы «\(title)»") }
+        return sqlite3_column_text(statement, 0).map { String(cString: $0) }
+    }
+
     private func rows<Row>(ofPage title: String, columns: String, row: (OpaquePointer?) -> Row) throws -> [Row] {
         var database: OpaquePointer?
         guard sqlite3_open_v2(databaseURL.path, &database, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {

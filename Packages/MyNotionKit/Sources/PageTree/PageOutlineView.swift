@@ -139,11 +139,14 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
 
     var onToggleExpanded: (() -> Void)?
     var onAddSubpage: (() -> Void)?
+    var onChooseIcon: ((NSView) -> Void)?
     var onShowMenu: ((NSView) -> Void)?
     var onRenameCommitted: ((String) -> Void)?
 
     private let iconLabel = NSTextField(labelWithString: "")
     let documentIcon = NSImageView()
+    /// Прозрачная кнопка поверх иконки: щелчок открывает окно выбора иконки.
+    let iconButton = NSButton()
     private let disclosureButton = RowAccessoryButton()
     let titleLabel = NSTextField(labelWithString: "")
     let menuButton = RowAccessoryButton()
@@ -170,6 +173,12 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
         iconLabel.alignment = .center
         documentIcon.image = DocumentGlyph.image(size: Metrics.Sidebar.rowIconSize)
         documentIcon.imageScaling = .scaleNone
+        iconButton.isBordered = false
+        iconButton.title = ""
+        iconButton.target = self
+        iconButton.action = #selector(chooseIcon)
+        iconButton.setAccessibilityLabel("Сменить иконку")
+        iconButton.setAccessibilityIdentifier("page-tree-icon")
 
         configureIconButton(disclosureButton, symbol: "chevron.right", label: "Свернуть или развернуть",
                             pointSize: Metrics.Sidebar.disclosureSymbolSize, action: #selector(toggleExpanded), tint: Palette.handleIcon)
@@ -201,7 +210,7 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
         renameField.isHidden = true
         renameField.setAccessibilityIdentifier("page-tree-rename")
 
-        for view in [iconLabel, documentIcon, disclosureButton, titleLabel, renameField, menuButton, addButton] as [NSView] {
+        for view in [iconLabel, documentIcon, iconButton, disclosureButton, titleLabel, renameField, menuButton, addButton] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             addSubview(view)
         }
@@ -216,6 +225,10 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
             documentIcon.centerYAnchor.constraint(equalTo: centerYAnchor),
             documentIcon.widthAnchor.constraint(equalToConstant: iconSize),
             documentIcon.heightAnchor.constraint(equalToConstant: iconSize),
+            iconButton.leadingAnchor.constraint(equalTo: documentIcon.leadingAnchor),
+            iconButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+            iconButton.widthAnchor.constraint(equalToConstant: iconSize),
+            iconButton.heightAnchor.constraint(equalToConstant: iconSize),
             disclosureButton.leadingAnchor.constraint(equalTo: documentIcon.leadingAnchor),
             disclosureButton.centerYAnchor.constraint(equalTo: centerYAnchor),
             disclosureButton.widthAnchor.constraint(equalToConstant: iconSize),
@@ -353,6 +366,7 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
             .withSymbolConfiguration(configuration)
         iconLabel.alphaValue = showsDisclosure ? 0 : 1
         documentIcon.alphaValue = showsDisclosure ? 0 : 1
+        iconButton.isHidden = showsDisclosure
         let showsAccessories = isRowHovered && !isRenaming
         menuButton.isHidden = !showsAccessories
         addButton.isHidden = !showsAccessories
@@ -365,6 +379,7 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
 
     @objc private func toggleExpanded() { onToggleExpanded?() }
     @objc private func addSubpage() { onAddSubpage?() }
+    @objc private func chooseIcon() { onChooseIcon?(iconButton) }
     @objc private func showMenu() { onShowMenu?(menuButton) }
 }
 

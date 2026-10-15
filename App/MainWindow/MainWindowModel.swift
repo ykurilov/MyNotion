@@ -36,6 +36,7 @@ final class MainWindowModel {
         isSidebarCollapsed = windowState?.isSidebarCollapsed ?? false
         reloadTree()
         treeOperations.onChange = { [weak self] touched in self?.treeDidChange(touched) }
+        treeOperations.onIconChange = { [weak self] pageId, _ in self?.iconDidChange(pageId) }
         treeOperations.onUndoFailure = { [weak self] error in
             self?.loadError = "Не удалось отменить: \(SaveStatus.reason(for: error))"
         }
@@ -98,6 +99,11 @@ final class MainWindowModel {
         }
     }
 
+    /// Иконка страницы из шапки или из боковой панели (`nil` — убрать); ⌘Z отменяет (FR-034).
+    func setIcon(_ pageId: UUID, to icon: String?) {
+        performTreeOperation { try treeOperations.setIcon(pageId, to: icon) }
+    }
+
     func rename(_ pageId: UUID, to title: String) {
         performTreeOperation { try treeOperations.rename(pageId, to: title) }
     }
@@ -151,6 +157,14 @@ final class MainWindowModel {
     var hasFailedSaves: Bool { openDocuments.hasFailedSaves }
 
     // MARK: Внутреннее
+
+    /// Иконка сменилась (выбор, отмена, повтор): дерево перечитать, открытой странице — новую иконку без перечитывания
+    /// текста, чтобы не терять курсор и выделение.
+    private func iconDidChange(_ pageId: UUID) {
+        reloadTree()
+        guard openDocument?.pageId == pageId, let stored = tree.page(pageId) else { return }
+        openDocument?.adoptIcon(of: stored)
+    }
 
     /// Перед операцией правки открытой страницы уходят в базу, чтобы операция видела их.
     @discardableResult

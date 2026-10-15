@@ -244,6 +244,70 @@ public enum Metrics {
         public static let checkmarkGlyphSize: CGFloat = 12
     }
 
+    /// Окно выбора иконки-эмодзи (FR-034), как у Notion 7.38.1 (снимки 16.10.2026, ±1,2). Отсчёт — от левого верхнего
+    /// угла карточки. У Notion справа от «Случайной» выбор оттенка кожи; у нас его нет — поле поиска длиннее.
+    public enum EmojiPicker {
+        public static let width: CGFloat = 408
+        public static let height: CGFloat = 390
+        /// Карточка под иконкой (по середине иконки), между ними 4.
+        public static let anchorSpacing: CGFloat = 4
+        /// Шапка: вкладка «Эмодзи» с 17 от края и чертой 2 под ней (шире текста на 6 с боков), «Убрать» в 17 от правого края.
+        public static let headerHeight: CGFloat = 40
+        public static let tabTitleX: CGFloat = 17
+        public static let tabUnderlineHeight: CGFloat = 2
+        public static let tabUnderlineOutset: CGFloat = 6
+        public static let removeRightPadding: CGFloat = 17
+        /// Поле поиска: с 48 от верха, высота 28, с 10 от края; лупа 14 серединой в 12 от края поля, текст с 28.
+        public static let searchTop: CGFloat = 48
+        public static let searchHeight: CGFloat = 28
+        public static let searchLeft: CGFloat = 10
+        public static let searchCornerRadius: CGFloat = 6
+        public static let searchIconCenterX: CGFloat = 12
+        public static let searchIconSize: CGFloat = 14
+        public static let searchTextX: CGFloat = 26
+        /// «Случайная» — квадрат 28 со скруглением 6 в 8 от правого края, между полем и ней 8.
+        public static let buttonSize: CGFloat = 28
+        public static let buttonCornerRadius: CGFloat = 6
+        public static let buttonIconSize: CGFloat = 13
+        public static let rightPadding: CGFloat = 8
+        public static let searchToButtonSpacing: CGFloat = 8
+        /// Прокрутка с эмодзи — с 85 от верха до черты над строкой разделов.
+        public static let contentTop: CGFloat = 85
+        /// Заголовок раздела: строка 39, середина надписи в 25 от её верха, надпись с 10 от края карточки.
+        public static let sectionHeaderHeight: CGFloat = 39
+        public static let sectionTitleCenterY: CGFloat = 25
+        public static let sectionTitleX: CGFloat = 10
+        /// Сетка: 12 столбцов по 32 с полями 12; под мышью и выбранная — подложка со скруглением 6.
+        public static let columns = 12
+        public static let cellSize: CGFloat = 32
+        public static let gridPadding: CGFloat = 12
+        public static let cellCornerRadius: CGFloat = 6
+        public static let emojiFontSize: CGFloat = 22
+        /// Результаты поиска — сразу под полем, с 4 от верха прокрутки; «Ничего не найдено» — как заголовок раздела.
+        public static let searchResultsTopPadding: CGFloat = 4
+        /// Строка разделов внизу: 51 под чертой; значки 17 с шагом 35, первый серединой в 28 от края, середина в 24 под чертой;
+        /// текущий раздел — подложка 32 × 32 со скруглением 6.
+        public static let sectionBarHeight: CGFloat = 51
+        public static let sectionIconPitch: CGFloat = 35
+        public static let firstSectionIconCenterX: CGFloat = 28
+        public static let sectionIconCenterY: CGFloat = 24
+        public static let sectionIconSize: CGFloat = 17
+        public static let sectionHighlightSize: CGFloat = 32
+    }
+
+    /// Шапка страницы: кнопка «Добавить иконку» при наведении, как у Notion (серая, значок и надпись 14), над названием.
+    public enum PageHeaderButton {
+        public static let height: CGFloat = 28
+        public static let horizontalPadding: CGFloat = 8
+        public static let iconSize: CGFloat = 14
+        public static let iconToTitleSpacing: CGFloat = 6
+        public static let cornerRadius: CGFloat = 6
+        /// Между кнопкой и верхом названия.
+        public static let titleSpacing: CGFloat = 4
+        /// Подсветка иконки страницы под мышью — скругление.
+        public static let iconHoverCornerRadius: CGFloat = 6
+    }
+
     /// Панель форматирования над выделенным текстом (FR-033), карточка как у Notion 7.38.1 (снимок 15.10.2026, ±1,2):
     /// строка типа блока, разделитель, ряд из 6 кнопок по 36.
     public enum FormatBar {

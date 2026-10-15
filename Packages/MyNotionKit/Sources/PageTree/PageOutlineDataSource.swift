@@ -13,6 +13,8 @@ public struct PageTreeActions {
     public var addSubpage: (UUID) -> Void
     /// Набор свёрнутых веток изменился.
     public var collapsedPagesChanged: (Set<UUID>) -> Void
+    /// Щелчок по иконке строки: открыть окно выбора иконки под этим видом (FR-034).
+    public var chooseIcon: (UUID, NSView) -> Void
 
     public init(
         select: @escaping (UUID) -> Void,
@@ -20,7 +22,8 @@ public struct PageTreeActions {
         move: @escaping (UUID, UUID?, Int) -> Void,
         moveToTrash: @escaping (UUID) -> Void,
         addSubpage: @escaping (UUID) -> Void,
-        collapsedPagesChanged: @escaping (Set<UUID>) -> Void
+        collapsedPagesChanged: @escaping (Set<UUID>) -> Void,
+        chooseIcon: @escaping (UUID, NSView) -> Void = { _, _ in }
     ) {
         self.select = select
         self.rename = rename
@@ -28,6 +31,7 @@ public struct PageTreeActions {
         self.moveToTrash = moveToTrash
         self.addSubpage = addSubpage
         self.collapsedPagesChanged = collapsedPagesChanged
+        self.chooseIcon = chooseIcon
     }
 }
 
@@ -239,6 +243,7 @@ final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineV
         cell.show(page, title: title, hasChildren: hasChildren, isExpanded: outlineView?.isItemExpanded(item) ?? false)
         cell.onToggleExpanded = { [weak self] in self?.toggleExpanded(page.id) }
         cell.onAddSubpage = { [weak self] in self?.actions.addSubpage(page.id) }
+        cell.onChooseIcon = { [weak self] anchor in self?.actions.chooseIcon(page.id, anchor) }
         cell.onShowMenu = { [weak self] anchor in self?.showMenu(for: page.id, from: anchor) }
         cell.onRenameCommitted = { [weak self] newTitle in self?.actions.rename(page.id, newTitle) }
     }

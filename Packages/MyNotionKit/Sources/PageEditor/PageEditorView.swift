@@ -13,16 +13,20 @@ public struct PageEditorView: View {
     /// Названия и иконки страниц для блоков-подстраниц.
     let linkedPages: [UUID: LinkedPage]
     let onOpenPage: @MainActor (UUID) -> Void
+    /// Выбрана иконка страницы (`nil` — убрать): правку делает владелец дерева, иконка возвращается в `document`.
+    let onSetIcon: @MainActor (String?) -> Void
     let onReady: @MainActor () -> Void
 
     public init(document: PageDocument, ancestorTitles: [String] = [], initialFocus: PageTextView.InitialFocus,
                 linkedPages: [UUID: LinkedPage] = [:], onOpenPage: @escaping @MainActor (UUID) -> Void = { _ in },
+                onSetIcon: @escaping @MainActor (String?) -> Void = { _ in },
                 onReady: @escaping @MainActor () -> Void = {}) {
         self.document = document
         self.ancestorTitles = ancestorTitles
         self.initialFocus = initialFocus
         self.linkedPages = linkedPages
         self.onOpenPage = onOpenPage
+        self.onSetIcon = onSetIcon
         self.onReady = onReady
     }
 
@@ -32,8 +36,8 @@ public struct PageEditorView: View {
             if case .failed(let reason) = document.saveStatus {
                 SaveStatusBanner(reason: reason)
             }
-            PageTextEditor(document: document, initialFocus: initialFocus, linkedPages: linkedPages,
-                           onOpenPage: onOpenPage, onReady: onReady)
+            PageTextEditor(document: document, icon: document.page.icon, initialFocus: initialFocus, linkedPages: linkedPages,
+                           onOpenPage: onOpenPage, onSetIcon: onSetIcon, onReady: onReady)
                 .overlay(alignment: .top) { scrollEdgeFade }
         }
         .background(Color(nsColor: Palette.pageBackground))
@@ -69,9 +73,12 @@ public struct PageEditorView: View {
 /// `PageTextView` в прокрутке для SwiftUI.
 struct PageTextEditor: NSViewRepresentable {
     let document: PageDocument
+    /// Иконка отдельно от документа: её смена должна обновить шапку.
+    let icon: String?
     let initialFocus: PageTextView.InitialFocus
     let linkedPages: [UUID: LinkedPage]
     let onOpenPage: @MainActor (UUID) -> Void
+    let onSetIcon: @MainActor (String?) -> Void
     let onReady: @MainActor () -> Void
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -79,6 +86,7 @@ struct PageTextEditor: NSViewRepresentable {
         textView.onReady = onReady
         textView.linkedPages = linkedPages
         textView.onOpenPage = onOpenPage
+        textView.onSetIcon = onSetIcon
         return Self.makeScrollView(around: textView)
     }
 
@@ -98,6 +106,8 @@ struct PageTextEditor: NSViewRepresentable {
         guard let textView = scrollView.documentView as? PageTextView else { return }
         textView.linkedPages = linkedPages
         textView.onOpenPage = onOpenPage
+        textView.onSetIcon = onSetIcon
+        textView.showIcon(icon)
     }
 
     static func dismantleNSView(_ scrollView: NSScrollView, coordinator: ()) {

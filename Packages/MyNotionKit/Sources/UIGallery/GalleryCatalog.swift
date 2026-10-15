@@ -36,6 +36,8 @@ public enum GalleryScene: Hashable, Sendable {
     case softLineBreaks
     /// Выделение через блоки с переносами строк: одна подложка на все строки.
     case selectionAcrossSoftBreaks
+    /// Иконка страницы: «Добавить иконку» под мышью, окно выбора эмодзи, поиск в нём (FR-034).
+    case pageIcon(GalleryPageIcon)
     /// Дерево четырёх уровней: ветка развёрнута или свёрнута.
     case sidebarTree(collapsed: Bool)
     /// Строка дерева под мышью: «⋯ +» справа; у длинного названия — обрезка перед ними.
@@ -58,6 +60,15 @@ public enum GalleryCaret: String, Hashable, Sendable, CaseIterable {
     case none
     case inMiddle
     case atEnd
+}
+
+public enum GalleryPageIcon: String, Hashable, Sendable, CaseIterable {
+    /// Мышь над шапкой страницы без иконки: серая «Добавить иконку» над названием.
+    case addIconHover
+    /// Окно выбора эмодзи под иконкой страницы.
+    case picker
+    /// В окне набрано «кот»: результаты без разделов, первый подсвечен.
+    case pickerSearch
 }
 
 public enum GalleryTrash: String, Hashable, Sendable, CaseIterable {
@@ -194,6 +205,13 @@ public enum GalleryCatalog {
                      "Панель форматирования под выделенным словом, у его конца, как у Notion: тип блока «Текст», кнопки, «Жирный» нажат (синий)", section: "Правка"),
         GalleryState("format-bar-type-menu", .formatBar(kindMenu: true),
                      "Панель форматирования с открытым списком типов: те же типы, что в меню «/», текущий отмечен галочкой", section: "Правка"),
+        GalleryState("page-icon-add-hover", .pageIcon(.addIconHover),
+                     "Мышь над шапкой страницы без иконки: серая «Добавить иконку» со значком над названием, как у Notion", section: "Правка"),
+        GalleryState("page-icon-picker", .pageIcon(.picker),
+                     "Окно выбора иконки под иконкой страницы: «Эмодзи», поиск, «Случайная», «Убрать», разделы и значки разделов внизу",
+                     section: "Правка"),
+        GalleryState("page-icon-picker-search", .pageIcon(.pickerSearch),
+                     "Поиск «кот» в окне выбора иконки: найденные эмодзи без разделов, первый подсвечен", section: "Правка"),
         GalleryState("soft-line-breaks", .softLineBreaks,
                      "Блоки с переносами строк (Shift+Enter): маркер, номер и квадрат у первой строки, следующие — с отступом текста; курсор во второй строке",
                      section: "Правка"),

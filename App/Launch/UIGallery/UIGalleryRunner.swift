@@ -222,6 +222,19 @@ final class UIGalleryRunner {
             if kindMenu, !PageEditorPreview.openFormatBarKindMenu(in: window) { return "список типов не открылся" }
             if let problem = GalleryTarget.popupsProblem("панель форматирования", in: window) { return problem }
 
+        case .pageIcon(let state):
+            switch state {
+            case .addIconHover:
+                await open(library.emptyPage)
+                if !PageEditorPreview.hoverHeader(in: window) { return "«Добавить иконку» не видна" }
+            case .picker, .pickerSearch:
+                await open(library.nestedLists)
+                guard PageEditorPreview.openIconPicker(query: state == .pickerSearch ? "кот" : "", in: window) else {
+                    return "окно выбора иконки не открылось"
+                }
+                if let problem = GalleryTarget.popupsProblem("окно выбора иконки", in: window) { return problem }
+            }
+
         case .selectionAcrossBlocks:
             guard let page = library.blockKindPages[.numberedItem] else { return "нет страницы нумерованного списка" }
             await open(page.pageId)

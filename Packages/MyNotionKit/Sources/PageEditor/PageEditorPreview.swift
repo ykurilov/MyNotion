@@ -78,6 +78,23 @@ public enum PageEditorPreview {
         return bar.isKindMenuOpen
     }
 
+    /// Мышь над шапкой страницы, как при наведении; `false` — «Добавить иконку» не видна (у страницы есть иконка).
+    @discardableResult
+    public static func hoverHeader(in window: NSWindow) -> Bool {
+        guard let header = textView(in: window)?.header else { return false }
+        header.isHovered = true
+        return !header.addIconButton.isHidden
+    }
+
+    /// Окно выбора иконки, как по щелчку на иконку страницы; `query` — набранное в поиске.
+    @discardableResult
+    public static func openIconPicker(query: String = "", in window: NSWindow) -> Bool {
+        guard let textView = textView(in: window), !textView.header.iconView.isHidden else { return false }
+        textView.openIconPicker()
+        textView.iconPicker.query = query
+        return textView.iconPicker.isShown
+    }
+
     /// Меню блока, как по щелчку на «⋮⋮» его ручек.
     @discardableResult
     public static func openBlockMenu(forBlock blockId: UUID, in window: NSWindow) -> Bool {

@@ -34,11 +34,15 @@ final class EditorFixture {
     let window: NSWindow
     let undoManager = UndoManager()
 
-    init(_ specs: [Spec] = [.paragraph()]) throws {
+    init(_ specs: [Spec] = [.paragraph()], icon: String? = nil) throws {
         folder = try TemporaryEditorFolder()
         store = try NotesStore(database: AppDatabase.open(at: folder.databaseURL), clock: HybridLogicalClock(deviceId: UUID()))
         pageId = try store.write { tx in
-            let page = try tx.createPage(title: "Блоки")
+            var page = try tx.createPage(title: "Блоки")
+            if let icon {
+                page.icon = icon
+                try tx.updatePage(page)
+            }
             for block in try tx.blocks(ofPage: page.id) { try tx.deleteBlock(block.id) }
             var key: FractionalSortKey?
             for spec in specs {

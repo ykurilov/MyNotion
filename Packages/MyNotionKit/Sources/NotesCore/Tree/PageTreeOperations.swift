@@ -10,6 +10,9 @@ public final class PageTreeOperations {
     public weak var undoManager: UndoManager?
     /// После каждой успешной операции, в том числе отмены: какие страницы она затронула.
     public var onChange: ((Set<UUID>) -> Void)?
+    /// Иконка страницы сменилась (в том числе отменой): страница и новая иконка. Вместо `onChange`, чтобы окно
+    /// не перечитывало открытую страницу, а только подставило иконку.
+    public var onIconChange: ((UUID, String?) -> Void)?
     /// Отмена не удалась (например, страницу уже стёрли навсегда).
     public var onUndoFailure: ((any Error) -> Void)?
 
@@ -44,6 +47,21 @@ public final class PageTreeOperations {
         }
         guard oldTitle != title else { return }
         registerUndo("Переименование") { try $0.rename(pageId, to: oldTitle) }
+    }
+
+    /// Поставить, сменить или убрать (`nil`) иконку-эмодзи (FR-034): одна правка поля `icon`.
+    public func setIcon(_ pageId: UUID, to icon: String?) throws {
+        let oldIcon = try perform(notify: false) { transaction in
+            guard var page = try transaction.page(pageId) else { throw NotesStoreError.pageNotFound(pageId) }
+            let oldIcon = page.icon
+            guard oldIcon != icon else { return oldIcon }
+            page.icon = icon
+            try transaction.updatePage(page)
+            return oldIcon
+        }
+        guard oldIcon != icon else { return }
+        onIconChange?(pageId, icon)
+        registerUndo("Иконка страницы") { try $0.setIcon(pageId, to: oldIcon) }
     }
 
     // MARK: Перенос
@@ -172,9 +190,9 @@ public final class PageTreeOperations {
         }
     }
 
-    /// Одна транзакция; после неё — набор затронутых страниц для окна.
+    /// Одна транзакция; после неё — набор затронутых страниц для окна (`notify: false` — без `onChange`).
     @discardableResult
-    private func perform<T>(_ body: (NotesTransaction) throws -> T) throws -> T {
+    private func perform<T>(notify: Bool = true, _ body: (NotesTransaction) throws -> T) throws -> T {
         var touched: Set<UUID> = []
         let result = try store.write { transaction in
             let result = try body(transaction)
@@ -189,7 +207,7 @@ public final class PageTreeOperations {
             }
             return result
         }
-        onChange?(touched)
+        if notify { onChange?(touched) }
         return result
     }
 

@@ -1,3 +1,4 @@
+import EmojiPicker
 import NotesCore
 import PageEditor
 import PageTree
@@ -51,6 +52,8 @@ private struct PagesWindow: View {
     @Environment(\.undoManager) private var undoManager
     /// Ширина в начале перетаскивания края панели.
     @State private var widthAtDragStart: Double?
+    /// Окно выбора иконки для строк боковой панели; у шапки страницы — своё в редакторе.
+    @State private var sidebarIconPicker = EmojiPickerController()
 
     var body: some View {
         HStack(spacing: 0) {
@@ -97,7 +100,12 @@ private struct PagesWindow: View {
                 move: { model.move($0, toParent: $1, at: $2) },
                 moveToTrash: { model.moveToTrash($0) },
                 addSubpage: { model.createSubpage(in: $0) },
-                collapsedPagesChanged: { model.setCollapsedPages($0) }
+                collapsedPagesChanged: { model.setCollapsedPages($0) },
+                chooseIcon: { pageId, anchor in
+                    guard let window = anchor.window else { return }
+                    let rect = window.convertToScreen(anchor.convert(anchor.bounds, to: nil))
+                    sidebarIconPicker.show(below: rect, in: window) { model.setIcon(pageId, to: $0) }
+                }
             ),
             trashActions: TrashActions(
                 restore: { model.restore($0) },
@@ -161,6 +169,7 @@ private struct PagesWindow: View {
                 initialFocus: model.initialFocus,
                 linkedPages: linkedPages,
                 onOpenPage: { model.select($0) },
+                onSetIcon: { model.setIcon(document.pageId, to: $0) },
                 onReady: onEditorReady
             )
             // Новый документ — новый редактор: страницу перечитали после операции с деревом.

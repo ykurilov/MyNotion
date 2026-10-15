@@ -1,4 +1,5 @@
 import AppKit
+import EmojiPicker
 import NotesCore
 import VisualStyle
 
@@ -41,6 +42,10 @@ public final class PageTextView: NSTextView {
     let layoutDelegate = BlockLayoutDelegate()
     let popups = EditorPopupController()
     let formatBar = FormatBarController()
+    /// Иконку выбрали в шапке (FR-034): «Добавить иконку», окно выбора; `nil` — убрать. Хозяин сохраняет её
+    /// и возвращает через `showIcon`.
+    public var onSetIcon: ((String?) -> Void)?
+    let iconPicker = EmojiPickerController()
     /// Где указатель мыши на экране; тесты подменяют.
     var pointerLocation: () -> NSPoint = { NSEvent.mouseLocation }
     lazy var blockHandles = BlockHandlesOverlay(textView: self)
@@ -97,6 +102,11 @@ public final class PageTextView: NSTextView {
             self?.layoutColumn()
         }
         header.onTitleEnter = { [weak self] in self?.focusBody(at: 0) }
+        header.onAddIcon = { [weak self] in
+            var generator = SystemRandomNumberGenerator()
+            self?.onSetIcon?(EmojiCatalog.shared.random(using: &generator).character)
+        }
+        header.onIconClick = { [weak self] in self?.openIconPicker() }
         _ = caret
         layoutColumn()
     }
@@ -541,6 +551,7 @@ public final class PageTextView: NSTextView {
         if newWindow == nil {
             formatBar.hide()
             closePopups()
+            iconPicker.close()
         }
         for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification] {
             if let window { NotificationCenter.default.removeObserver(self, name: name, object: window) }
@@ -628,6 +639,21 @@ public final class PageTextView: NSTextView {
         let widthChanged = newSize.width != frame.width
         super.setFrameSize(newSize)
         if widthChanged { layoutColumn() }
+    }
+
+    /// Показать иконку страницы из документа: шапка и текст сдвигаются, как при открытии страницы с ней.
+    public func showIcon(_ icon: String?) {
+        guard icon != header.iconView.emoji else { return }
+        header.setIcon(icon)
+        layoutColumn()
+    }
+
+    /// Окно выбора иконки под иконкой шапки, как у Notion.
+    public func openIconPicker() {
+        guard let window else { return }
+        let icon = header.iconView
+        let anchor = window.convertToScreen(icon.convert(icon.bounds, to: nil))
+        iconPicker.show(below: anchor, in: window) { [weak self] in self?.onSetIcon?($0) }
     }
 
     private func layoutColumn() {
@@ -828,96 +854,5 @@ private final class PageTitleFieldCell: NSTextFieldCell {
             editor.selectedTextAttributes = [.backgroundColor: Palette.textSelection]
         }
         return editor
-    }
-}
-
-/// Шапка страницы над текстом: эмодзи-иконка и название (contracts/visual-style.md, «Страница»).
-@MainActor
-
-public final class PageHeaderView: NSView, NSTextFieldDelegate {
-    private let iconLabel = NSTextField(labelWithString: "")
-    let titleField = PageTitleField(string: "")
-    var onTitleChange: ((String) -> Void)?
-    var onTitleEnter: (() -> Void)?
-
-    init(page: Page) {
-        super.init(frame: .zero)
-        iconLabel.stringValue = page.icon ?? ""
-        iconLabel.font = .systemFont(ofSize: Metrics.Page.iconFontSize)
-        iconLabel.alignment = .center
-        iconLabel.isHidden = page.icon == nil
-        addSubview(iconLabel)
-
-        let titleStyle = Typography.pageTitle
-        titleField.stringValue = page.title
-        titleField.font = titleStyle.font
-        titleField.textColor = Palette.textPrimary
-        let placeholderStyle = NSMutableParagraphStyle()
-        placeholderStyle.firstLineHeadIndent = Metrics.Page.emptyHintCaretGap
-        titleField.placeholderAttributedString = NSAttributedString(string: Page.untitledTitle, attributes: [
-            .font: titleStyle.font, .foregroundColor: Palette.textSecondary, .paragraphStyle: placeholderStyle,
-        ])
-        titleField.isBordered = false
-        titleField.drawsBackground = false
-        titleField.focusRingType = .none
-        titleField.usesSingleLineMode = false
-        titleField.cell?.wraps = true
-        titleField.cell?.isScrollable = false
-        titleField.lineBreakMode = .byWordWrapping
-        titleField.maximumNumberOfLines = 0
-        titleField.delegate = self
-        titleField.setAccessibilityIdentifier("page-title")
-        // Элемент доступности поля — его ячейка: без метки на ней название не находится.
-        titleField.cell?.setAccessibilityIdentifier("page-title")
-        addSubview(titleField)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
-
-    public override var isFlipped: Bool { true }
-
-    private var hasIcon: Bool { !iconLabel.isHidden }
-
-    private var titleTop: CGFloat {
-        hasIcon
-            ? Metrics.Page.headerTopPadding + Metrics.Page.iconSize + Metrics.Page.iconToTitleSpacing
-            : Metrics.Page.headerTopPaddingWithoutIcon
-    }
-
-    private func titleHeight(forWidth width: CGFloat) -> CGFloat {
-        let fitting = titleField.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: width, height: .greatestFiniteMagnitude)).height
-        return max(fitting ?? 0, Typography.pageTitle.lineHeight)
-    }
-
-    func height(forWidth width: CGFloat) -> CGFloat {
-        titleTop + titleHeight(forWidth: width) + Metrics.Page.titleToFirstBlockSpacing
-    }
-
-    public override func layout() {
-        super.layout()
-        // Строка эмодзи выше и шире квадрата иконки, хотя рисунок в нём помещается: поле по размеру строки
-        // с серединой в середине квадрата, иначе рисунок обрезается или съезжает.
-        let square = NSRect(x: 0, y: Metrics.Page.headerTopPadding, width: Metrics.Page.iconSize, height: Metrics.Page.iconSize)
-        let line = iconLabel.intrinsicContentSize
-        iconLabel.frame = NSRect(x: square.midX - line.width / 2, y: square.midY - line.height / 2, width: line.width, height: line.height)
-        titleField.frame = NSRect(x: 0, y: titleTop, width: bounds.width, height: titleHeight(forWidth: bounds.width))
-    }
-
-    func focusTitle() {
-        window?.makeFirstResponder(titleField)
-        titleField.currentEditor()?.selectedRange = NSRange(location: (titleField.stringValue as NSString).length, length: 0)
-    }
-
-    public func controlTextDidChange(_ notification: Notification) {
-        onTitleChange?(titleField.stringValue)
-        needsLayout = true
-    }
-
-    public func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
-        // Enter из названия — в первый блок (contracts/editor-interactions.md, ⌘N).
-        guard selector == #selector(NSResponder.insertNewline(_:)) else { return false }
-        onTitleEnter?()
-        return true
     }
 }

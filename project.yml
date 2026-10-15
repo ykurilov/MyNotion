@@ -36,6 +36,8 @@ targets:
       - package: MyNotionKit
         product: PageEditor
       - package: MyNotionKit
+        product: EmojiPicker
+      - package: MyNotionKit
         product: PageSearch
       - package: MyNotionKit
         product: MarkdownExport

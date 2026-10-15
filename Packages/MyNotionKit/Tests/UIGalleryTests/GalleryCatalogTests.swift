@@ -56,6 +56,11 @@ struct GalleryCatalogTests {
         #expect(scenes.contains { if case .slashMenu(let filter) = $0 { !filter.isEmpty } else { false } })
     }
 
+    @Test("Иконка страницы: «Добавить иконку» под мышью, окно эмодзи, поиск в нём")
+    func pageIconStatesPresent() {
+        for state in GalleryPageIcon.allCases { #expect(scenes.contains(.pageIcon(state)), "\(state)") }
+    }
+
     @Test("Боковая панель и корзина")
     func sidebarAndTrashStatesPresent() {
         let required: [GalleryScene] = [

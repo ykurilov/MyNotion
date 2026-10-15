@@ -55,6 +55,18 @@ public enum Palette {
     public static let popupDivider = themed(light: .hex(0xF0EFED), dark: .hex(0x373736))
     /// Значок нажатой кнопки панели форматирования — синий, как у Notion (снимок 15.10.2026).
     public static let formatBarActiveIcon = themed(light: .hex(0x2383E2), dark: .hex(0x2383E2))
+    /// Окно эмодзи (снимки Notion 16.10.2026): поле поиска, его синяя рамка, значки (лупа, «Случайная», разделы),
+    /// неактивный значок «Недавних», надписи разделов, «Убрать», рамка кнопки, черта над строкой разделов.
+    public static let emojiSearchBackground = themed(light: .hex(0xF9F8F7), dark: .hex(0x2C2C2C))
+    public static let focusRing = themed(light: .hex(0x2383E2), dark: .hex(0x2383E2))
+    public static let emojiPickerIcon = themed(light: .hex(0x8E8B86), dark: .hex(0xADA9A3))
+    public static let emojiPickerIconDisabled = themed(light: .hex(0xD2D1CF), dark: .hex(0x5B5A57))
+    public static let emojiSectionTitle = themed(light: .hex(0x7D7A75), dark: .hex(0xADA9A3))
+    public static let emojiPickerAction = themed(light: .hex(0x8E8B86), dark: .hex(0x8E8B86))
+    public static let emojiButtonBorder = themed(light: .hex(0xE6E5E3), dark: .hex(0x3B3B39))
+    public static let emojiSectionBarDivider = themed(light: .hex(0xF0EFED), dark: .hex(0x2C2C2B))
+    /// «Добавить иконку» в шапке страницы: серая надпись и значок (тёмная — по снимку Notion 16.10.2026, светлая ≈).
+    public static let pageHeaderButton = themed(light: .hex(0x9B9A97), dark: .hex(0x7D7A75))
 
     /// Тень всплывающих панелей: четыре слоя, последний — тонкая рамка. В тёмной теме тень гуще, а рамка светлая:
     /// тёмная тень на тёмной странице не видна (≈ по Notion).

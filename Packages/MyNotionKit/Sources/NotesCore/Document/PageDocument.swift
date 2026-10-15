@@ -56,6 +56,15 @@ public final class PageDocument {
         didEdit?()
     }
 
+    /// Иконку сменили в обход документа (`PageTreeOperations.setIcon`): подставить записанную, не трогая
+    /// несохранённое. Автосохранение пишет только название, поэтому иконку не затрёт.
+    public func adoptIcon(of stored: Page) {
+        page.icon = stored.icon
+        page.fieldClocks.icon = stored.fieldClocks.icon
+        savedPage.icon = stored.icon
+        savedPage.fieldClocks.icon = stored.fieldClocks.icon
+    }
+
     public func setText(_ text: InlineText, ofBlock blockId: UUID) {
         guard let index = indexById[blockId] else { return }
         let normalized = text.normalized()
