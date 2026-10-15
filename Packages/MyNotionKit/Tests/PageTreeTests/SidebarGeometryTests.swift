@@ -212,7 +212,7 @@ struct SidebarGeometryTests {
         host.layoutSubtreeIfNeeded()
 
         let titleBar = Metrics.Window.titleBarHeight
-        #expect(titleBar == 32)
+        #expect(titleBar == 36)
         // «✎»: нарисованный значок по центру квадрата у правого края, на середине строки светофора.
         let bitmap = try Self.render(host)
         let button = Metrics.Window.toolbarButtonSize

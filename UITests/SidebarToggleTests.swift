@@ -19,11 +19,15 @@ final class SidebarToggleTests: XCTestCase {
         let toggle = app.buttons["sidebar-toggle"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 5))
 
-        // Кнопка — в строке светофора: середина на 90 от левого края окна и на 16 от верха (visual-style.md).
+        // Кнопка — в строке светофора: середина на 95 от левого края окна и на 18 от верха (visual-style.md).
         let window = app.windows.firstMatch.frame
-        XCTAssertEqual(toggle.frame.midX - window.minX, 90, accuracy: 2)
-        XCTAssertEqual(toggle.frame.midY - window.minY, 16, accuracy: 2)
+        XCTAssertEqual(toggle.frame.midX - window.minX, 95, accuracy: 2)
+        XCTAssertEqual(toggle.frame.midY - window.minY, 18, accuracy: 2)
         let togglePlace = toggle.frame
+        // Кнопки окна — как у Notion: красная на 20,75 и 17,75 от левого верхнего угла.
+        let close = app.windows.firstMatch.buttons[XCUIIdentifierCloseWindow].frame
+        XCTAssertEqual(close.midX - window.minX, 20.75, accuracy: 1)
+        XCTAssertEqual(close.midY - window.minY, 17.75, accuracy: 1)
 
         // Кнопкой: свернуть — дерево ушло, кнопка на том же месте; развернуть — дерево вернулось.
         toggle.click()
