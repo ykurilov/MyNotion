@@ -1,6 +1,7 @@
 import NotesCore
 import PageEditor
 import PageTree
+import ServiceLaunch
 import SwiftUI
 import VisualStyle
 
@@ -24,7 +25,7 @@ struct MainWindowView: View {
 
     /// Окно на экране и принимает ввод: метка для замеров и, по флагу, снимок окна.
     private func editorReady() {
-        if options.presence == .background { BackgroundWindows.orderInBehindEverything() }
+        if options.presence == .background { BackgroundWindows.shared.orderInMainWindow() }
         LaunchMilestones.editorReady(reportTo: options.launchReportURL)
         if let snapshotURL = options.windowSnapshotURL {
             WindowSnapshot.capture(to: snapshotURL, hoveredSidebarRow: options.hoveredSidebarRow)

@@ -45,6 +45,15 @@ build_and_push() {
   rsync -a --delete -e "ssh -i $SSH_KEY" $APP_LOCAL $VM_USER@$ip:/Users/$VM_USER/
 }
 
+# Экран как у ноутбука с ретиной — 1512×982 точек @2x: окно галереи 1440×900 влезает целиком, снимки @2x.
+# Сам гость после перезапуска ставит 1024×768, поэтому режим ставится перед каждой галереей.
+set_screen() {
+  local ip=$1 tool=$DERIVED/displaymode
+  [[ $tool -nt $REPO/scripts/vm/displaymode.swift ]] || swiftc -O $REPO/scripts/vm/displaymode.swift -o $tool
+  scp -q -i $SSH_KEY $tool $VM_USER@$ip:/Users/$VM_USER/displaymode
+  vm_ssh $ip "./displaymode 1512 982 && defaults write com.apple.dock autohide -bool true"
+}
+
 # Приложение запускается в GUI-сессии виртуального Mac через `open` (из SSH так можно, `launchctl asuser` — нет).
 run_app() {
   local ip=$1; shift
@@ -55,7 +64,7 @@ case ${1:-} in
   gallery)
     shift; only=(); out=/tmp/mynotion-gallery-vm-$(date +%H%M%S)
     while (( $# )); do case $1 in --only) only=(--ui-gallery-only $2); shift 2;; --out) out=$2; shift 2;; *) shift;; esac; done
-    ip=$(ensure_vm_running); build_and_push $ip
+    ip=$(ensure_vm_running); build_and_push $ip; set_screen $ip
     vm_ssh $ip "rm -rf ~/gallery && mkdir ~/gallery"
     run_app $ip --ui-gallery /Users/$VM_USER/gallery $only
     mkdir -p $out && rsync -a -e "ssh -i $SSH_KEY" $VM_USER@$ip:/Users/$VM_USER/gallery/ $out/

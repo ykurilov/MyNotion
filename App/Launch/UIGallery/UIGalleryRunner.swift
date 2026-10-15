@@ -93,9 +93,16 @@ final class UIGalleryRunner {
 
     private func capture(_ shot: GalleryShot) async {
         NSApp.appearance = NSAppearance(named: shot.theme == .light ? .aqua : .darkAqua)
-        window.setContentSize(NSSize(width: shot.size.width, height: shot.size.height))
-        // Окно у нижнего края экрана, как развёрнутое: поповер корзины система сдвигает в пределы экрана.
-        if let screen = window.screen { window.setFrameOrigin(NSPoint(x: screen.visibleFrame.minX, y: screen.visibleFrame.minY)) }
+        let contentSize = NSSize(width: shot.size.width, height: shot.size.height)
+        if let screen = window.screen {
+            // Место и размер — одним вызовом: окно у нижнего края экрана, как развёрнутое. Если ставить размер
+            // раньше места, система ужимает окно по краю экрана (экран 1512×982 в виртуальном Mac).
+            let size = window.frameRect(forContentRect: NSRect(origin: .zero, size: contentSize)).size
+            let y = max(screen.frame.minY, min(screen.visibleFrame.minY, screen.visibleFrame.maxY - size.height))
+            window.setFrame(NSRect(origin: NSPoint(x: screen.visibleFrame.minX, y: y), size: size), display: true)
+        } else {
+            window.setContentSize(contentSize)
+        }
         await reset()
         if let problem = await show(shot.state.scene) {
             missing[shot.fileName] = problem
