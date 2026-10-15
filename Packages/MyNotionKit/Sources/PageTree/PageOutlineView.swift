@@ -138,9 +138,11 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
     private let iconLabel = NSTextField(labelWithString: "")
     private let documentIcon = NSImageView()
     private let disclosureButton = RowAccessoryButton()
-    private let titleLabel = NSTextField(labelWithString: "")
-    private let menuButton = RowAccessoryButton()
-    private let addButton = RowAccessoryButton()
+    let titleLabel = NSTextField(labelWithString: "")
+    let menuButton = RowAccessoryButton()
+    let addButton = RowAccessoryButton()
+    /// Поле переименования: стоит ровно на месте названия, текст не сдвигается; длинное прокручивается.
+    let renameField = RenameField()
     private var title = ""
     private var hasChildren = false
     private var isExpanded = false
@@ -163,24 +165,36 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
         documentIcon.imageScaling = .scaleNone
 
         configureIconButton(disclosureButton, symbol: "chevron.right", label: "Свернуть или развернуть",
-                            pointSize: Metrics.Sidebar.disclosureSymbolSize, action: #selector(toggleExpanded))
+                            pointSize: Metrics.Sidebar.disclosureSymbolSize, action: #selector(toggleExpanded), tint: Palette.handleIcon)
         disclosureButton.setAccessibilityIdentifier("page-tree-disclosure")
         configureIconButton(menuButton, symbol: "ellipsis", label: "Действия со страницей",
-                            pointSize: Metrics.Sidebar.disclosureSymbolSize + 2, action: #selector(showMenu))
+                            pointSize: Metrics.Sidebar.accessorySymbolSize, action: #selector(showMenu))
         menuButton.setAccessibilityIdentifier("page-tree-menu")
         configureIconButton(addButton, symbol: "plus", label: "Добавить подстраницу",
-                            pointSize: Metrics.Sidebar.disclosureSymbolSize + 2, action: #selector(addSubpage))
+                            pointSize: Metrics.Sidebar.accessorySymbolSize, action: #selector(addSubpage))
         addButton.setAccessibilityIdentifier("page-tree-add-subpage")
 
         titleLabel.font = Typography.sidebarRow.font
         titleLabel.lineBreakMode = .byTruncatingTail
         titleLabel.cell?.truncatesLastVisibleLine = true
         titleLabel.maximumNumberOfLines = 1
-        titleLabel.delegate = self
-        titleLabel.focusRingType = .none
         titleLabel.setAccessibilityIdentifier("page-tree-title")
 
-        for view in [iconLabel, documentIcon, disclosureButton, titleLabel, menuButton, addButton] as [NSView] {
+        renameField.font = Typography.sidebarRow.font
+        renameField.textColor = Palette.textPrimary
+        renameField.isBordered = false
+        renameField.isBezeled = false
+        renameField.drawsBackground = false
+        renameField.focusRingType = .none
+        renameField.usesSingleLineMode = true
+        renameField.cell?.isScrollable = true
+        renameField.cell?.wraps = false
+        renameField.lineBreakMode = .byClipping
+        renameField.delegate = self
+        renameField.isHidden = true
+        renameField.setAccessibilityIdentifier("page-tree-rename")
+
+        for view in [iconLabel, documentIcon, disclosureButton, titleLabel, renameField, menuButton, addButton] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             addSubview(view)
         }
@@ -188,19 +202,22 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
         let accessorySize = Metrics.Sidebar.rowAccessorySize
         let padding = Metrics.Sidebar.rowHorizontalPadding
         NSLayoutConstraint.activate([
-            iconLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: padding),
+            // Эмодзи — по центру квадрата иконки, как значок документа: ширина эмодзи своя.
+            documentIcon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: padding),
+            iconLabel.centerXAnchor.constraint(equalTo: documentIcon.centerXAnchor),
             iconLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
-            iconLabel.widthAnchor.constraint(equalToConstant: iconSize),
-            documentIcon.leadingAnchor.constraint(equalTo: iconLabel.leadingAnchor),
             documentIcon.centerYAnchor.constraint(equalTo: centerYAnchor),
             documentIcon.widthAnchor.constraint(equalToConstant: iconSize),
             documentIcon.heightAnchor.constraint(equalToConstant: iconSize),
-            disclosureButton.leadingAnchor.constraint(equalTo: iconLabel.leadingAnchor),
+            disclosureButton.leadingAnchor.constraint(equalTo: documentIcon.leadingAnchor),
             disclosureButton.centerYAnchor.constraint(equalTo: centerYAnchor),
             disclosureButton.widthAnchor.constraint(equalToConstant: iconSize),
             disclosureButton.heightAnchor.constraint(equalToConstant: iconSize),
 
-            titleLabel.leadingAnchor.constraint(equalTo: iconLabel.trailingAnchor, constant: Metrics.Sidebar.rowIconSpacing),
+            titleLabel.leadingAnchor.constraint(equalTo: documentIcon.trailingAnchor, constant: Metrics.Sidebar.rowIconSpacing),
+            renameField.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor, constant: Self.renameTextOffset),
+            renameField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -padding + Self.renameTextOffset),
+            renameField.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
             titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
             titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -padding),
 
@@ -243,34 +260,51 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
 
     // MARK: Переименование
 
+    /// Текст редактируемого поля стоит на 2 правее его рамки и выходит на 2 за правый край (замер в SidebarGeometryTests):
+    /// поле шире на 2 с каждой стороны, чтобы текст встал ровно на место названия и кончался за 8 до края строки.
+    static let renameTextOffset: CGFloat = -2
+
     func beginRenaming() {
         guard let window else { return }
         isRenaming = true
         renameCancelled = false
-        titleLabel.isEditable = true
-        titleLabel.isSelectable = true
-        titleLabel.drawsBackground = false
-        titleLabel.stringValue = title
-        window.makeFirstResponder(titleLabel)
-        titleLabel.currentEditor()?.selectAll(nil)
+        renameField.stringValue = title
+        renameField.isHidden = false
+        titleLabel.isHidden = true
+        updateHoverState()
+        window.makeFirstResponder(renameField)
+        // Общий редактор окна рисует белый фон и рамку фокуса: поле стоит на строке без плашки.
+        if let editor = renameField.currentEditor() as? NSTextView {
+            editor.drawsBackground = false
+            editor.backgroundColor = .clear
+            editor.focusRingType = .none
+            editor.enclosingScrollView?.drawsBackground = false
+        }
+        renameField.currentEditor()?.selectAll(nil)
+    }
+
+    private func finishRenaming() {
+        isRenaming = false
+        renameField.isHidden = true
+        titleLabel.isHidden = false
+        updateHoverState()
     }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         guard commandSelector == #selector(cancelOperation(_:)) else { return false }
         renameCancelled = true
-        titleLabel.stringValue = title
+        renameField.stringValue = title
         window?.makeFirstResponder(enclosingOutline)
         return true
     }
 
     func controlTextDidEndEditing(_ notification: Notification) {
         guard isRenaming else { return }
-        isRenaming = false
-        titleLabel.isEditable = false
-        titleLabel.isSelectable = false
-        let newTitle = titleLabel.stringValue
+        finishRenaming()
+        let newTitle = renameField.stringValue
         if !renameCancelled, newTitle != title {
             title = newTitle
+            titleLabel.stringValue = newTitle
             onRenameCommitted?(newTitle)
         }
         if window?.firstResponder == nil || window?.firstResponder === window {
@@ -286,10 +320,12 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
 
     // MARK: Вид
 
-    private func configureIconButton(_ button: NSButton, symbol: String, label: String, pointSize: CGFloat, action: Selector) {
-        let configuration = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .semibold)
+    /// «⋯» и «+» — одного размера и веса, цвета второстепенного текста; стрелка раскрытия — цвета ручек.
+    private func configureIconButton(_ button: NSButton, symbol: String, label: String, pointSize: CGFloat, action: Selector,
+                                     tint: NSColor = Palette.textSecondary) {
+        let configuration = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .medium)
         button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)?.withSymbolConfiguration(configuration)
-        button.contentTintColor = Palette.handleIcon
+        button.contentTintColor = tint
         button.isBordered = false
         button.bezelStyle = .regularSquare
         button.imagePosition = .imageOnly
@@ -353,4 +389,9 @@ final class RowAccessoryButton: NSButton {
 
     override func mouseEntered(with event: NSEvent) { isHovered = true }
     override func mouseExited(with event: NSEvent) { isHovered = false }
+}
+
+/// Поле переименования: рамка поля — ровно то место, где виден текст (у обычного поля текст выходит на 2 за рамку выравнивания).
+final class RenameField: NSTextField {
+    override var alignmentRectInsets: NSEdgeInsets { NSEdgeInsetsZero }
 }

@@ -17,25 +17,23 @@ public struct TrashActions {
     }
 }
 
-/// Корзина: удалённые страницы (каждая — со своими подстраницами), вернуть, удалить навсегда, очистить.
-/// Удаление навсегда не отменяется, поэтому сначала спрашивает.
+/// Содержимое окна корзины: удалённые страницы (каждая — со своими подстраницами), вернуть, удалить навсегда, очистить.
+/// Удаление навсегда не отменяется: спрашивает окно корзины (`confirmDeleteForever`, `confirmEmptyTrash`).
 struct TrashView: View {
     let entries: [Page]
     let actions: TrashActions
+    let confirmDeleteForever: (Page) -> Void
+    let confirmEmptyTrash: () -> Void
 
-    @State private var pendingErase: PendingErase?
-
-    private enum PendingErase: Identifiable {
-        case page(Page)
-        case everything
-
-        var id: String {
-            switch self {
-            case .page(let page): page.id.uuidString
-            case .everything: "everything"
-            }
-        }
+    /// Высота содержимого без прокрутки: заголовок, строки, линия и «Очистить корзину» (или строка «пусто»).
+    static func preferredHeight(entryCount: Int) -> CGFloat {
+        let row = Metrics.Sidebar.rowHeight
+        let inset = Metrics.TrashPanel.contentInset
+        guard entryCount > 0 else { return 2 * inset + 2 * row }
+        return 2 * inset + row + CGFloat(entryCount) * row + dividerHeight + row
     }
+
+    private static let dividerHeight = 1 + 2 * Metrics.Sidebar.rowVerticalPadding
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -43,83 +41,56 @@ struct TrashView: View {
                 .font(Font(Typography.sidebarGroupHeader.font))
                 .foregroundStyle(Color(nsColor: Palette.textSecondary))
                 .padding(.horizontal, Metrics.Sidebar.rowHorizontalPadding)
-                .frame(height: Metrics.Sidebar.rowHeight, alignment: .leading)
+                .frame(maxWidth: .infinity, minHeight: Metrics.Sidebar.rowHeight, maxHeight: Metrics.Sidebar.rowHeight,
+                       alignment: .leading)
 
             if entries.isEmpty {
                 Text("Корзина пуста")
                     .font(Font(Typography.sidebarRow.font))
                     .foregroundStyle(Color(nsColor: Palette.textSecondary))
                     .padding(.horizontal, Metrics.Sidebar.rowHorizontalPadding)
-                    .frame(height: Metrics.Sidebar.rowHeight, alignment: .leading)
+                    .frame(maxWidth: .infinity, minHeight: Metrics.Sidebar.rowHeight, maxHeight: Metrics.Sidebar.rowHeight,
+                           alignment: .leading)
+                    .accessibilityIdentifier("trash-empty-state")
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(entries) { page in row(page) }
                     }
                 }
-                .frame(maxHeight: Metrics.Sidebar.trashPopoverMaxHeight)
+                .frame(maxHeight: .infinity)
 
                 Rectangle()
                     .fill(Color(nsColor: Palette.border))
                     .frame(height: 1)
                     .padding(.vertical, Metrics.Sidebar.rowVerticalPadding)
 
-                Button { pendingErase = .everything } label: {
-                    Text("Очистить корзину")
-                        .font(Font(Typography.sidebarRow.font))
-                        .foregroundStyle(Color(nsColor: Palette.sidebarText))
-                        .padding(.horizontal, Metrics.Sidebar.rowHorizontalPadding)
-                        .frame(maxWidth: .infinity, minHeight: Metrics.Sidebar.rowHeight, alignment: .leading)
-                        .contentShape(Rectangle())
+                Button(action: confirmEmptyTrash) {
+                    EmptyTrashLabel()
                 }
                 .buttonStyle(SidebarRowButtonStyle())
                 .accessibilityIdentifier("trash-empty")
             }
         }
-        .padding(Metrics.Sidebar.panelInset)
-        .frame(width: Metrics.Sidebar.trashPopoverWidth)
-        .background(Color(nsColor: Palette.pageBackground))
-        .alert(item: $pendingErase) { pending in
-            switch pending {
-            case .page(let page):
-                Alert(
-                    title: Text("Удалить «\(page.displayTitle)» навсегда?"),
-                    message: Text("Страница и её подстраницы сотрутся. Вернуть их будет нельзя."),
-                    primaryButton: .destructive(Text("Удалить навсегда")) { actions.deleteForever(page.id) },
-                    secondaryButton: .cancel(Text("Отмена"))
-                )
-            case .everything:
-                Alert(
-                    title: Text("Очистить корзину?"),
-                    message: Text("Все страницы из корзины сотрутся. Вернуть их будет нельзя."),
-                    primaryButton: .destructive(Text("Очистить")) { actions.emptyTrash() },
-                    secondaryButton: .cancel(Text("Отмена"))
-                )
-            }
-        }
+        .padding(Metrics.TrashPanel.contentInset)
+        .frame(width: Metrics.TrashPanel.width, alignment: .topLeading)
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 
     private func row(_ page: Page) -> some View {
         HStack(spacing: Metrics.Sidebar.rowIconSpacing) {
-            Group {
-                if let icon = page.icon {
-                    Text(icon).font(.system(size: Metrics.Sidebar.rowEmojiFontSize))
-                } else {
-                    Image(nsImage: DocumentGlyph.image(size: Metrics.Sidebar.rowIconSize))
-                }
-            }
-            .frame(width: Metrics.Sidebar.rowIconSize, height: Metrics.Sidebar.rowIconSize)
-
+            PageIconView(icon: page.icon)
             Text(page.displayTitle)
                 .font(Font(Typography.sidebarRow.font))
                 .foregroundStyle(Color(nsColor: Palette.textPrimary))
                 .lineLimit(1)
                 .truncationMode(.tail)
-            Spacer(minLength: 0)
+            Spacer(minLength: Metrics.Sidebar.rowAccessorySpacing)
             iconButton("arrow.uturn.backward", label: "Вернуть", identifier: "trash-restore") { actions.restore(page.id) }
-            iconButton("trash", label: "Удалить навсегда", identifier: "trash-delete-forever") { pendingErase = .page(page) }
+            iconButton("trash", label: "Удалить навсегда", identifier: "trash-delete-forever") { confirmDeleteForever(page) }
         }
-        .padding(.horizontal, Metrics.Sidebar.rowHorizontalPadding)
+        .padding(.leading, Metrics.Sidebar.rowHorizontalPadding)
+        .padding(.trailing, Metrics.Sidebar.rowHorizontalPadding / 2)
         .frame(height: Metrics.Sidebar.rowHeight)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("trash-entry")
@@ -129,14 +100,51 @@ struct TrashView: View {
     private func iconButton(_ symbol: String, label: String, identifier: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: Metrics.Sidebar.disclosureSymbolSize + 2, weight: .semibold))
-                .foregroundStyle(Color(nsColor: Palette.handleIcon))
+                .font(.system(size: Metrics.Sidebar.accessorySymbolSize, weight: .medium))
+                .foregroundStyle(Color(nsColor: Palette.textSecondary))
                 .frame(width: Metrics.Sidebar.rowAccessorySize, height: Metrics.Sidebar.rowAccessorySize)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(SidebarRowButtonStyle())
+        .buttonStyle(SidebarRowButtonStyle(cornerRadius: Metrics.Sidebar.rowAccessoryCornerRadius))
         .help(label)
         .accessibilityLabel(label)
         .accessibilityIdentifier(identifier)
+    }
+}
+
+/// «Очистить корзину»: видно, что это действие; под мышью — красным.
+private struct EmptyTrashLabel: View {
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: Metrics.Sidebar.rowIconSpacing) {
+            Image(systemName: "trash")
+                .font(.system(size: Metrics.Sidebar.accessorySymbolSize, weight: .medium))
+                .frame(width: Metrics.Sidebar.rowIconSize, height: Metrics.Sidebar.rowIconSize)
+            Text("Очистить корзину")
+                .font(Font(Typography.sidebarRow.font))
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(Color(nsColor: isHovered ? Palette.destructiveText : Palette.textPrimary))
+        .padding(.horizontal, Metrics.Sidebar.rowHorizontalPadding)
+        .frame(maxWidth: .infinity, minHeight: Metrics.Sidebar.rowHeight, maxHeight: Metrics.Sidebar.rowHeight)
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
+    }
+}
+
+/// Иконка страницы в строке: эмодзи или значок документа, по центру квадрата 20×20.
+struct PageIconView: View {
+    let icon: String?
+
+    var body: some View {
+        Group {
+            if let icon {
+                Text(icon).font(.system(size: Metrics.Sidebar.rowEmojiFontSize))
+            } else {
+                Image(nsImage: DocumentGlyph.image(size: Metrics.Sidebar.rowIconSize))
+            }
+        }
+        .frame(width: Metrics.Sidebar.rowIconSize, height: Metrics.Sidebar.rowIconSize)
     }
 }
