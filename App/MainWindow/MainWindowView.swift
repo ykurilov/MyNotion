@@ -12,6 +12,13 @@ struct MainWindowView: View {
     let options: LaunchOptions
 
     var body: some View {
+        content
+            // Кнопки окна — на месте Notion (visual-style.md, «Боковая панель»).
+            .background(TrafficLightsAnchor())
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch library {
         case .success(let model):
             PagesWindow(model: model, onEditorReady: editorReady)
@@ -42,6 +49,19 @@ struct MainWindowView: View {
         }
         if let benchmarkURL = options.typingBenchmarkURL, case .success(let model) = library {
             TypingBenchmark.editorReady(model: model, reportTo: benchmarkURL)
+        }
+    }
+}
+
+/// Как только вид попал в окно — кнопки окна на месте Notion и держатся там.
+private struct TrafficLightsAnchor: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { WindowWatcher() }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    private final class WindowWatcher: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let window { TrafficLights.keepInPlace(in: window) }
         }
     }
 }

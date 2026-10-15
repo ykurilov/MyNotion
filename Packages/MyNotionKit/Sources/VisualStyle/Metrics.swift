@@ -169,8 +169,10 @@ public enum Metrics {
 
     /// Верхняя строка окна — в линию со светофором: шторка панели и «✎» (по снимку Notion для Mac).
     public enum Window {
-        /// Высота строки светофора; середина — на 16 от верха окна, как у системных кнопок.
-        public static let titleBarHeight: CGFloat = 32
+        /// Середина красной кнопки окна от левого верхнего угла окна, как у Notion (у системы — 15,75; 15,75).
+        public static let trafficLightsCenter = CGPoint(x: 20.75, y: 17.75)
+        /// Высота строки светофора, шторки и «✎»; середина — на 18 от верха окна, как у Notion.
+        public static let titleBarHeight: CGFloat = 36
         /// Кнопки строки: квадрат, значок внутри, скругление фона при наведении.
         public static let toolbarButtonSize: CGFloat = 28
         /// Значки по снимку Notion: шторка ≈ 16,5 × 13,5, «✎» ≈ 13,5 × 13,5.
@@ -178,7 +180,7 @@ public enum Metrics {
         public static let newPageSymbolSize: CGFloat = 13
         public static let toolbarButtonCornerRadius: CGFloat = 6
         /// Середина шторки от левого края окна: на 28 правее середины зелёной кнопки, как у Notion.
-        public static let sidebarToggleCenterX: CGFloat = 90
+        public static let sidebarToggleCenterX: CGFloat = 95
         /// Сворачивание и разворот панели.
         public static let sidebarToggleDuration: Double = 0.2
     }
