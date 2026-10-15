@@ -96,8 +96,10 @@ public enum Metrics {
         public static let dragHandleSize = CGSize(width: 18, height: 24)
         public static let dragHandleLeadingOffset: CGFloat = 28
         public static let cornerRadius: CGFloat = 4
-        /// Линия места сброса при перетаскивании блока (≈ по Notion).
+        /// Линия места сброса при перетаскивании блока (по снимку Notion).
         public static let dropIndicatorHeight: CGFloat = 4
+        /// Непрозрачность копии блока, которая едет за мышью (по снимку Notion: текст 111 из 240 на фоне 25).
+        public static let dragGhostOpacity: CGFloat = 0.4
         /// Сдвиг мыши, после которого щелчок по «⋮⋮» становится перетаскиванием.
         public static let dragThreshold: CGFloat = 3
     }

@@ -194,6 +194,10 @@ public final class PageTextView: NSTextView {
     }
 
     public override func doCommand(by selector: Selector) {
+        if selector == #selector(NSResponder.cancelOperation(_:)), blockHandles.isDragging {
+            blockHandles.cancelDrag()
+            return
+        }
         if handlePopupCommand(selector) { return }
         super.doCommand(by: selector)
     }

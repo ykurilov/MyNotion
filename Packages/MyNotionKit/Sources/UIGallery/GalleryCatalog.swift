@@ -20,6 +20,10 @@ public enum GalleryScene: Hashable, Sendable {
     case slashMenu(filter: String)
     /// Меню блока по щелчку на «⋮⋮».
     case blockMenu
+    /// Последний пустой блок страницы списка стал пунктом от «- »: маркер и подсказка там же, где у пункта выше.
+    case bulletByShortcutAtEnd
+    /// Пункт с вложенными тянут за «⋮⋮»: копия едет за мышью, линия показывает место сброса.
+    case blockDragging
     /// Выделенный текст с жирным, курсивом и кодом.
     case formattedSelection
     /// Дерево четырёх уровней: ветка развёрнута или свёрнута.
@@ -163,6 +167,10 @@ public enum GalleryCatalog {
         GalleryState("slash-menu", .slashMenu(filter: ""), "Меню «/» в пустом абзаце, все типы", section: "Правка", narrowToo: true),
         GalleryState("slash-menu-filtered", .slashMenu(filter: "заг"), "Меню «/» с фильтром «заг»", section: "Правка"),
         GalleryState("block-menu", .blockMenu, "Меню блока по щелчку на «⋮⋮»", section: "Правка"),
+        GalleryState("bullet-shortcut-at-end", .bulletByShortcutAtEnd,
+                     "Последний пустой блок стал пунктом от «- »: маркер с отступом, «Список» там, где начнётся текст", section: "Правка"),
+        GalleryState("block-dragging", .blockDragging,
+                     "Идёт перетаскивание за «⋮⋮»: копия пункта с вложенными едет за мышью, синяя линия — место сброса", section: "Правка"),
         GalleryState("formatted-selection", .formattedSelection,
                      "Выделенный текст с жирным, курсивом и зачёркнутым", section: "Правка"),
     ]

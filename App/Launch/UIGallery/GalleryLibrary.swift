@@ -15,6 +15,8 @@ struct GalleryLibrary {
     let sample: PageContent
     let blockKindPages: [BlockKind: BlockKindPage]
     let nestedLists: UUID
+    /// «Первый уровень» маркированного списка: у него два вложенных пункта.
+    let nestedListGroup: UUID
     let emptyPage: UUID
     let untitledPage: UUID
     /// «Проекты» → … → страница четвёртого уровня; у всех длинные названия.
@@ -76,7 +78,7 @@ struct GalleryLibrary {
             }
 
             let nestedLists = try page("Вложенные списки", icon: "🧩")
-            _ = try blocks(nestedLists, [
+            let nestedListIds = try blocks(nestedLists, [
                 (.heading2, "Маркированный", 0, false),
                 (.bulletItem, "Первый уровень", 0, false), (.bulletItem, "Второй уровень", 1, false),
                 (.bulletItem, "Третий уровень", 2, false), (.bulletItem, "Снова первый", 0, false),
@@ -114,7 +116,8 @@ struct GalleryLibrary {
             _ = try page("Удалённая страница с очень длинным названием, которое обрезается в корзине", trashed: true)
             _ = try page("Цели на год", icon: "🎯", trashed: true)
 
-            return GalleryLibrary(sample: sample, blockKindPages: blockKindPages, nestedLists: nestedLists, emptyPage: emptyPage,
+            return GalleryLibrary(sample: sample, blockKindPages: blockKindPages, nestedLists: nestedLists,
+                                  nestedListGroup: nestedListIds[1], emptyPage: emptyPage,
                                   untitledPage: untitledPage, projects: projects, projectBranch: [projects, work, report],
                                   deepPage: deepPage, longTitlePage: longTitlePage, archive: archive,
                                   notesPage: notesPage, notesBlock: notesBlock)
