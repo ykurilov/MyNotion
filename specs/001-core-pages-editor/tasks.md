@@ -111,7 +111,7 @@ description: "Задачи: минимальное ядро MyNotion для macO
 - [x] T033 [US2] Заменить временный список в `App/MainWindow/MainWindowView.swift` деревом; ⇧⌘N — подстраница; сохранение свёрнутых веток и ширины панели в `WindowState`
 - [x] T034 [US2] Отмена операций с деревом через `UndoManager` окна в `PK/Sources/NotesCore/Tree/PageTreeOperations.swift` (FR-012)
 
-**Checkpoint**: Записи раскладываются по дереву. Сборка, затронутые тесты и замеры (`PerformanceTests`), показ Юрию, коммит.
+**Checkpoint**: Записи раскладываются по дереву. Сборка, затронутые тесты и замеры (`PerformanceTests`), галерея `--ui-gallery` и проверяющий интерфейса, показ Юрию, коммит.
 
 ---
 
@@ -143,7 +143,7 @@ description: "Задачи: минимальное ядро MyNotion для macO
 - [x] T047 [US3] Единая отмена для смены типа, перестановки и вложенности в `PK/Sources/PageEditor/PageTextView.swift` (FR-012)
 - [x] T048 [P] [US3] Замер отклика в `PerformanceTests/TypingAndNavigationTests.swift`: 200 нажатий в странице на 1 000 блоков и переходы между страницами на эталонной базе, p95 ≤ 50 мс через signpost; страница на 10 000 блоков прокручивается и набирается без превышения
 
-**Checkpoint**: Полноценный редактор. Сборка, затронутые тесты и замеры (`PerformanceTests`), показ Юрию, коммит.
+**Checkpoint**: Полноценный редактор. Сборка, затронутые тесты и замеры (`PerformanceTests`), галерея `--ui-gallery` и проверяющий интерфейса, показ Юрию, коммит.
 
 ---
 
@@ -165,7 +165,7 @@ description: "Задачи: минимальное ядро MyNotion для macO
 - [ ] T053 [US4] Поле поиска и список результатов вверху боковой панели в `PK/Sources/PageSearch/SidebarSearchField.swift` (вид по contracts/visual-style.md, результаты — всплывающим меню); подключение в `App/MainWindow/MainWindowView.swift`, ⇧⌘F фокусирует поле
 - [ ] T054 [P] [US4] Замер в `PerformanceTests/SearchTests.swift`: ≤ 100 мс на символ по эталонной базе (SC-009)
 
-**Checkpoint**: Поиск работает. Сборка, затронутые тесты и замеры (`PerformanceTests`), показ Юрию, коммит.
+**Checkpoint**: Поиск работает. Сборка, затронутые тесты и замеры (`PerformanceTests`), галерея `--ui-gallery` и проверяющий интерфейса, показ Юрию, коммит.
 
 ---
 
@@ -179,7 +179,7 @@ description: "Задачи: минимальное ядро MyNotion для macO
 - [ ] T056 `MarkdownBlockWriter` в `PK/Sources/MarkdownExport/MarkdownBlockWriter.swift` и `MarkdownExporter` в `PK/Sources/MarkdownExport/MarkdownExporter.swift` (папка `MyNotion-выгрузка-<ГГГГ-ММ-ДД>/`)
 - [ ] T057 Команда меню «Выгрузить в Markdown…» (⌘⇧E) с выбором папки в `App/Settings/ExportCommand.swift`
 
-**Checkpoint**: Записи можно забрать в обычные файлы. Сборка, затронутые тесты и замеры (`PerformanceTests`), показ Юрию, коммит.
+**Checkpoint**: Записи можно забрать в обычные файлы. Сборка, затронутые тесты и замеры (`PerformanceTests`), галерея `--ui-gallery` и проверяющий интерфейса, показ Юрию, коммит.
 
 ---
 
@@ -228,7 +228,7 @@ description: "Задачи: минимальное ядро MyNotion для macO
 - [ ] T081 [US5] Значок синхронизации внизу боковой панели в `PK/Sources/PageTree/SyncStatusBadge.swift` (FR-022)
 - [ ] T082 [US5] Метка «Две версии» и окно сравнения с выбором (одна версия или обе двумя блоками) в `PK/Sources/PageEditor/ConflictResolutionView.swift`; уведомление о возврате страницы из корзины
 
-**Checkpoint**: Записи на всех Mac. Живая проверка на двух Mac по quickstart.md. Сборка, затронутые тесты и замеры (`PerformanceTests`), показ Юрию, коммит.
+**Checkpoint**: Записи на всех Mac. Живая проверка на двух Mac по quickstart.md. Сборка, затронутые тесты и замеры (`PerformanceTests`), галерея `--ui-gallery` и проверяющий интерфейса, показ Юрию, коммит.
 
 ---
 
@@ -252,7 +252,7 @@ description: "Задачи: минимальное ядро MyNotion для macO
 - [ ] T089 [US6] `NotionImporter` в `PK/Sources/NotionImport/NotionImporter.swift`: обход папок, CSV, ссылки, транзакция на ветку, `ImportRun` со статусами running, finished, failed, ход работы
 - [ ] T090 [US6] Команда «Импорт из Notion…», прогресс и окно отчёта в `App/Settings/NotionImportView.swift`
 
-**Checkpoint**: Переезд из Notion. Сборка, затронутые тесты и замеры (`PerformanceTests`), показ Юрию, коммит.
+**Checkpoint**: Переезд из Notion. Сборка, затронутые тесты и замеры (`PerformanceTests`), галерея `--ui-gallery` и проверяющий интерфейса, показ Юрию, коммит.
 
 ---
 
