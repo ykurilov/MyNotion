@@ -18,7 +18,7 @@ enum TrashPanelLayout {
 }
 
 /// Окно корзины: всплывающая панель над страницей. Закрывается по Esc, щелчку мимо и повторному щелчку по «Корзине».
-/// Удалить навсегда и очистить корзину — только после вопроса по центру окна приложения.
+/// Удалить навсегда и очистить корзину — только после вопроса (`ConfirmationDialogWindow`).
 @MainActor
 final class TrashPanelController {
     /// Строка «Корзина»: от неё окно узнаёт своё место.
@@ -118,38 +118,15 @@ final class TrashPanelController {
                 action: "Очистить") { [weak self] in self?.actions?.emptyTrash() }
     }
 
-    /// Вопрос — листом окна приложения (по центру его ширины). «Отмена» — по Enter, стирающая кнопка — красная.
+    /// Вопрос — над содержимым окна и над окном корзины. После ответа ввод снова у окна корзины.
     private func confirm(title: String, message: String, action: String, perform: @escaping @MainActor () -> Void) {
         guard let parent = anchorView?.window else { return }
-        let alert = DestructiveConfirmation.alert(title: title, message: message, action: action)
         isConfirming = true
-        alert.beginSheetModal(for: parent) { [weak self] response in
-            MainActor.assumeIsolated {
-                self?.isConfirming = false
-                if response == DestructiveConfirmation.confirmed { perform() }
-            }
+        ConfirmationDialogWindow.present(over: parent, title: title, message: message, action: action) { [weak self] confirmed in
+            self?.isConfirming = false
+            self?.panel?.makeKey()
+            if confirmed { perform() }
         }
-    }
-}
-
-/// Вопрос перед действием, которое не отменить.
-@MainActor
-enum DestructiveConfirmation {
-    static let confirmed = NSApplication.ModalResponse.alertSecondButtonReturn
-
-    static func alert(title: String, message: String, action: String) -> NSAlert {
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = title
-        alert.informativeText = message
-        let cancel = alert.addButton(withTitle: "Отмена")
-        cancel.keyEquivalent = "\r"
-        let destructive = alert.addButton(withTitle: action)
-        destructive.keyEquivalent = ""
-        // Системная красная кнопка: сразу видно, что она стирает.
-        destructive.hasDestructiveAction = true
-        destructive.setAccessibilityIdentifier("confirm-destructive")
-        return alert
     }
 }
 
