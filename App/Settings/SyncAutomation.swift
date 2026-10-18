@@ -13,6 +13,8 @@ enum SyncAutomation {
         var joinCodeOutput: URL?
         /// Второй Mac: файл с кодом (ждём, пока появится).
         var joinCodeInput: URL?
+        /// Куда писать ход синхронизации; без него — в стандартный поток ошибок.
+        var logFile: URL?
 
         func with(_ change: (inout Options) -> Void) -> Options {
             var copy = self
@@ -22,6 +24,17 @@ enum SyncAutomation {
     }
 
     static func start(_ options: Options, controller: SyncController) {
+        func log(_ line: String) {
+            let data = Data((line + "\n").utf8)
+            guard let file = options.logFile else { return FileHandle.standardError.write(data) }
+            if let handle = try? FileHandle(forWritingTo: file) {
+                handle.seekToEndOfFile()
+                handle.write(data)
+                try? handle.close()
+            } else {
+                try? data.write(to: file)
+            }
+        }
         if let address = options.serverAddress { controller.serverAddress = address }
         if let name = options.deviceName { controller.deviceName = name }
         Task {
@@ -41,7 +54,17 @@ enum SyncAutomation {
                 try? controller.joinCode?.text.write(to: output, atomically: true, encoding: .utf8)
             }
             if let error = controller.errorMessage {
-                FileHandle.standardError.write(Data("Синхронизация: \(error)\n".utf8))
+                log("Синхронизация: \(error)")
+            }
+            // Ход проверки — в журнал: смена состояния значка с подробностями.
+            var last: String?
+            while true {
+                let state = controller.badge.map { "\($0.title): \($0.detail)" } ?? "выключена"
+                if state != last {
+                    log("Синхронизация [\(Date().formatted(date: .omitted, time: .standard))] \(state)")
+                    last = state
+                }
+                try? await Task.sleep(for: .milliseconds(300))
             }
         }
     }

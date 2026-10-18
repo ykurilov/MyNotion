@@ -27,9 +27,9 @@ vm() { ssh -i $SSH_KEY -o BatchMode=yes $VM_USER@$ip "$@"; }
 push() { rsync -a -e "ssh -i $SSH_KEY" "$@"; }
 
 # 1. Сервер: собранный server/ и тот же node, под который собран better-sqlite3.
-(cd $REPO/server && pnpm install --frozen-lockfile --silent && pnpm build --silent)
+(cd $REPO/server && pnpm install --frozen-lockfile --silent && pnpm --silent build)
 NODE=${$(command -v node):A}
-vm "mkdir -p ~/mn-sync-server/bin; pkill -f 'mn-sync-server/bin/node' || true; rm -rf /tmp/mn-sync-live; mkdir -p /tmp/mn-sync-live"
+vm "mkdir -p ~/mn-sync-server/bin; pkill -f 'mn-sync-server/bin/node' || true; pkill -f 'MyNotion.*.app/Contents/MacOS' || true; rm -rf /tmp/mn-sync-live; mkdir -p /tmp/mn-sync-live"
 push $NODE $VM_USER@$ip:/Users/$VM_USER/mn-sync-server/bin/node
 push --delete $REPO/server/dist $REPO/server/node_modules $REPO/server/package.json $VM_USER@$ip:/Users/$VM_USER/mn-sync-server/app/
 vm "cd ~/mn-sync-server/app && DATA_DIR=/tmp/mn-sync-live/server PORT=$PORT nohup ../bin/node dist/main.js > /tmp/mn-sync-live/server.log 2>&1 & echo \$! > /tmp/mn-sync-live/server.pid"
@@ -48,7 +48,7 @@ run=$(cd $UITEST_DERIVED/Build/Products && ls *.xctestrun | head -1)
 vm "cat > ~/run-uitest.command <<SCRIPT
 #!/bin/zsh
 cd ~/uitest-products
-xcodebuild test-without-building -xctestrun $run -destination 'platform=macOS,arch=arm64' -only-testing:UITests/SyncTwoMacsUITests > ~/uitest.log 2>&1
+rm -rf ~/sync-live.xcresult; xcodebuild test-without-building -xctestrun $run -destination 'platform=macOS,arch=arm64' -only-testing:UITests/SyncTwoMacsUITests -resultBundlePath ~/sync-live.xcresult > ~/uitest.log 2>&1
 echo \\\$? > ~/uitest.done
 osascript -e 'tell application \"Terminal\" to quit' &
 SCRIPT
@@ -57,7 +57,8 @@ for _ in {1..120}; do vm "test -f ~/uitest.done" && break; perl -e 'select(undef
 
 # 4. Итог и уборка: сервер остановлен, база сервера и экземпляров — во временной папке виртуального Mac.
 mkdir -p $OUT
-vm "grep -E 'Test Case .*(passed|failed|skipped)|error:|XCTAssert|TEST (EXECUTE )?(SUCCEEDED|FAILED)' ~/uitest.log | tail -20; echo exit=\$(cat ~/uitest.done 2>/dev/null)"
-vm "cat /tmp/mn-sync-live/delays.txt 2>/dev/null; kill \$(cat /tmp/mn-sync-live/server.pid) 2>/dev/null || true"
-push "$VM_USER@$ip:/tmp/mn-sync-live/*.png" "$VM_USER@$ip:/tmp/mn-sync-live/delays.txt" "$VM_USER@$ip:/tmp/mn-sync-live/server.log" $OUT/ 2>/dev/null || true
+vm "grep -E 'Test Case .*(passed|failed|skipped)|error:|XCTAssert|Задержка|TEST (EXECUTE )?(SUCCEEDED|FAILED)' ~/uitest.log | tail -20; echo exit=\$(cat ~/uitest.done 2>/dev/null)"
+vm "rm -rf /tmp/mn-sync-live/shots; xcrun xcresulttool export attachments --path ~/sync-live.xcresult --output-path /tmp/mn-sync-live/shots >/dev/null 2>&1; cd /tmp/mn-sync-live/shots 2>/dev/null && python3 -c \"import json;[__import__('os').rename(a['exportedFileName'],a['suggestedHumanReadableName']) for t in json.load(open('manifest.json')) for a in t['attachments']]\" 2>/dev/null; ls /tmp/mn-sync-live/shots"
+vm "cat /tmp/mn-sync-live/mac-a.log /tmp/mn-sync-live/mac-b.log 2>/dev/null; kill \$(cat /tmp/mn-sync-live/server.pid) 2>/dev/null || true"
+push "$VM_USER@$ip:/tmp/mn-sync-live/shots/" "$VM_USER@$ip:/tmp/mn-sync-live/server.log" $OUT/ 2>/dev/null || true
 echo "Итог: $OUT"

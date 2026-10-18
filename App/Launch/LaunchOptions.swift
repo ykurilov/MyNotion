@@ -62,6 +62,7 @@ struct LaunchOptions {
                 syncAutomation = (syncAutomation ?? .init()).with { $0.joinCodeOutput = remaining.popFirst().map(Self.fileURL) }
             case "--sync-join-code-file":
                 syncAutomation = (syncAutomation ?? .init()).with { $0.joinCodeInput = remaining.popFirst().map(Self.fileURL) }
+            case "--sync-log": syncAutomation = (syncAutomation ?? .init()).with { $0.logFile = remaining.popFirst().map(Self.fileURL) }
             case "--sync-device-name": syncAutomation = (syncAutomation ?? .init()).with { $0.deviceName = remaining.popFirst() }
             case "--appearance":
                 switch remaining.popFirst() {

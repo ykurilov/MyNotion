@@ -24,21 +24,34 @@ final class SyncTwoMacsUITests: XCTestCase {
 
         let first = XCUIApplication()
         first.launchArguments = ["--database", live.appendingPathComponent("mac-a.sqlite").path, "--generate-visual-sample",
-                                 "--sync-server", server, "--sync-device-name", "Mac A",
+                                 "--sync-server", server, "--sync-device-name", "Mac A", "--sync-log", live.appendingPathComponent("mac-a.log").path,
                                  "--sync-connect-token-file", live.appendingPathComponent("token").path,
                                  "--sync-write-join-code", code.path]
         first.launch()
+        addTeardownBlock { @MainActor in first.terminate() }
         XCTAssertTrue(first.pageBody.waitForExistence(timeout: 15))
         XCTAssertTrue(waitFor(timeout: 20) { FileManager.default.fileExists(atPath: code.path) }, "Первый Mac не выдал код подключения")
         XCTAssertTrue(first.syncBadge.waitForExistence(timeout: 10), "Нет значка синхронизации")
 
         let second = XCUIApplication(url: live.appendingPathComponent("MyNotionB.app"))
         second.launchArguments = ["--database", live.appendingPathComponent("mac-b.sqlite").path,
-                                  "--sync-server", server, "--sync-device-name", "Mac B", "--sync-join-code-file", code.path]
+                                  "--sync-server", server, "--sync-device-name", "Mac B", "--sync-log", live.appendingPathComponent("mac-b.log").path, "--sync-join-code-file", code.path]
         second.launch()
+        addTeardownBlock { @MainActor in second.terminate() }
         XCTAssertTrue(second.syncBadge.waitForExistence(timeout: 20), "Второй Mac не подключился")
-        XCTAssertTrue(waitFor(timeout: 20) { second.pageBodyText.contains("Заголовок первого уровня") },
-                      "Страница с первого Mac не дошла до второго")
+        XCTAssertTrue(waitFor(timeout: 15) { second.syncBadge.label == "Синхронизировано" },
+                      "Второй Mac: \(second.syncBadge.label) — \(second.syncBadge.value as? String ?? "")")
+        XCTAssertTrue(waitFor(timeout: 15) { first.syncBadge.label == "Синхронизировано" },
+                      "Первый Mac: \(first.syncBadge.label) — \(first.syncBadge.value as? String ?? "")")
+        // Образец лежит внутри «Буфера»: пустой Mac открыл первую пришедшую страницу, образец открываем в дереве.
+        let sampleRow = second.outlines["page-tree"].outlineRows.containing(NSPredicate(format: "value == %@", "MyNotion — образец")).firstMatch
+        XCTAssertTrue(sampleRow.waitForExistence(timeout: 20), "Страницы с первого Mac не дошли до второго")
+        second.activate()
+        // Середина строки — как человек; край строки XCUITest задевает кнопки раскрытия.
+        sampleRow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        let opened = waitFor(timeout: 10) { second.pageBodyText.contains("Заголовок первого уровня") }
+        if !opened { saveScreenshots(first, second, suffix: "-failed") }
+        XCTAssertTrue(opened, "Образец не открылся: \(second.pageBodyText.prefix(200)); значок: \(second.syncBadge.label) — \(second.syncBadge.value as? String ?? "")")
 
         // Правка на первом Mac — в открытой странице второго.
         first.activate()
@@ -61,12 +74,20 @@ final class SyncTwoMacsUITests: XCTestCase {
 
         XCTAssertTrue(waitFor(timeout: 10) { first.syncBadge.label == "Синхронизировано" && second.syncBadge.label == "Синхронизировано" },
                       "Значок: \(first.syncBadge.label) / \(second.syncBadge.label)")
-        try "A→B \(String(format: "%.2f", firstDelay)) с, B→A \(String(format: "%.2f", secondDelay)) с\n"
-            .write(to: live.appendingPathComponent("delays.txt"), atomically: true, encoding: .utf8)
-        try first.windows.firstMatch.screenshot().pngRepresentation.write(to: live.appendingPathComponent("mac-a.png"))
-        try second.windows.firstMatch.screenshot().pngRepresentation.write(to: live.appendingPathComponent("mac-b.png"))
+        print("Задержка синхронизации: A→B \(String(format: "%.2f", firstDelay)) с, B→A \(String(format: "%.2f", secondDelay)) с")
+        saveScreenshots(first, second)
         first.terminate()
         second.terminate()
+    }
+
+    /// Снимки обоих окон — вложениями отчёта; сценарий выгружает их из .xcresult.
+    private func saveScreenshots(_ first: XCUIApplication, _ second: XCUIApplication, suffix: String = "") {
+        for (name, app) in [("mac-a", first), ("mac-b", second)] {
+            let attachment = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+            attachment.name = name + suffix
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
     }
 
     private func waitFor(timeout: TimeInterval, _ condition: () -> Bool) -> Bool {

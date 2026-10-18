@@ -73,6 +73,7 @@ public struct SyncStatusBadge: View {
         .buttonStyle(SidebarRowButtonStyle())
         .accessibilityIdentifier("sidebar-sync-status")
         .accessibilityLabel(state.title)
+        .accessibilityValue(state.detail)
         .background(DetailsAnchor(card: details))
         .onDisappear { details.card.close() }
     }
