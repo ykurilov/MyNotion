@@ -15,7 +15,9 @@ VM_USER=lume
 SSH_KEY=~/.ssh/mynotion_vm_ed25519
 LUME_API=http://localhost:7777/lume
 REPO=${0:A:h:h:h}
-DERIVED=/tmp/mynotion-vm-dd
+# Папки сборки — свои у каждой копии кода (git worktree): MYNOTION_VM_DD и MYNOTION_UITEST_DD.
+DERIVED=${MYNOTION_VM_DD:-/tmp/mynotion-vm-dd}
+UITEST_DERIVED=${MYNOTION_UITEST_DD:-/tmp/mynotion-uitest-dd}
 APP_LOCAL=$DERIVED/Build/Products/Debug/MyNotion.app
 APP_REMOTE=/Users/$VM_USER/MyNotion.app
 
@@ -92,9 +94,9 @@ case ${1:-} in
     # Штатные UI-тесты Xcode внутри виртуального Mac: сборка здесь, прогон там.
     #   scripts/vm/run-in-vm.sh uitest [-only-testing:UITests/<Класс>] ...
     shift; ip=$(ensure_vm_running); set_screen $ip
-    (cd $REPO && xcodegen generate -q && xcodebuild -scheme MyNotion -derivedDataPath /tmp/mynotion-uitest-dd build-for-testing -quiet)
-    rsync -a --delete -e "ssh -i $SSH_KEY" /tmp/mynotion-uitest-dd/Build/Products/ $VM_USER@$ip:/Users/$VM_USER/uitest-products/
-    run=$(cd /tmp/mynotion-uitest-dd/Build/Products && ls *.xctestrun | head -1)
+    (cd $REPO && xcodegen generate -q && xcodebuild -scheme MyNotion -derivedDataPath $UITEST_DERIVED build-for-testing -quiet)
+    rsync -a --delete -e "ssh -i $SSH_KEY" $UITEST_DERIVED/Build/Products/ $VM_USER@$ip:/Users/$VM_USER/uitest-products/
+    run=$(cd $UITEST_DERIVED/Build/Products && ls *.xctestrun | head -1)
     # UI-тестам нужен режим автоматизации, а его можно включить только из GUI-сессии, не из SSH:
     # кладём сценарий .command и открываем его в Терминале виртуального Mac, ждём файл-итог.
     vm_ssh $ip "cat > ~/run-uitest.command <<SCRIPT

@@ -1,6 +1,7 @@
 import EmojiPicker
 import NotesCore
 import PageEditor
+import PageSearch
 import PageTree
 import ServiceLaunch
 import SwiftUI
@@ -49,6 +50,9 @@ struct MainWindowView: View {
         }
         if let benchmarkURL = options.typingBenchmarkURL, case .success(let model) = library {
             TypingBenchmark.editorReady(model: model, reportTo: benchmarkURL)
+        }
+        if let benchmarkURL = options.searchBenchmarkURL, case .success(let model) = library {
+            SearchBenchmark.editorReady(model: model, reportTo: benchmarkURL)
         }
     }
 }
@@ -133,7 +137,9 @@ private struct PagesWindow: View {
                 emptyTrash: { model.emptyTrash() }
             ),
             newPage: { model.createPage() }
-        )
+        ) {
+            SidebarSearchField(controller: model.search)
+        }
     }
 
     /// Шторка: середина — на `sidebarToggleCenterX` от левого края, в строке светофора.

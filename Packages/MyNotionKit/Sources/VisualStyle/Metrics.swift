@@ -159,8 +159,6 @@ public enum Metrics {
         public static let rowAccessoryCornerRadius: CGFloat = 4
         /// Значки «⋯», «+», «вернуть», «удалить»: один размер (≈ по Notion).
         public static let accessorySymbolSize: CGFloat = 13
-        public static let searchFieldHeight: CGFloat = 32
-        public static let searchFieldCornerRadius: CGFloat = 6
         public static let syncStatusRowHeight: CGFloat = 30
         /// Нижние строки панели («Корзина»): воздух над разделителем и под ним, отступ от нижнего края окна.
         public static let footerDividerSpacing: CGFloat = 6
@@ -183,6 +181,46 @@ public enum Metrics {
         public static let sidebarToggleCenterX: CGFloat = 95
         /// Сворачивание и разворот панели.
         public static let sidebarToggleDuration: Double = 0.2
+    }
+
+    /// Поле поиска вверху боковой панели (FR-018), как «Search» у Notion 7.38.1 (снимок 17.10.2026, ≈ ±1,5):
+    /// рамка на фоне панели, на 10 от краёв окна и панели, под строкой светофора. У Notion лупы нет — у нас есть.
+    public enum SearchField {
+        public static let height: CGFloat = 30
+        public static let cornerRadius: CGFloat = 6
+        public static let borderWidth: CGFloat = 1
+        /// Добавка к `Sidebar.panelInset` по бокам: поле с 10 от края панели.
+        public static let extraHorizontalInset: CGFloat = 2
+        /// Воздух над полем (под строкой светофора) и под ним (до «Страницы»).
+        public static let topSpacing: CGFloat = 6
+        public static let bottomSpacing: CGFloat = 6
+        /// Лупа серединой в 14 от левого края поля, текст и подсказка «Поиск» — с 26.
+        public static let iconCenterX: CGFloat = 14
+        public static let iconSize: CGFloat = 12
+        public static let textX: CGFloat = 26
+        public static let textTrailingPadding: CGFloat = 8
+    }
+
+    /// Выдача поиска: всплывающая карточка под полем поиска, строки как у Notion 7.38.1 (снимок 17.10.2026, ≈ ±1,5):
+    /// иконка, название 14, путь родителей 12 серым, кусок текста 12 с найденным словом синим.
+    public enum SearchResults {
+        public static let width: CGFloat = 420
+        public static let maxHeight: CGFloat = 480
+        /// Между полем и карточкой.
+        public static let anchorSpacing: CGFloat = 4
+        /// Поля карточки сверху и снизу; строки отступают от краёв карточки на `PopupMenu.rowInset`.
+        public static let verticalPadding: CGFloat = 6
+        /// Строка: поля 8 сверху и снизу, название — строка 20, путь и кусок текста — по 18.
+        public static let rowVerticalPadding: CGFloat = 8
+        public static let titleLineHeight: CGFloat = 20
+        public static let detailLineHeight: CGFloat = 18
+        /// Иконка — место 20 в 8 от края строки, текст — с 36 от края строки.
+        public static let iconSize: CGFloat = 20
+        public static let iconFontSize: CGFloat = 15
+        public static let textX: CGFloat = 36
+        public static let rowTrailingPadding: CGFloat = 10
+        /// «Ничего не найдено» — строка как у меню.
+        public static let emptyRowHeight: CGFloat = 33
     }
 
     /// Окно корзины: всплывающая панель справа от боковой панели, у строки «Корзина».

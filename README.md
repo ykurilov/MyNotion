@@ -45,9 +45,10 @@ xcodebuild test -scheme MyNotionPerformance -configuration Release -destination 
 | `--ui-gallery <папка>` | на своей временной базе снять все состояния интерфейса (светлая и тёмная тема, 1440×900, ключевые ещё 900×700), положить рядом `index.html` и `manifest.json` и выйти |
 | `--ui-gallery-only <часть имени>` | вместе с `--ui-gallery`: снять только состояния, в имени которых есть эта строка |
 | `--appearance light\|dark` | светлая или тёмная тема вместо системной |
+| `--search-benchmark <путь>` | замер поиска (T054, SC-009): слова печатаются в поле поиска по букве, время от нажатия до выдачи на экране; отчёт с p95 в файл и выход |
 | `--typing-benchmark <путь>` | замер отклика: 200 нажатий в странице на 1 000 блоков, переходы между страницами, набор и прокрутка страницы на 10 000 блоков; отчёт с p95 в файл и выход |
 
-**Служебные режимы не берут фокус.** Галерея, снимки окна, замеры и эталонная база (`--ui-gallery`, `--ui-gallery-only`, `--window-snapshot`, `--hover-sidebar-row`, `--generate-reference-library`, `--launch-report`, `--typing-benchmark`, а также `--generate-visual-sample` вместе с ними) идут, пока человек работает в других программах. Приложение не становится активным, не стоит в Dock, его окна лежат под всеми окнами. Нигде в этих режимах нет `activate`, `makeKeyAndOrderFront` и `orderFrontRegardless`. Новый служебный флаг обязан работать так же: он добавляется в `LaunchPresence.serviceFlags` (модуль `ServiceLaunch`) и в его тест. Запуск без служебных флагов — обычное приложение.
+**Служебные режимы не берут фокус.** Галерея, снимки окна, замеры и эталонная база (`--ui-gallery`, `--ui-gallery-only`, `--window-snapshot`, `--hover-sidebar-row`, `--generate-reference-library`, `--launch-report`, `--typing-benchmark`, `--search-benchmark`, а также `--generate-visual-sample` вместе с ними) идут, пока человек работает в других программах. Приложение не становится активным, не стоит в Dock, его окна лежат под всеми окнами. Нигде в этих режимах нет `activate`, `makeKeyAndOrderFront` и `orderFrontRegardless`. Новый служебный флаг обязан работать так же: он добавляется в `LaunchPresence.serviceFlags` (модуль `ServiceLaunch`) и в его тест. Запуск без служебных флагов — обычное приложение.
 
 ## Сервер синхронизации (появится в этапе 7)
 

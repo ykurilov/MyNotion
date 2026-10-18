@@ -3,8 +3,9 @@ import NotesCore
 import SwiftUI
 import VisualStyle
 
-/// Боковая панель: верхняя строка в линию со светофором с «✎» справа, заголовок «Страницы», дерево и «Корзина» внизу.
-public struct PageTreeSidebar: View {
+/// Боковая панель: верхняя строка в линию со светофором с «✎» справа, поле поиска, заголовок «Страницы», дерево
+/// и «Корзина» внизу. Поле поиска — из модуля поиска: панель только отводит ему место.
+public struct PageTreeSidebar<SearchField: View>: View {
     let tree: PageTreeSnapshot
     /// Меняется, когда дерево нужно перечитать.
     let treeRevision: Int
@@ -17,12 +18,13 @@ public struct PageTreeSidebar: View {
     let trashActions: TrashActions
     /// «✎» в верхней строке — то же, что ⌘N.
     let newPage: () -> Void
+    let searchField: SearchField
 
     @State private var trashPanel = TrashPanelController()
 
     public init(tree: PageTreeSnapshot, treeRevision: Int, collapsedPageIds: Set<UUID>, selectedPageId: UUID?,
                 liveTitle: String?, trashEntries: [Page], actions: PageTreeActions, trashActions: TrashActions,
-                newPage: @escaping () -> Void) {
+                newPage: @escaping () -> Void, @ViewBuilder searchField: () -> SearchField) {
         self.tree = tree
         self.treeRevision = treeRevision
         self.collapsedPageIds = collapsedPageIds
@@ -32,11 +34,19 @@ public struct PageTreeSidebar: View {
         self.actions = actions
         self.trashActions = trashActions
         self.newPage = newPage
+        self.searchField = searchField()
     }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             topRow
+            if SearchField.self != EmptyView.self {
+                searchField
+                    .frame(height: Metrics.SearchField.height)
+                    .padding(.horizontal, Metrics.SearchField.extraHorizontalInset)
+                    .padding(.top, Metrics.SearchField.topSpacing)
+                    .padding(.bottom, Metrics.SearchField.bottomSpacing)
+            }
             groupHeader("Страницы")
             PageOutline(tree: tree, treeRevision: treeRevision, collapsedPageIds: collapsedPageIds,
                         selectedPageId: selectedPageId, liveTitle: liveTitle, actions: actions)
@@ -99,6 +109,17 @@ public struct PageTreeSidebar: View {
         .background(TrashPanelAnchor(controller: trashPanel))
         .onChange(of: trashEntries) { _, entries in trashPanel.update(entries: entries, actions: trashActions) }
         .onDisappear { trashPanel.close() }
+    }
+}
+
+extension PageTreeSidebar where SearchField == EmptyView {
+    /// Панель без поля поиска.
+    public init(tree: PageTreeSnapshot, treeRevision: Int, collapsedPageIds: Set<UUID>, selectedPageId: UUID?,
+                liveTitle: String?, trashEntries: [Page], actions: PageTreeActions, trashActions: TrashActions,
+                newPage: @escaping () -> Void) {
+        self.init(tree: tree, treeRevision: treeRevision, collapsedPageIds: collapsedPageIds, selectedPageId: selectedPageId,
+                  liveTitle: liveTitle, trashEntries: trashEntries, actions: actions, trashActions: trashActions,
+                  newPage: newPage) { EmptyView() }
     }
 }
 

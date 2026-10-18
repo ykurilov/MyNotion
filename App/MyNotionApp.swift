@@ -1,5 +1,6 @@
 import AppKit
 import NotesCore
+import PageSearch
 import ServiceLaunch
 import SwiftUI
 
@@ -53,6 +54,10 @@ struct MyNotionApp: App {
                 Button("Новая подстраница") { (try? library.get())?.createSubpage() }
                     .keyboardShortcut("n", modifiers: [.command, .shift])
             }
+            CommandGroup(after: .textEditing) {
+                Button("Найти страницу") { (try? library.get())?.search.focusField() }
+                    .keyboardShortcut("f", modifiers: [.command, .shift])
+            }
             SidebarToggleCommands(model: try? library.get())
             FormatCommands()
         }
@@ -61,6 +66,8 @@ struct MyNotionApp: App {
     private static func openLibrary(_ options: LaunchOptions) throws -> NotesStore {
         let database = try AppDatabase.open(at: options.databaseURL ?? AppDatabase.defaultURL)
         let store = NotesStore(database: database, clock: HybridLogicalClock(deviceId: DeviceIdentity.deviceId()))
+        // Индекс поиска пишется в той же транзакции, что и записи (research R6) — до первой записи.
+        store.addWriteHook(SearchIndexer())
         if options.generatesVisualSample {
             // Образец сразу открыт: для сверки с Notion и снимков окна.
             let sample = try VisualSamplePage.ensure(in: store)

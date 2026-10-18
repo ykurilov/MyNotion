@@ -10,6 +10,9 @@ public enum Typography {
     public static let popupMenuTitle = TextLineStyle(fontSize: 14, lineHeight: 20, weight: .regular)
     /// Заголовок раздела меню «/» и быстрые символы справа в строке.
     public static let popupMenuSectionHeader = TextLineStyle(fontSize: 12, lineHeight: 16, weight: .medium)
+    /// Выдача поиска: название страницы, путь родителей и кусок текста.
+    public static let searchResultTitle = TextLineStyle(fontSize: 14, lineHeight: 20, weight: .regular)
+    public static let searchResultDetail = TextLineStyle(fontSize: 12, lineHeight: 18, weight: .regular)
     public static let popupMenuShortcut = TextLineStyle(fontSize: 12, lineHeight: 16, weight: .regular)
 
     /// Жирный в строке — 600.
