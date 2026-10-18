@@ -25,6 +25,11 @@ struct UserFacingTextTests {
         return url
     }
 
+    /// Проверка читает исходники: где их нет (виртуальный Mac, куда приходят только собранные тесты), её не запускаем.
+    static var hasSources: Bool {
+        FileManager.default.fileExists(atPath: repository.appendingPathComponent(files[0]).path)
+    }
+
     /// Строки в кавычках с русскими буквами, кроме комментариев и служебных мест.
     static func userFacingStrings(in file: String) throws -> [String] {
         let text = try String(contentsOf: repository.appendingPathComponent(file), encoding: .utf8)
@@ -44,7 +49,8 @@ struct UserFacingTextTests {
         return result
     }
 
-    @Test("В строках синхронизации нет слов разработчика", arguments: files)
+    @Test("В строках синхронизации нет слов разработчика", .enabled(if: hasSources, "нет исходников рядом с тестами"),
+          arguments: files)
     func noJargon(_ file: String) throws {
         let strings = try Self.userFacingStrings(in: file)
         for string in strings {
@@ -54,7 +60,7 @@ struct UserFacingTextTests {
         }
     }
 
-    @Test("Проверка видит строки: в настройках они есть")
+    @Test("Проверка видит строки: в настройках они есть", .enabled(if: hasSources, "нет исходников рядом с тестами"))
     func scannerFindsStrings() throws {
         #expect(try Self.userFacingStrings(in: "App/Settings/SyncSettingsView.swift").count > 10)
     }

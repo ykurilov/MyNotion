@@ -12,8 +12,8 @@ struct NotionImporterTests {
     private let store: NotesStore
     private let importDate = Calendar(identifier: .gregorian).date(from: DateComponents(year: 2026, month: 10, day: 18, hour: 15))!
 
-    static let fixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-        .appendingPathComponent("Fixtures/notion-export", isDirectory: true)
+    /// Образцы — ресурсы модуля тестов: находятся и там, где исходников нет (виртуальный Mac).
+    static let fixtures = Bundle.module.resourceURL!.appendingPathComponent("Fixtures/notion-export", isDirectory: true)
     static let synthetic = fixtures.appendingPathComponent("synthetic", isDirectory: true)
     static let syntheticZip = fixtures.appendingPathComponent("synthetic-nested.zip")
     static let liveZip = fixtures.appendingPathComponent("live-mynotion-comparison.zip")

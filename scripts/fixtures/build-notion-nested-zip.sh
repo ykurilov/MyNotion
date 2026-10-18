@@ -2,7 +2,7 @@
 # Собирает synthetic-nested.zip из папки synthetic/ так, как Notion отдаёт большую выгрузку:
 # внешний ZIP, внутри части «ExportBlock-…-Part-N.zip» с деревом страниц (T083).
 set -euo pipefail
-fixtures="$(cd "$(dirname "$0")/../../Packages/MyNotionKit/Tests/Fixtures/notion-export" && pwd)"
+fixtures="$(cd "$(dirname "$0")/../../Packages/MyNotionKit/Tests/NotionImportTests/Fixtures/notion-export" && pwd)"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/part1" "$work/part2" "$work/outer"

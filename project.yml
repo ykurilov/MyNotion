@@ -70,7 +70,7 @@ targets:
       - path: UITests
         createIntermediateGroups: true
       # Образец выгрузки Notion для «Файл → Импорт из Notion…»: UI-тесты идут в виртуальном Mac, где исходников нет.
-      - path: Packages/MyNotionKit/Tests/Fixtures/notion-export/synthetic-nested.zip
+      - path: Packages/MyNotionKit/Tests/NotionImportTests/Fixtures/notion-export/synthetic-nested.zip
         buildPhase: resources
     dependencies:
       - target: MyNotion
