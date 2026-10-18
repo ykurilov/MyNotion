@@ -1,4 +1,5 @@
 import AppKit
+import MarkdownExport
 import NotesCore
 import PageSearch
 import ServiceLaunch
@@ -9,6 +10,7 @@ struct MyNotionApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     private let options: LaunchOptions
     private let library: Result<MainWindowModel, any Error>
+    private let exportController: MarkdownExportController?
 
     init() {
         // Флаги запуска — не файлы. Иначе AppKit склеивает флаг без значения со следующим флагом в свою
@@ -37,12 +39,19 @@ struct MyNotionApp: App {
             return MainWindowModel(store: store)
         }
         AppDelegate.galleryLibrary = galleryLibrary
-        AppDelegate.model = try? library.get()
+        let model = try? library.get()
+        AppDelegate.model = model
+        if let exportURL = options.exportMarkdownURL {
+            Self.exportMarkdownAndExit(from: library, into: exportURL)
+        }
+        exportController = model.map { model in
+            MarkdownExportController(store: model.store, saveOpenPages: { model.saveAll() })
+        }
     }
 
     var body: some Scene {
         WindowGroup {
-            MainWindowView(library: library, options: options)
+            MainWindowView(library: library, options: options, exportController: exportController)
         }
         .defaultSize(width: 1200, height: 800)
         .windowStyle(.hiddenTitleBar)
@@ -60,6 +69,7 @@ struct MyNotionApp: App {
             }
             SidebarToggleCommands(model: try? library.get())
             FormatCommands()
+            ExportCommands(controller: exportController)
         }
     }
 
@@ -77,6 +87,18 @@ struct MyNotionApp: App {
             try TypingBenchmark.ensureHugePage(in: store)
         }
         return store
+    }
+
+    /// Служебная выгрузка без окна выбора папки: путь результата — в стандартный вывод, код выхода 0 или 1.
+    private static func exportMarkdownAndExit(from library: Result<MainWindowModel, any Error>, into folder: URL) -> Never {
+        do {
+            let result = try MarkdownExporter(store: library.get().store).export(into: folder)
+            print("Выгрузка готова: \(result.folder.path) (страниц: \(result.pageCount), блоков: \(result.blockCount))")
+            exit(0)
+        } catch {
+            FileHandle.standardError.write(Data("Выгрузка не удалась: \(error.localizedDescription)\n".utf8))
+            exit(1)
+        }
     }
 
     private static func generateReferenceLibraryAndExit(at url: URL) -> Never {

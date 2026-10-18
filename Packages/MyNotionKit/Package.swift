@@ -41,7 +41,7 @@ let package = Package(
         .testTarget(name: "PageEditorTests", dependencies: ["PageEditor", "NotesCore", "EmojiPicker"]),
         .testTarget(name: "EmojiPickerTests", dependencies: ["EmojiPicker", "NotesCore"]),
         .testTarget(name: "PageSearchTests", dependencies: ["PageSearch", "NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
-        .testTarget(name: "MarkdownExportTests", dependencies: ["MarkdownExport"]),
+        .testTarget(name: "MarkdownExportTests", dependencies: ["MarkdownExport", "NotesCore"]),
         .testTarget(name: "NotionImportTests", dependencies: ["NotionImport"]),
         .testTarget(name: "SyncTests", dependencies: ["Sync"]),
         .testTarget(name: "UIGalleryTests", dependencies: ["UIGallery", "NotesCore"]),

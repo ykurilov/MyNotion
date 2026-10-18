@@ -11,6 +11,8 @@ import VisualStyle
 struct MainWindowView: View {
     let library: Result<MainWindowModel, any Error>
     let options: LaunchOptions
+    /// Уведомление о выгрузке в Markdown; `nil` — выгрузки нет.
+    var exportController: MarkdownExportController?
 
     var body: some View {
         content
@@ -22,7 +24,7 @@ struct MainWindowView: View {
     private var content: some View {
         switch library {
         case .success(let model):
-            PagesWindow(model: model, onEditorReady: editorReady)
+            PagesWindow(model: model, exportController: exportController, onEditorReady: editorReady)
         case .failure(let error):
             Text("Не удалось открыть записи: \(error.localizedDescription)")
                 .foregroundStyle(Color(nsColor: Palette.textSecondary))
@@ -72,6 +74,7 @@ private struct TrafficLightsAnchor: NSViewRepresentable {
 
 private struct PagesWindow: View {
     @Bindable var model: MainWindowModel
+    let exportController: MarkdownExportController?
     let onEditorReady: @MainActor () -> Void
     @Environment(\.undoManager) private var undoManager
     /// Ширина в начале перетаскивания края панели.
@@ -101,6 +104,9 @@ private struct PagesWindow: View {
         }
         // Шторка — у светофора и не двигается, когда панель уезжает.
         .overlay(alignment: .topLeading) { sidebarToggle }
+        .overlay(alignment: .bottom) {
+            if let exportController { ExportNoticeView(controller: exportController) }
+        }
         .animation(.easeInOut(duration: Metrics.Window.sidebarToggleDuration), value: model.isSidebarCollapsed)
         // Путь страницы — в самой верхней полосе окна, как в Notion; кнопки окна — над боковой панелью.
         .ignoresSafeArea(.container, edges: .top)
