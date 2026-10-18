@@ -157,6 +157,12 @@ final class MainWindowModel {
         saveWindowState { $0.sidebarWidth = sidebarWidth }
     }
 
+    /// Импорт из Notion добавил ветку: перечитать дерево и открыть её корень.
+    func showImportedBranch(_ rootPageId: UUID) {
+        reloadTree()
+        select(rootPageId)
+    }
+
     /// Записать всё сейчас: уход в фон, закрытие окна, выход. `false` — что-то не записалось.
     @discardableResult
     func saveAll() -> Bool {
