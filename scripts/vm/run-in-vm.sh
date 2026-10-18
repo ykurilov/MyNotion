@@ -71,7 +71,8 @@ close_stale_prompts() { vm_ssh $1 "pkill -9 -x SecurityAgent || true"; }
 # Приложение запускается в GUI-сессии виртуального Mac через `open` (из SSH так можно, `launchctl asuser` — нет).
 run_app() {
   local ip=$1; shift
-  vm_ssh $ip "open -W -n $APP_REMOTE --stdout /tmp/mynotion.out --stderr /tmp/mynotion.err --args ${(q)@}; cat /tmp/mynotion.out /tmp/mynotion.err"
+  # Вывод прошлых запусков стирается: иначе в отчёт этого запуска попадают чужие строки и ошибки.
+  vm_ssh $ip "rm -f /tmp/mynotion.out /tmp/mynotion.err; open -W -n $APP_REMOTE --stdout /tmp/mynotion.out --stderr /tmp/mynotion.err --args ${(q)@}; cat /tmp/mynotion.out /tmp/mynotion.err"
 }
 
 # Виртуальный Mac один на ВСЕ проекты и всех агентов: любые действия с ним идут по очереди через
@@ -86,7 +87,8 @@ take_vm_lock() {
   echo $$ > $LOCK/pid
 }
 # Ловушка — на верхнем уровне: в zsh `trap ... EXIT` внутри функции срабатывает при выходе из функции.
-if [[ ${1:-} == (gallery|run|uitest|lock) ]]; then take_vm_lock; trap 'rm -rf $LOCK' EXIT; fi
+# Полный путь и «|| true»: ловушка срабатывает и после чужого PATH, и код выхода скрипта она не портит.
+if [[ ${1:-} == (gallery|run|uitest|lock) ]]; then take_vm_lock; trap '/bin/rm -rf $LOCK || true' EXIT; fi
 
 case ${1:-} in
   lock)
@@ -98,7 +100,7 @@ case ${1:-} in
     vm_ssh $ip "rm -rf ~/gallery && mkdir ~/gallery"
     run_app $ip --ui-gallery /Users/$VM_USER/gallery $only
     mkdir -p $out && rsync -a --delete -e "ssh -i $SSH_KEY" $VM_USER@$ip:/Users/$VM_USER/gallery/ $out/
-    echo "Галерея: $out ($(ls $out | grep -c png) снимков)";;
+    echo "Галерея: $out ($(ls $out | grep -c png || true) снимков)";;
   run)
     shift; ip=$(ensure_vm_running); build_and_push $ip; close_stale_prompts $ip; run_app $ip "$@";;
   uitest)

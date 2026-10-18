@@ -26,10 +26,10 @@ public enum NotionImportError: Error, LocalizedError, Equatable {
     public var errorDescription: String? {
         switch self {
         case .sourceMissing(let path): "Файл «\(path)» не найден."
-        case .cannotUnpack(let reason): "Не удалось распаковать выгрузку: \(reason)."
-        case .notAnExport: "В выбранном файле нет страниц Notion. Нужна выгрузка «Export → Markdown & CSV»."
-        case .cannotRead(let reason): "Не удалось прочитать выгрузку: \(reason)."
-        case .cannotWrite(let reason): "Импорт не записан: \(reason). Прежние записи не тронуты."
+        case .cannotUnpack(let reason): "Не удалось открыть файл из Notion: \(reason)."
+        case .notAnExport: "В выбранном файле нет страниц Notion. В Notion нужен пункт «Export», формат «Markdown & CSV»."
+        case .cannotRead(let reason): "Не удалось прочитать файл из Notion: \(reason)."
+        case .cannotWrite(let reason): "Страницы не перенесены: \(reason). Прежние записи не тронуты."
         }
     }
 }

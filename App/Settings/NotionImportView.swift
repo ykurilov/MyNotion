@@ -18,8 +18,8 @@ struct NotionImportCommands: Commands {
     }
 }
 
-/// Импорт в фоне: окно не замирает, ход виден в карточке внизу, в конце — окно отчёта.
-/// Повтор той же выгрузки (по отпечатку содержимого) спрашивается до начала.
+/// Перенос в фоне: окно не замирает, ход виден в карточке внизу, в конце — окно итога.
+/// Повтор того же файла из Notion (по отпечатку содержимого) спрашивается до начала.
 @MainActor
 @Observable
 final class NotionImportController {
@@ -63,8 +63,8 @@ final class NotionImportController {
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         panel.allowedContentTypes = [.zip, .folder]
-        panel.prompt = "Импортировать"
-        panel.message = "Выберите ZIP выгрузки Notion («Export → Markdown & CSV») или папку с распакованной выгрузкой"
+        panel.prompt = "Перенести"
+        panel.message = "Выберите файл, который сохранил Notion (меню «Export → Markdown & CSV», ZIP), или папку с распакованным файлом"
         panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
         guard panel.runModal() == .OK, let source = panel.url else { return }
         start(source)
@@ -173,7 +173,7 @@ final class NotionImportController {
     }
 
     private static func message(for error: any Error) -> String {
-        error is CancellationError ? "Импорт остановлен. Недоделанная ветка убрана, прежние записи не тронуты."
+        error is CancellationError ? "Перенос остановлен. Уже перенесённые страницы убраны, прежние записи не тронуты."
             : error.localizedDescription
     }
 
@@ -183,70 +183,49 @@ final class NotionImportController {
     }
 }
 
-/// Карточка внизу окна: ход импорта с кнопкой «Остановить» или понятная ошибка.
+/// Карточка внизу окна: ход переноса с кнопкой «Остановить» или понятная ошибка с «Закрыть».
 struct NotionImportNoticeView: View {
     let controller: NotionImportController
 
     var body: some View {
-        if let content = noticeContent {
-            HStack(spacing: 12) { content }
-                .font(.system(size: 14))
-                .foregroundStyle(Color(nsColor: Palette.textPrimary))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .frame(maxWidth: 560)
-                .background(Color(nsColor: Palette.popupMenuBackground), in: RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(nsColor: Palette.border)))
-                .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
-                .padding(.bottom, 20)
-                .transition(.opacity)
-                .accessibilityElement(children: .contain)
-                .accessibilityIdentifier("notion-import-notice")
-        }
-    }
-
-    private var noticeContent: AnyView? {
         switch controller.state {
         case .preparing:
-            AnyView(Group {
-                ProgressView().controlSize(.small)
-                Text("Импорт из Notion: распаковываю выгрузку…")
-            })
+            NoticeCard(identifier: "notion-import-notice") {
+                NoticeProgress(done: 0, total: 0, text: "Открываю файл из Notion…")
+            }
         case .running(let step):
-            AnyView(Group {
-                if step.total > 0 {
-                    ProgressView(value: Double(step.done), total: Double(step.total)).frame(width: 100)
-                } else {
-                    ProgressView().controlSize(.small)
-                }
-                Text(Self.progressText(step)).monospacedDigit().lineLimit(1).fixedSize()
+            NoticeCard(identifier: "notion-import-notice") {
+                NoticeProgress(done: step.done, total: step.total, text: Self.progressText(step))
                 Button("Остановить") { controller.stop() }
                     .accessibilityIdentifier("notion-import-stop")
-            })
+            }
         case .failed(let message):
-            AnyView(Group {
-                Text(message).foregroundStyle(Color(nsColor: Palette.destructiveText))
+            NoticeCard(identifier: "notion-import-notice") {
+                Text(verbatim: message).foregroundStyle(Color(nsColor: Palette.destructiveText))
+                    .fixedSize(horizontal: false, vertical: true)
                 Button("Закрыть") { controller.dismiss() }
                     .accessibilityIdentifier("notion-import-close")
-            })
+            }
         case .idle, .confirmRepeat, .finished:
-            nil
+            EmptyView()
         }
     }
 
+    /// «Перенесено страниц: 420 из 1 000»; пока файл читается — «Читаю файл из Notion: 420 из 1 000 страниц».
     static func progressText(_ step: NotionImportProgress) -> String {
-        // Чтение выгрузки — быстрое, его отмечаем словом; запись — главная часть, ей хватает чисел.
-        let action = step.phase == .reading ? "Импорт из Notion: читаю" : "Импорт из Notion:"
-        return step.total > 0 ? "\(action) \(number(step.done)) из \(number(step.total))" : "\(action)…"
+        guard step.total > 0 else { return step.phase == .reading ? "Читаю файл из Notion…" : "Переношу страницы…" }
+        return step.phase == .reading
+            ? "Читаю файл из Notion: \(number(step.done)) из \(number(step.total)) страниц"
+            : "Перенесено страниц: \(number(step.done)) из \(number(step.total))"
     }
 }
 
-/// Окна поверх страницы: «уже импортировано — ещё раз?» и отчёт после импорта.
+/// Окна поверх страницы: «этот файл уже переносили — ещё раз?» и итог переноса.
 struct NotionImportSheets: ViewModifier {
     let controller: NotionImportController?
 
     func body(content: Content) -> some View {
-        content.sheet(isPresented: isPresented) {
+        content.modalCard(isPresented: isPresented) {
             if let controller {
                 switch controller.state {
                 case .confirmRepeat(let previous): NotionImportRepeatView(controller: controller, previous: previous)
@@ -257,109 +236,104 @@ struct NotionImportSheets: ViewModifier {
         }
     }
 
-    private var isPresented: Binding<Bool> {
-        Binding {
-            switch controller?.state {
-            case .confirmRepeat?, .finished?: true
-            default: false
-            }
-        } set: { shown in
-            guard !shown, let controller else { return }
-            if case .confirmRepeat = controller.state { controller.cancelRepeat() } else { controller.dismiss() }
+    private var isPresented: Bool {
+        switch controller?.state {
+        case .confirmRepeat?, .finished?: true
+        default: false
         }
     }
 }
 
-/// Отчёт (FR-026): сколько перенесено, где лежит, что упрощено до простого текста.
+/// Итог (FR-026): сколько перенесено, где лежит, что из оформления Notion стало простым текстом.
 struct NotionImportReportView: View {
     let controller: NotionImportController
     let report: NotionImportReport
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Импорт из Notion завершён")
-                .font(.system(size: 16, weight: .semibold))
-            Text(verbatim: "Перенесено страниц: \(number(report.pageCount)), блоков: \(number(report.blockCount)). Всё лежит в ветке «\(report.rootTitle)».")
+        VStack(alignment: .leading, spacing: 12) {
+            ModalCardTitle(text: "Перенос из Notion закончен")
+            Text(verbatim: "Перенесено страниц: \(number(report.pageCount)). Они лежат на новой странице «\(report.rootTitle)» в списке слева.")
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("notion-import-summary")
             if report.simplified.isEmpty {
-                Text("Всё перенесено как есть.")
+                Text("Всё перенесено как было.")
                     .foregroundStyle(Color(nsColor: Palette.textSecondary))
             } else {
-                Text("Упрощено до простого текста:")
+                Text("Кое-что из Notion здесь выглядеть так же не может. Текст сохранён, но обычными абзацами:")
                     .foregroundStyle(Color(nsColor: Palette.textSecondary))
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 6) {
-                        ForEach(Array(report.simplified.enumerated()), id: \.offset) { _, page in
-                            (Text(page.pageTitle).fontWeight(.medium) + Text(" — " + page.items.joined(separator: ", ")))
-                                .fixedSize(horizontal: false, vertical: true)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
+                    .fixedSize(horizontal: false, vertical: true)
+                // Короткий список — по высоте строк, длинный — с прокруткой: пустого места под строками нет.
+                Group {
+                    if report.simplified.count > 6 {
+                        ScrollView { simplifiedList }.frame(height: 220)
+                    } else {
+                        simplifiedList
                     }
-                    .padding(10)
                 }
-                .frame(maxHeight: 220)
                 .background(Color(nsColor: Palette.pageBackground), in: RoundedRectangle(cornerRadius: 6))
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: Palette.border)))
                 .accessibilityIdentifier("notion-import-simplified")
             }
-            HStack {
+            HStack(spacing: 8) {
                 Spacer()
-                Button("Открыть ветку") { controller.openBranch(report) }
+                Button("Открыть страницу") { controller.openBranch(report) }
+                    .buttonStyle(ModalCardButtonStyle())
                     .accessibilityIdentifier("notion-import-open-branch")
                 Button("Готово") { controller.dismiss() }
+                    .buttonStyle(ModalCardButtonStyle(isPrimary: true))
                     .keyboardShortcut(.defaultAction)
                     .accessibilityIdentifier("notion-import-done")
             }
+            .padding(.top, 4)
         }
-        .font(.system(size: 14))
-        .foregroundStyle(Color(nsColor: Palette.textPrimary))
-        .padding(20)
-        .frame(width: 480)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("notion-import-report")
     }
+
+    private var simplifiedList: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(report.simplified.enumerated()), id: \.offset) { _, page in
+                (Text(verbatim: page.pageTitle).fontWeight(.medium) + Text(verbatim: ": " + page.items.joined(separator: ", ")))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(10)
+    }
 }
 
-/// Повтор той же выгрузки (FR-027): дубли молча не создаются.
+/// Повтор того же файла (FR-027): дубли молча не создаются.
 struct NotionImportRepeatView: View {
     let controller: NotionImportController
     let previous: NotionImportRun
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Эта выгрузка уже импортирована")
-                .font(.system(size: 16, weight: .semibold))
-            Text(verbatim: "\(Self.dateText(previous.startedAt)) перенесено страниц: \(number(previous.importedPages)). Если импортировать ещё раз, рядом появится вторая копия этих страниц.")
+        VStack(alignment: .leading, spacing: 12) {
+            ModalCardTitle(text: "Этот файл из Notion уже переносили")
+            Text(verbatim: "\(Self.dateText(previous.startedAt)) из него перенесено страниц: \(number(previous.importedPages)). Если перенести ещё раз, рядом появится вторая копия этих страниц.")
                 .fixedSize(horizontal: false, vertical: true)
-            HStack {
+            HStack(spacing: 8) {
                 Spacer()
                 Button("Отмена") { controller.cancelRepeat() }
+                    .buttonStyle(ModalCardButtonStyle())
                     .keyboardShortcut(.cancelAction)
                     .accessibilityIdentifier("notion-import-cancel-repeat")
-                Button("Импортировать ещё раз") { controller.confirmRepeat() }
+                Button("Перенести ещё раз") { controller.confirmRepeat() }
+                    .buttonStyle(ModalCardButtonStyle(isPrimary: true))
                     .keyboardShortcut(.defaultAction)
                     .accessibilityIdentifier("notion-import-again")
             }
+            .padding(.top, 4)
         }
-        .font(.system(size: 14))
-        .foregroundStyle(Color(nsColor: Palette.textPrimary))
-        .padding(20)
-        .frame(width: 440)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("notion-import-repeat")
     }
 
-    /// «18 октября 2026 в 15:00».
+    /// «18 октября 2026 в 15:04».
     static func dateText(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "ru_RU")
         formatter.dateFormat = "d MMMM yyyy 'в' HH:mm"
         return formatter.string(from: date)
     }
-}
-
-/// Число по-русски: «1 000», «147 400».
-func number(_ value: Int) -> String {
-    value.formatted(.number.locale(Locale(identifier: "ru_RU")))
 }

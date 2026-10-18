@@ -1,6 +1,6 @@
 import XCTest
 
-/// Импорт из Notion (US6): «Файл → Импорт из Notion…» → окно выбора (путь через ⌘⇧G) → «Импортировать» → лист отчёта
+/// Импорт из Notion (US6): «Файл → Импорт из Notion…» → окно выбора (путь через ⌘⇧G) → «Перенести» → окно итога
 /// → страницы выгрузки в базе. Повтор той же выгрузки — вопрос до начала, «Отмена» дублей не создаёт.
 final class NotionImportUITests: XCTestCase {
     override func setUpWithError() throws {
@@ -48,18 +48,18 @@ final class NotionImportUITests: XCTestCase {
         XCTAssertEqual(try library.savedIcon(ofPage: "Проекты"), "📁")
     }
 
-    /// Меню «Файл → Импорт из Notion…», путь к выгрузке через «Перейти к папке» (⌘⇧G), «Импортировать».
+    /// Меню «Файл → Импорт из Notion…», путь к выгрузке через «Перейти к папке» (⌘⇧G), «Перенести».
     @MainActor
     private func chooseExport(_ source: URL, in app: XCUIApplication) {
         app.menuBars.menuBarItems["Файл"].click()
         app.menuItems["Импорт из Notion…"].click()
-        let importButton = app.buttons["Импортировать"].firstMatch
-        XCTAssertTrue(importButton.waitForExistence(timeout: 10), "Окно выбора выгрузки не открылось")
+        let importButton = app.buttons["Перенести"].firstMatch
+        XCTAssertTrue(importButton.waitForExistence(timeout: 10), "Окно выбора файла из Notion не открылось")
         app.typeKey("g", modifierFlags: [.command, .shift])
         app.typeText(source.resolvingSymlinksInPath().path)
         app.typeKey(.return, modifierFlags: [])
         XCTAssertTrue(importButton.waitForExistence(timeout: 5))
-        // «Импортировать» — кнопка по умолчанию; щелчок по ней находит ещё и копию в Touch Bar.
+        // «Перенести» — кнопка по умолчанию; щелчок по ней находит ещё и копию в Touch Bar.
         app.typeKey(.return, modifierFlags: [])
     }
 

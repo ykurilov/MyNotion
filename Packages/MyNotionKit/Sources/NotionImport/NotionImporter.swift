@@ -269,7 +269,7 @@ public struct NotionImporter: Sendable {
                 let page = plan.pages[index]
                 let items = NotionSimplification.allCases.compactMap { kind -> String? in
                     guard let count = page.simplifications[kind], count > 0 else { return nil }
-                    return count == 1 ? kind.title : "\(kind.title) ×\(count)"
+                    return kind.title(count: count)
                 }
                 if !items.isEmpty { result.append(SimplifiedPage(pageTitle: page.title.isEmpty ? Page.untitledTitle : page.title, items: items)) }
                 visit(page.children)

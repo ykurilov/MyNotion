@@ -100,53 +100,40 @@ final class MarkdownExportController {
     func showInFinder(_ folder: URL) {
         NSWorkspace.shared.activateFileViewerSelecting([folder])
     }
+
+    /// Состояние для галереи интерфейса, без настоящей выгрузки.
+    func showPreview(_ preview: State) {
+        state = preview
+    }
 }
 
-/// Карточка внизу окна: ход выгрузки, итог с кнопкой «Показать в Finder» или понятная ошибка.
+/// Карточка внизу окна: ход выгрузки, итог с кнопкой «Показать в Finder» или понятная ошибка — в той же манере,
+/// что перенос из Notion (contracts/visual-style.md, «Карточки хода»).
 struct ExportNoticeView: View {
     let controller: MarkdownExportController
 
     var body: some View {
-        if controller.state != .idle {
-            card
-                .padding(.bottom, 20)
-                .transition(.opacity)
-                // Идентификатор на контейнере иначе прячет вложенные текст и кнопки от VoiceOver и UI-тестов.
-                .accessibilityElement(children: .contain)
-                .accessibilityIdentifier("export-notice")
-        }
-    }
-
-    private var card: some View {
-        HStack(spacing: 12) {
-            content
-        }
-        .font(.system(size: 14))
-        .foregroundStyle(Color(nsColor: Palette.textPrimary))
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .frame(maxWidth: 560)
-        .background(Color(nsColor: Palette.popupMenuBackground), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(nsColor: Palette.border)))
-        .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
-    }
-
-    @ViewBuilder
-    private var content: some View {
         switch controller.state {
         case .idle:
             EmptyView()
         case .running(let done, let total):
-            ProgressView().controlSize(.small)
-            Text(total > 0 ? "Выгружаю в Markdown… \(done) из \(total)" : "Выгружаю в Markdown…")
+            NoticeCard(identifier: "export-notice") {
+                NoticeProgress(done: done, total: total,
+                               text: total > 0 ? "Выгружено в Markdown страниц: \(number(done)) из \(number(total))" : "Выгружаю в Markdown…")
+            }
         case .finished(let folder, let pageCount):
-            Text("Выгружено страниц: \(pageCount)")
-            Button("Показать в Finder") { controller.showInFinder(folder) }
-                .accessibilityIdentifier("export-show-in-finder")
-            closeButton
+            NoticeCard(identifier: "export-notice") {
+                Text(verbatim: "Выгружено в Markdown страниц: \(number(pageCount))")
+                Button("Показать в Finder") { controller.showInFinder(folder) }
+                    .accessibilityIdentifier("export-show-in-finder")
+                closeButton
+            }
         case .failed(let message):
-            Text(message).foregroundStyle(Color(nsColor: Palette.destructiveText))
-            closeButton
+            NoticeCard(identifier: "export-notice") {
+                Text(verbatim: message).foregroundStyle(Color(nsColor: Palette.destructiveText))
+                    .fixedSize(horizontal: false, vertical: true)
+                closeButton
+            }
         }
     }
 

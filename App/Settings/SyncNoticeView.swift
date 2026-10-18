@@ -18,7 +18,8 @@ struct SyncNoticeView: View {
                     Text("ещё \(controller.notices.count - 1)")
                         .foregroundStyle(Color(nsColor: Palette.textSecondary))
                 }
-                Button("Понятно") { controller.dismissNotice() }
+                // Одно слово закрытия у всех карточек внизу окна (contracts/visual-style.md, «Карточки хода»).
+                Button("Закрыть") { controller.dismissNotice() }
                     .accessibilityIdentifier("sync-notice-close")
             }
             .font(.system(size: 14))
