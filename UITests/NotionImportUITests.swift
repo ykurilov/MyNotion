@@ -17,14 +17,17 @@ final class NotionImportUITests: XCTestCase {
         addTeardownBlock { try? FileManager.default.removeItem(at: source) }
 
         let app = library.launchApp()
-        XCTAssertTrue(app.pageTitle.waitForExistence(timeout: 10))
+        // В пустой базе страниц нет: ждём само окно.
+        XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 10))
 
         chooseExport(source, in: app)
         let report = app.descendants(matching: .any)["notion-import-report"]
         XCTAssertTrue(report.waitForExistence(timeout: 30), "Отчёт об импорте не появился")
-        let summary = app.staticTexts["notion-import-summary"]
-        XCTAssertTrue(summary.label.contains("Перенесено страниц: 6"), "Отчёт: \(summary.label)")
-        XCTAssertTrue(summary.label.contains("Импорт из Notion — "), "Нет названия ветки: \(summary.label)")
+        // Текст SwiftUI на macOS виден тестам как значение элемента, а не как подпись.
+        let summaryElement = app.staticTexts["notion-import-summary"]
+        let summary = (summaryElement.value as? String).flatMap { $0.isEmpty ? nil : $0 } ?? summaryElement.label
+        XCTAssertTrue(summary.contains("Перенесено страниц: 6"), "Отчёт: \(summary)")
+        XCTAssertTrue(summary.contains("Импорт из Notion — "), "Нет названия ветки: \(summary)")
         XCTAssertTrue(app.descendants(matching: .any)["notion-import-simplified"].exists, "Нет списка упрощённого")
         app.buttons["notion-import-done"].click()
         XCTAssertTrue(waitForAbsence(report), "Отчёт не закрылся")

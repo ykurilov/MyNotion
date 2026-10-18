@@ -90,7 +90,8 @@ struct MyNotionApp: App {
         // Индекс поиска пишется в той же транзакции, что и записи (research R6) — до первой записи.
         store.addWriteHook(SearchIndexer())
         // Импорт из Notion, прерванный падением приложения, не оставляет недоделанной ветки (FR-027).
-        try NotionImporter(store: store).rollBackInterruptedImports()
+        // Не вышло (диск полон) — записи всё равно открываются, журнал остаётся running и откатится в следующий раз.
+        _ = try? NotionImporter(store: store).rollBackInterruptedImports()
         if options.generatesVisualSample {
             // Образец сразу открыт: для сверки с Notion и снимков окна.
             let sample = try VisualSamplePage.ensure(in: store)

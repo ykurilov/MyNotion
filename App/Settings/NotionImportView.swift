@@ -215,11 +215,11 @@ struct NotionImportNoticeView: View {
         case .running(let step):
             AnyView(Group {
                 if step.total > 0 {
-                    ProgressView(value: Double(step.done), total: Double(step.total)).frame(width: 120)
+                    ProgressView(value: Double(step.done), total: Double(step.total)).frame(width: 100)
                 } else {
                     ProgressView().controlSize(.small)
                 }
-                Text(Self.progressText(step)).monospacedDigit()
+                Text(Self.progressText(step)).monospacedDigit().lineLimit(1).fixedSize()
                 Button("Остановить") { controller.stop() }
                     .accessibilityIdentifier("notion-import-stop")
             })
@@ -235,8 +235,9 @@ struct NotionImportNoticeView: View {
     }
 
     static func progressText(_ step: NotionImportProgress) -> String {
-        let action = step.phase == .reading ? "читаю страницы" : "записываю страницы"
-        return step.total > 0 ? "Импорт из Notion: \(action) — \(step.done) из \(step.total)" : "Импорт из Notion: \(action)…"
+        // Чтение выгрузки — быстрое, его отмечаем словом; запись — главная часть, ей хватает чисел.
+        let action = step.phase == .reading ? "Импорт из Notion: читаю" : "Импорт из Notion:"
+        return step.total > 0 ? "\(action) \(number(step.done)) из \(number(step.total))" : "\(action)…"
     }
 }
 
@@ -278,7 +279,7 @@ struct NotionImportReportView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Импорт из Notion завершён")
                 .font(.system(size: 16, weight: .semibold))
-            Text("Перенесено страниц: \(report.pageCount), блоков: \(report.blockCount). Всё лежит в ветке «\(report.rootTitle)».")
+            Text(verbatim: "Перенесено страниц: \(number(report.pageCount)), блоков: \(number(report.blockCount)). Всё лежит в ветке «\(report.rootTitle)».")
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("notion-import-summary")
             if report.simplified.isEmpty {
@@ -329,7 +330,7 @@ struct NotionImportRepeatView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Эта выгрузка уже импортирована")
                 .font(.system(size: 16, weight: .semibold))
-            Text("\(Self.dateText(previous.startedAt)) перенесено страниц: \(previous.importedPages). Если импортировать ещё раз, рядом появится вторая копия этих страниц.")
+            Text(verbatim: "\(Self.dateText(previous.startedAt)) перенесено страниц: \(number(previous.importedPages)). Если импортировать ещё раз, рядом появится вторая копия этих страниц.")
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
@@ -356,4 +357,9 @@ struct NotionImportRepeatView: View {
         formatter.dateFormat = "d MMMM yyyy 'в' HH:mm"
         return formatter.string(from: date)
     }
+}
+
+/// Число по-русски: «1 000», «147 400».
+func number(_ value: Int) -> String {
+    value.formatted(.number.locale(Locale(identifier: "ru_RU")))
 }
