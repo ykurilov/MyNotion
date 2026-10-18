@@ -1,22 +1,28 @@
+import AppKit
 import NotesCore
 import PageTree
 import SwiftUI
 import Sync
 import VisualStyle
 
-/// «Настройки → Синхронизация» (T080, research R9): включить на первом Mac токеном, подключить второй кодом,
-/// «Добавить Mac» с кодом и предупреждением, список устройств, отключение.
+/// «Настройки → Синхронизация» (T080, research R9; проверка интерфейса, раунд 4, № 2, 7, 8, 9): простыми словами,
+/// без слов разработчика. Глаголы договорены: «Подключить Mac» — этот Mac к остальным, «Добавить Mac» — показать код
+/// для нового, «Убрать» — чужой Mac из списка, «Выключить на этом Mac» — остановить у себя.
 struct SyncSettingsView: View {
     @Bindable var controller: SyncController
-    @State private var token = ""
     @State private var codeText = ""
     @State private var confirmsDisable = false
 
+    /// Ширина окон поверх страницы (contracts/visual-style.md, «Окна поверх страницы»).
+    static let width: CGFloat = 520
+    /// Колонка подписей у полей: поля начинаются на одной линии.
+    private static let labelWidth: CGFloat = 130
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Синхронизация")
+            Text("Одни записи на всех ваших Mac")
                 .font(.system(size: 18, weight: .semibold))
-            Text("Одни и те же записи на всех ваших Mac. Записи шифруются здесь — сервер видит только зашифрованное.")
+            Text("Правки с одного Mac сами появляются на других. Прочитать записи могут только ваши Mac.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if controller.isEnabled { connected } else { disconnected }
@@ -29,58 +35,70 @@ struct SyncSettingsView: View {
         }
         .font(.system(size: 13))
         .padding(24)
-        .frame(width: 560, alignment: .leading)
+        .frame(width: Self.width, alignment: .leading)
         .disabled(controller.isBusy)
+        .focusEffectDisabled()
         .task(id: controller.account?.deviceId) { if controller.isEnabled { await controller.refreshDevices() } }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("sync-settings")
     }
 
-    // MARK: Не подключён
+    // MARK: Этот Mac ещё не подключён
 
     private var disconnected: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            LabeledContent("Сервер") {
-                TextField("https://mynotion.kurilov.cloud", text: $controller.serverAddress)
-                    .textFieldStyle(.roundedBorder)
-                    .accessibilityIdentifier("sync-server-address")
-            }
-            LabeledContent("Имя этого Mac") {
-                TextField("MacBook", text: $controller.deviceName)
-                    .textFieldStyle(.roundedBorder)
-                    .accessibilityIdentifier("sync-device-name")
-            }
-            GroupBox {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Второй Mac: введите код с экрана уже подключённого Mac («Добавить Mac»).")
-                        .fixedSize(horizontal: false, vertical: true)
-                    TextField("XXXX-XXXX-…", text: $codeText, axis: .vertical)
-                        .font(.system(size: 14, design: .monospaced))
+        VStack(alignment: .leading, spacing: 16) {
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
+                GridRow {
+                    Text("Имя этого Mac").frame(width: Self.labelWidth, alignment: .leading)
+                    TextField("MacBook", text: $controller.deviceName)
                         .textFieldStyle(.roundedBorder)
-                        .lineLimit(2...4)
+                        .accessibilityIdentifier("sync-device-name")
+                }
+                GridRow {
+                    Text("Код с другого Mac").frame(width: Self.labelWidth, alignment: .leading)
+                    TextField("XXXX-XXXX-…", text: $codeText)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 13, design: .monospaced))
                         .accessibilityIdentifier("sync-join-code")
-                    Button("Подключить") { Task { await controller.join(codeText: codeText) } }
-                        .disabled(codeText.trimmingCharacters(in: .whitespaces).isEmpty)
-                        .accessibilityIdentifier("sync-join")
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(6)
-            } label: { Text("Подключить к уже настроенным Mac").font(.system(size: 13, weight: .semibold)) }
-            GroupBox {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Первый Mac: токен устройства, который выдала команда на сервере.")
-                        .fixedSize(horizontal: false, vertical: true)
-                    SecureField("Токен устройства", text: $token)
-                        .textFieldStyle(.roundedBorder)
-                        .accessibilityIdentifier("sync-first-token")
-                    Button("Включить синхронизацию") { Task { await controller.connectFirstDevice(token: token) } }
-                        .disabled(token.trimmingCharacters(in: .whitespaces).isEmpty)
-                        .accessibilityIdentifier("sync-enable-first")
+                GridRow {
+                    Color.clear.frame(width: Self.labelWidth, height: 1)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("На Mac, где записи уже есть, откройте эти настройки и нажмите «Добавить Mac» — появится код.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button("Подключить Mac") { Task { await controller.join(codeText: codeText) } }
+                            .buttonStyle(.borderedProminent)
+                            .keyboardShortcut(.defaultAction)
+                            .disabled(codeText.trimmingCharacters(in: .whitespaces).isEmpty)
+                            .accessibilityIdentifier("sync-join")
+                    }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(6)
-            } label: { Text("Это первый Mac").font(.system(size: 13, weight: .semibold)) }
+            }
+            Divider()
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Это ваш первый Mac?").font(.system(size: 13, weight: .semibold))
+                Text("Тогда кода ещё нет. Нужен файл-ключ «mynotion-sync-device.env» — его выдаёт тот, кто настраивал MyNotion.")
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Выбрать файл-ключ…") { chooseKeyFile() }
+                    .accessibilityIdentifier("sync-enable-first")
+            }
         }
+    }
+
+    /// Окно выбора файла-ключа: сразу в папке, куда его кладут при установке; скрытые папки видны.
+    private func chooseKeyFile() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.showsHiddenFiles = true
+        panel.prompt = "Подключить Mac"
+        panel.message = "Выберите файл-ключ «mynotion-sync-device.env»"
+        let secrets = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex/secrets", isDirectory: true)
+        if FileManager.default.fileExists(atPath: secrets.path) { panel.directoryURL = secrets }
+        guard panel.runModal() == .OK, let file = panel.url else { return }
+        Task { await controller.connectFirstDevice(keyFile: file) }
     }
 
     // MARK: Подключён
@@ -93,18 +111,18 @@ struct SyncSettingsView: View {
                     .accessibilityIdentifier("sync-settings-status")
             }
             if let account = controller.account {
-                Text("Этот Mac: \(account.deviceName) · \(account.serverURL.host() ?? account.serverURL.absoluteString)")
+                Text("Этот Mac называется «\(account.deviceName)».")
                     .foregroundStyle(.secondary)
             }
             joinCodeSection
             devicesSection
-            Button("Выключить синхронизацию на этом Mac…") { confirmsDisable = true }
+            Button("Выключить на этом Mac…") { confirmsDisable = true }
                 .accessibilityIdentifier("sync-disable")
-                .confirmationDialog("Выключить синхронизацию на этом Mac?", isPresented: $confirmsDisable) {
+                .confirmationDialog("Выключить на этом Mac?", isPresented: $confirmsDisable) {
                     Button("Выключить", role: .destructive) { Task { await controller.disable() } }
                     Button("Отмена", role: .cancel) {}
                 } message: {
-                    Text("Записи останутся на этом Mac. Правки перестанут уходить на другие Mac, пока вы снова не подключите этот.")
+                    Text("Записи останутся на этом Mac. Новые правки перестанут уходить на другие Mac, пока вы снова не подключите этот.")
                 }
         }
     }
@@ -114,6 +132,8 @@ struct SyncSettingsView: View {
         GroupBox {
             VStack(alignment: .leading, spacing: 10) {
                 if let code = controller.joinCode {
+                    Text("Введите этот код на новом Mac в «Настройки → Код с другого Mac»:")
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(code.text)
                         .font(.system(size: 17, weight: .medium, design: .monospaced))
                         .textSelection(.enabled)
@@ -124,12 +144,15 @@ struct SyncSettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("sync-join-code-warning")
                     if let expiresAt = controller.joinCodeExpiresAt {
-                        Text("Код одноразовый, действует до \(expiresAt.formatted(date: .omitted, time: .shortened)).")
-                            .foregroundStyle(.secondary)
+                        TimelineView(.periodic(from: .now, by: 30)) { context in
+                            Text(JoinCode.lifetimeText(until: expiresAt, now: context.date))
+                                .foregroundStyle(.secondary)
+                                .accessibilityIdentifier("sync-join-code-lifetime")
+                        }
                     }
                     Button("Скрыть код") { controller.hideJoinCode() }
                 } else {
-                    Text("На новом Mac откройте «Настройки → Синхронизация» и введите код, который появится здесь.")
+                    Text("Чтобы подключить ещё один Mac, нажмите кнопку — здесь появится код. Его нужно ввести на новом Mac.")
                         .fixedSize(horizontal: false, vertical: true)
                     Button("Добавить Mac") { Task { await controller.makeJoinCode() } }
                         .accessibilityIdentifier("sync-add-mac")
@@ -144,21 +167,22 @@ struct SyncSettingsView: View {
         GroupBox {
             VStack(alignment: .leading, spacing: 6) {
                 if controller.devices.isEmpty {
-                    Text("Список устройств появится, когда будет связь с сервером.").foregroundStyle(.secondary)
+                    Text("Список появится, когда будет интернет.").foregroundStyle(.secondary)
                 }
                 ForEach(controller.devices) { device in
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(device.deviceName + (device.deviceId == controller.account?.deviceId ? " — этот Mac" : ""))
                             if let seen = device.lastSeenAt {
-                                Text("На связи: \(seen.formatted(date: .abbreviated, time: .shortened))")
+                                Text("Был на связи: \(seen.formatted(date: .abbreviated, time: .shortened))")
                                     .font(.system(size: 11))
                                     .foregroundStyle(.secondary)
                             }
                         }
                         Spacer()
                         if device.deviceId != controller.account?.deviceId {
-                            Button("Отключить") { Task { await controller.disconnect(device) } }
+                            Button("Убрать") { Task { await controller.disconnect(device) } }
+                                .help("Этот Mac перестанет получать ваши записи — например, если он потерян или продан")
                                 .accessibilityIdentifier("sync-disconnect-device")
                         }
                     }
@@ -166,6 +190,6 @@ struct SyncSettingsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(6)
-        } label: { Text("Устройства").font(.system(size: 13, weight: .semibold)) }
+        } label: { Text("Ваши Mac").font(.system(size: 13, weight: .semibold)) }
     }
 }

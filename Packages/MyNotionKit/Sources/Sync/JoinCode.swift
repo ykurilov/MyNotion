@@ -45,10 +45,55 @@ public struct JoinCode: Sendable {
     }
 }
 
+extension JoinCode {
+    /// Сколько ещё действует код — минутами, а не временем суток («до 0:10» читалось как полночь).
+    public static func lifetimeText(until expiresAt: Date, now: Date = Date()) -> String {
+        let seconds = expiresAt.timeIntervalSince(now)
+        guard seconds > 0 else { return "Код больше не действует — нажмите «Добавить Mac» ещё раз" }
+        let minutes = Int((seconds / 60).rounded(.up))
+        return "Код одноразовый и действует ещё \(minutes) \(minuteWord(minutes))"
+    }
+
+    private static func minuteWord(_ count: Int) -> String {
+        let lastTwo = count % 100, last = count % 10
+        if (11...14).contains(lastTwo) { return "минут" }
+        switch last {
+        case 1: return "минуту"
+        case 2...4: return "минуты"
+        default: return "минут"
+        }
+    }
+}
+
+/// Ключ первого Mac — файл, который выдают при установке MyNotion (`MYNOTION_SYNC_URL=…`, `MYNOTION_SYNC_DEVICE_TOKEN=…`)
+/// или файл с одним ключом в строке. Адрес из файла заменяет адрес по умолчанию.
+public struct FirstMacKey: Sendable, Equatable {
+    public var serverURL: URL?
+    public var secret: String
+
+    public init?(fileText: String) {
+        var values: [String: String] = [:]
+        let lines = fileText.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        for line in lines {
+            guard let equals = line.firstIndex(of: "=") else { continue }
+            values[String(line[..<equals])] = String(line[line.index(after: equals)...]).trimmingCharacters(in: CharacterSet(charactersIn: "\"' "))
+        }
+        if let secret = values["MYNOTION_SYNC_DEVICE_TOKEN"], !secret.isEmpty {
+            self.secret = secret
+            serverURL = values["MYNOTION_SYNC_URL"].flatMap(URL.init(string:))
+        } else if values.isEmpty, lines.count == 1 {
+            secret = lines[0]
+            serverURL = nil
+        } else {
+            return nil
+        }
+    }
+}
+
 public enum JoinCodeError: Error, Equatable, LocalizedError {
     case mistyped
 
-    public var errorDescription: String? { "В коде опечатка — проверьте его по экрану первого Mac" }
+    public var errorDescription: String? { "В коде опечатка — сверьте его с экраном другого Mac" }
 }
 
 /// Base32 Дугласа Крокфорда: 0–9 и буквы без I, L, O, U.

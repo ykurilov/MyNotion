@@ -357,10 +357,10 @@ final class UIGalleryRunner {
         case .badgeReady, .badgeSending, .badgeError, .badgeErrorDetails:
             await open(library.notesPage)
             sync.previewBadge = switch state {
-            case .badgeReady: SyncBadgeState(kind: .ready, detail: "Все правки этого Mac отправлены, правки других Mac получены.",
+            case .badgeReady: SyncBadgeState(kind: .ready, detail: "На всех ваших Mac одни и те же записи.",
                                              lastSyncedAt: Date())
-            case .badgeSending: SyncBadgeState(kind: .sending, detail: "Правки этого Mac уходят на сервер.")
-            default: SyncBadgeState(kind: .error, detail: "Нет связи с сервером — правки сохранены здесь и уйдут, когда связь появится",
+            case .badgeSending: SyncBadgeState(kind: .sending, detail: "Свежие правки уходят на другие Mac.")
+            default: SyncBadgeState(kind: .error, detail: SyncEngine.message(for: URLError(.notConnectedToInternet)),
                                     lastSyncedAt: Date().addingTimeInterval(-25 * 60))
             }
             await settle()

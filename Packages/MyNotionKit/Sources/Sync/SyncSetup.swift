@@ -66,6 +66,6 @@ public enum SyncSetupError: Error, Equatable, LocalizedError {
     case missingSecrets
 
     public var errorDescription: String? {
-        "В связке ключей нет ключа синхронизации — выключите и снова подключите этот Mac"
+        "Этот Mac забыл код подключения — выключите синхронизацию на нём и подключите его заново"
     }
 }

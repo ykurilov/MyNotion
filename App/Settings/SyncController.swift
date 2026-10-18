@@ -52,10 +52,9 @@ final class SyncController {
         guard let engine else { return nil }
         switch engine.status {
         case .ready:
-            return SyncBadgeState(kind: .ready, detail: "Все правки этого Mac отправлены, правки других Mac получены.",
-                                  lastSyncedAt: engine.lastSyncedAt)
+            return SyncBadgeState(kind: .ready, detail: "На всех ваших Mac одни и те же записи.", lastSyncedAt: engine.lastSyncedAt)
         case .sending:
-            return SyncBadgeState(kind: .sending, detail: "Правки этого Mac уходят на сервер.", lastSyncedAt: engine.lastSyncedAt)
+            return SyncBadgeState(kind: .sending, detail: "Свежие правки уходят на другие Mac.", lastSyncedAt: engine.lastSyncedAt)
         case .error(let message):
             return SyncBadgeState(kind: .error, detail: message, lastSyncedAt: engine.lastSyncedAt)
         }
@@ -63,7 +62,20 @@ final class SyncController {
 
     // MARK: Подключение
 
-    /// Первый Mac: токен от команды `mynotion-sync bootstrap`.
+    /// Первый Mac: файл-ключ, выданный при установке (`mynotion-sync bootstrap`); адрес в файле — главнее.
+    func connectFirstDevice(keyFile: URL) async {
+        do {
+            guard let key = FirstMacKey(fileText: try String(contentsOf: keyFile, encoding: .utf8)) else {
+                errorMessage = SyncSettingsError.notAKeyFile.localizedDescription
+                return
+            }
+            if let url = key.serverURL { serverAddress = url.absoluteString }
+            await connectFirstDevice(token: key.secret)
+        } catch {
+            errorMessage = SyncSettingsError.notAKeyFile.localizedDescription
+        }
+    }
+
     func connectFirstDevice(token: String) async {
         await perform {
             let server = try self.server()
@@ -213,6 +225,12 @@ final class SyncController {
 
 enum SyncSettingsError: LocalizedError {
     case badServerAddress
+    case notAKeyFile
 
-    var errorDescription: String? { "Адрес сервера должен начинаться с https://" }
+    var errorDescription: String? {
+        switch self {
+        case .badServerAddress: "В файле-ключе неверный адрес — попросите новый файл у того, кто настраивал MyNotion"
+        case .notAKeyFile: "Это не файл-ключ MyNotion — выберите файл «mynotion-sync-device.env»"
+        }
+    }
 }

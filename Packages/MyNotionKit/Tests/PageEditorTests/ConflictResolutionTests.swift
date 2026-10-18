@@ -74,3 +74,22 @@ struct ConflictResolutionTests {
         #expect(try fixture.store.unresolvedConflicts(ofPage: fixture.pageId).isEmpty)
     }
 }
+
+@MainActor
+@Suite("Место метки «Две версии»")
+struct ConflictLabelPlacementTests {
+    @Test("Метка у правого края колонки текста, а не далеко за ним (№ 14)")
+    func labelHugsColumn() throws {
+        let fixture = try EditorFixture([.paragraph("Короткий"), .paragraph("второй")])
+        let blockId = fixture.document.blocks[0].id
+        try fixture.store.write { tx in
+            try tx.recordConflict(blockId: blockId, localVersion: InlineText("Короткий"), remoteVersion: InlineText("Другой"),
+                                  remoteDeviceName: "MacBook Air")
+        }
+        fixture.document.replacePendingConflicts(try fixture.store.unresolvedConflicts(ofPage: fixture.pageId))
+        let label = try #require(fixture.textView.subviews.compactMap { $0 as? ConflictLabelView }.first)
+        let columnRight = fixture.textView.textContainerOrigin.x + (fixture.textView.textContainer?.size.width ?? 0)
+        #expect(label.frame.minX >= columnRight, "налезает на текст: \(label.frame.minX) < \(columnRight)")
+        #expect(label.frame.minX <= columnRight + 8, "далеко от колонки: \(label.frame.minX) > \(columnRight + 8)")
+    }
+}

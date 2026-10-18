@@ -110,7 +110,9 @@ final class ConflictMarksOverlay {
             }()
             let size = label.intrinsicContentSize
             label.isHidden = false
-            label.frame = NSRect(x: rect.maxX + 6, y: rect.minY + 2, width: size.width, height: size.height)
+            // Подложка блока шире колонки на `horizontalOutset`: метка — сразу за правым краем колонки текста.
+            let columnRight = rect.maxX - Metrics.BlockSelection.horizontalOutset
+            label.frame = NSRect(x: columnRight + 4, y: rect.minY + 2, width: size.width, height: size.height)
         }
     }
 
@@ -140,7 +142,7 @@ extension PageTextView {
             self?.resolveConflict(conflict, choice: choice)
         }
         let hosting = NSHostingView(rootView: view)
-        conflictMarks.comparison.show(hosting, size: hosting.fittingSize, besides: label, preferringRight: false)
+        conflictMarks.comparison.show(hosting, size: hosting.fittingSize, besides: label, gap: 8, preferringRight: false)
     }
 
     /// Выбор версии — обычная правка текста блока, её можно отменить ⌘Z; затем конфликт снимается.
@@ -184,14 +186,22 @@ struct ConflictResolutionView: View {
                 .foregroundStyle(Color(nsColor: Palette.textSecondary))
                 .fixedSize(horizontal: false, vertical: true)
             HStack(alignment: .top, spacing: 12) {
-                version(title: "Сейчас в блоке", text: current, identifier: "conflict-keep-current") { choose(.current) }
-                version(title: otherTitle, text: other, identifier: "conflict-keep-other") { choose(.other) }
+                version(title: "Сейчас в блоке", text: current)
+                version(title: otherTitle, text: other)
             }
-            Button("Оставить обе — двумя блоками") { choose(.both) }
-                .accessibilityIdentifier("conflict-keep-both")
+            // Три выбора — одним рядом, одинаковой ширины; подписи говорят, какая версия останется.
+            HStack(spacing: 8) {
+                choice("Оставить текущую", identifier: "conflict-keep-current") { choose(.current) }
+                choice("Оставить вторую", identifier: "conflict-keep-other") { choose(.other) }
+                choice("Оставить обе", identifier: "conflict-keep-both") { choose(.both) }
+            }
+            Text("«Оставить обе» — вторая версия встанет отдельным блоком под этим.")
+                .font(.system(size: 12))
+                .foregroundStyle(Color(nsColor: Palette.textSecondary))
         }
         .padding(16)
         .frame(width: 520, alignment: .leading)
+        .focusEffectDisabled()
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("conflict-comparison")
     }
@@ -201,7 +211,15 @@ struct ConflictResolutionView: View {
         return name.isEmpty || UUID(uuidString: name) != nil ? "Вторая версия" : "Вторая версия · с \(name)"
     }
 
-    private func version(title: String, text: String, identifier: String, action: @escaping () -> Void) -> some View {
+    private func choice(_ title: String, identifier: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title).frame(maxWidth: .infinity)
+        }
+        .controlSize(.large)
+        .accessibilityIdentifier(identifier)
+    }
+
+    private func version(title: String, text: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
                 .font(.system(size: 12, weight: .medium))
@@ -216,8 +234,6 @@ struct ConflictResolutionView: View {
             .frame(minHeight: 60, maxHeight: 180)
             .padding(8)
             .background(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: Palette.border)))
-            Button("Оставить эту", action: action)
-                .accessibilityIdentifier(identifier)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

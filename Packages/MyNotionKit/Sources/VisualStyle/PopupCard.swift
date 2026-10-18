@@ -15,22 +15,12 @@ public final class PopupCard {
 
     public var isShown: Bool { panel?.isVisible == true }
 
-    /// Показать `content` размером `size` рядом с `anchor` (вид окна): справа от него, иначе под ним;
-    /// всё равно — сдвинуть внутрь окна с полем 8.
-    public func show(_ content: NSView, size: NSSize, besides anchor: NSView, preferringRight: Bool = true) {
+    /// Показать `content` размером `size` рядом с `anchor` (вид окна), место — `cardFrame`.
+    public func show(_ content: NSView, size: NSSize, besides anchor: NSView, gap: CGFloat = 8, preferringRight: Bool = true) {
         close()
         guard let window = anchor.window, let windowContent = window.contentView else { return }
-        let anchorRect = anchor.convert(anchor.bounds, to: nil)
-        let bounds = windowContent.bounds
-        let margin: CGFloat = 8
-        var card = NSRect(origin: .zero, size: size)
-        if preferringRight, anchorRect.maxX + 4 + size.width <= bounds.maxX - margin {
-            card.origin = NSPoint(x: anchorRect.maxX + 4, y: anchorRect.minY)
-        } else {
-            card.origin = NSPoint(x: anchorRect.maxX - size.width, y: anchorRect.minY - 4 - size.height)
-        }
-        card.origin.x = min(max(margin, card.origin.x), bounds.maxX - margin - size.width)
-        card.origin.y = min(max(margin, card.origin.y), bounds.maxY - margin - size.height)
+        let card = Self.cardFrame(size: size, anchor: anchor.convert(anchor.bounds, to: nil), in: windowContent.bounds,
+                                  gap: gap, preferringRight: preferringRight)
 
         let panel = PopupCardPanel(content: content)
         panel.onCancel = { [weak self] in self?.close() }
@@ -42,6 +32,23 @@ public final class PopupCard {
             return event
         }
         deactivationObserver = PopupWindows.onAppDeactivation { [weak self] in self?.close() }
+    }
+
+    /// Где встанет карточка размером `size` у `anchor` (координаты окна) внутри `bounds`: справа от него с зазором `gap`,
+    /// низом по низу якоря; не влезает или `preferringRight == false` — под ним с тем же зазором, правым краем по якорю.
+    /// Всегда целиком в окне с полем 8.
+    nonisolated public static func cardFrame(size: NSSize, anchor: NSRect, in bounds: NSRect, gap: CGFloat,
+                                             preferringRight: Bool) -> NSRect {
+        let margin: CGFloat = 8
+        var card = NSRect(origin: .zero, size: size)
+        if preferringRight, anchor.maxX + gap + size.width <= bounds.maxX - margin {
+            card.origin = NSPoint(x: anchor.maxX + gap, y: anchor.minY)
+        } else {
+            card.origin = NSPoint(x: anchor.maxX - size.width, y: anchor.minY - gap - size.height)
+        }
+        card.origin.x = min(max(margin, card.origin.x), bounds.maxX - margin - size.width)
+        card.origin.y = min(max(margin, card.origin.y), bounds.maxY - margin - size.height)
+        return card
     }
 
     public func close() {
