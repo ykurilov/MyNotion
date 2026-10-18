@@ -295,6 +295,13 @@ final class UIGalleryRunner {
             model.toggleSidebar()
             await settle()
 
+        case .search(let nothingFound):
+            await open(library.sample.page.id)
+            model.search.type(nothingFound ? "абракадабра" : "стран")
+            await settle()
+            guard model.search.isShowingResults else { return "выдача поиска не открылась" }
+            if let problem = GalleryTarget.popupsProblem("выдача поиска", in: window) { return problem }
+
         case .trash(let trash):
             await open(library.sample.page.id)
             switch trash {
@@ -346,6 +353,8 @@ final class UIGalleryRunner {
         case .sidebarHidden:
             model.toggleSidebar()
             await settle()
+        case .search:
+            model.search.dismiss()
         default:
             break
         }

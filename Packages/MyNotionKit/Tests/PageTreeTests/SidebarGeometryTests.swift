@@ -231,7 +231,43 @@ struct SidebarGeometryTests {
         #expect(abs(listTop - (titleBar + Metrics.Sidebar.rowHeight)) <= 0.5, "дерево начинается на \(listTop)")
     }
 
+    @Test("Поле поиска — под строкой светофора, на 10 от краёв панели; заголовок группы и дерево — под ним")
+    func searchFieldBelowTopRow() throws {
+        let width = Metrics.Sidebar.defaultWidth
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: 400), styleMask: [.borderless],
+                              backing: .buffered, defer: false)
+        let pages = [Self.page("Проекты", key: "1")]
+        let sidebar = PageTreeSidebar(tree: PageTreeSnapshot(allPages: pages), treeRevision: 0, collapsedPageIds: [],
+                                      selectedPageId: nil, liveTitle: nil, trashEntries: [], actions: Self.noActions,
+                                      trashActions: TrashActions(restore: { _ in }, deleteForever: { _ in }, emptyTrash: {}),
+                                      newPage: {}) { SearchFieldStandIn() }
+        let host = NSHostingView(rootView: sidebar)
+        window.contentView = host
+        host.layoutSubtreeIfNeeded()
+
+        let field = try #require(Self.find(SearchFieldStandIn.View.self, in: host))
+        let frame = field.convert(field.bounds, to: nil)
+        let fieldTop = 400 - frame.maxY
+        let search = Metrics.SearchField.self
+        #expect(abs(fieldTop - (Metrics.Window.titleBarHeight + search.topSpacing)) <= 0.5, "поле с \(fieldTop)")
+        #expect(abs(frame.height - search.height) <= 0.5)
+        #expect(abs(frame.minX - 10) <= 0.5 && abs(width - frame.maxX - 10) <= 0.5, "поле \(frame)")
+
+        let outline = try #require(Self.find(PageOutlineView.self, in: host))
+        let scroll = try #require(outline.enclosingScrollView)
+        let listTop = 400 - scroll.convert(scroll.bounds, to: nil).maxY
+        let expected = fieldTop + search.height + search.bottomSpacing + Metrics.Sidebar.rowHeight
+        #expect(abs(listTop - expected) <= 0.5, "дерево начинается на \(listTop)")
+    }
+
     // MARK: Помощники
+
+    /// Вместо настоящего поля поиска — пустой вид: панель отводит место любому полю.
+    private struct SearchFieldStandIn: NSViewRepresentable {
+        final class View: NSView {}
+        func makeNSView(context: Context) -> View { View() }
+        func updateNSView(_ nsView: View, context: Context) {}
+    }
 
     private static func trashRowFrame(sidebarWidth: CGFloat) -> NSRect {
         NSRect(x: Metrics.Sidebar.panelInset, y: Metrics.Sidebar.footerBottomInset,
@@ -267,7 +303,7 @@ struct SidebarGeometryTests {
     private static var retained: [AnyObject] = []
 
     private static func sidebar(_ pages: [Page], revision: Int, actions: PageTreeActions,
-                                newPage: @escaping () -> Void = {}) -> PageTreeSidebar {
+                                newPage: @escaping () -> Void = {}) -> PageTreeSidebar<EmptyView> {
         PageTreeSidebar(tree: PageTreeSnapshot(allPages: pages), treeRevision: revision, collapsedPageIds: [],
                         selectedPageId: pages.last?.id, liveTitle: nil, trashEntries: [], actions: actions,
                         trashActions: TrashActions(restore: { _ in }, deleteForever: { _ in }, emptyTrash: {}), newPage: newPage)

@@ -48,6 +48,8 @@ public enum GalleryScene: Hashable, Sendable {
     case sidebarRenaming
     /// Боковая панель свёрнута шторкой: шторка у светофора над страницей.
     case sidebarHidden
+    /// В поле поиска набрано слово: выдача под полем; `nothingFound` — слово, которого нет (FR-018).
+    case search(nothingFound: Bool)
     case trash(GalleryTrash)
     /// Полоса «Изменения не сохранены…» над страницей.
     case saveErrorBanner
@@ -234,6 +236,11 @@ public enum GalleryCatalog {
                      "Открыта страница четвёртого уровня: её строка выбрана", section: "Боковая панель"),
         GalleryState("sidebar-renaming", .sidebarRenaming,
                      "Переименование строки дерева: название выделено в поле", section: "Боковая панель"),
+        GalleryState("sidebar-search-results", .search(nothingFound: false),
+                     "Поиск «стран»: под полем выдача — сначала названия, потом текст; путь родителей серым, найденное синим, первая строка выбрана; корзина не ищется",
+                     section: "Боковая панель", narrowToo: true),
+        GalleryState("sidebar-search-nothing-found", .search(nothingFound: true),
+                     "Поиск слова, которого нет: «Ничего не найдено» под полем", section: "Боковая панель"),
         GalleryState("sidebar-hidden", .sidebarHidden,
                      "Боковая панель свёрнута шторкой: шторка у светофора, страница во всю ширину", section: "Боковая панель",
                      narrowToo: true),

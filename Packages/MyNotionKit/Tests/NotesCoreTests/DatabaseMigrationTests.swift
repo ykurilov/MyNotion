@@ -99,7 +99,7 @@ struct DatabaseMigrationTests {
 
         let migrated = try AppDatabase.open(at: folder.databaseURL)
         defer { migrated.close() }
-        #expect(try migrated.appliedSchemaVersion() == "v3")
+        #expect(try migrated.appliedSchemaVersion() == SchemaMigrations.current.steps.last?.version)
         let state = try #require(try NotesStore(database: migrated, clock: clock).windowState(WindowState.mainWindowId))
         #expect(state.openPageId == pageId)
         #expect(state.sidebarWidth == 320)

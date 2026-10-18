@@ -2,6 +2,7 @@ import Foundation
 import NotesCore
 import Observation
 import PageEditor
+import PageSearch
 import VisualStyle
 
 /// Состояние главного окна: дерево страниц, корзина, открытая страница и вид окна.
@@ -25,6 +26,8 @@ final class MainWindowModel {
     /// Куда поставить курсор в только что открытой странице.
     private(set) var initialFocus: PageTextView.InitialFocus = .body
     private(set) var loadError: String?
+    /// Поле поиска вверху боковой панели и его выдача (FR-018).
+    @ObservationIgnored private(set) var search: PageSearchController!
 
     init(store: NotesStore) {
         self.store = store
@@ -40,6 +43,8 @@ final class MainWindowModel {
         treeOperations.onUndoFailure = { [weak self] error in
             self?.loadError = "Не удалось отменить: \(SaveStatus.reason(for: error))"
         }
+        search = PageSearchController(store: store, tree: { [weak self] in self?.tree ?? PageTreeSnapshot(allPages: []) },
+                                      open: { [weak self] in self?.select($0) })
         let lastOpen = windowState?.openPageId.flatMap { tree.page($0)?.id }
         if let pageId = lastOpen ?? tree.children(of: nil).first?.id {
             open(pageId, focus: .body, remember: false)

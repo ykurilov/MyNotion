@@ -28,7 +28,7 @@ let package = Package(
         .target(name: "PageEditor", dependencies: ["NotesCore", "VisualStyle", "EmojiPicker"]),
         // Окно выбора эмодзи (FR-034): список и названия — из Unicode и CLDR (scripts/emoji/build-emoji-data.py).
         .target(name: "EmojiPicker", dependencies: ["VisualStyle"], resources: [.copy("Resources/emoji.tsv")]),
-        .target(name: "PageSearch", dependencies: ["NotesCore", "VisualStyle"]),
+        .target(name: "PageSearch", dependencies: ["NotesCore", "VisualStyle", .product(name: "GRDB", package: "GRDB.swift")]),
         .target(name: "MarkdownExport", dependencies: ["NotesCore"]),
         .target(name: "NotionImport", dependencies: ["NotesCore"]),
         .target(name: "Sync", dependencies: ["NotesCore"]),
@@ -40,7 +40,7 @@ let package = Package(
         .testTarget(name: "PageTreeTests", dependencies: ["PageTree"]),
         .testTarget(name: "PageEditorTests", dependencies: ["PageEditor", "NotesCore", "EmojiPicker"]),
         .testTarget(name: "EmojiPickerTests", dependencies: ["EmojiPicker", "NotesCore"]),
-        .testTarget(name: "PageSearchTests", dependencies: ["PageSearch"]),
+        .testTarget(name: "PageSearchTests", dependencies: ["PageSearch", "NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "MarkdownExportTests", dependencies: ["MarkdownExport"]),
         .testTarget(name: "NotionImportTests", dependencies: ["NotionImport"]),
         .testTarget(name: "SyncTests", dependencies: ["Sync"]),
