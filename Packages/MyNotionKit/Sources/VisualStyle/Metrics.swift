@@ -219,8 +219,15 @@ public enum Metrics {
         public static let iconFontSize: CGFloat = 15
         public static let textX: CGFloat = 36
         public static let rowTrailingPadding: CGFloat = 10
-        /// «Ничего не найдено» — строка как у меню.
-        public static let emptyRowHeight: CGFloat = 33
+        /// Заголовок «Найдено: N» над строками, как «Search results (3)» у Notion: 12 medium textSecondary
+        /// с края иконок строк, строка 27, как заголовок раздела меню «/».
+        public static let headerHeight: CGFloat = 27
+        /// Пусто: «Ничего не найдено» (14 medium textPrimary, строка 20) и пояснение под ним (12 textSecondary, строка 18)
+        /// по центру карточки, как «No results» у Notion.
+        public static let emptyStateHeight: CGFloat = 70
+        /// Над буквами строки названия пусто больше, чем под строкой пояснения: обе строки выше на столько,
+        /// чтобы по центру стоял сам текст, а не строки.
+        public static let emptyStateOpticalLift: CGFloat = 2.5
     }
 
     /// Окно корзины: всплывающая панель справа от боковой панели, у строки «Корзина».
