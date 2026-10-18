@@ -106,6 +106,38 @@ struct DatabaseMigrationTests {
         #expect(state.isSidebarCollapsed == false)
     }
 
+    @Test("v4 → v5: записи, надгробия и подключение синхронизации на месте; перед миграцией — копия")
+    func migrationAddsSyncBookkeeping() throws {
+        let folder = try TemporaryFolder()
+        let clock = HybridLogicalClock(deviceId: UUID(), wallClock: AdjustableWallClock().reading)
+        let upToV4 = SchemaMigrations(steps: Array(SchemaMigrations.current.steps.prefix { $0.version != "v5" }))
+        let erasedId = UUID.timeOrdered()
+
+        let old = try AppDatabase.open(at: folder.databaseURL, migrations: upToV4)
+        let page = try NotesStore(database: old, clock: clock).write { try $0.createPage(title: "До v5") }
+        try old.dbWriter.write { db in
+            try db.execute(sql: "INSERT INTO page_tombstone (pageId, erasedAt) VALUES (?, ?)",
+                           arguments: [erasedId.uuidString.lowercased(), clock.now().description])
+            try db.execute(sql: "INSERT INTO sync_account (id, serverURL, deviceId, deviceName, lastPulledSeq) VALUES (1, 'https://s', 'd', 'Mac', 7)")
+        }
+        old.close()
+
+        let migrated = try AppDatabase.open(at: folder.databaseURL)
+        defer { migrated.close() }
+        let store = NotesStore(database: migrated, clock: clock)
+        #expect(try store.pageOutline().map(\.title) == ["До v5"])
+        #expect(try store.pageContent(page.id)?.blocks.count == 1)
+        #expect(try store.pageTombstones().map(\.pageId) == [erasedId])
+        let (known, pulled, sent) = try migrated.dbWriter.read { db in
+            (try String.fetchOne(db, sql: "SELECT knownClocks FROM page_tombstone"),
+             try Int.fetchOne(db, sql: "SELECT lastPulledSeq FROM sync_account"),
+             try Int.fetchOne(db, sql: "SELECT lastSentSeq FROM sync_account"))
+        }
+        #expect(known == "{}")
+        #expect(pulled == 7 && sent == 0)
+        #expect(FileManager.default.fileExists(atPath: AppDatabase.backupURL(for: folder.databaseURL, version: "v4").path))
+    }
+
     @Test("Основная база живёт в ~/Library/Application Support/MyNotion/MyNotion.sqlite")
     func defaultLocation() {
         #expect(AppDatabase.defaultURL.path.hasSuffix("Library/Application Support/MyNotion/MyNotion.sqlite"))

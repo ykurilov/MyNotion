@@ -4,13 +4,24 @@ import GRDB
 /// Открытая транзакция записи. Живёт только внутри `NotesStore.write`.
 public final class NotesTransaction {
     private let db: Database
-    private let clock: HybridLogicalClock
-    private(set) var changes = NotesChanges()
+    package let clock: HybridLogicalClock
+    /// Что изменено в этой транзакции на данный момент.
+    package private(set) var changes = NotesChanges()
     private var touchedPageIds: Set<UUID> = []
+    private let keepsDeletionMarks: Bool
 
-    init(db: Database, clock: HybridLogicalClock) {
+    init(db: Database, clock: HybridLogicalClock, keepsDeletionMarks: Bool = false) {
         self.db = db
         self.clock = clock
+        self.keepsDeletionMarks = keepsDeletionMarks
+    }
+
+    /// Соединение этой транзакции — для таблиц модулей-добавок (синхронизация).
+    package var database: Database { db }
+
+    /// Выполнить после успешной фиксации транзакции (например, разбудить отправку).
+    package func afterCommit(_ action: @escaping @Sendable () -> Void) {
+        db.afterNextTransaction { _ in action() }
     }
 
     // MARK: Чтение внутри транзакции
@@ -100,11 +111,27 @@ public final class NotesTransaction {
     /// Подстраницы не трогаются — ветку стирает `PageTreeOperations`.
     public func erasePage(_ pageId: UUID) throws {
         guard try pageExists(pageId) else { throw NotesStoreError.pageNotFound(pageId) }
+        try erase(pageId, erasedAt: clock.now(), known: try contentKnowledge(ofPage: pageId))
+    }
+
+    /// Какие правки содержимого страницы (название, иконка, блоки, в том числе удалённые) есть на этом Mac.
+    package func contentKnowledge(ofPage pageId: UUID) throws -> ClockKnowledge {
+        var knowledge = ClockKnowledge()
+        if let page = try page(pageId) {
+            for stamp in [page.fieldClocks.title, page.fieldClocks.icon].compactMap({ $0 }) { knowledge.record(stamp) }
+        }
+        for (block, _) in try blocks(ofPage: pageId, includingDeleted: true) {
+            for stamp in block.fieldClocks.all { knowledge.record(stamp) }
+        }
+        return knowledge
+    }
+
+    private func erase(_ pageId: UUID, erasedAt: HybridTimestamp, known: ClockKnowledge) throws {
         try db.execute(sql: "DELETE FROM block WHERE pageId = ?", arguments: [pageId.databaseText])
         try db.execute(sql: "DELETE FROM page WHERE id = ?", arguments: [pageId.databaseText])
         try db.execute(
-            sql: "INSERT OR REPLACE INTO page_tombstone (pageId, erasedAt) VALUES (?, ?)",
-            arguments: [pageId.databaseText, clock.now().description]
+            sql: "INSERT OR REPLACE INTO page_tombstone (pageId, erasedAt, knownClocks) VALUES (?, ?, ?)",
+            arguments: [pageId.databaseText, erasedAt.description, try JSONColumn.encode(known)]
         )
         touchedPageIds.remove(pageId)
         changes.erasedPageIds.append(pageId)
@@ -127,6 +154,8 @@ public final class NotesTransaction {
         let fields = Set(Block.Field.allCases).subtracting([.deleted])
         inserted.fieldClocks.stamp(fields, with: stamp)
         inserted.textBaseClock = stamp
+        // Блок, оставшийся пометкой «удалён», возвращается под тем же id.
+        try db.execute(sql: "DELETE FROM block WHERE id = ? AND isDeleted = 1", arguments: [block.id.databaseText])
         try inserted.insert(into: db)
         touchedPageIds.insert(block.pageId)
         changes.blocks.append(.saved(inserted, changedFields: fields, isNew: true))
@@ -146,31 +175,39 @@ public final class NotesTransaction {
         updated.fieldClocks = stored.fieldClocks
         updated.fieldClocks.stamp(changedFields, with: clock.now())
         updated.textBaseClock = changedFields.contains(.text) ? updated.fieldClocks.text : stored.textBaseClock
+        if changedFields.contains(.text), let base = stored.fieldClocks.text, changes.textBaseClocks[block.id] == nil {
+            changes.textBaseClocks[block.id] = base
+        }
         try updated.update(in: db)
         changes.blocks.append(.saved(updated, changedFields: changedFields, isNew: false))
         return updated
     }
 
-    /// Удалить блок. Пока синхронизации нет, он стирается сразу (data-model.md).
-    /// Если на странице не останется блоков, в конце транзакции появится пустой абзац.
+    /// Удалить блок. Пока синхронизации нет, он стирается сразу; с ней — остаётся пометкой «удалён» с меткой часов,
+    /// пока её не получат все устройства (data-model.md). Если на странице не останется блоков, в конце транзакции
+    /// появится пустой абзац.
     public func deleteBlock(_ blockId: UUID) throws {
-        guard let stored = try storedBlock(blockId) else { throw NotesStoreError.blockNotFound(blockId) }
-        try db.execute(sql: "DELETE FROM block WHERE id = ?", arguments: [blockId.databaseText])
+        guard var stored = try storedBlock(blockId) else { throw NotesStoreError.blockNotFound(blockId) }
+        if keepsDeletionMarks {
+            stored.fieldClocks.stamp([.deleted], with: clock.now())
+            try stored.update(in: db)
+            try db.execute(sql: "UPDATE block SET isDeleted = 1 WHERE id = ?", arguments: [blockId.databaseText])
+        } else {
+            try db.execute(sql: "DELETE FROM block WHERE id = ?", arguments: [blockId.databaseText])
+        }
         touchedPageIds.insert(stored.pageId)
         changes.blocks.append(.erased(blockId: blockId, pageId: stored.pageId))
     }
 
     // MARK: Конфликты
 
-    /// Записать конфликт текста блока. Если по блоку уже ждёт неразрешённый конфликт,
-    /// обновляется его своя версия: на один блок — одно ожидающее решение.
+    /// Записать конфликт текста блока. Если по блоку уже ждёт неразрешённый конфликт с той же второй версией,
+    /// обновляется его своя версия (Юрий дописал блок); с другой второй версией — это новый конфликт,
+    /// иначе одна из версий пропала бы.
     @discardableResult
     public func recordConflict(blockId: UUID, localVersion: InlineText, remoteVersion: InlineText,
                                remoteDeviceName: String) throws -> Conflict {
-        if var pending = try Row.fetchOne(
-            db, sql: "SELECT * FROM conflict WHERE blockId = ? AND resolvedAt IS NULL ORDER BY detectedAt DESC LIMIT 1",
-            arguments: [blockId.databaseText]
-        ).map(Conflict.init(row:)) {
+        if var pending = try pendingConflicts(ofBlock: blockId).last(where: { $0.remoteVersion == remoteVersion }) {
             pending.localVersion = localVersion
             pending.remoteVersion = remoteVersion
             pending.remoteDeviceName = remoteDeviceName
@@ -181,6 +218,147 @@ public final class NotesTransaction {
                                 remoteDeviceName: remoteDeviceName)
         try conflict.insert(into: db)
         return conflict
+    }
+
+    /// Неразрешённые конфликты блока по времени появления.
+    public func pendingConflicts(ofBlock blockId: UUID) throws -> [Conflict] {
+        try Row.fetchAll(
+            db, sql: "SELECT * FROM conflict WHERE blockId = ? AND resolvedAt IS NULL ORDER BY detectedAt, id",
+            arguments: [blockId.databaseText]
+        ).map(Conflict.init(row:))
+    }
+
+    /// Юрий выбрал версию: конфликт решён. Сам выбор — обычная правка текста блока.
+    public func resolveConflict(_ conflictId: UUID) throws {
+        guard var conflict = try Row.fetchOne(db, sql: "SELECT * FROM conflict WHERE id = ?", arguments: [conflictId.databaseText])
+            .map(Conflict.init(row:)), conflict.resolvedAt == nil else { return }
+        conflict.resolvedAt = Date()
+        try conflict.update(in: db)
+        changes.resolvedConflicts.append(conflict)
+    }
+
+    /// Записать конфликт, найденный при слиянии; такой же ожидающий второй раз не записывается.
+    @discardableResult
+    package func addConflict(blockId: UUID, shownVersion: InlineText, otherVersion: InlineText,
+                             otherDeviceName: String) throws -> Bool {
+        let pending = try pendingConflicts(ofBlock: blockId)
+        guard !pending.contains(where: { $0.localVersion == shownVersion && $0.remoteVersion == otherVersion }) else { return false }
+        try Conflict(blockId: blockId, localVersion: shownVersion, remoteVersion: otherVersion,
+                     remoteDeviceName: otherDeviceName).insert(into: db)
+        return true
+    }
+
+    /// Снять ожидающий конфликт без записи в изменения (его уже решили на другом Mac).
+    package func markConflictResolved(_ conflict: Conflict) throws {
+        var resolved = conflict
+        resolved.resolvedAt = Date()
+        try resolved.update(in: db)
+    }
+
+    // MARK: Правки с других Mac (модуль Sync)
+
+    /// Блок как он лежит в базе, в том числе пометкой «удалён».
+    package func block(_ id: UUID, includingDeleted: Bool) throws -> (block: Block, isDeleted: Bool)? {
+        guard includingDeleted else { return try storedBlock(id).map { ($0, false) } }
+        return try Row.fetchOne(db, sql: "SELECT * FROM block WHERE id = ?", arguments: [id.databaseText]).map { row in
+            (try Block(row: row), row["isDeleted"] as Bool)
+        }
+    }
+
+    package func blocks(ofPage pageId: UUID, includingDeleted: Bool) throws -> [(block: Block, isDeleted: Bool)] {
+        guard includingDeleted else { return try blocks(ofPage: pageId).map { ($0, false) } }
+        return try Row.fetchAll(db, sql: "SELECT * FROM block WHERE pageId = ? ORDER BY sortKey, id",
+                                arguments: [pageId.databaseText]).map { row in (try Block(row: row), row["isDeleted"] as Bool) }
+    }
+
+    /// Записать страницу ровно такой, какой она пришла: со своими метками часов, без проверки петель —
+    /// петли разбирает слияние.
+    package func writeReplicatedPage(_ page: Page, changedFields: Set<Page.Field>) throws {
+        if let icon = page.icon, !Self.isSingleEmoji(icon) {
+            throw NotesStoreError.invalidPage("иконка — один эмодзи или пусто")
+        }
+        let isNew = try !pageExists(page.id)
+        if isNew { try page.insert(into: db) } else { try page.update(in: db) }
+        changes.pages.append(PageChange(page: page, changedFields: isNew ? Set(Page.Field.allCases) : changedFields, isNew: isNew))
+    }
+
+    /// Записать блок ровно таким, каким он пришёл, вместе с пометкой «удалён».
+    package func writeReplicatedBlock(_ block: Block, isDeleted: Bool, changedFields: Set<Block.Field>) throws {
+        try validate(block)
+        let existing = try self.block(block.id, includingDeleted: true)
+        if existing == nil { try block.insert(into: db) } else { try block.update(in: db) }
+        try db.execute(sql: "UPDATE block SET isDeleted = ? WHERE id = ?", arguments: [isDeleted, block.id.databaseText])
+        if isDeleted {
+            if existing?.isDeleted == false { changes.blocks.append(.erased(blockId: block.id, pageId: block.pageId)) }
+        } else {
+            let appears = existing == nil || existing?.isDeleted == true
+            changes.blocks.append(.saved(block, changedFields: appears ? Set(Block.Field.allCases) : changedFields, isNew: appears))
+        }
+    }
+
+    /// Стереть страницу по правке с другого Mac: метка стирания и известные ему правки — оттуда.
+    package func eraseReplicatedPage(_ pageId: UUID, erasedAt: HybridTimestamp, known: ClockKnowledge) throws {
+        try erase(pageId, erasedAt: erasedAt, known: known)
+    }
+
+    /// Надгробие страницы: когда стёрта и какие правки видел стёрший Mac.
+    package func tombstone(ofPage pageId: UUID) throws -> (erasedAt: HybridTimestamp, known: ClockKnowledge)? {
+        guard let row = try Row.fetchOne(db, sql: "SELECT erasedAt, knownClocks FROM page_tombstone WHERE pageId = ?",
+                                         arguments: [pageId.databaseText]),
+              let erasedAt = HybridTimestamp(row["erasedAt"] as String) else { return nil }
+        return (erasedAt, try RowDecoding.json(ClockKnowledge.self, row, "knownClocks"))
+    }
+
+    package func allTombstones() throws -> [(pageId: UUID, erasedAt: HybridTimestamp, known: ClockKnowledge)] {
+        try Row.fetchAll(db, sql: "SELECT pageId FROM page_tombstone ORDER BY erasedAt").compactMap { row in
+            guard let pageId = RowDecoding.optionalUUID(row, "pageId"), let tombstone = try tombstone(ofPage: pageId) else { return nil }
+            return (pageId, tombstone.erasedAt, tombstone.known)
+        }
+    }
+
+    package func removeTombstone(ofPage pageId: UUID) throws {
+        try db.execute(sql: "DELETE FROM page_tombstone WHERE pageId = ?", arguments: [pageId.databaseText])
+    }
+
+    /// Записать надгробие страницы, которой на этом Mac не было.
+    package func writeTombstone(ofPage pageId: UUID, erasedAt: HybridTimestamp, known: ClockKnowledge) throws {
+        if let existing = try tombstone(ofPage: pageId), existing.erasedAt >= erasedAt { return }
+        try db.execute(sql: "INSERT OR REPLACE INTO page_tombstone (pageId, erasedAt, knownClocks) VALUES (?, ?, ?)",
+                       arguments: [pageId.databaseText, erasedAt.description, try JSONColumn.encode(known)])
+    }
+
+    /// Новые метки всем полям страницы и её живых блоков: так этот Mac отправляет страницу целиком,
+    /// и она перекрывает стирание на других Mac (research R8).
+    package func restampPageWithBlocks(_ pageId: UUID) throws {
+        guard var page = try page(pageId) else { throw NotesStoreError.pageNotFound(pageId) }
+        page.fieldClocks.stamp(Set(Page.Field.allCases), with: clock.now())
+        page.updatedAt = Date()
+        try page.update(in: db)
+        changes.pages.append(PageChange(page: page, changedFields: Set(Page.Field.allCases), isNew: true))
+        for block in try blocks(ofPage: pageId) {
+            try restampBlock(block)
+        }
+    }
+
+    /// Новые метки всем полям живого блока: блок уходит на другие Mac целиком.
+    package func restampBlock(_ blockId: UUID) throws {
+        guard let block = try storedBlock(blockId) else { throw NotesStoreError.blockNotFound(blockId) }
+        try restampBlock(block)
+    }
+
+    private func restampBlock(_ block: Block) throws {
+        var restamped = block
+        let fields = Set(Block.Field.allCases).subtracting([.deleted])
+        restamped.fieldClocks.stamp(fields, with: clock.now())
+        if let base = block.fieldClocks.text { changes.textBaseClocks[block.id] = base }
+        restamped.textBaseClock = restamped.fieldClocks.text
+        try restamped.update(in: db)
+        changes.blocks.append(.saved(restamped, changedFields: fields, isNew: true))
+    }
+
+    /// Стереть пометки удалённых блоков и надгробия страниц: их получили все устройства или синхронизации нет.
+    package func eraseDeletionMarksAndTombstones() throws {
+        try db.execute(sql: "DELETE FROM block WHERE isDeleted = 1; DELETE FROM page_tombstone;")
     }
 
     // MARK: Подписчики
@@ -257,7 +435,7 @@ public final class NotesTransaction {
         }
     }
 
-    static func isSingleEmoji(_ text: String) -> Bool {
+    package static func isSingleEmoji(_ text: String) -> Bool {
         guard text.count == 1 else { return false }
         let scalars = text.unicodeScalars
         return scalars.contains { $0.properties.isEmojiPresentation } || scalars.contains("\u{FE0F}")

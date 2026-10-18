@@ -53,7 +53,7 @@ public struct Block: Sendable, Hashable, Identifiable {
         case deleted
     }
 
-    func changedFields(comparedTo old: Block) -> Set<Field> {
+    public func changedFields(comparedTo old: Block) -> Set<Field> {
         var fields: Set<Field> = []
         if kind != old.kind || indent != old.indent || linkedPageId != old.linkedPageId { fields.insert(.kindAndIndent) }
         if text != old.text { fields.insert(.text) }
@@ -92,7 +92,12 @@ public struct BlockFieldClocks: Sendable, Hashable, Codable {
         self.deleted = deleted
     }
 
-    mutating func stamp(_ fields: Set<Block.Field>, with timestamp: HybridTimestamp) {
+    /// Все проставленные метки.
+    public var all: [HybridTimestamp] {
+        [kindAndIndent, text, isChecked, sortKey, deleted].compactMap { $0 }
+    }
+
+    public mutating func stamp(_ fields: Set<Block.Field>, with timestamp: HybridTimestamp) {
         for field in fields {
             switch field {
             case .kindAndIndent: kindAndIndent = timestamp

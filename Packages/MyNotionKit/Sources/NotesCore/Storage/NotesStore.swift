@@ -8,6 +8,7 @@ public final class NotesStore: Sendable {
     public let database: AppDatabase
     public let clock: HybridLogicalClock
     private let writeHooks = Mutex<[any NotesWriteHook]>([])
+    private let deletionMarks = Mutex(false)
 
     public init(database: AppDatabase, clock: HybridLogicalClock) {
         self.database = database
@@ -17,6 +18,13 @@ public final class NotesStore: Sendable {
     /// Подписчик (поиск, синхронизация) будет писать в каждую транзакцию записи перед её фиксацией.
     public func addWriteHook(_ hook: any NotesWriteHook) {
         writeHooks.withLock { $0.append(hook) }
+    }
+
+    /// Удалённый блок остаётся пометкой с меткой часов, пока её не получат все устройства (data-model.md, «Block»).
+    /// Включает синхронизация; без неё удалённое стирается сразу.
+    package var keepsDeletionMarks: Bool {
+        get { deletionMarks.withLock { $0 } }
+        set { deletionMarks.withLock { $0 = newValue } }
     }
 
     // MARK: Чтение
@@ -67,7 +75,7 @@ public final class NotesStore: Sendable {
     public func write<T>(_ body: (NotesTransaction) throws -> T) throws -> T {
         let hooks = writeHooks.withLock { $0 }
         return try database.dbWriter.write { db in
-            let transaction = NotesTransaction(db: db, clock: clock)
+            let transaction = NotesTransaction(db: db, clock: clock, keepsDeletionMarks: keepsDeletionMarks)
             let result = try body(transaction)
             try transaction.giveEveryTouchedPageABlock()
             let changes = transaction.changes
@@ -93,8 +101,12 @@ public struct NotesChanges: Sendable {
     public internal(set) var blocks: [BlockChange] = []
     /// Страницы, стёртые навсегда; их блоки стёрты вместе с ними.
     public internal(set) var erasedPageIds: [UUID] = []
+    /// Версия текста, поверх которой записан новый текст блока: по ней другой Mac узнаёт одновременную правку (R8).
+    public internal(set) var textBaseClocks: [UUID: HybridTimestamp] = [:]
+    /// Конфликты, по которым Юрий сделал выбор.
+    public internal(set) var resolvedConflicts: [Conflict] = []
 
-    public var isEmpty: Bool { pages.isEmpty && blocks.isEmpty && erasedPageIds.isEmpty }
+    public var isEmpty: Bool { pages.isEmpty && blocks.isEmpty && erasedPageIds.isEmpty && resolvedConflicts.isEmpty }
 }
 
 public struct PageChange: Sendable {

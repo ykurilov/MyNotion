@@ -15,6 +15,7 @@ public struct SchemaMigrations: Sendable {
         Step(version: "v2", migrate: addPageTombstones),
         Step(version: "v3", migrate: addSidebarCollapsed),
         Step(version: "v4", migrate: fillSearchIndex),
+        Step(version: "v5", migrate: addSyncBookkeeping),
     ])
 
     /// Та же схема плюс ещё один шаг — для проверки миграций.
@@ -127,6 +128,17 @@ private func addPageTombstones(_ db: Database) throws {
             pageId TEXT PRIMARY KEY NOT NULL,
             erasedAt TEXT NOT NULL
         );
+        """)
+}
+
+/// Синхронизация (v5): в надгробии — какие правки страницы видел стёрший Mac (research R8);
+/// в подключении — номер последней своей отправленной пачки и последнего снимка.
+private func addSyncBookkeeping(_ db: Database) throws {
+    try db.execute(sql: """
+        ALTER TABLE page_tombstone ADD COLUMN knownClocks TEXT NOT NULL DEFAULT '{}';
+        ALTER TABLE sync_account ADD COLUMN lastSentSeq INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE sync_account ADD COLUMN lastSnapshotSeq INTEGER NOT NULL DEFAULT 0;
+        CREATE INDEX block_deleted ON block(isDeleted) WHERE isDeleted = 1;
         """)
 }
 

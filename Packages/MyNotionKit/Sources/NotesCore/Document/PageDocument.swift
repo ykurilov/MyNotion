@@ -12,6 +12,8 @@ public final class PageDocument {
     /// Блоки по порядку.
     public private(set) var blocks: [Block]
     public internal(set) var saveStatus: SaveStatus = .saved
+    /// Конфликты текста в блоках страницы, ждущие выбора Юрия («Две версии», FR-021).
+    public internal(set) var pendingConflicts: [Conflict] = []
 
     /// Страница и блоки так, как они записаны в базе на момент чтения или последней записи.
     @ObservationIgnored private var savedPage: Page
@@ -26,7 +28,8 @@ public final class PageDocument {
     /// Сообщает автосохранению о каждой правке.
     @ObservationIgnored var didEdit: (@MainActor () -> Void)?
 
-    public init(content: PageContent) {
+    public init(content: PageContent, conflicts: [Conflict] = []) {
+        pendingConflicts = conflicts
         pageId = content.page.id
         page = content.page
         blocks = content.blocks
@@ -163,6 +166,137 @@ public final class PageDocument {
             position = previous[current]
         }
         return kept
+    }
+
+    /// Взять за основу правки текст блока, который сейчас лежит в базе: после выбора версии в «Двух версиях»
+    /// следующая запись ложится поверх него, а не становится новым конфликтом.
+    public func adoptStoredTextVersion(ofBlock blockId: UUID) {
+        guard let index = indexById[blockId], let saved = savedBlocks[blockId] else { return }
+        blocks[index].textBaseClock = saved.fieldClocks.text
+        markEdited(blockId)
+        if unsavedBlockIds.contains(blockId) { didEdit?() }
+    }
+
+    // MARK: Правки из базы, сделанные не этим документом (research R5)
+
+    /// Что поменялось в документе от внешних правок — редактор перерисовывает только это.
+    public struct ExternalChange: Sendable, Hashable {
+        public var changedBlockIds: Set<UUID> = []
+        public var insertedBlockIds: Set<UUID> = []
+        public var removedBlockIds: Set<UUID> = []
+        public var titleChanged = false
+        public var iconChanged = false
+        public var conflictsChanged = false
+
+        public var touchesBlocks: Bool { !changedBlockIds.isEmpty || !insertedBlockIds.isEmpty || !removedBlockIds.isEmpty }
+        public var isEmpty: Bool { !touchesBlocks && !titleChanged && !iconChanged && !conflictsChanged }
+    }
+
+    /// После `applyExternalChanges`; `object` — документ, `userInfo[externalChangeKey]` — `ExternalChange`.
+    public static let didApplyExternalChanges = Notification.Name("PageDocument.didApplyExternalChanges")
+    public static let externalChangeKey = "change"
+
+    /// Принять то, что сейчас лежит в базе (пришло с другого Mac или из импорта). Несохранённые правки этого окна
+    /// остаются: в блоке, который правится, свои поля не трогаются, и автосохранение потом сверит текст
+    /// с версией начала правки (research R4). Порядок блоков — по ключам, поэтому свои новые блоки встают на места.
+    @discardableResult
+    public func applyExternalChanges(_ content: PageContent, conflicts: [Conflict]) -> ExternalChange {
+        var change = ExternalChange()
+
+        let stored = content.page
+        if !isTitleUnsaved, page.title != stored.title {
+            page.title = stored.title
+            change.titleChanged = true
+        }
+        if page.icon != stored.icon {
+            page.icon = stored.icon
+            change.iconChanged = true
+        }
+        let ownTitle = page.title
+        page = stored
+        page.title = isTitleUnsaved ? ownTitle : stored.title
+        savedPage = stored
+        isTitleUnsaved = page.title != savedPage.title
+
+        let storedById = Dictionary(uniqueKeysWithValues: content.blocks.map { ($0.id, $0) })
+        let oldById = Dictionary(uniqueKeysWithValues: blocks.map { ($0.id, $0) })
+        var merged: [Block] = []
+        for block in content.blocks where !removedBlockIds.contains(block.id) {
+            if unsavedBlockIds.contains(block.id), let local = oldById[block.id], let base = savedBlocks[block.id] {
+                let (shown, saved) = Self.threeWayMerge(local: local, base: base, stored: block)
+                merged.append(shown)
+                savedBlocks[block.id] = saved
+            } else {
+                merged.append(block)
+                savedBlocks[block.id] = block
+            }
+        }
+        // Свои несохранённые блоки, которых в базе нет (новые или стёртые там): автосохранение запишет их целиком.
+        for block in blocks where storedById[block.id] == nil && unsavedBlockIds.contains(block.id) {
+            merged.append(block)
+        }
+        for id in Array(savedBlocks.keys) where storedById[id] == nil {
+            savedBlocks[id] = nil
+            removedBlockIds.remove(id)
+        }
+        removedBlockIds.formIntersection(storedById.keys)
+        merged.sort { $0.sortKey != $1.sortKey ? $0.sortKey < $1.sortKey : $0.id.uuidString < $1.id.uuidString }
+
+        let newIds = Set(merged.map(\.id))
+        for block in merged {
+            if let old = oldById[block.id] {
+                if !old.hasSameContent(as: block) { change.changedBlockIds.insert(block.id) }
+            } else {
+                change.insertedBlockIds.insert(block.id)
+            }
+        }
+        change.removedBlockIds = Set(oldById.keys).subtracting(newIds)
+        let orderChanged = blocks.map(\.id).filter(newIds.contains) != merged.map(\.id).filter(oldById.keys.contains)
+        if orderChanged {
+            for block in merged where oldById[block.id] != nil { change.changedBlockIds.insert(block.id) }
+        }
+        blocks = merged
+        reindex()
+
+        if conflicts != pendingConflicts {
+            pendingConflicts = conflicts
+            change.conflictsChanged = true
+        }
+        if !change.isEmpty {
+            NotificationCenter.default.post(name: Self.didApplyExternalChanges, object: self,
+                                            userInfo: [Self.externalChangeKey: change])
+        }
+        return change
+    }
+
+    /// Блок, который правится здесь и изменился в базе: свои изменённые поля — свои, остальные — из базы.
+    /// Возвращает, что показать, и с чем потом сравнивать автосохранению (свои поля — по старой основе).
+    private static func threeWayMerge(local: Block, base: Block, stored: Block) -> (shown: Block, saved: Block) {
+        let edited = local.changedFields(comparedTo: base)
+        var shown = stored
+        var saved = stored
+        if edited.contains(.kindAndIndent) {
+            shown.kind = local.kind
+            shown.indent = local.indent
+            shown.linkedPageId = local.linkedPageId
+            saved.kind = base.kind
+            saved.indent = base.indent
+            saved.linkedPageId = base.linkedPageId
+        }
+        if edited.contains(.isChecked) || edited.contains(.kindAndIndent) {
+            shown.isChecked = local.isChecked
+            saved.isChecked = base.isChecked
+        }
+        if edited.contains(.sortKey) {
+            shown.sortKey = local.sortKey
+            saved.sortKey = base.sortKey
+        }
+        if edited.contains(.text) {
+            shown.text = local.text
+            shown.textBaseClock = local.textBaseClock
+            saved.text = base.text
+        }
+        return (shown, saved)
     }
 
     // MARK: Запись

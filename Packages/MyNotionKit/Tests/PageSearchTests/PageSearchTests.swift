@@ -205,7 +205,7 @@ struct SearchIndexMigrationTests {
     func migrationFillsIndexForExistingLibrary() throws {
         let folder = try TemporaryFolder()
         let clock = HybridLogicalClock(deviceId: UUID())
-        let beforeSearch = SchemaMigrations(steps: Array(SchemaMigrations.current.steps.dropLast()))
+        let beforeSearch = SchemaMigrations(steps: Array(SchemaMigrations.current.steps.prefix { $0.version != "v4" }))
 
         let old = try AppDatabase.open(at: folder.databaseURL, migrations: beforeSearch)
         let page = try NotesStore(database: old, clock: clock).write { transaction in

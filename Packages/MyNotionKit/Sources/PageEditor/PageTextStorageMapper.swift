@@ -301,6 +301,33 @@ public final class PageTextStorageMapper: NSObject {
         refreshSpacing(ofBlockAt: range.upperBound)
     }
 
+    /// Документ принял правки из базы (`PageDocument.applyExternalChanges`): переписать только абзацы
+    /// от первого затронутого блока до последнего; абзацы до и после не трогаются.
+    func renderExternalChanges(_ change: PageDocument.ExternalChange) {
+        let string = textStorage.string as NSString
+        var oldIds: [UUID?] = []
+        var starts: [Int] = []
+        var location = 0
+        while location < string.length {
+            starts.append(location)
+            oldIds.append(textStorage.attribute(.blockID, at: location, effectiveRange: nil) as? UUID)
+            location = NSMaxRange(string.paragraphRange(for: NSRange(location: location, length: 0)))
+        }
+        let newIds = document.blocks.map(\.id)
+        let dirty = change.changedBlockIds.union(change.insertedBlockIds).union(change.removedBlockIds)
+        func same(_ old: Int, _ new: Int) -> Bool { oldIds[old] == newIds[new] && !dirty.contains(newIds[new]) }
+        var prefix = 0
+        while prefix < oldIds.count, prefix < newIds.count, same(prefix, prefix) { prefix += 1 }
+        var suffix = 0
+        while suffix < oldIds.count - prefix, suffix < newIds.count - prefix,
+              same(oldIds.count - 1 - suffix, newIds.count - 1 - suffix) { suffix += 1 }
+        guard prefix < oldIds.count - suffix || prefix < newIds.count - suffix else { return }
+        let start = prefix < starts.count ? starts[prefix] : string.length
+        let end = oldIds.count - suffix < starts.count ? starts[oldIds.count - suffix] : string.length
+        pendingRange = nil
+        renderBlocks(prefix..<(newIds.count - suffix), replacing: NSRange(location: start, length: end - start))
+    }
+
     // MARK: Блоки ⇄ текст
 
     static let newline = unichar(0x0A)
