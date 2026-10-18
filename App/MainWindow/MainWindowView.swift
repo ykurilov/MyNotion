@@ -147,7 +147,6 @@ private struct PagesWindow: View {
     @State private var widthAtDragStart: Double?
     /// Окно выбора иконки для строк боковой панели; у шапки страницы — своё в редакторе.
     @State private var sidebarIconPicker = EmojiPickerController()
-    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         HStack(spacing: 0) {
@@ -179,6 +178,9 @@ private struct PagesWindow: View {
             }
         }
         .modifier(NotionImportSheets(controller: importController))
+        .modalCard(isPresented: model.isSyncSettingsShown) {
+            SyncSettingsView(controller: model.syncSettingsPreview ?? model.sync) { model.isSyncSettingsShown = false }
+        }
         .animation(.easeInOut(duration: Metrics.Window.sidebarToggleDuration), value: model.isSidebarCollapsed)
         // Путь страницы — в самой верхней полосе окна, как в Notion; кнопки окна — над боковой панелью.
         .ignoresSafeArea(.container, edges: .top)
@@ -216,7 +218,7 @@ private struct PagesWindow: View {
             ),
             newPage: { model.createPage() },
             syncBadge: model.sync.badge,
-            openSyncSettings: { openSettings() }
+            openSyncSettings: { model.isSyncSettingsShown = true }
         ) {
             SidebarSearchField(controller: model.search)
         }
