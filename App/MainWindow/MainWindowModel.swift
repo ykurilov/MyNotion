@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import NotesCore
 import Observation
@@ -5,19 +6,16 @@ import PageEditor
 import PageSearch
 import VisualStyle
 
-/// Состояние главного окна: дерево страниц, корзина, открытая страница и вид окна.
+/// Состояние одного окна: открытая страница, вид окна и поиск. Дерево, корзина, открытые страницы
+/// и синхронизация — общие для всех окон, в `PagesLibrary` (FR-029).
 /// Операции с деревом идут через `PageTreeOperations` ядра; отмена — в `UndoManager` окна.
 @MainActor
 @Observable
 final class MainWindowModel {
-    let store: NotesStore
-    @ObservationIgnored let openDocuments: OpenDocuments
+    @ObservationIgnored let library: PagesLibrary
     @ObservationIgnored let treeOperations: PageTreeOperations
-    /// Дерево без корзины.
-    private(set) var tree = PageTreeSnapshot(allPages: [])
-    /// Меняется при каждом перечитывании дерева.
-    private(set) var treeRevision = 0
-    private(set) var trashEntries: [Page] = []
+    /// Окно на экране: по нему библиотека знает, в каком окне работают сейчас.
+    @ObservationIgnored weak var window: NSWindow?
     private(set) var collapsedPageIds: Set<UUID> = []
     private(set) var sidebarWidth: Double = Metrics.Sidebar.defaultWidth
     /// Боковая панель спрятана шторкой (⌘⌥S).
@@ -28,31 +26,42 @@ final class MainWindowModel {
     private(set) var loadError: String?
     /// Поле поиска вверху боковой панели и его выдача (FR-018).
     @ObservationIgnored private(set) var search: PageSearchController!
-    /// Синхронизация между Mac (US5); выключена — ничего не делает.
-    @ObservationIgnored private(set) var sync: SyncController!
 
-    init(store: NotesStore, startsSync: Bool = true) {
-        self.store = store
-        openDocuments = OpenDocuments(store: store)
-        treeOperations = PageTreeOperations(store: store)
-        let windowState = try? store.windowState(WindowState.mainWindowId)
+    /// `opening` — страница нового окна; `nil` — последняя открытая (вид окна в базе) или первая в дереве.
+    init(library: PagesLibrary, opening pageId: UUID?) {
+        self.library = library
+        treeOperations = PageTreeOperations(store: library.store)
+        let windowState = try? library.store.windowState(WindowState.mainWindowId)
         collapsedPageIds = windowState?.collapsedPageIds ?? []
         sidebarWidth = windowState?.sidebarWidth ?? Metrics.Sidebar.defaultWidth
         isSidebarCollapsed = windowState?.isSidebarCollapsed ?? false
-        reloadTree()
-        treeOperations.onChange = { [weak self] touched in self?.treeDidChange(touched) }
-        treeOperations.onIconChange = { [weak self] pageId, _ in self?.iconDidChange(pageId) }
+        treeOperations.onChange = { [weak library] touched in library?.treeDidChange(touched) }
+        treeOperations.onIconChange = { [weak library] pageId, _ in library?.iconDidChange(pageId) }
         treeOperations.onUndoFailure = { [weak self] error in
             self?.loadError = "Не удалось отменить: \(SaveStatus.reason(for: error))"
         }
-        search = PageSearchController(store: store, tree: { [weak self] in self?.tree ?? PageTreeSnapshot(allPages: []) },
+        search = PageSearchController(store: library.store, tree: { [weak library] in library?.tree ?? PageTreeSnapshot(allPages: []) },
                                       open: { [weak self] in self?.select($0) })
-        sync = SyncController(store: store, openDocuments: openDocuments, startsEngine: startsSync)
-        sync.onRemoteChange = { [weak self] _ in self?.remoteChangesApplied() }
-        let lastOpen = windowState?.openPageId.flatMap { tree.page($0)?.id }
+        library.register(self)
+        let tree = library.tree
+        let lastOpen = (pageId ?? windowState?.openPageId).flatMap { tree.page($0)?.id }
         if let pageId = lastOpen ?? tree.children(of: nil).first?.id {
             open(pageId, focus: .body, remember: false)
         }
+    }
+
+    var store: NotesStore { library.store }
+    var openDocuments: OpenDocuments { library.openDocuments }
+    var tree: PageTreeSnapshot { library.tree }
+    var treeRevision: Int { library.treeRevision }
+    var trashEntries: [Page] { library.trashEntries }
+    var sync: SyncController! { library.sync }
+
+    /// Окно закрыли: его страница больше не держится открытой (записывается, если других окон с ней нет).
+    func windowClosed() {
+        if let openDocument { openDocuments.release(openDocument.pageId) }
+        openDocument = nil
+        library.unregister(self)
     }
 
     var openPageId: UUID? { openDocument?.pageId }
@@ -90,7 +99,7 @@ final class MainWindowModel {
                     try transaction.createPage()
                 }
             }
-            reloadTree()
+            library.reloadTree()
             open(page.id, focus: .title, remember: true)
         } catch {
             loadError = "Не удалось создать страницу: \(SaveStatus.reason(for: error))"
@@ -159,17 +168,15 @@ final class MainWindowModel {
 
     /// Импорт из Notion добавил ветку: перечитать дерево и открыть её корень.
     func showImportedBranch(_ rootPageId: UUID) {
-        reloadTree()
+        library.reloadTree()
         select(rootPageId)
     }
 
     /// Записать всё сейчас: уход в фон, закрытие окна, выход. `false` — что-то не записалось.
     @discardableResult
     func saveAll() -> Bool {
-        openDocuments.saveAll()
+        library.saveAll()
     }
-
-    var hasFailedSaves: Bool { openDocuments.hasFailedSaves }
 
     /// Юрий выбрал версию в «Двух версиях»: конфликт снят, правка уйдёт на другие Mac.
     func resolveConflict(_ conflict: Conflict, in document: PageDocument) {
@@ -181,25 +188,18 @@ final class MainWindowModel {
         }
     }
 
-    // MARK: Внутреннее
+    // MARK: От библиотеки
 
-    /// Правки с другого Mac легли в базу; открытая страница их уже приняла (research R5). Дерево перечитать;
-    /// если открытая страница ушла в корзину или стёрта — открыть другую.
-    private func remoteChangesApplied() {
-        reloadTree()
+    /// Правки с другого Mac легли в базу; открытая страница их уже приняла (research R5), дерево перечитано.
+    /// Если открытая страница ушла в корзину или стёрта — открыть другую.
+    func remoteChangesApplied() {
         if let openPageId, tree.page(openPageId) != nil { return }
         if openPageId != nil { closeOpenDocument() }
         // Пустой Mac получил первые страницы — открыть первую, как при запуске.
         if let first = tree.children(of: nil).first { open(first.id, focus: .unchanged, remember: true) }
     }
 
-    /// Иконка сменилась (выбор, отмена, повтор): дерево перечитать, открытой странице — новую иконку без перечитывания
-    /// текста, чтобы не терять курсор и выделение.
-    private func iconDidChange(_ pageId: UUID) {
-        reloadTree()
-        guard openDocument?.pageId == pageId, let stored = tree.page(pageId) else { return }
-        openDocument?.adoptIcon(of: stored)
-    }
+    // MARK: Внутреннее
 
     /// Перед операцией правки открытой страницы уходят в базу, чтобы операция видела их.
     @discardableResult
@@ -213,9 +213,18 @@ final class MainWindowModel {
         }
     }
 
-    /// После операции (и её отмены): перечитать дерево; открытую страницу — перечитать или сменить.
-    private func treeDidChange(_ touchedPageIds: Set<UUID>) {
-        reloadTree()
+    /// Операция задела открытую страницу (название, ссылки): отпустить её документ, чтобы перечитать из базы.
+    /// Отпускают все окна сразу — иначе второе окно отдало бы первому прежний документ. Возвращает, что перечитать.
+    func releaseIfTouched(_ touchedPageIds: Set<UUID>) -> UUID? {
+        guard let openPageId, tree.page(openPageId) != nil, touchedPageIds.contains(openPageId) else { return nil }
+        openDocuments.release(openPageId)
+        openDocument = nil
+        return openPageId
+    }
+
+    /// После операции в любом окне (и её отмены) дерево перечитано: открытую страницу — перечитать или сменить.
+    func treeDidChange(_ touchedPageIds: Set<UUID>, reopening releasedPageId: UUID?) {
+        if let releasedPageId { return open(releasedPageId, focus: .body, remember: false) }
         guard let openPageId else {
             if let first = tree.children(of: nil).first { open(first.id, focus: .body, remember: true) }
             return
@@ -225,8 +234,6 @@ final class MainWindowModel {
             let fallback = touchedPageIds.lazy.compactMap { self.tree.page($0) }.first ?? tree.children(of: nil).first
             closeOpenDocument()
             if let fallback { open(fallback.id, focus: .body, remember: true) }
-        } else if touchedPageIds.contains(openPageId) {
-            reopen(openPageId)
         }
     }
 
@@ -243,13 +250,6 @@ final class MainWindowModel {
         }
     }
 
-    /// Перечитать открытую страницу из базы: операция с деревом поменяла её название или ссылки.
-    private func reopen(_ pageId: UUID) {
-        openDocuments.release(pageId)
-        openDocument = nil
-        open(pageId, focus: .body, remember: false)
-    }
-
     private func closeOpenDocument() {
         if let openDocument { openDocuments.release(openDocument.pageId) }
         openDocument = nil
@@ -261,12 +261,5 @@ final class MainWindowModel {
         var state = (try? store.windowState(WindowState.mainWindowId)) ?? WindowState(windowId: WindowState.mainWindowId)
         change(&state)
         try? store.saveWindowState(state)
-    }
-
-    private func reloadTree() {
-        let all = (try? store.pageOutline()) ?? []
-        tree = PageTreeSnapshot(allPages: all)
-        trashEntries = NotesStore.trashEntries(in: all)
-        treeRevision += 1
     }
 }

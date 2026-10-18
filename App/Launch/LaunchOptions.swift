@@ -35,10 +35,12 @@ struct LaunchOptions {
     /// Служебный запуск — в фоне: не забирает фокус и не всплывает.
     let presence: LaunchPresence
 
-    /// Связываться с сервером синхронизации: не в галерее, замерах и снимках.
+    /// Связываться с сервером синхронизации: не в галерее, замерах отклика и снимках. Замер запуска и памяти
+    /// (`--launch-report`) синхронизацию не выключает: на базе, где она включена, мерится память с ней
+    /// (`scripts/vm/sync-memory-check.sh`); у эталонной базы синхронизации нет.
     var allowsSync: Bool {
         uiGalleryURL == nil && typingBenchmarkURL == nil && searchBenchmarkURL == nil && windowSnapshotURL == nil
-            && exportMarkdownURL == nil && launchReportURL == nil
+            && exportMarkdownURL == nil
     }
 
     init(arguments: [String]) {

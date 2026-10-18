@@ -179,10 +179,6 @@ final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineV
         return cell
     }
 
-    func outlineView(_ outlineView: NSOutlineView, heightOfRowByItem item: Any) -> CGFloat {
-        Metrics.Sidebar.rowPitch
-    }
-
     func outlineViewSelectionDidChange(_ notification: Notification) {
         guard !isApplyingState, let outlineView, let pageId = pageId(atRow: outlineView.selectedRow) else { return }
         actions.select(pageId)

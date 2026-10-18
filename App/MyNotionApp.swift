@@ -11,7 +11,7 @@ import Sync
 struct MyNotionApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     private let options: LaunchOptions
-    private let library: Result<MainWindowModel, any Error>
+    private let library: Result<PagesLibrary, any Error>
     private let exportController: MarkdownExportController?
     private let importController: NotionImportController?
 
@@ -40,55 +40,46 @@ struct MyNotionApp: App {
             let store = try Self.openLibrary(options)
             if options.uiGalleryURL != nil { galleryLibrary = try UIGalleryRunner.prepareLibrary(in: store) }
             // Служебные запуски (галерея, замеры, снимки) с сервером не связываются.
-            let model = MainWindowModel(store: store, startsSync: options.allowsSync)
-            if let automation = options.syncAutomation { SyncAutomation.start(automation, controller: model.sync) }
-            return model
+            let pages = PagesLibrary(store: store, startsSync: options.allowsSync)
+            if let automation = options.syncAutomation { SyncAutomation.start(automation, controller: pages.sync) }
+            return pages
         }
         AppDelegate.galleryLibrary = galleryLibrary
-        let model = try? library.get()
-        AppDelegate.model = model
+        let pages = try? library.get()
+        AppDelegate.library = pages
         if let exportURL = options.exportMarkdownURL {
             Self.exportMarkdownAndExit(from: library, into: exportURL)
         }
         if let importURL = options.importNotionURL {
             Self.importNotionAndExit(from: library, source: importURL)
         }
-        exportController = model.map { model in
-            MarkdownExportController(store: model.store, saveOpenPages: { model.saveAll() })
+        exportController = pages.map { pages in
+            MarkdownExportController(store: pages.store, saveOpenPages: { pages.saveAll() })
         }
-        importController = model.map { model in
-            NotionImportController(store: model.store, saveOpenPages: { model.saveAll() },
-                                   showBranch: { model.showImportedBranch($0) })
+        importController = pages.map { pages in
+            NotionImportController(store: pages.store, saveOpenPages: { pages.saveAll() },
+                                   showBranch: { (pages.activeWindow ?? pages.firstWindow).showImportedBranch($0) })
         }
         AppDelegate.importController = importController
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: MainWindowView.sceneId) {
             MainWindowView(library: library, options: options, exportController: exportController, importController: importController)
         }
         .defaultSize(width: 1200, height: 800)
         .windowStyle(.hiddenTitleBar)
         .windowLevel(options.presence.windowLevel)
         .commands {
-            CommandGroup(replacing: .newItem) {
-                Button("Новая страница") { (try? library.get())?.createPage() }
-                    .keyboardShortcut("n")
-                Button("Новая подстраница") { (try? library.get())?.createSubpage() }
-                    .keyboardShortcut("n", modifiers: [.command, .shift])
-            }
-            CommandGroup(after: .textEditing) {
-                Button("Найти страницу") { (try? library.get())?.search.focusField() }
-                    .keyboardShortcut("f", modifiers: [.command, .shift])
-            }
-            SidebarToggleCommands(model: try? library.get())
+            PageCommands(library: try? library.get())
+            SidebarToggleCommands(library: try? library.get())
             FormatCommands()
             ExportCommands(controller: exportController)
             NotionImportCommands(controller: importController)
         }
         Settings {
-            if let model = try? library.get() {
-                SyncSettingsView(controller: model.sync)
+            if let pages = try? library.get() {
+                SyncSettingsView(controller: pages.sync)
             }
         }
     }
@@ -118,7 +109,7 @@ struct MyNotionApp: App {
     }
 
     /// Служебная выгрузка без окна выбора папки: путь результата — в стандартный вывод, код выхода 0 или 1.
-    private static func exportMarkdownAndExit(from library: Result<MainWindowModel, any Error>, into folder: URL) -> Never {
+    private static func exportMarkdownAndExit(from library: Result<PagesLibrary, any Error>, into folder: URL) -> Never {
         do {
             let result = try MarkdownExporter(store: library.get().store).export(into: folder)
             print("Выгрузка готова: \(result.folder.path) (страниц: \(result.pageCount), блоков: \(result.blockCount))")
@@ -131,7 +122,7 @@ struct MyNotionApp: App {
 
     /// Служебный импорт без окна выбора: отчёт — в стандартный вывод. Код 0 — готово, 1 — ошибка (ветка откачена),
     /// 2 — эта выгрузка уже импортирована, повтор не начат.
-    private static func importNotionAndExit(from library: Result<MainWindowModel, any Error>, source: URL) -> Never {
+    private static func importNotionAndExit(from library: Result<PagesLibrary, any Error>, source: URL) -> Never {
         do {
             let store = try library.get().store
             let prepared = try NotionExportUnpacker().prepare(source)
@@ -167,7 +158,7 @@ struct MyNotionApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Ставится при запуске, до первого окна.
-    static var model: MainWindowModel?
+    static var library: PagesLibrary?
     /// Страницы временной базы галереи (`--ui-gallery`).
     static var galleryLibrary: (GalleryLibrary, FailingWrites)?
     /// Импорт из Notion — для галереи интерфейса.
@@ -179,23 +170,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // ⌘⌥S — по клавише S, а не по букве: с ⌥ и на русской раскладке буква другая, и меню сочетание не узнаёт.
+        // ⌥⌘N — «Новое окно» — так же.
         sidebarShortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             let modifiers = event.modifierFlags.intersection([.command, .option, .shift, .control])
-            guard event.keyCode == Self.sKeyCode, modifiers == [.command, .option], let model = Self.model else { return event }
-            model.toggleSidebar()
+            guard modifiers == [.command, .option], let library = Self.library else { return event }
+            switch event.keyCode {
+            case Self.sKeyCode: library.activeWindow?.toggleSidebar()
+            case Self.nKeyCode: library.openNewWindow?()
+            default: return event
+            }
             return nil
         }
     }
 
-    /// Клавиша S на любой раскладке (kVK_ANSI_S).
+    /// Клавиши S и N на любой раскладке (kVK_ANSI_S, kVK_ANSI_N).
     private static let sKeyCode: UInt16 = 1
+    private static let nKeyCode: UInt16 = 45
 
     func applicationWillResignActive(_ notification: Notification) {
-        Self.model?.saveAll()
+        Self.library?.saveAll()
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let model = Self.model, !model.saveAll() else { return .terminateNow }
+        guard let library = Self.library, !library.saveAll() else { return .terminateNow }
         if Self.presence == .background {
             // Служебный запуск окон с вопросами не показывает: база у него своя или эталонная.
             FileHandle.standardError.write(Data("Выход без сохранения: записать правки на диск не удалось\n".utf8))
@@ -215,9 +212,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+/// «Файл»: новая страница, подстраница и окно; «Правка → Найти страницу». Действуют в окне, где работают.
+private struct PageCommands: Commands {
+    let library: PagesLibrary?
+    @FocusedValue(\.windowModel) private var focusedModel
+    @Environment(\.openWindow) private var openWindow
+
+    private var model: MainWindowModel? { focusedModel ?? library?.activeWindow }
+
+    var body: some Commands {
+        CommandGroup(replacing: .newItem) {
+            Button("Новая страница") { model?.createPage() }
+                .keyboardShortcut("n")
+            Button("Новая подстраница") { model?.createSubpage() }
+                .keyboardShortcut("n", modifiers: [.command, .shift])
+            // Сочетание ловит и `AppDelegate`: с ⌥ буква на русской раскладке другая.
+            Button("Новое окно") { openWindow(id: MainWindowView.sceneId) }
+                .keyboardShortcut("n", modifiers: [.command, .option])
+                .disabled(library == nil)
+        }
+        CommandGroup(after: .textEditing) {
+            Button("Найти страницу") { model?.search.focusField() }
+                .keyboardShortcut("f", modifiers: [.command, .shift])
+        }
+    }
+}
+
 /// «Вид → Скрыть/Показать боковую панель», ⌘⌥S (contracts/editor-interactions.md).
 private struct SidebarToggleCommands: Commands {
-    let model: MainWindowModel?
+    let library: PagesLibrary?
+    @FocusedValue(\.windowModel) private var focusedModel
+
+    private var model: MainWindowModel? { focusedModel ?? library?.activeWindow }
 
     var body: some Commands {
         CommandGroup(before: .sidebar) {

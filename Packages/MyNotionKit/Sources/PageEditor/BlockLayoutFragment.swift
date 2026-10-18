@@ -317,7 +317,9 @@ extension PageTextView {
 
     /// Перерисовать маркеры видимых блоков: номера и вид зависят от соседей.
     func redrawBlockDecorations() {
-        guard let textLayoutManager else { return }
+        // Вне окна рисовать нечего, а без видимой области перекладывался бы весь документ: страница только
+        // создаётся, и в окне её всё равно разложат заново.
+        guard window != nil, let textLayoutManager else { return }
         let range = textLayoutManager.textViewportLayoutController.viewportRange ?? textLayoutManager.documentRange
         textLayoutManager.invalidateLayout(for: range)
         textLayoutManager.textViewportLayoutController.layoutViewport()

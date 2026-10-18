@@ -52,11 +52,15 @@ public final class PageDocument {
 
     // MARK: Правки
 
-    public func setTitle(_ title: String) {
+    /// `origin` — кто правит (редактор окна): другие окна этой страницы получат `didApplyLocalEdits`.
+    public func setTitle(_ title: String, origin: AnyObject? = nil) {
         guard title != page.title else { return }
         page.title = title
         isTitleUnsaved = page.title != savedPage.title
         didEdit?()
+        var change = ExternalChange()
+        change.titleChanged = true
+        postLocalEdits(change, origin: origin)
     }
 
     /// Иконку сменили в обход документа (`PageTreeOperations.setIcon`): подставить записанную, не трогая
@@ -84,7 +88,7 @@ public final class PageDocument {
     /// новый ключ получают именно они, а не соседи.
     @discardableResult
     public func replaceBlocks(after previousId: UUID?, before nextId: UUID?, with drafts: [BlockDraft],
-                              movedBlockIds: Set<UUID> = []) -> [UUID] {
+                              movedBlockIds: Set<UUID> = [], origin: AnyObject? = nil) -> [UUID] {
         let start = previousId.flatMap { indexById[$0] }.map { $0 + 1 } ?? 0
         let end = max(start, nextId.flatMap { indexById[$0] } ?? blocks.count)
         let replaced = Array(blocks[start..<end])
@@ -142,6 +146,17 @@ public final class PageDocument {
         blocks.replaceSubrange(start..<end, with: newBlocks)
         reindex()
         if !newBlocks.isEmpty || !replaced.isEmpty { didEdit?() }
+
+        var change = ExternalChange()
+        change.removedBlockIds = replacedIds.subtracting(used)
+        for block in newBlocks {
+            if let old = replacedById[block.id] {
+                if old != block { change.changedBlockIds.insert(block.id) }
+            } else {
+                change.insertedBlockIds.insert(block.id)
+            }
+        }
+        postLocalEdits(change, origin: origin)
         return newBlocks.map(\.id)
     }
 
@@ -190,6 +205,19 @@ public final class PageDocument {
 
         public var touchesBlocks: Bool { !changedBlockIds.isEmpty || !insertedBlockIds.isEmpty || !removedBlockIds.isEmpty }
         public var isEmpty: Bool { !touchesBlocks && !titleChanged && !iconChanged && !conflictsChanged }
+    }
+
+    /// После правки из редактора (`setTitle`, `replaceBlocks`): `object` — документ, `userInfo[externalChangeKey]` —
+    /// что поменялось, `userInfo[editOriginKey]` — `ObjectIdentifier` того, кто правил. Другие окна этой же страницы
+    /// (FR-029) перерисовывают затронутое; тот, кто правил, свой текст уже показывает.
+    public static let didApplyLocalEdits = Notification.Name("PageDocument.didApplyLocalEdits")
+    public static let editOriginKey = "origin"
+
+    private func postLocalEdits(_ change: ExternalChange, origin: AnyObject?) {
+        guard !change.isEmpty else { return }
+        var userInfo: [String: any Sendable] = [Self.externalChangeKey: change]
+        if let origin { userInfo[Self.editOriginKey] = ObjectIdentifier(origin) }
+        NotificationCenter.default.post(name: Self.didApplyLocalEdits, object: self, userInfo: userInfo)
     }
 
     /// После `applyExternalChanges`; `object` — документ, `userInfo[externalChangeKey]` — `ExternalChange`.

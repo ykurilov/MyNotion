@@ -65,6 +65,8 @@ public final class PageTextView: NSTextView {
     /// Выделение меняет сам режим блоков — режим не снимается.
     var isApplyingBlockSelection = false
     private(set) var isPerformingCommand = false
+    /// Текст страницы загружается в редактор: выделение меняет сама загрузка.
+    private var isLoadingText = false
     /// Протяжка мышью с поля: где нажали и сдвинулась ли мышь.
     var marginDrag: (start: NSPoint, moved: Bool)?
 
@@ -89,13 +91,21 @@ public final class PageTextView: NSTextView {
 
         configureTextBehaviour()
         mapper = PageTextStorageMapper(document: document, textStorage: textStorage!)
+        // После загрузки текста система ставит выделение в конец, и место курсора там считалось бы раскладкой
+        // всей страницы (на 10 000 блоках — секунды). Пока текст загружается, вид выделения не обновляется;
+        // курсор — в начало, куда его потом и ставит открытие страницы.
+        isLoadingText = true
         mapper.load()
+        isLoadingText = false
+        setSelectedRange(NSRange(location: 0, length: 0))
         // Отмена правки текста не зовёт didChangeText: забрать её в документ сразу после ⌘Z и ⇧⌘Z.
         for name in [NSNotification.Name.NSUndoManagerDidUndoChange, .NSUndoManagerDidRedoChange] {
             NotificationCenter.default.addObserver(self, selector: #selector(undoManagerDidRestore(_:)), name: name, object: nil)
         }
         NotificationCenter.default.addObserver(self, selector: #selector(documentDidApplyExternalChanges(_:)),
                                                name: PageDocument.didApplyExternalChanges, object: document)
+        NotificationCenter.default.addObserver(self, selector: #selector(documentDidApplyLocalEdits(_:)),
+                                               name: PageDocument.didApplyLocalEdits, object: document)
 
         addSubview(header)
         slashQueryHighlight.wantsLayer = true
@@ -106,7 +116,7 @@ public final class PageTextView: NSTextView {
         emptyParagraphHint.textColor = Palette.textSecondary
         emptyParagraphHint.isHidden = true
         header.onTitleChange = { [weak self] title in
-            self?.document.setTitle(title)
+            self?.document.setTitle(title, origin: self?.textStorage)
             self?.layoutColumn()
         }
         header.onTitleEnter = { [weak self] in self?.focusBody(at: 0) }
@@ -161,6 +171,19 @@ public final class PageTextView: NSTextView {
     /// в своём блоке на том же месте. Прежние шаги ⌘Z относятся к старому тексту — их больше нет.
     @objc private func documentDidApplyExternalChanges(_ notification: Notification) {
         guard let change = notification.userInfo?[PageDocument.externalChangeKey] as? PageDocument.ExternalChange else { return }
+        render(change)
+    }
+
+    /// Ту же страницу правят в другом окне (FR-029): показать их правку так же, как пришедшую с другого Mac.
+    /// Свою правку этот редактор уже показывает — её он не перерисовывает, и его ⌘Z цела.
+    @objc private func documentDidApplyLocalEdits(_ notification: Notification) {
+        guard let change = notification.userInfo?[PageDocument.externalChangeKey] as? PageDocument.ExternalChange,
+              let textStorage, notification.userInfo?[PageDocument.editOriginKey] as? ObjectIdentifier != ObjectIdentifier(textStorage)
+        else { return }
+        render(change)
+    }
+
+    private func render(_ change: PageDocument.ExternalChange) {
         if change.titleChanged, header.titleField.currentEditor() == nil {
             header.titleField.stringValue = document.page.title
             layoutColumn()
@@ -432,7 +455,7 @@ public final class PageTextView: NSTextView {
 
         let previousId = range.lowerBound > 0 ? blocks[range.lowerBound - 1].id : nil
         let nextId = touchesEnd ? nil : blocks[range.upperBound].id
-        let ids = document.replaceBlocks(after: previousId, before: nextId, with: drafts, movedBlockIds: moved)
+        let ids = document.replaceBlocks(after: previousId, before: nextId, with: drafts, movedBlockIds: moved, origin: textStorage)
         let changed = range.lowerBound..<range.lowerBound + ids.count
         mapper.renderBlocks(changed, replacing: characters)
 
@@ -473,6 +496,7 @@ public final class PageTextView: NSTextView {
     public override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
         if !isApplyingBlockSelection { blockSelectionEnds = nil }
         super.setSelectedRanges(ranges.map(keepingBeforeFinalNewline), affinity: affinity, stillSelecting: stillSelecting)
+        guard !isLoadingText else { return }
         updateSelectionLook()
         guard !stillSelecting else {
             formatBar.hide()
@@ -758,6 +782,13 @@ public final class PageTextView: NSTextView {
         guard let layoutManager = textLayoutManager, let storage = textContentStorage, let container = textContainer else { return [] }
         let origin = textContainerOrigin
         let outset = Metrics.BlockSelection.horizontalOutset
+        // Раскладка — с начала текста до последнего выделенного блока: TextKit раскладывает лениво, а абзац,
+        // разложенный раньше предыдущих, встаёт на прикидочное место (как у курсора, `TextCaret`).
+        if let end = storage.location(storage.documentRange.location,
+                                      offsetBy: mapper.paragraphStart(ofBlockAt: blocks.upperBound - 1)),
+           let range = NSTextRange(location: storage.documentRange.location, end: end) {
+            layoutManager.ensureLayout(for: range)
+        }
         var rects: [NSRect] = []
         for index in blocks {
             guard let location = storage.location(storage.documentRange.location, offsetBy: mapper.paragraphStart(ofBlockAt: index)),

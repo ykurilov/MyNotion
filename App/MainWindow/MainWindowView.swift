@@ -7,9 +7,12 @@ import ServiceLaunch
 import SwiftUI
 import VisualStyle
 
-/// Главное окно: дерево страниц слева, открытая страница справа.
+/// Окно страниц: дерево слева, открытая страница справа. Окон может быть несколько (FR-029, «Файл → Новое окно»).
 struct MainWindowView: View {
-    let library: Result<MainWindowModel, any Error>
+    /// Сцена окон страниц: «Новое окно» открывает ещё одно.
+    static let sceneId = "pages"
+
+    let library: Result<PagesLibrary, any Error>
     let options: LaunchOptions
     /// Уведомление о выгрузке в Markdown; `nil` — выгрузки нет.
     var exportController: MarkdownExportController?
@@ -25,19 +28,21 @@ struct MainWindowView: View {
     @ViewBuilder
     private var content: some View {
         switch library {
-        case .success(let model):
-            PagesWindow(model: model, exportController: exportController, importController: importController, onEditorReady: editorReady)
+        case .success(let library):
+            WindowContent(library: library, exportController: exportController, importController: importController,
+                          onEditorReady: editorReady)
         case .failure(let error):
             Text("Не удалось открыть записи: \(error.localizedDescription)")
                 .foregroundStyle(Color(nsColor: Palette.textSecondary))
                 .padding()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .onAppear { DispatchQueue.main.async { editorReady() } }
+                .onAppear { DispatchQueue.main.async { editorReady(nil) } }
         }
     }
 
     /// Окно на экране и принимает ввод: метка для замеров и, по флагу, снимок окна.
-    private func editorReady() {
+    /// Замеры, галерея и снимки идут в первом окне — других окон в служебных запусках нет.
+    private func editorReady(_ model: MainWindowModel?) {
         if options.presence == .background { BackgroundWindows.shared.orderInMainWindow() }
         LaunchMilestones.editorReady(reportTo: options.launchReportURL)
         if let snapshotURL = options.windowSnapshotURL {
@@ -45,18 +50,18 @@ struct MainWindowView: View {
         }
         if let galleryURL = options.uiGalleryURL {
             switch library {
-            case .success(let model): UIGalleryRunner.editorReady(model: model, prepared: AppDelegate.galleryLibrary, folder: galleryURL,
+            case .success(let library): UIGalleryRunner.editorReady(model: model ?? library.firstWindow, prepared: AppDelegate.galleryLibrary, folder: galleryURL,
                                                                   filter: options.uiGalleryFilter)
             case .failure(let error):
                 FileHandle.standardError.write(Data("Галерея: база не открылась: \(error)\n".utf8))
                 NSApp.terminate(nil)
             }
         }
-        if let benchmarkURL = options.typingBenchmarkURL, case .success(let model) = library {
-            TypingBenchmark.editorReady(model: model, reportTo: benchmarkURL)
+        if let benchmarkURL = options.typingBenchmarkURL, case .success(let library) = library {
+            TypingBenchmark.editorReady(model: model ?? library.firstWindow, reportTo: benchmarkURL)
         }
-        if let benchmarkURL = options.searchBenchmarkURL, case .success(let model) = library {
-            SearchBenchmark.editorReady(model: model, reportTo: benchmarkURL)
+        if let benchmarkURL = options.searchBenchmarkURL, case .success(let library) = library {
+            SearchBenchmark.editorReady(model: model ?? library.firstWindow, reportTo: benchmarkURL)
         }
     }
 }
@@ -70,6 +75,64 @@ private struct TrafficLightsAnchor: NSViewRepresentable {
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             if let window { TrafficLights.keepInPlace(in: window) }
+        }
+    }
+}
+
+extension FocusedValues {
+    /// Окно, в котором работают: команды меню действуют в нём.
+    @Entry var windowModel: MainWindowModel?
+}
+
+/// Своя модель у каждого окна: первому — созданная при запуске, следующим — новая над той же библиотекой.
+private struct WindowContent: View {
+    let library: PagesLibrary
+    let exportController: MarkdownExportController?
+    let importController: NotionImportController?
+    let onEditorReady: @MainActor (MainWindowModel?) -> Void
+    @State private var model: MainWindowModel?
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Group {
+            if let model {
+                PagesWindow(model: model, exportController: exportController, importController: importController,
+                            onEditorReady: { onEditorReady(model) })
+                    .background(WindowReader { model.window = $0 })
+                    .focusedSceneValue(\.windowModel, model)
+                    .onDisappear { model.windowClosed() }
+            } else {
+                Color(nsColor: Palette.pageBackground)
+            }
+        }
+        .onAppear {
+            if model == nil { model = library.modelForNewWindow() }
+            library.openNewWindow = { openWindow(id: MainWindowView.sceneId) }
+        }
+    }
+}
+
+/// Окно, в котором лежит вид: модели окна — чтобы библиотека знала, где работают сейчас.
+private struct WindowReader: NSViewRepresentable {
+    let onWindow: @MainActor (NSWindow?) -> Void
+
+    func makeNSView(context: Context) -> NSView { Watcher(onWindow: onWindow) }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    private final class Watcher: NSView {
+        let onWindow: @MainActor (NSWindow?) -> Void
+
+        init(onWindow: @escaping @MainActor (NSWindow?) -> Void) {
+            self.onWindow = onWindow
+            super.init(frame: .zero)
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            onWindow(window)
         }
     }
 }

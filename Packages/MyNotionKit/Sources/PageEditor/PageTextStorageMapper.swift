@@ -114,7 +114,7 @@ public final class PageTextStorageMapper: NSObject {
         let replaced = Array(document.blocks[start..<end])
 
         let drafts = blockDrafts(for: paragraphs, replacing: replaced)
-        let ids = document.replaceBlocks(after: previousId, before: nextId, with: drafts)
+        let ids = document.replaceBlocks(after: previousId, before: nextId, with: drafts, origin: textStorage)
         renderParagraphs(paragraphs, as: ids)
         if let next = nextId.flatMap(document.index(ofBlock:)) { refreshSpacing(ofBlockAt: next) }
         return true
