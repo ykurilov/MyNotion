@@ -61,6 +61,7 @@ struct MyNotionApp: App {
                                    showBranch: { model.showImportedBranch($0) })
         }
         AppDelegate.importController = importController
+        AppDelegate.exportController = exportController
     }
 
     var body: some Scene {
@@ -172,6 +173,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static var galleryLibrary: (GalleryLibrary, FailingWrites)?
     /// Импорт из Notion — для галереи интерфейса.
     static var importController: NotionImportController?
+    /// Выгрузка в Markdown — для галереи интерфейса.
+    static var exportController: MarkdownExportController?
     static var presence = LaunchPresence.foreground
     static var backgroundActivity: (any NSObjectProtocol)?
 

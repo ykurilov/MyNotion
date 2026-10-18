@@ -1,22 +1,24 @@
 import Foundation
 import NotesCore
 
-/// Что при разборе пришлось упростить до простого текста (FR-026). Название — для отчёта.
+/// Что при разборе пришлось упростить до простого текста (FR-026). Слова — для итога, простые, без терминов Notion.
 public enum NotionSimplification: String, CaseIterable, Sendable, Codable, Hashable {
     case table, file, quote, callout, code, toggle, divider, equation, embed
 
-    public var title: String {
-        switch self {
-        case .table: "таблица"
-        case .file: "файл или картинка"
-        case .quote: "цитата"
-        case .callout: "выноска"
-        case .code: "блок кода"
-        case .toggle: "переключатель"
-        case .divider: "разделитель"
-        case .equation: "формула"
-        case .embed: "встраивание"
+    /// «таблицы (2)», «картинки и файлы (3) — вместо них их имена».
+    public func title(count: Int) -> String {
+        let (name, note): (String, String?) = switch self {
+        case .table: ("таблицы", "по строке на абзац")
+        case .file: ("картинки и файлы", "вместо них их имена")
+        case .quote: ("цитаты", nil)
+        case .callout: ("выделенные блоки со значком", nil)
+        case .code: ("блоки кода", nil)
+        case .toggle: ("раскрывающиеся списки", "текст внутри показан сразу")
+        case .divider: ("разделительные линии", "убраны")
+        case .equation: ("формулы", "записаны как текст")
+        case .embed: ("встроенные видео и сайты", "вместо них их адреса")
         }
+        return name + (count > 1 ? " (\(count))" : "") + (note.map { " — " + $0 } ?? "")
     }
 }
 

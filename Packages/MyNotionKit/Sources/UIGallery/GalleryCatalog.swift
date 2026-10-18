@@ -59,14 +59,22 @@ public enum GalleryScene: Hashable, Sendable {
     case sync(GallerySync)
     /// Импорт из Notion (US6): карточка хода, вопрос о повторе той же выгрузки, отчёт.
     case notionImport(GalleryNotionImport)
+    /// Выгрузка в Markdown (FR-017): карточка хода, итог с «Показать в Finder», ошибка.
+    case markdownExport(GalleryMarkdownExport)
+}
+
+public enum GalleryMarkdownExport: String, Hashable, Sendable, CaseIterable {
+    case progress
+    case done
+    case failed
 }
 
 public enum GalleryNotionImport: String, Hashable, Sendable, CaseIterable {
-    /// Карточка внизу окна: «записываю страницы — 420 из 1000» и «Остановить».
+    /// Карточка внизу окна: «Перенесено страниц: 420 из 1 000» и «Остановить».
     case progress
-    /// Лист «Эта выгрузка уже импортирована».
+    /// Окно «Этот файл из Notion уже переносили».
     case repeatWarning
-    /// Лист отчёта: сколько перенесено и что упрощено.
+    /// Окно итога: сколько перенесено и что стало простым текстом.
     case report
 }
 
@@ -164,7 +172,7 @@ public struct GalleryShot: Hashable, Sendable {
 
 public enum GalleryCatalog {
     /// Все состояния по порядку съёмки.
-    public static let states: [GalleryState] = pageStates + blockStates + editingStates + sidebarStates + trashStates + importStates
+    public static let states: [GalleryState] = pageStates + blockStates + editingStates + sidebarStates + trashStates + importStates + exportStates
         + syncStates
 
     /// Все снимки: каждое состояние в каждом размере, светлая и тёмная тема подряд.
@@ -317,10 +325,19 @@ public enum GalleryCatalog {
 
     private static let importStates: [GalleryState] = [
         GalleryState("notion-import-progress", .notionImport(.progress),
-                     "Импорт из Notion идёт: карточка хода внизу окна с кнопкой «Остановить»", section: "Импорт из Notion", narrowToo: true),
+                     "Перенос из Notion идёт: карточка хода внизу окна с кнопкой «Остановить»", section: "Импорт из Notion", narrowToo: true),
         GalleryState("notion-import-repeat", .notionImport(.repeatWarning),
-                     "Та же выгрузка уже импортирована: вопрос до начала", section: "Импорт из Notion"),
+                     "Этот файл из Notion уже переносили: вопрос до начала", section: "Импорт из Notion"),
         GalleryState("notion-import-report", .notionImport(.report),
-                     "Отчёт после импорта: страницы, блоки, что упрощено по страницам", section: "Импорт из Notion", narrowToo: true),
+                     "Итог переноса: сколько страниц, где лежат, что стало простым текстом", section: "Импорт из Notion", narrowToo: true),
+    ]
+
+    private static let exportStates: [GalleryState] = [
+        GalleryState("markdown-export-progress", .markdownExport(.progress),
+                     "Выгрузка в Markdown идёт: карточка хода внизу окна", section: "Выгрузка в Markdown", narrowToo: true),
+        GalleryState("markdown-export-done", .markdownExport(.done),
+                     "Выгрузка готова: «Показать в Finder» и «Закрыть»", section: "Выгрузка в Markdown"),
+        GalleryState("markdown-export-failed", .markdownExport(.failed),
+                     "Выгрузка не удалась: понятная ошибка и «Закрыть»", section: "Выгрузка в Markdown"),
     ]
 }

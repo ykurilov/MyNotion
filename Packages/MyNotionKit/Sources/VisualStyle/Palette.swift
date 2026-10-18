@@ -52,6 +52,8 @@ public enum Palette {
     /// Кнопка необратимого действия в вопросе («Удалить навсегда»): насыщенный красный под белый текст в обеих темах (≈ по Notion).
     public static let destructiveButtonFill = NSColor.hex(0xD44C47)
     /// Затемнение под вопросом: над содержимым окна и всеми панелями (≈ по Notion).
+    /// Главная кнопка окон-вопросов и итогов (синяя, как у Notion), обе темы; текст на ней белый.
+    public static let primaryButtonFill = NSColor.hex(0x2383E2)
     public static let modalBackdrop = themed(light: .rgba(15, 15, 15, 0.6), dark: .rgba(0, 0, 0, 0.6))
     /// Фон всплывающих панелей (меню, окно корзины): в тёмной теме светлее страницы, как в Notion (≈ по Notion).
     public static let popupMenuBackground = themed(light: .hex(0xFFFFFF), dark: .hex(0x252525))

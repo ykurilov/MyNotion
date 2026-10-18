@@ -172,10 +172,14 @@ struct NotionImporterTests {
         let blockCount = try stored.reduce(0) { $0 + (try store.pageContent($1.id)?.blocks.count ?? 0) }
         #expect(report.blockCount == blockCount)
         let projects = try #require(report.simplified.first { $0.pageTitle == "Проекты" })
-        #expect(projects.items == ["таблица", "файл или картинка", "цитата", "выноска", "блок кода", "переключатель",
-                                   "разделитель", "формула", "встраивание"])
+        #expect(projects.items == [
+            "таблицы — по строке на абзац", "картинки и файлы — вместо них их имена", "цитаты",
+            "выделенные блоки со значком", "блоки кода", "раскрывающиеся списки — текст внутри показан сразу",
+            "разделительные линии — убраны", "формулы — записаны как текст", "встроенные видео и сайты — вместо них их адреса",
+        ])
         #expect(report.simplified.map(\.pageTitle).sorted() == ["Задачи", "Идеи", "Проекты"])
-        #expect(report.simplified.first { $0.pageTitle == "Задачи" }?.items == ["таблица"])
+        #expect(report.simplified.first { $0.pageTitle == "Задачи" }?.items == ["таблицы — по строке на абзац"])
+        #expect(NotionSimplification.quote.title(count: 12) == "цитаты (12)")
 
         let run = try #require(try importer().runs().first)
         #expect(run.status == .finished)

@@ -1,5 +1,6 @@
 import AppKit
 import CryptoKit
+import MarkdownExport
 import NotesCore
 import NotionImport
 import PageEditor
@@ -343,7 +344,17 @@ final class UIGalleryRunner {
             await open(library.sample.page.id)
             controller.showPreview(Self.importPreview(state))
             await settle()
-            if state != .progress, window.attachedSheet == nil { return "лист импорта не открылся" }
+
+        case .markdownExport(let state):
+            guard let controller = AppDelegate.exportController else { return "выгрузка в Markdown не подключена" }
+            await open(library.sample.page.id)
+            let preview: MarkdownExportController.State = switch state {
+            case .progress: .running(done: 420, total: 1_000)
+            case .done: .finished(folder: URL(fileURLWithPath: "/tmp/MyNotion-выгрузка-2026-10-18"), pageCount: 1_000)
+            case .failed: .failed(MarkdownExportError.cannotWrite("на диске нет места").localizedDescription)
+            }
+            controller.showPreview(preview)
+            await settle()
         case .sync(let state):
             return await showSync(state)
         }
@@ -429,6 +440,8 @@ final class UIGalleryRunner {
             model.search.dismiss()
         case .notionImport:
             AppDelegate.importController?.showPreview(.idle)
+        case .markdownExport:
+            AppDelegate.exportController?.showPreview(.idle)
         case .sync:
             model.sync.previewBadge = nil
             model.sync.clearNotices()
@@ -456,13 +469,20 @@ final class UIGalleryRunner {
             return .finished(NotionImportReport(
                 rootPageId: UUID(), rootTitle: "Импорт из Notion — 18 октября 2026", pageCount: 1_000, blockCount: 147_400,
                 simplified: [
-                    SimplifiedPage(pageTitle: "Проекты", items: ["таблица", "файл или картинка ×2", "цитата", "выноска", "блок кода"]),
-                    SimplifiedPage(pageTitle: "Задачи", items: ["таблица"]),
-                    SimplifiedPage(pageTitle: "Идеи на 2027 год с очень длинным названием страницы", items: ["файл или картинка"]),
-                    SimplifiedPage(pageTitle: "Рецепты", items: ["переключатель ×3", "разделитель"]),
-                    SimplifiedPage(pageTitle: "Чтение", items: ["цитата ×12", "встраивание"]),
+                    Self.simplified("Проекты", [.table: 1, .file: 2, .quote: 1, .callout: 1, .code: 1]),
+                    Self.simplified("Задачи", [.table: 1]),
+                    Self.simplified("Идеи на 2027 год с очень длинным названием страницы", [.file: 1]),
+                    Self.simplified("Рецепты", [.toggle: 3, .divider: 1]),
+                    Self.simplified("Чтение", [.quote: 12, .embed: 1]),
                 ]))
         }
+    }
+
+    /// Строка итога теми же словами, что пишет настоящий перенос.
+    private static func simplified(_ title: String, _ counts: [NotionSimplification: Int]) -> SimplifiedPage {
+        SimplifiedPage(pageTitle: title, items: NotionSimplification.allCases.compactMap { kind in
+            counts[kind].map { kind.title(count: $0) }
+        })
     }
 
     /// Открыть страницу заново (свой редактор) и снять курсор, который новая страница ставит в начало.
