@@ -26,8 +26,6 @@ final class UIGalleryRunner {
     private let folder: URL
     private var window: NSWindow!
     private var isTrashShown = false
-    /// Окно настроек синхронизации, показанное листом над окном.
-    private var settingsSheet: NSWindow?
     private var missing: [String: String] = [:]
 
     private let filter: String?
@@ -406,9 +404,8 @@ final class UIGalleryRunner {
                                    lastAckSeq: 118),
                     ])
             }
-            let sheet = NSWindow(contentViewController: NSHostingController(rootView: SyncSettingsView(controller: preview)))
-            settingsSheet = sheet
-            window.beginSheet(sheet) { _ in }
+            model.syncSettingsPreview = preview
+            model.isSyncSettingsShown = true
             await settle()
         case .noticeReturnedFromTrash:
             await open(library.notesPage)
@@ -445,10 +442,8 @@ final class UIGalleryRunner {
         case .sync:
             model.sync.previewBadge = nil
             model.sync.clearNotices()
-            if let settingsSheet {
-                window.endSheet(settingsSheet)
-                self.settingsSheet = nil
-            }
+            model.isSyncSettingsShown = false
+            model.syncSettingsPreview = nil
             await settle()
         default:
             break

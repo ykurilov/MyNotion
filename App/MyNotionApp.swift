@@ -78,11 +78,6 @@ struct MyNotionApp: App {
             ExportCommands(controller: exportController)
             NotionImportCommands(controller: importController)
         }
-        Settings {
-            if let pages = try? library.get() {
-                SyncSettingsView(controller: pages.sync)
-            }
-        }
     }
 
     private static func openLibrary(_ options: LaunchOptions) throws -> NotesStore {
@@ -237,6 +232,12 @@ private struct PageCommands: Commands {
         CommandGroup(after: .textEditing) {
             Button("Найти страницу") { model?.search.focusField() }
                 .keyboardShortcut("f", modifiers: [.command, .shift])
+        }
+        // Настройки — карточкой поверх окна (contracts/visual-style.md, «Окна поверх страницы»), а не отдельным окном.
+        CommandGroup(replacing: .appSettings) {
+            Button("Настройки…") { model?.isSyncSettingsShown = true }
+                .keyboardShortcut(",")
+                .disabled(model == nil)
         }
     }
 }

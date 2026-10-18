@@ -26,10 +26,21 @@ ip=$($VM ssh true >/dev/null && $VM status | awk '{print $2}')
 vm() { ssh -i $SSH_KEY -o BatchMode=yes $VM_USER@$ip "$@"; }
 push() { rsync -a -e "ssh -i $SSH_KEY" "$@"; }
 
+# Свой сервер гасится при любом выходе, и при падении сценария: по номеру процесса и по порту
+# (запущен как `../bin/node dist/main.js` — по имени его не найти). Адрес стирается: обычный прогон UI-тестов
+# пропускает проверку двух Mac.
+stop_server() {
+  vm "pid=\$(cat /tmp/mn-sync-live/server.pid 2>/dev/null); [ -n \"\$pid\" ] && kill \$pid 2>/dev/null;
+      pid=\$(lsof -tiTCP:$PORT -sTCP:LISTEN 2>/dev/null); [ -n \"\$pid\" ] && kill \$pid 2>/dev/null;
+      pkill -f 'MyNotion.*.app/Contents/MacOS' 2>/dev/null; rm -f /tmp/mn-sync-live/server-url; true" || true
+}
+trap stop_server EXIT INT TERM
+
 # 1. Сервер: собранный server/ и тот же node, под который собран better-sqlite3.
 (cd $REPO/server && pnpm install --frozen-lockfile --silent && pnpm --silent build)
 NODE=${$(command -v node):A}
-vm "mkdir -p ~/mn-sync-server/bin; pkill -f 'mn-sync-server/bin/node' || true; pkill -f 'MyNotion.*.app/Contents/MacOS' || true; rm -rf /tmp/mn-sync-live; mkdir -p /tmp/mn-sync-live"
+stop_server
+vm "mkdir -p ~/mn-sync-server/bin; rm -rf /tmp/mn-sync-live; mkdir -p /tmp/mn-sync-live"
 push $NODE $VM_USER@$ip:/Users/$VM_USER/mn-sync-server/bin/node
 push --delete $REPO/server/dist $REPO/server/node_modules $REPO/server/package.json $VM_USER@$ip:/Users/$VM_USER/mn-sync-server/app/
 vm "cd ~/mn-sync-server/app && DATA_DIR=/tmp/mn-sync-live/server PORT=$PORT nohup ../bin/node dist/main.js > /tmp/mn-sync-live/server.log 2>&1 & echo \$! > /tmp/mn-sync-live/server.pid"
@@ -59,10 +70,8 @@ for _ in {1..120}; do vm "test -f ~/uitest.done" && break; perl -e 'select(undef
 mkdir -p $OUT
 vm "grep -E 'Test Case .*(passed|failed|skipped)|error:|XCTAssert|Задержка|TEST (EXECUTE )?(SUCCEEDED|FAILED)' ~/uitest.log | tail -20; echo exit=\$(cat ~/uitest.done 2>/dev/null)"
 vm "rm -rf /tmp/mn-sync-live/shots; xcrun xcresulttool export attachments --path ~/sync-live.xcresult --output-path /tmp/mn-sync-live/shots >/dev/null 2>&1; cd /tmp/mn-sync-live/shots 2>/dev/null && python3 -c \"import json;[__import__('os').rename(a['exportedFileName'],a['suggestedHumanReadableName']) for t in json.load(open('manifest.json')) for a in t['attachments']]\" 2>/dev/null; ls /tmp/mn-sync-live/shots"
-vm "cat /tmp/mn-sync-live/mac-a.log /tmp/mn-sync-live/mac-b.log 2>/dev/null; kill \$(cat /tmp/mn-sync-live/server.pid) 2>/dev/null || true"
+vm "cat /tmp/mn-sync-live/mac-a.log /tmp/mn-sync-live/mac-b.log 2>/dev/null"
 push "$VM_USER@$ip:/tmp/mn-sync-live/shots/" "$VM_USER@$ip:/tmp/mn-sync-live/server.log" $OUT/ 2>/dev/null || true
-# Без адреса сервера обычный прогон UI-тестов пропускает проверку двух Mac.
-vm "rm -f /tmp/mn-sync-live/server-url"
 # Секреты экземпляров — из связки ключей виртуального Mac: следующая сборка (с другой подписью) при встрече с ними
 # вызвала бы запрос пароля, и его окно закрыло бы кнопки другим UI-тестам. Само окно, если уже всплыло, — тоже.
 vm "while security delete-generic-password -s cloud.kurilov.mynotion.sync >/dev/null 2>&1; do :; done; pkill -9 -x SecurityAgent || true"

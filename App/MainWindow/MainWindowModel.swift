@@ -56,6 +56,10 @@ final class MainWindowModel {
     var treeRevision: Int { library.treeRevision }
     var trashEntries: [Page] { library.trashEntries }
     var sync: SyncController! { library.sync }
+    /// Настройки синхронизации — карточкой поверх этого окна (⌘, или «Настройки синхронизации…» у значка).
+    var isSyncSettingsShown = false
+    /// Галерея показывает в карточке настроек свой образец вместо настоящего подключения.
+    var syncSettingsPreview: SyncController?
 
     /// Окно закрыли: его страница больше не держится открытой (записывается, если других окон с ней нет).
     func windowClosed() {
