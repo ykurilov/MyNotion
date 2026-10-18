@@ -1,0 +1,31 @@
+{
+  "name": "mynotion-sync",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Сервер синхронизации MyNotion: почтовый ящик зашифрованных пачек изменений",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "mynotion-sync": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/main.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.5",
+    "better-sqlite3": "^13.0.3",
+    "hono": "^4.13.13"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.20.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  },
+  "packageManager": "pnpm@10.33.2"
+}
