@@ -37,8 +37,7 @@ public enum SyncSetup {
     /// Первый Mac: токен устройства, выданный командой `mynotion-sync bootstrap`. Ключ шифрования создаётся здесь.
     public static func connectFirstDevice(store: NotesStore, serverURL: URL, deviceToken: String, deviceName: String,
                                           secrets: any SyncSecrets, server: any SyncServer) async throws -> SyncAccount {
-        let devices = try await server.transport(deviceToken: deviceToken).devices()
-        guard devices.count == 1, let device = devices.first else { throw SyncSetupError.serverAlreadyHasDevices }
+        let device = try await server.transport(deviceToken: deviceToken).currentDevice()
         try secrets.save(SyncSecretValues(deviceToken: deviceToken, encryptionKey: SymmetricKey(size: .bits256)), for: device.deviceId)
         let account = SyncAccount(serverURL: serverURL, deviceId: device.deviceId, deviceName: deviceName)
         try enable(store: store, account: account)
@@ -64,15 +63,9 @@ public enum SyncSetup {
 }
 
 public enum SyncSetupError: Error, Equatable, LocalizedError {
-    case serverAlreadyHasDevices
     case missingSecrets
 
     public var errorDescription: String? {
-        switch self {
-        case .serverAlreadyHasDevices:
-            "На сервере уже подключены другие Mac — подключите этот кодом с одного из них («Добавить Mac»)"
-        case .missingSecrets:
-            "В связке ключей нет ключа синхронизации — выключите и снова подключите этот Mac"
-        }
+        "В связке ключей нет ключа синхронизации — выключите и снова подключите этот Mac"
     }
 }

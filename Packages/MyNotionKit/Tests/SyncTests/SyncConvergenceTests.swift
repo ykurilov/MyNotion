@@ -133,6 +133,27 @@ struct SyncConvergenceTests {
         #expect(try SyncAccountStore(store: b.store).account()?.lastPulledSeq == pulledBefore, "Пачка ждёт: номер не сдвинут")
     }
 
+    @Test("Первый Mac находит себя по токену (/devices/me), даже когда на сервере уже несколько Mac; отключённый токен не принят",
+          arguments: SyncTestServerKind.available)
+    func firstMacIdentifiesItselfByToken(_ kind: SyncTestServerKind) async throws {
+        let server = try await kind.start()
+        defer { server.stop() }
+        let token = try await server.bootstrapToken(name: "Mac A")
+        let a = try EngineTestMac(name: "Mac A", wallMillis: 10_000)
+        try await a.connectFirst(server, token: token)
+        let b = try EngineTestMac(name: "Mac B", wallMillis: 10_000)
+        try await b.join(server, code: a.makeJoinCode())
+
+        // Синхронизацию на A выключили и включили снова тем же токеном: на сервере уже два устройства.
+        let again = try EngineTestMac(name: "Mac A", wallMillis: 20_000)
+        try await again.connectFirst(server, token: token)
+        #expect(again.account.deviceId == a.account.deviceId, "Mac взял свой id, а не чужой")
+        #expect(try await b.connection.devices().count == 2)
+
+        try await b.connection.deleteDevice(a.account.deviceId)
+        await #expect(throws: SyncServerError.unauthorized) { try await again.connection.currentDevice() }
+    }
+
     // MARK: Помощники
 
     private func connectedPair(_ server: any SyncTestServer) async throws -> (EngineTestMac, EngineTestMac) {

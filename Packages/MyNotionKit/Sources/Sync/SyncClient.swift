@@ -106,6 +106,8 @@ public protocol SyncTransport: Sendable {
     func putSnapshot(seq: Int, ciphertext: String) async throws
     func snapshot() async throws -> SyncSnapshotEnvelope?
     func devices() async throws -> [SyncDevice]
+    /// Устройство, которому принадлежит токен (`GET /devices/me`).
+    func currentDevice() async throws -> SyncDevice
     func invite() async throws -> SyncInvite
     func deleteDevice(_ deviceId: String) async throws
 }
@@ -179,6 +181,10 @@ struct HTTPSyncTransport: SyncTransport {
 
     func devices() async throws -> [SyncDevice] {
         try await send("GET", "devices")
+    }
+
+    func currentDevice() async throws -> SyncDevice {
+        try await send("GET", "devices/me")
     }
 
     func invite() async throws -> SyncInvite {

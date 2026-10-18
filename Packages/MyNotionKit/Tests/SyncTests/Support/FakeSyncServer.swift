@@ -31,9 +31,10 @@ actor FakeSyncServer: SyncServer {
         self.now = now
     }
 
-    /// `mynotion-sync bootstrap`: первое устройство и его токен.
-    func bootstrap(name: String) -> String {
-        createDevice(name: name, ackSeq: 0).token
+    /// `mynotion-sync bootstrap`: первое устройство и его токен; когда устройства уже есть — отказ, как у сервера.
+    func bootstrap(name: String) throws -> String {
+        guard devices.isEmpty else { throw SyncServerError.badRequest("Первое устройство уже есть") }
+        return createDevice(name: name, ackSeq: 0).token
     }
 
     var lastSeq: Int { nextSeq - 1 }
@@ -78,6 +79,11 @@ actor FakeSyncServer: SyncServer {
         return devices.filter(\.isActive).map {
             SyncDevice(deviceId: $0.id, deviceName: $0.name, lastSeenAt: $0.lastSeenAt, lastAckSeq: $0.lastAckSeq)
         }
+    }
+
+    fileprivate func currentDevice(token: String) throws -> SyncDevice {
+        let device = devices[try authenticate(token)]
+        return SyncDevice(deviceId: device.id, deviceName: device.name, lastSeenAt: device.lastSeenAt, lastAckSeq: device.lastAckSeq)
     }
 
     fileprivate func disable(token: String, deviceId: String) throws {
@@ -188,6 +194,8 @@ private struct FakeSyncTransport: SyncTransport {
 
     func devices() async throws -> [SyncDevice] { try await server.listDevices(token: token) }
 
+    func currentDevice() async throws -> SyncDevice { try await server.currentDevice(token: token) }
+
     func invite() async throws -> SyncInvite { try await server.invite(token: token) }
 
     func deleteDevice(_ deviceId: String) async throws { try await server.disable(token: token, deviceId: deviceId) }
@@ -252,6 +260,11 @@ final class SwitchableTransport: SyncTransport, @unchecked Sendable {
     func devices() async throws -> [SyncDevice] {
         try checkOnline()
         return try await base.devices()
+    }
+
+    func currentDevice() async throws -> SyncDevice {
+        try checkOnline()
+        return try await base.currentDevice()
     }
 
     func invite() async throws -> SyncInvite {

@@ -61,4 +61,6 @@ vm "grep -E 'Test Case .*(passed|failed|skipped)|error:|XCTAssert|Задержк
 vm "rm -rf /tmp/mn-sync-live/shots; xcrun xcresulttool export attachments --path ~/sync-live.xcresult --output-path /tmp/mn-sync-live/shots >/dev/null 2>&1; cd /tmp/mn-sync-live/shots 2>/dev/null && python3 -c \"import json;[__import__('os').rename(a['exportedFileName'],a['suggestedHumanReadableName']) for t in json.load(open('manifest.json')) for a in t['attachments']]\" 2>/dev/null; ls /tmp/mn-sync-live/shots"
 vm "cat /tmp/mn-sync-live/mac-a.log /tmp/mn-sync-live/mac-b.log 2>/dev/null; kill \$(cat /tmp/mn-sync-live/server.pid) 2>/dev/null || true"
 push "$VM_USER@$ip:/tmp/mn-sync-live/shots/" "$VM_USER@$ip:/tmp/mn-sync-live/server.log" $OUT/ 2>/dev/null || true
+# Без адреса сервера обычный прогон UI-тестов пропускает проверку двух Mac.
+vm "rm -f /tmp/mn-sync-live/server-url"
 echo "Итог: $OUT"

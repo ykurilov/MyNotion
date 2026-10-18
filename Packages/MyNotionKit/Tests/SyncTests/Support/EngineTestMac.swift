@@ -37,7 +37,7 @@ final class FakeTestServer: SyncTestServer {
     let fake = FakeSyncServer()
     var server: any SyncServer { fake }
     let serverURL = URL(string: "https://fake.sync.test")!
-    func bootstrapToken(name: String) async throws -> String { await fake.bootstrap(name: name) }
+    func bootstrapToken(name: String) async throws -> String { try await fake.bootstrap(name: name) }
     func isCompacted() async throws -> Bool { await fake.compactedSeq > 0 }
     func stop() {}
 }
@@ -67,7 +67,10 @@ final class EngineTestMac {
     }
 
     func connectFirst(_ server: any SyncTestServer) async throws {
-        let token = try await server.bootstrapToken(name: name)
+        try await connectFirst(server, token: try await server.bootstrapToken(name: name))
+    }
+
+    func connectFirst(_ server: any SyncTestServer, token: String) async throws {
         account = try await SyncSetup.connectFirstDevice(store: store, serverURL: server.serverURL, deviceToken: token,
                                                          deviceName: name, secrets: secrets, server: server.server)
         try makeEngine(server.server)

@@ -28,7 +28,7 @@ final class SyncTwoMacsUITests: XCTestCase {
                                  "--sync-connect-token-file", live.appendingPathComponent("token").path,
                                  "--sync-write-join-code", code.path]
         first.launch()
-        addTeardownBlock { @MainActor in first.terminate() }
+        addTeardownBlock { @MainActor in if first.state != .notRunning { first.terminate() } }
         XCTAssertTrue(first.pageBody.waitForExistence(timeout: 15))
         XCTAssertTrue(waitFor(timeout: 20) { FileManager.default.fileExists(atPath: code.path) }, "Первый Mac не выдал код подключения")
         XCTAssertTrue(first.syncBadge.waitForExistence(timeout: 10), "Нет значка синхронизации")
@@ -37,7 +37,7 @@ final class SyncTwoMacsUITests: XCTestCase {
         second.launchArguments = ["--database", live.appendingPathComponent("mac-b.sqlite").path,
                                   "--sync-server", server, "--sync-device-name", "Mac B", "--sync-log", live.appendingPathComponent("mac-b.log").path, "--sync-join-code-file", code.path]
         second.launch()
-        addTeardownBlock { @MainActor in second.terminate() }
+        addTeardownBlock { @MainActor in if second.state != .notRunning { second.terminate() } }
         XCTAssertTrue(second.syncBadge.waitForExistence(timeout: 20), "Второй Mac не подключился")
         XCTAssertTrue(waitFor(timeout: 15) { second.syncBadge.label == "Синхронизировано" },
                       "Второй Mac: \(second.syncBadge.label) — \(second.syncBadge.value as? String ?? "")")
@@ -76,8 +76,6 @@ final class SyncTwoMacsUITests: XCTestCase {
                       "Значок: \(first.syncBadge.label) / \(second.syncBadge.label)")
         print("Задержка синхронизации: A→B \(String(format: "%.2f", firstDelay)) с, B→A \(String(format: "%.2f", secondDelay)) с")
         saveScreenshots(first, second)
-        first.terminate()
-        second.terminate()
     }
 
     /// Снимки обоих окон — вложениями отчёта; сценарий выгружает их из .xcresult.
