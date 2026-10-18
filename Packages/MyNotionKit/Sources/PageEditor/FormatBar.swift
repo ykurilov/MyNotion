@@ -294,6 +294,8 @@ final class FormatBarController {
     private(set) var state: FormatBarState?
     /// Место карточки без тени, в координатах экрана; `nil` — панель скрыта.
     private(set) var cardFrame: NSRect?
+    /// Где панель поставлена для текущего выделения; пока выделение то же, панель на месте (как в Notion).
+    var anchor: FormatBarAnchor?
     private var window: FormatBarWindow?
     private var kindMenu: PopupMenuWindow?
     private var observers: [NSObjectProtocol] = []
@@ -325,6 +327,7 @@ final class FormatBarController {
         closeKindMenu()
         state = nil
         cardFrame = nil
+        anchor = nil
         window?.hide()
         observers.forEach(NotificationCenter.default.removeObserver)
         observers = []
@@ -420,12 +423,22 @@ enum FormatBarPlacement {
     }
 }
 
+/// Где поставлена панель для выделения: у первой или последней строки, левым краем у `x` страницы.
+/// `x` — в координатах страницы, а не экрана: панель едет вместе с текстом при прокрутке и переносе окна,
+/// но не сдвигается, когда жирный или моноширинный текст меняет ширину букв.
+struct FormatBarAnchor: Equatable {
+    let selection: NSRange
+    let atFirstLine: Bool
+    let x: CGFloat
+}
+
 extension PageTextView {
     // MARK: Панель форматирования
 
     /// Панель видна, пока в тексте страницы в фокусе выделен текст — внутри блока или через блоки.
     /// Курсор без выделения, режим блоков, набор с подбором букв — панели нет.
     func updateFormatBar() {
+        guard !isPerformingCommand else { return }
         let selection = selectedRange()
         guard selection.length > 0, !isBlockSelection, !hasMarkedText(), let window, window.firstResponder === self,
               let blocks = selectedBlockRange() else {
@@ -435,18 +448,21 @@ extension PageTextView {
         let first = firstRect(forCharacterRange: NSRange(location: selection.location, length: 1), actualRange: nil)
         let last = firstRect(forCharacterRange: NSRange(location: NSMaxRange(selection) - 1, length: 1), actualRange: nil)
         let visible = window.convertToScreen(convert(visibleRect, to: nil))
-        // Как у Notion: у указателя мыши, если он над страницей (и при выделении клавиатурой), иначе — у конца выделения.
+        let anchor = formatBar.anchor.flatMap { $0.selection == selection ? $0 : nil }
+            ?? placeFormatBar(for: selection, first: first, last: last, visible: visible, in: window)
+        formatBar.anchor = anchor
+        let anchorX = window.convertPoint(toScreen: convert(NSPoint(x: anchor.x, y: 0), to: nil)).x
+        formatBar.show(formatBarState(for: selection, blocks: blocks), line: anchor.atFirstLine ? first : last,
+                       anchorX: anchorX, visible: visible)
+    }
+
+    /// Как у Notion: у указателя мыши, если он над страницей (и при выделении клавиатурой), иначе — у конца выделения.
+    private func placeFormatBar(for selection: NSRange, first: NSRect, last: NSRect, visible: NSRect, in window: NSWindow) -> FormatBarAnchor {
         let pointer = pointerLocation()
-        let line: NSRect
-        let anchorX: CGFloat
-        if visible.contains(pointer) {
-            line = abs(pointer.y - first.midY) < abs(pointer.y - last.midY) ? first : last
-            anchorX = pointer.x
-        } else {
-            line = last
-            anchorX = last.maxX
-        }
-        formatBar.show(formatBarState(for: selection, blocks: blocks), line: line, anchorX: anchorX, visible: visible)
+        let atFirstLine = visible.contains(pointer) && abs(pointer.y - first.midY) < abs(pointer.y - last.midY)
+        let screenX = visible.contains(pointer) ? pointer.x : last.maxX
+        let x = convert(window.convertPoint(fromScreen: NSPoint(x: screenX, y: 0)), from: nil).x
+        return FormatBarAnchor(selection: selection, atFirstLine: atFirstLine, x: x)
     }
 
     /// Тип выделенных блоков и оформление, которое есть у всего выделенного текста.

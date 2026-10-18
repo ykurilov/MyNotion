@@ -211,6 +211,40 @@ struct FormatBarTests {
         #expect(abs(card.minX - (end.maxX + Metrics.FormatBar.pointerOffset)) <= 1, "Левый край \(card.minX), конец выделения \(end.maxX)")
     }
 
+    @Test("Оформление при том же выделении не двигает панель, хоть указатель и стоит над ней (как в Notion)")
+    func formattingKeepsCardInPlace() throws {
+        let editor = try EditorFixture([.paragraph("первый абзац"), .paragraph("Выделяем слово в середине второго абзаца")])
+        let view = editor.textView
+        let wordRect = view.firstRect(forCharacterRange: (view.string as NSString).range(of: "слово"), actualRange: nil)
+        var pointer = NSPoint(x: wordRect.minX + 40, y: wordRect.midY)
+        view.pointerLocation = { pointer }
+        editor.select(inBlock: 1, "слово")
+        let placed = try #require(view.formatBar.cardFrame)
+
+        pointer = NSPoint(x: placed.midX, y: placed.midY)
+        editor.step { view.formatBar.press(.bold) }
+        #expect(view.formatBar.cardFrame == placed, "После кнопки «Жирный»: \(String(describing: view.formatBar.cardFrame)), было \(placed)")
+        editor.perform(.toggleInline(.underline))
+        #expect(view.formatBar.cardFrame == placed, "После ⌘U: \(String(describing: view.formatBar.cardFrame)), было \(placed)")
+    }
+
+    @Test("Новое выделение ставит панель заново у указателя")
+    func newSelectionPlacesCardAgain() throws {
+        let editor = try EditorFixture([.paragraph("первый абзац"), .paragraph("Выделяем слово в середине второго абзаца")])
+        let view = editor.textView
+        var pointer = NSPoint(x: -10_000, y: -10_000)
+        view.pointerLocation = { pointer }
+        editor.select(inBlock: 1, "слово")
+        let placed = try #require(view.formatBar.cardFrame)
+
+        let middle = view.firstRect(forCharacterRange: (view.string as NSString).range(of: "середине"), actualRange: nil)
+        pointer = NSPoint(x: middle.minX + 10, y: middle.midY)
+        editor.select(inBlock: 1, "середине")
+        let card = try #require(view.formatBar.cardFrame)
+        #expect(card != placed)
+        #expect(card.minX == pointer.x + Metrics.FormatBar.pointerOffset, "Левый край \(card.minX), указатель \(pointer.x)")
+    }
+
     // MARK: Вид
 
     static func bar(_ state: FormatBarState) -> FormatBarView {

@@ -64,6 +64,7 @@ public final class PageTextView: NSTextView {
     var blockSelectionEnds: (anchor: Int, head: Int)?
     /// Выделение меняет сам режим блоков — режим не снимается.
     var isApplyingBlockSelection = false
+    private(set) var isPerformingCommand = false
     /// Протяжка мышью с поля: где нажали и сдвинулась ли мышь.
     var marginDrag: (start: NSPoint, moved: Bool)?
 
@@ -332,7 +333,12 @@ public final class PageTextView: NSTextView {
     /// Выполнить действие редактора над блоками под курсором или выделением.
     public func perform(_ command: EditorCommand) {
         guard !hasMarkedText() else { return }
+        // Пока команда перестраивает текст, выделение на миг сходит на нет: панель форматирования
+        // не прячем и не ставим заново — после команды она на прежнем месте (как в Notion).
+        isPerformingCommand = true
         keepingBlockSelection { performOnSelectedBlocks(command) }
+        isPerformingCommand = false
+        updateFormatBar()
     }
 
     private func performOnSelectedBlocks(_ command: EditorCommand) {
