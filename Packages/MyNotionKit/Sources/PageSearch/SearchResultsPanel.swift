@@ -36,6 +36,8 @@ private final class SearchResultsCard: NSView {
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
+        // Полоса прокрутки поверх строк: при любой настройке Mac она не отнимает ширину у строк.
+        scrollView.scrollerStyle = .overlay
         scrollView.hasHorizontalScroller = false
         scrollView.automaticallyAdjustsContentInsets = false
         scrollView.contentInsets = NSEdgeInsets(top: Metrics.SearchResults.verticalPadding, left: 0,
@@ -52,7 +54,7 @@ private final class SearchResultsCard: NSView {
         super.layout()
         scrollView.frame = card
         guard let resultsView = scrollView.documentView as? SearchResultsView else { return }
-        resultsView.frame.size = NSSize(width: card.width, height: resultsView.contentHeight)
+        resultsView.frame.size = NSSize(width: scrollView.contentSize.width, height: resultsView.contentHeight)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -70,6 +72,10 @@ private final class SearchResultsCard: NSView {
 @MainActor
 final class SearchResultsView: NSView {
     static let emptyText = "Ничего не найдено"
+    /// Почему может не найтись: корзину поиск обходит (у Notion — «Some results may be in your deleted pages»).
+    static let emptyHint = "Страницы из корзины в поиск не попадают"
+
+    static func headerText(count: Int) -> String { "Найдено: \(count)" }
 
     var onHover: ((Int) -> Void)?
     var onClick: ((Int) -> Void)?
@@ -102,7 +108,9 @@ final class SearchResultsView: NSView {
 
     /// Высота строк без полей карточки.
     var contentHeight: CGFloat {
-        results.isEmpty ? Metrics.SearchResults.emptyRowHeight : results.map(Self.rowHeight).reduce(0, +)
+        results.isEmpty
+            ? Metrics.SearchResults.emptyStateHeight
+            : Metrics.SearchResults.headerHeight + results.map(Self.rowHeight).reduce(0, +)
     }
 
     /// Высота карточки, в которую строки влезают целиком.
@@ -117,14 +125,25 @@ final class SearchResultsView: NSView {
     }
 
     private func rowRect(_ index: Int) -> NSRect {
-        let top = results.prefix(index).map(Self.rowHeight).reduce(0, +)
+        let top = Metrics.SearchResults.headerHeight + results.prefix(index).map(Self.rowHeight).reduce(0, +)
         let inset = Metrics.PopupMenu.rowInset
         return NSRect(x: inset, y: top, width: bounds.width - 2 * inset, height: Self.rowHeight(results[index]))
     }
 
+    /// Прокрутить только по вертикали, чтобы выбранная строка была видна; у первой строки виден и заголовок.
     func scrollSelectionToVisible() {
-        guard results.indices.contains(selectedIndex) else { return }
-        scrollToVisible(rowRect(selectedIndex))
+        guard results.indices.contains(selectedIndex), let scrollView = enclosingScrollView else { return }
+        let clip = scrollView.contentView
+        let top = -scrollView.contentInsets.top
+        let row = rowRect(selectedIndex)
+        var y = max(top, clip.bounds.minY)
+        if selectedIndex == 0 || row.minY < y {
+            y = selectedIndex == 0 ? top : row.minY
+        } else if row.maxY > y + clip.bounds.height - scrollView.contentInsets.bottom {
+            y = row.maxY - clip.bounds.height + scrollView.contentInsets.bottom
+        }
+        clip.scroll(to: NSPoint(x: 0, y: y))
+        scrollView.reflectScrolledClipView(clip)
     }
 
     // MARK: Мышь
@@ -154,13 +173,13 @@ final class SearchResultsView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let metrics = Metrics.SearchResults.self
-        guard !results.isEmpty else {
-            let line = Typography.popupMenuTitle
-            let x = Metrics.PopupMenu.rowInset + Metrics.PopupMenu.rowHorizontalPadding
-            draw(NSAttributedString(string: Self.emptyText, attributes: [.font: line.font, .foregroundColor: Palette.textSecondary]),
-                 in: NSRect(x: x, y: (metrics.emptyRowHeight - line.lineHeight) / 2, width: bounds.width - 2 * x, height: line.lineHeight))
-            return
-        }
+        guard !results.isEmpty else { return drawEmptyState() }
+        let headerX = Metrics.PopupMenu.rowInset + Metrics.PopupMenu.rowHorizontalPadding
+        let header = Typography.popupMenuSectionHeader
+        draw(NSAttributedString(string: Self.headerText(count: results.count),
+                                attributes: attributes(header, color: Palette.textSecondary)),
+             in: NSRect(x: headerX, y: (metrics.headerHeight - header.lineHeight) / 2, width: bounds.width - 2 * headerX,
+                        height: header.lineHeight))
         for index in results.indices {
             let row = rowRect(index)
             guard row.intersects(dirtyRect) else { continue }
@@ -171,6 +190,24 @@ final class SearchResultsView: NSView {
             }
             drawRow(results[index], in: row)
         }
+    }
+
+    /// «Ничего не найдено» и пояснение — по центру карточки, как «No results» у Notion.
+    private func drawEmptyState() {
+        let title = Typography.searchEmptyTitle, hint = Typography.searchResultDetail
+        let metrics = Metrics.SearchResults.self
+        let top = (metrics.emptyStateHeight - title.lineHeight - hint.lineHeight) / 2 - metrics.emptyStateOpticalLift
+        drawCentered(Self.emptyText, style: title, color: Palette.textPrimary, top: top)
+        drawCentered(Self.emptyHint, style: hint, color: Palette.textSecondary, top: top + title.lineHeight)
+    }
+
+    private func drawCentered(_ text: String, style: TextLineStyle, color: NSColor, top: CGFloat) {
+        let paragraph = style.paragraphStyle.mutableCopy() as! NSMutableParagraphStyle
+        paragraph.alignment = .center
+        paragraph.lineBreakMode = .byTruncatingTail
+        let inset = Metrics.PopupMenu.rowInset + Metrics.PopupMenu.rowHorizontalPadding
+        draw(NSAttributedString(string: text, attributes: [.font: style.font, .foregroundColor: color, .paragraphStyle: paragraph]),
+             in: NSRect(x: inset, y: top, width: bounds.width - 2 * inset, height: style.lineHeight))
     }
 
     private func drawRow(_ result: PageSearchResult, in row: NSRect) {

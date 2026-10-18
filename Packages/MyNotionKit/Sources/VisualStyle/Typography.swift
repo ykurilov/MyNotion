@@ -13,6 +13,8 @@ public enum Typography {
     /// Выдача поиска: название страницы, путь родителей и кусок текста.
     public static let searchResultTitle = TextLineStyle(fontSize: 14, lineHeight: 20, weight: .regular)
     public static let searchResultDetail = TextLineStyle(fontSize: 12, lineHeight: 18, weight: .regular)
+    /// «Ничего не найдено» в пустой выдаче поиска.
+    public static let searchEmptyTitle = TextLineStyle(fontSize: 14, lineHeight: 20, weight: .medium)
     public static let popupMenuShortcut = TextLineStyle(fontSize: 12, lineHeight: 16, weight: .regular)
 
     /// Жирный в строке — 600.
