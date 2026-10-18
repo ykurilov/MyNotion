@@ -204,8 +204,8 @@ description: "Задачи: минимальное ядро MyNotion для macO
 - [x] T063 [US5] Маршруты, авторизация `Bearer`, `/health`, лимиты тела в `server/src/app.ts`; запуск в `server/src/main.ts` (порт из `PORT`, база в `DATA_DIR`)
 - [x] T064 [US5] Команда `mynotion-sync bootstrap` (создаёт первое устройство и печатает токен один раз) в `server/src/bootstrap.ts`
 - [x] T065 [US5] `server/Dockerfile` и `server/docker-compose.yml`: том для `DATA_DIR`, `restart: unless-stopped`, проверка `/health`
-- [ ] T066 [US5] Развернуть на индонезийском сервере по скиллу server-deploy: `/opt/apps/mynotion-sync`, Nginx и сертификат для `mynotion.kurilov.cloud` (`proxy_read_timeout` ≥ 35 с для долгого ожидания), ежедневная копия файла базы; гейт «прод жив»: `https://mynotion.kurilov.cloud/health` → 200
-- [ ] T067 [US5] Токен первого устройства передать через secret-handoff в `~/.codex/secrets/mynotion-sync-device.env`; в чат, файлы проекта и коммиты не попадает
+- [x] T066 [US5] Развернуть на индонезийском сервере по скиллу server-deploy: `/opt/apps/mynotion-sync`, Nginx и сертификат для `mynotion.kurilov.cloud` (`proxy_read_timeout` ≥ 35 с для долгого ожидания), ежедневная копия файла базы; гейт «прод жив»: `https://mynotion.kurilov.cloud/health` → 200
+- [x] T067 [US5] Токен первого устройства передать через secret-handoff в `~/.codex/secrets/mynotion-sync-device.env`; в чат, файлы проекта и коммиты не попадает
 
 ### Приложение: тесты (сначала, должны упасть)
 

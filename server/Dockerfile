@@ -1,5 +1,7 @@
 FROM node:22-slim AS build
-RUN npm install -g pnpm@10.33.2
+# better-sqlite3 при отсутствии готовой сборки компилируется из исходников
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
+    && rm -rf /var/lib/apt/lists/* && npm install -g pnpm@10.33.2
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
