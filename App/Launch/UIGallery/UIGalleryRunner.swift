@@ -1,5 +1,6 @@
 import AppKit
 import NotesCore
+import NotionImport
 import PageEditor
 import PageTree
 import Synchronization
@@ -331,6 +332,13 @@ final class UIGalleryRunner {
 
         case .longBreadcrumb:
             await open(library.deepPage)
+
+        case .notionImport(let state):
+            guard let controller = AppDelegate.importController else { return "импорт из Notion не подключён" }
+            await open(library.sample.page.id)
+            controller.showPreview(Self.importPreview(state))
+            await settle()
+            if state != .progress, window.attachedSheet == nil { return "лист импорта не открылся" }
         }
         return nil
     }
@@ -355,8 +363,34 @@ final class UIGalleryRunner {
             await settle()
         case .search:
             model.search.dismiss()
+        case .notionImport:
+            AppDelegate.importController?.showPreview(.idle)
+            await settle()
         default:
             break
+        }
+    }
+
+    /// Импорт на 1 000 страниц, как у замера SC-010: в отчёте — несколько страниц с упрощениями.
+    private static func importPreview(_ state: GalleryNotionImport) -> NotionImportController.State {
+        let date = Calendar(identifier: .gregorian).date(from: DateComponents(year: 2026, month: 10, day: 18, hour: 15, minute: 4))!
+        switch state {
+        case .progress:
+            return .running(NotionImportProgress(phase: .writing, done: 420, total: 1_000))
+        case .repeatWarning:
+            return .confirmRepeat(previous: NotionImportRun(
+                id: UUID(), sourceFingerprint: "", startedAt: date, finishedAt: date, rootPageId: nil, importedPages: 1_000,
+                simplifiedItems: [], status: .finished))
+        case .report:
+            return .finished(NotionImportReport(
+                rootPageId: UUID(), rootTitle: "Импорт из Notion — 18 октября 2026", pageCount: 1_000, blockCount: 147_400,
+                simplified: [
+                    SimplifiedPage(pageTitle: "Проекты", items: ["таблица", "файл или картинка ×2", "цитата", "выноска", "блок кода"]),
+                    SimplifiedPage(pageTitle: "Задачи", items: ["таблица"]),
+                    SimplifiedPage(pageTitle: "Идеи на 2027 год с очень длинным названием страницы", items: ["файл или картинка"]),
+                    SimplifiedPage(pageTitle: "Рецепты", items: ["переключатель ×3", "разделитель"]),
+                    SimplifiedPage(pageTitle: "Чтение", items: ["цитата ×12", "встраивание"]),
+                ]))
         }
     }
 

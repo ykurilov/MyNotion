@@ -240,17 +240,17 @@ description: "Задачи: минимальное ядро MyNotion для macO
 
 ### Тесты US6 (сначала, должны упасть)
 
-- [ ] T083 [P] [US6] Образец выгрузки в `PK/Tests/Fixtures/notion-export/`: 3 уровня страниц с хвостами `<32 hex>`, все поддерживаемые блоки, CSV-таблица, картинка, toggle, callout, цитата, код-блок, ссылки между страницами, вложенный ZIP
-- [ ] T084 [P] [US6] Тест разбора в `PK/Tests/NotionImportTests/NotionMarkdownParserTests.swift`: поддерживаемое → блоки по таблице contracts/files-import-export.md; круговой тест «наша выгрузка → разбор → те же блоки»
-- [ ] T085 [P] [US6] Тест импорта в `PK/Tests/NotionImportTests/NotionImporterTests.swift`: вложенность из путей; CSV → «Колонка: значение»; файлы → «[файл: имя]»; неподдерживаемое → абзацы с текстом; ссылки между страницами → pageLink или текст; ветка «Импорт из Notion — <дата>»; отчёт; прерванный импорт откатывает ветку; повтор с тем же `sourceFingerprint` — предупреждение до начала
-- [ ] T086 [P] [US6] Замер в `PerformanceTests/NotionImportPerformanceTests.swift`: сгенерированная выгрузка на 1 000 страниц ≤ 60 с, окно отвечает во время импорта (SC-010)
+- [x] T083 [P] [US6] Образец выгрузки в `PK/Tests/Fixtures/notion-export/`: 3 уровня страниц с хвостами `<32 hex>`, все поддерживаемые блоки, CSV-таблица, картинка, toggle, callout, цитата, код-блок, ссылки между страницами, вложенный ZIP
+- [x] T084 [P] [US6] Тест разбора в `PK/Tests/NotionImportTests/NotionMarkdownParserTests.swift`: поддерживаемое → блоки по таблице contracts/files-import-export.md; круговой тест «наша выгрузка → разбор → те же блоки»
+- [x] T085 [P] [US6] Тест импорта в `PK/Tests/NotionImportTests/NotionImporterTests.swift`: вложенность из путей; CSV → «Колонка: значение»; файлы → «[файл: имя]»; неподдерживаемое → абзацы с текстом; ссылки между страницами → pageLink или текст; ветка «Импорт из Notion — <дата>»; отчёт; прерванный импорт откатывает ветку; повтор с тем же `sourceFingerprint` — предупреждение до начала
+- [x] T086 [P] [US6] Замер в `PerformanceTests/NotionImportPerformanceTests.swift`: сгенерированная выгрузка на 1 000 страниц ≤ 60 с, окно отвечает во время импорта (SC-010)
 
 ### Реализация US6
 
-- [ ] T087 [US6] Распаковка через `/usr/bin/ditto -x -k` во временную папку, включая вложенные ZIP, в `PK/Sources/NotionImport/NotionExportUnpacker.swift`
-- [ ] T088 [US6] Разбор Markdown-подмножества Notion в `PK/Sources/NotionImport/NotionMarkdownParser.swift`
-- [ ] T089 [US6] `NotionImporter` в `PK/Sources/NotionImport/NotionImporter.swift`: обход папок, CSV, ссылки, транзакция на ветку, `ImportRun` со статусами running, finished, failed, ход работы
-- [ ] T090 [US6] Команда «Импорт из Notion…», прогресс и окно отчёта в `App/Settings/NotionImportView.swift`
+- [x] T087 [US6] Распаковка через `/usr/bin/ditto -x -k` во временную папку, включая вложенные ZIP, в `PK/Sources/NotionImport/NotionExportUnpacker.swift`
+- [x] T088 [US6] Разбор Markdown-подмножества Notion в `PK/Sources/NotionImport/NotionMarkdownParser.swift`
+- [x] T089 [US6] `NotionImporter` в `PK/Sources/NotionImport/NotionImporter.swift`: обход папок, CSV, ссылки, транзакция на ветку, `ImportRun` со статусами running, finished, failed, ход работы
+- [x] T090 [US6] Команда «Импорт из Notion…», прогресс и окно отчёта в `App/Settings/NotionImportView.swift`
 
 **Checkpoint**: Переезд из Notion. Сборка, затронутые тесты и замеры (`PerformanceTests`), галерея `--ui-gallery` и проверяющий интерфейса, показ Юрию, коммит.
 

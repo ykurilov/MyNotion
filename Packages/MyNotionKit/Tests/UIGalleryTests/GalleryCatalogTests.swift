@@ -70,6 +70,11 @@ struct GalleryCatalogTests {
         for scene in required { #expect(scenes.contains(scene), "\(scene)") }
     }
 
+    @Test("Импорт из Notion: ход, вопрос о повторе, отчёт")
+    func notionImportStatesPresent() {
+        for state in GalleryNotionImport.allCases { #expect(scenes.contains(.notionImport(state)), "\(state)") }
+    }
+
     @Test("Пустая корзина снимается после всех остальных состояний корзины")
     func emptyTrashIsLast() throws {
         let trash = states.filter { if case .trash = $0.scene { true } else { false } }

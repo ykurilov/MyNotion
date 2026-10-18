@@ -69,6 +69,9 @@ targets:
     sources:
       - path: UITests
         createIntermediateGroups: true
+      # Образец выгрузки Notion для «Файл → Импорт из Notion…»: UI-тесты идут в виртуальном Mac, где исходников нет.
+      - path: Packages/MyNotionKit/Tests/Fixtures/notion-export/synthetic-nested.zip
+        buildPhase: resources
     dependencies:
       - target: MyNotion
     settings:
@@ -88,6 +91,10 @@ targets:
     dependencies:
       - package: MyNotionKit
         product: NotesCore
+      - package: MyNotionKit
+        product: NotionImport
+      - package: MyNotionKit
+        product: PageSearch
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion.performancetests

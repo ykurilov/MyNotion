@@ -13,6 +13,8 @@ struct MainWindowView: View {
     let options: LaunchOptions
     /// Уведомление о выгрузке в Markdown; `nil` — выгрузки нет.
     var exportController: MarkdownExportController?
+    /// Ход и отчёт импорта из Notion; `nil` — импорта нет.
+    var importController: NotionImportController?
 
     var body: some View {
         content
@@ -24,7 +26,7 @@ struct MainWindowView: View {
     private var content: some View {
         switch library {
         case .success(let model):
-            PagesWindow(model: model, exportController: exportController, onEditorReady: editorReady)
+            PagesWindow(model: model, exportController: exportController, importController: importController, onEditorReady: editorReady)
         case .failure(let error):
             Text("Не удалось открыть записи: \(error.localizedDescription)")
                 .foregroundStyle(Color(nsColor: Palette.textSecondary))
@@ -75,6 +77,7 @@ private struct TrafficLightsAnchor: NSViewRepresentable {
 private struct PagesWindow: View {
     @Bindable var model: MainWindowModel
     let exportController: MarkdownExportController?
+    let importController: NotionImportController?
     let onEditorReady: @MainActor () -> Void
     @Environment(\.undoManager) private var undoManager
     /// Ширина в начале перетаскивания края панели.
@@ -105,8 +108,12 @@ private struct PagesWindow: View {
         // Шторка — у светофора и не двигается, когда панель уезжает.
         .overlay(alignment: .topLeading) { sidebarToggle }
         .overlay(alignment: .bottom) {
-            if let exportController { ExportNoticeView(controller: exportController) }
+            VStack(spacing: 0) {
+                if let importController { NotionImportNoticeView(controller: importController) }
+                if let exportController { ExportNoticeView(controller: exportController) }
+            }
         }
+        .modifier(NotionImportSheets(controller: importController))
         .animation(.easeInOut(duration: Metrics.Window.sidebarToggleDuration), value: model.isSidebarCollapsed)
         // Путь страницы — в самой верхней полосе окна, как в Notion; кнопки окна — над боковой панелью.
         .ignoresSafeArea(.container, edges: .top)
