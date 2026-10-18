@@ -1,0 +1,23 @@
+services:
+  mynotion-sync:
+    build: .
+    image: mynotion-sync:latest
+    container_name: mynotion-sync
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      DATA_DIR: /data
+      BACKUP_KEEP: "14"
+    volumes:
+      # база и ежедневные копии (/data/backups) лежат на хосте: видны и копируются без входа в контейнер
+      - ./data:/data
+    ports:
+      - "127.0.0.1:3320:3000"
+    # снимок до 200 МБ разбирается целиком в памяти
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3

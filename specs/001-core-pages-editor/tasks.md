@@ -193,19 +193,19 @@ description: "Задачи: минимальное ядро MyNotion для macO
 
 ### Сервер: тесты (сначала, должны упасть)
 
-- [ ] T058 [P] [US5] Создать `server/package.json` (pnpm, Node 22, Hono, better-sqlite3, Vitest, TypeScript), `server/tsconfig.json`; `pnpm install`, коммит `pnpm-lock.yaml`
-- [ ] T059 [P] [US5] Контрактные тесты в `server/test/devices.test.ts`: `/devices/invite` → 201 со сроком 15 минут и одним использованием; `/devices/join` → 201 или 410; `GET /devices`; `DELETE /devices/{id}` → 204, затем 401 для этого токена; хранится только sha256 токена
-- [ ] T060 [P] [US5] Контрактные тесты в `server/test/journal.test.ts`: `POST /changes` → 201 с `seq`, повтор `batchId` → 200 с тем же `seq`, больше 4 МБ → `too_large`; `GET /changes` отдаёт до 200 пачек и `hasMore`, долгое ожидание отвечает сразу при новой пачке (подменённые часы, один живой случай), `410 log_compacted` после сжатия; `/ack`; `PUT/GET /snapshot` и удаление пачек ≤ seq после подтверждения всеми активными устройствами; единый вид ошибок
+- [x] T058 [P] [US5] Создать `server/package.json` (pnpm, Node 22, Hono, better-sqlite3, Vitest, TypeScript), `server/tsconfig.json`; `pnpm install`, коммит `pnpm-lock.yaml`
+- [x] T059 [P] [US5] Контрактные тесты в `server/test/devices.test.ts`: `/devices/invite` → 201 со сроком 15 минут и одним использованием; `/devices/join` → 201 или 410; `GET /devices`; `DELETE /devices/{id}` → 204, затем 401 для этого токена; хранится только sha256 токена
+- [x] T060 [P] [US5] Контрактные тесты в `server/test/journal.test.ts`: `POST /changes` → 201 с `seq`, повтор `batchId` → 200 с тем же `seq`, больше 4 МБ → `too_large`; `GET /changes` отдаёт до 200 пачек и `hasMore`, долгое ожидание отвечает сразу при новой пачке (подменённые часы, один живой случай), `410 log_compacted` после сжатия; `/ack`; `PUT/GET /snapshot` и удаление пачек ≤ seq после подтверждения всеми активными устройствами; единый вид ошибок
 
 ### Сервер: реализация
 
-- [ ] T061 [US5] Устройства и приглашения в `server/src/devices.ts`
-- [ ] T062 [US5] Журнал, долгое ожидание, снимки и сжатие в `server/src/journal.ts`
-- [ ] T063 [US5] Маршруты, авторизация `Bearer`, `/health`, лимиты тела в `server/src/app.ts`; запуск в `server/src/main.ts` (порт из `PORT`, база в `DATA_DIR`)
-- [ ] T064 [US5] Команда `mynotion-sync bootstrap` (создаёт первое устройство и печатает токен один раз) в `server/src/bootstrap.ts`
-- [ ] T065 [US5] `server/Dockerfile` и `server/docker-compose.yml`: том для `DATA_DIR`, `restart: unless-stopped`, проверка `/health`
-- [ ] T066 [US5] Развернуть на индонезийском сервере по скиллу server-deploy: `/opt/apps/mynotion-sync`, Nginx и сертификат для `mynotion.kurilov.cloud` (`proxy_read_timeout` ≥ 35 с для долгого ожидания), ежедневная копия файла базы; гейт «прод жив»: `https://mynotion.kurilov.cloud/health` → 200
-- [ ] T067 [US5] Токен первого устройства передать через secret-handoff в `~/.codex/secrets/mynotion-sync-device.env`; в чат, файлы проекта и коммиты не попадает
+- [x] T061 [US5] Устройства и приглашения в `server/src/devices.ts`
+- [x] T062 [US5] Журнал, долгое ожидание, снимки и сжатие в `server/src/journal.ts`
+- [x] T063 [US5] Маршруты, авторизация `Bearer`, `/health`, лимиты тела в `server/src/app.ts`; запуск в `server/src/main.ts` (порт из `PORT`, база в `DATA_DIR`)
+- [x] T064 [US5] Команда `mynotion-sync bootstrap` (создаёт первое устройство и печатает токен один раз) в `server/src/bootstrap.ts`
+- [x] T065 [US5] `server/Dockerfile` и `server/docker-compose.yml`: том для `DATA_DIR`, `restart: unless-stopped`, проверка `/health`
+- [x] T066 [US5] Развернуть на индонезийском сервере по скиллу server-deploy: `/opt/apps/mynotion-sync`, Nginx и сертификат для `mynotion.kurilov.cloud` (`proxy_read_timeout` ≥ 35 с для долгого ожидания), ежедневная копия файла базы; гейт «прод жив»: `https://mynotion.kurilov.cloud/health` → 200
+- [x] T067 [US5] Токен первого устройства передать через secret-handoff в `~/.codex/secrets/mynotion-sync-device.env`; в чат, файлы проекта и коммиты не попадает
 
 ### Приложение: тесты (сначала, должны упасть)
 
