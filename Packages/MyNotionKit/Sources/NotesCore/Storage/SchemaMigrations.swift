@@ -14,6 +14,7 @@ public struct SchemaMigrations: Sendable {
         Step(version: "v1", migrate: createInitialSchema),
         Step(version: "v2", migrate: addPageTombstones),
         Step(version: "v3", migrate: addSidebarCollapsed),
+        Step(version: "v4", migrate: fillSearchIndex),
     ])
 
     /// Та же схема плюс ещё один шаг — для проверки миграций.
@@ -131,4 +132,20 @@ private func addPageTombstones(_ db: Database) throws {
 
 private func addSidebarCollapsed(_ db: Database) throws {
     try db.execute(sql: "ALTER TABLE window_state ADD COLUMN isSidebarCollapsed BOOLEAN NOT NULL DEFAULT 0")
+}
+
+extension SchemaMigrations {
+    /// Наполнить `search_index` по уже записанным страницам (v4): до US4 таблица создавалась, но не наполнялась.
+    /// Строки — те же, что пишет подписчик `SearchIndexer` модуля поиска: название страницы — rowid `-page.rowid`
+    /// без blockId, текст блока — rowid `block.rowid`; пустые не индексируются; «ё» записана как «е».
+    package static func fillSearchIndex(_ db: Database) throws {
+        let content = { (column: String) in "replace(replace(\(column), 'ё', 'е'), 'Ё', 'Е')" }
+        try db.execute(sql: """
+            DELETE FROM search_index;
+            INSERT INTO search_index (rowid, pageId, blockId, content)
+                SELECT -rowid, id, NULL, \(content("title")) FROM page WHERE title != '';
+            INSERT INTO search_index (rowid, pageId, blockId, content)
+                SELECT rowid, pageId, id, \(content("text")) FROM block WHERE isDeleted = 0 AND text != '';
+            """)
+    }
 }

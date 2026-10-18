@@ -38,6 +38,8 @@ public struct ReferenceLibraryGenerator: Sendable {
         }
         let database = try AppDatabase.open(at: draftURL)
         try generate(into: NotesStore(database: database, clock: HybridLogicalClock(deviceId: UUID())))
+        // Эталон пишется без подписчика поиска — индекс наполняется так же, как миграцией старой базы.
+        try database.dbWriter.write { try SchemaMigrations.fillSearchIndex($0) }
         // Всё из журнала WAL — в основной файл: переносится только он.
         try database.dbWriter.writeWithoutTransaction { try $0.checkpoint(.truncate) }
         database.close()
