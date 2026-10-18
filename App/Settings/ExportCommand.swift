@@ -111,6 +111,8 @@ struct ExportNoticeView: View {
             card
                 .padding(.bottom, 20)
                 .transition(.opacity)
+                // Идентификатор на контейнере иначе прячет вложенные текст и кнопки от VoiceOver и UI-тестов.
+                .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("export-notice")
         }
     }

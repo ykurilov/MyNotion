@@ -50,10 +50,7 @@ struct MyNotionApp: App {
 
     var body: some Scene {
         WindowGroup {
-            MainWindowView(library: library, options: options)
-                .overlay(alignment: .bottom) {
-                    if let exportController { ExportNoticeView(controller: exportController) }
-                }
+            MainWindowView(library: library, options: options, exportController: exportController)
         }
         .defaultSize(width: 1200, height: 800)
         .windowStyle(.hiddenTitleBar)
