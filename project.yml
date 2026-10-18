@@ -88,6 +88,10 @@ targets:
     dependencies:
       - package: MyNotionKit
         product: NotesCore
+      - package: MyNotionKit
+        product: NotionImport
+      - package: MyNotionKit
+        product: PageSearch
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion.performancetests
