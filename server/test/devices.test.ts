@@ -119,6 +119,33 @@ describe('устройства и приглашения', () => {
     });
   });
 
+  it('GET /devices/me: отдаёт устройство-владельца токена', async () => {
+    const second = await joinDevice(server, 'MacBook Юрия');
+    vi.setSystemTime(new Date(START.getTime() + 30_000));
+
+    const response = await server.call('GET', '/devices/me', { token: second.token });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      deviceId: second.deviceId,
+      deviceName: 'MacBook Юрия',
+      lastSeenAt: '2026-10-18T10:00:30.000Z',
+      lastAckSeq: 0,
+    });
+
+    const first = (await (await server.call('GET', '/devices/me')).json()) as { deviceId: string };
+    expect(first.deviceId).toBe(server.firstDevice.deviceId);
+  });
+
+  it('GET /devices/me: без токена или с отключённым — 401', async () => {
+    const lost = await joinDevice(server, 'Потерянный Mac');
+    await server.call('DELETE', `/devices/${lost.deviceId}`);
+    for (const token of [null, 'not-a-real-token', lost.token]) {
+      const response = await server.call('GET', '/devices/me', { token });
+      expect(response.status).toBe(401);
+      expectRussianError(await response.json(), 'unauthorized');
+    }
+  });
+
   it('DELETE: 204, токен отключённого устройства получает 401, в списке его нет', async () => {
     const second = await joinDevice(server, 'Потерянный Mac');
     const response = await server.call('DELETE', `/devices/${second.deviceId}`);

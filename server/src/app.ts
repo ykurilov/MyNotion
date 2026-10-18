@@ -110,6 +110,12 @@ export function createApp({ devices, journal, limits = {} }: AppOptions): Hono<E
 
   app.get('/devices', (c) => c.json(devices.list()));
 
+  app.get('/devices/me', (c) => {
+    const me = devices.get(c.get('deviceId'));
+    if (!me) throw new ApiError(401, 'unauthorized', 'Нужен действующий токен устройства');
+    return c.json(me);
+  });
+
   app.delete('/devices/:deviceId', (c) => {
     const result = devices.disable(c.req.param('deviceId'));
     if (result === 'unknown') throw new ApiError(404, 'not_found', 'Такого устройства нет');
