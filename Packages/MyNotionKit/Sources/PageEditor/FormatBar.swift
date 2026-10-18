@@ -304,6 +304,8 @@ final class FormatBarController {
     var isKindMenuOpen: Bool { kindMenu != nil }
     var kindMenuItems: [PopupMenuItem] { kindMenu?.menuView.items ?? [] }
     var checkedKindItem: PopupMenuItem? { kindMenu?.menuView.checkedItem }
+    /// Место открытого списка типов без тени, в координатах экрана.
+    var kindMenuFrame: NSRect? { kindMenu?.menuFrame }
 
     /// Показать под строкой выделения `line`, левым краем у `anchorX` (см. `FormatBarPlacement`).
     /// Все места — в координатах экрана.
@@ -358,7 +360,10 @@ final class FormatBarController {
         }
         let row = window.barView.kindRow
         let rowOnScreen = window.convertToScreen(row.convert(row.bounds, to: nil))
-        menu.show(below: rowOnScreen, parent: parent)
+        guard let card = cardFrame else { return }
+        let frame = FormatBarPlacement.kindMenu(size: menu.menuView.fittingMenuSize, card: card, row: rowOnScreen,
+                                                visible: parent.screen.map { $0.visibleFrame.intersection(parent.frame) } ?? parent.frame)
+        menu.show(menuFrame: frame, parent: parent)
     }
 
     func closeKindMenu() {
@@ -419,6 +424,18 @@ enum FormatBarPlacement {
         var origin = NSPoint(x: anchorX + Metrics.FormatBar.pointerOffset, y: line.minY - spacing - size.height)
         if origin.y < visible.minY { origin.y = line.maxY + spacing }
         origin.x = max(visible.minX, min(origin.x, visible.maxX - size.width))
+        return NSRect(origin: origin, size: size)
+    }
+
+    /// Список типов, как у Notion: сбоку от карточки — справа, а если там нет места, слева, — заходит на неё
+    /// на `kindMenuOverlap` и не закрывает кнопок; серединой против строки типа `row`; в пределах `visible`.
+    static func kindMenu(size: NSSize, card: NSRect, row: NSRect, visible: NSRect) -> NSRect {
+        let overlap = Metrics.FormatBar.kindMenuOverlap
+        // Окно меню встаёт на целые точки: округляем от карточки, чтобы не наехать на кнопку.
+        var origin = NSPoint(x: (card.maxX - overlap).rounded(.up), y: row.midY - size.height / 2)
+        if origin.x + size.width > visible.maxX { origin.x = (card.minX + overlap).rounded(.down) - size.width }
+        origin.x = max(visible.minX, min(origin.x, visible.maxX - size.width))
+        origin.y = max(visible.minY, min(origin.y, visible.maxY - size.height))
         return NSRect(origin: origin, size: size)
     }
 }

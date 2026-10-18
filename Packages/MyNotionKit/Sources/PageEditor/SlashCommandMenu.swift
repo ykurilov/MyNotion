@@ -126,6 +126,15 @@ final class PopupMenuWindow: NSPanel {
         PopupWindows.show(self, over: parent)
     }
 
+    /// Показать меню на месте `frame` (без тени, координаты экрана).
+    func show(menuFrame frame: NSRect, parent: NSWindow) {
+        setFrame(frame.insetBy(dx: -Self.shadowMargin, dy: -Self.shadowMargin), display: true)
+        PopupWindows.show(self, over: parent)
+    }
+
+    /// Место меню без тени, в координатах экрана.
+    var menuFrame: NSRect { frame.insetBy(dx: Self.shadowMargin, dy: Self.shadowMargin) }
+
     func hide() {
         parent?.removeChildWindow(self)
         orderOut(nil)

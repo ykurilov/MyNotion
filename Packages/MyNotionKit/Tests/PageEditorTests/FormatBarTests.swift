@@ -184,6 +184,54 @@ struct FormatBarTests {
         #expect(left.minX == Self.visible.minX)
     }
 
+    // Список типов — как у Notion (сверено 18.10.2026): сбоку от карточки, справа, заходит на неё на kindMenuOverlap
+    // (до подсветки последней кнопки), серединой против строки типа; в пределах окна. Кнопок не закрывает.
+    static let menuSize = NSSize(width: Metrics.PopupMenu.blockMenuWidth, height: 330)
+
+    static func kindRow(of card: NSRect) -> NSRect {
+        NSRect(x: card.minX + Metrics.FormatBar.horizontalPadding, y: card.maxY - Metrics.FormatBar.verticalPadding - Metrics.FormatBar.kindRowHeight,
+               width: card.width - 2 * Metrics.FormatBar.horizontalPadding, height: Metrics.FormatBar.kindRowHeight)
+    }
+
+    @Test("Список типов — справа от карточки, серединой против строки типа")
+    func kindMenuBesideCard() {
+        let card = NSRect(origin: NSPoint(x: 300, y: 400), size: Self.size)
+        let row = Self.kindRow(of: card)
+        let menu = FormatBarPlacement.kindMenu(size: Self.menuSize, card: card, row: row, visible: Self.visible)
+        #expect(menu.size == Self.menuSize)
+        #expect(menu.minX == (card.maxX - Metrics.FormatBar.kindMenuOverlap).rounded(.up))
+        #expect(menu.midY == row.midY)
+    }
+
+    @Test("Справа нет места — список слева от карточки")
+    func kindMenuFlipsLeftWithoutRoom() {
+        let card = NSRect(origin: NSPoint(x: 600, y: 400), size: Self.size)
+        let menu = FormatBarPlacement.kindMenu(size: Self.menuSize, card: card, row: Self.kindRow(of: card), visible: Self.visible)
+        #expect(menu.maxX == (card.minX + Metrics.FormatBar.kindMenuOverlap).rounded(.down))
+    }
+
+    @Test("У верха и низа окна список прижимается к краю")
+    func kindMenuClampedVertically() {
+        let high = NSRect(origin: NSPoint(x: 300, y: 700), size: Self.size)
+        #expect(FormatBarPlacement.kindMenu(size: Self.menuSize, card: high, row: Self.kindRow(of: high), visible: Self.visible).maxY == Self.visible.maxY)
+        let low = NSRect(origin: NSPoint(x: 300, y: 110), size: Self.size)
+        #expect(FormatBarPlacement.kindMenu(size: Self.menuSize, card: low, row: Self.kindRow(of: low), visible: Self.visible).minY == Self.visible.minY)
+    }
+
+    @Test("Открытый список типов не закрывает строку типа и кнопки панели")
+    func openKindMenuLeavesBarVisible() throws {
+        let editor = try EditorFixture([.paragraph("первый абзац"), .paragraph("Выделяем слово в середине второго абзаца")])
+        let view = editor.textView
+        view.pointerLocation = { NSPoint(x: -10_000, y: -10_000) }
+        editor.select(inBlock: 1, "слово")
+        view.formatBar.openKindMenu()
+        let card = try #require(view.formatBar.cardFrame)
+        let menu = try #require(view.formatBar.kindMenuFrame)
+        let overlap = Metrics.FormatBar.kindMenuOverlap
+        let controls = NSRect(x: card.minX + overlap, y: card.minY, width: card.width - 2 * overlap, height: card.height)
+        #expect(!menu.intersects(controls), "Список \(menu) закрывает панель \(card)")
+    }
+
     @Test("Указатель над страницей — карточка у указателя, под строкой выделения рядом с ним")
     func editorPlacesCardAtPointer() throws {
         let editor = try EditorFixture([.paragraph("первый абзац"), .paragraph("Выделяем слово в середине второго абзаца")])

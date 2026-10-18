@@ -376,6 +376,9 @@ public enum Metrics {
         public static let buttonHighlightSize = CGSize(width: 32, height: 28)
         public static let buttonCornerRadius: CGFloat = 6
         public static let height: CGFloat = 2 * verticalPadding + kindRowHeight + dividerBandHeight + buttonRowHeight
+        /// Список типов — сбоку от карточки (Notion, сверено 18.10.2026: ≈ 8,8 ± 1,3) и заходит на неё до подсветки
+        /// последней кнопки: поле карточки 6 + половина зазора между местом кнопки 36 и подсветкой 32.
+        public static let kindMenuOverlap: CGFloat = horizontalPadding + (buttonWidth - buttonHighlightSize.width) / 2
         /// Между строкой выделения и карточкой (под строкой, а если внизу нет места — над ней).
         public static let selectionSpacing: CGFloat = 8
         /// Левый край карточки правее указателя мыши (или конца выделения, если указатель не над страницей).
