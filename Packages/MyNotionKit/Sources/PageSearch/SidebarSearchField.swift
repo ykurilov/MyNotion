@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 import VisualStyle
 
-/// Поле поиска вверху боковой панели (contracts/visual-style.md, «Боковая панель»): рамка border на фоне панели,
+/// Поле поиска вверху боковой панели (contracts/visual-style.md, «Боковая панель»): рамка searchFieldBorder на фоне панели,
 /// скругление 6, лупа и подсказка «Поиск». Ввод и выдачу ведёт `PageSearchController`.
 public struct SidebarSearchField: NSViewRepresentable {
     let controller: PageSearchController
@@ -34,10 +34,6 @@ public final class SearchFieldView: NSView {
 
     let textField = SearchTextField()
 
-    var isFocused = false {
-        didSet { needsDisplay = true }
-    }
-
     override init(frame: NSRect) {
         super.init(frame: frame)
         textField.placeholderAttributedString = NSAttributedString(string: Self.placeholder, attributes: [
@@ -67,7 +63,7 @@ public final class SearchFieldView: NSView {
         let frame = NSBezierPath(roundedRect: bounds.insetBy(dx: inset, dy: inset),
                                  xRadius: metrics.cornerRadius, yRadius: metrics.cornerRadius)
         frame.lineWidth = metrics.borderWidth
-        Palette.border.setStroke()
+        Palette.searchFieldBorder.setStroke()
         frame.stroke()
         drawSymbol("magnifyingglass", size: metrics.iconSize, color: Palette.textSecondary,
                    center: NSPoint(x: metrics.iconCenterX, y: bounds.midY))
@@ -114,4 +110,14 @@ final class SearchTextField: NSTextField {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
+
+    /// Редактор строки в фокусе — без своего белого фона: поле остаётся цвета панели.
+    override func becomeFirstResponder() -> Bool {
+        let became = super.becomeFirstResponder()
+        if became, let editor = currentEditor() as? NSTextView {
+            editor.drawsBackground = false
+            editor.insertionPointColor = Palette.textPrimary
+        }
+        return became
+    }
 }

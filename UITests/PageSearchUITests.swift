@@ -39,8 +39,13 @@ final class PageSearchUITests: XCTestCase {
         XCTAssertEqual(field.value as? String ?? "", "", "Поле поиска не очистилось")
     }
 
-    private func waitFor(_ element: XCUIElement, gone: Bool = false, _ condition: @escaping (String) -> Bool = { _ in true }) -> Bool {
-        let predicate = NSPredicate { _, _ in gone ? !element.exists : element.exists && condition(element.label) }
-        return XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: nil)], timeout: 5) == .completed
+    @MainActor
+    private func waitFor(_ element: XCUIElement, gone: Bool = false, _ condition: (String) -> Bool = { _ in true }) -> Bool {
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline {
+            if gone ? !element.exists : element.exists && condition(element.label) { return true }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        return false
     }
 }

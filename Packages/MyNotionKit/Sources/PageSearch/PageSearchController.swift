@@ -47,21 +47,17 @@ public final class PageSearchController: NSObject, NSTextFieldDelegate {
     public func type(_ text: String) {
         focusField()
         fieldView?.textField.stringValue = text
+        fieldView?.textField.currentEditor()?.selectedRange = NSRange(location: (text as NSString).length, length: 0)
         queryDidChange()
     }
 
     // MARK: Ввод
-
-    public func controlTextDidBeginEditing(_ obj: Notification) {
-        fieldView?.isFocused = true
-    }
 
     public func controlTextDidChange(_ obj: Notification) {
         queryDidChange()
     }
 
     public func controlTextDidEndEditing(_ obj: Notification) {
-        fieldView?.isFocused = false
         closeResults()
         fieldView?.textField.stringValue = ""
     }

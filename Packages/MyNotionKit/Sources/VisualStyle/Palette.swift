@@ -52,6 +52,8 @@ public enum Palette {
     /// Фон всплывающих панелей (меню, окно корзины): в тёмной теме светлее страницы, как в Notion (≈ по Notion).
     public static let popupMenuBackground = themed(light: .hex(0xFFFFFF), dark: .hex(0x252525))
     /// Разделитель внутри всплывающей панели (панель форматирования), по снимкам Notion 15.10.2026.
+    /// Рамка поля поиска: светлая — как border; тёмная — по снимку Notion 7.38.1 (17.10.2026: ≈ #373735), заметнее border.
+    public static let searchFieldBorder = themed(light: .hex(0xE6E5E3), dark: .hex(0x373735))
     /// Найденная часть слова в выдаче поиска (Notion 7.38.1, снимок 17.10.2026: ≈ #2783DE).
     public static let searchHighlight = themed(light: .hex(0x2383E2), dark: .hex(0x2383E2))
     public static let popupDivider = themed(light: .hex(0xF0EFED), dark: .hex(0x373736))

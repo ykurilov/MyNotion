@@ -156,14 +156,14 @@ description: "Задачи: минимальное ядро MyNotion для macO
 ### Тесты US4 (сначала, должны упасть)
 
 - [x] T049 [P] [US4] Тест поиска в `PK/Tests/PageSearchTests/PageSearchTests.swift`: поиск по началу слова в названии и тексте, кириллица и латиница, регистр не важен, «Страницы в корзине из выдачи исключаются», индекс обновлён в той же транзакции, что и запись
-- [ ] T050 [P] [US4] Сценарий `UITests/PageSearchUITests.swift`: ⇧⌘F, ввод слова, ↓, Enter открывает страницу (сценарий 4.1)
+- [x] T050 [P] [US4] Сценарий `UITests/PageSearchUITests.swift`: ⇧⌘F, ввод слова, ↓, Enter открывает страницу (сценарий 4.1)
 
 ### Реализация US4
 
 - [x] T051 [US4] Обновление `search_index` через хук транзакции ядра (та же транзакция, что запись) в `PK/Sources/PageSearch/SearchIndexer.swift`
 - [x] T052 [US4] Запрос FTS5 и ранжирование (сначала совпадения в названии) в `PK/Sources/PageSearch/PageSearch.swift`
-- [ ] T053 [US4] Поле поиска и список результатов вверху боковой панели в `PK/Sources/PageSearch/SidebarSearchField.swift` (вид по contracts/visual-style.md, результаты — всплывающим меню); подключение в `App/MainWindow/MainWindowView.swift`, ⇧⌘F фокусирует поле
-- [ ] T054 [P] [US4] Замер в `PerformanceTests/SearchTests.swift`: ≤ 100 мс на символ по эталонной базе (SC-009)
+- [x] T053 [US4] Поле поиска и список результатов вверху боковой панели в `PK/Sources/PageSearch/SidebarSearchField.swift` (вид по contracts/visual-style.md, результаты — всплывающим меню); подключение в `App/MainWindow/MainWindowView.swift`, ⇧⌘F фокусирует поле
+- [x] T054 [P] [US4] Замер в `PerformanceTests/SearchTests.swift`: ≤ 100 мс на символ по эталонной базе (SC-009)
 
 **Checkpoint**: Поиск работает. Сборка, затронутые тесты и замеры (`PerformanceTests`), галерея `--ui-gallery` и проверяющий интерфейса, показ Юрию, коммит.
 
