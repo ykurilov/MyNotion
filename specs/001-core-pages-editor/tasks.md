@@ -77,7 +77,7 @@ description: "Задачи: минимальное ядро MyNotion для macO
 - [x] T018 [P] [US1] Тест «сто циклов» в `PK/Tests/NotesCoreTests/SaveReopenCycleTests.swift`: 100 раз — случайный текст во всех типах полей → закрыть документ и базу → открыть → полное совпадение (SC-004); в браузерном тесте T021 остаётся один живой случай
 - [x] T019 [P] [US1] Тест ошибки записи в `PK/Tests/NotesCoreTests/SaveFailureTests.swift`: при отказе диска состояние «не сохранено» с причиной, текст в памяти не теряется, повторная попытка записывает его (FR-015)
 - [x] T020 [P] [US1] Тест разбора абзацев в `PK/Tests/PageEditorTests/PageTextMappingTests.swift`: блоки → текст с атрибутами абзацев (id блока) → блоки без потерь; Enter делит блок, ⌫ в начале склеивает
-- [ ] T021 [P] [US1] Сценарий `UITests/NoteSurvivesRelaunchTests.swift`: новая страница, название, абзац, выход, запуск — открыта та же страница с тем же текстом; второй прогон с `kill -9` через 1,5 с после набора — текст на месте (SC-004, SC-005)
+- [x] T021 [P] [US1] Сценарий `UITests/NoteSurvivesRelaunchTests.swift`: новая страница, название, абзац, выход, запуск — открыта та же страница с тем же текстом; второй прогон с `kill -9` через 1,5 с после набора — текст на месте (SC-004, SC-005)
 
 ### Реализация US1
 
@@ -258,11 +258,11 @@ description: "Задачи: минимальное ядро MyNotion для macO
 
 ## Phase 10: Polish & Cross-Cutting Concerns
 
-- [ ] T091 Светлая и тёмная тема: снимки главного окна, дерева, редактора, полос и окна конфликта в `UITests/AppearanceSnapshotTests.swift` (FR-028)
-- [ ] T092 Сверка с образцом Notion в `UITests/VisualReferenceTests.swift`: открыть страницу «MyNotion — образец» (`--generate-visual-sample`), окно 1440×900, снимки в обеих темах в `specs/001-core-pages-editor/visual-reference/mynotion-*.png`; по рамкам элементов проверить цифры contracts/visual-style.md (колонка 720 по центру, высоты блоков, строка дерева 30, позиции ручек) с допуском 1 pt; показать Юрию пары снимков «Notion / MyNotion» (FR-031, SC-012)
-- [ ] T093 Несколько окон: одна страница в двух окнах, набор в обоих — текст общий, без потерь, в `UITests/MultiWindowTests.swift` (FR-029)
-- [ ] T094 Крайние случаи из spec: глубокое дерево 10+ уровней читаемо, нет места на диске (подменённый отказ записи) — предупреждение без потери текста; дополнить `UITests/PageTreeTests.swift` и `PK/Tests/NotesCoreTests/SaveFailureTests.swift`
-- [ ] T095 Полный прогон: `xcodebuild test -scheme MyNotion`, `xcodebuild test -scheme MyNotionPerformance -configuration Release` на эталонной базе, `pnpm test` в `server/`; результаты замеров записать в `specs/001-core-pages-editor/quickstart.md`
+- [x] T091 Светлая и тёмная тема: снимки главного окна, дерева, редактора, полос и окна конфликта в `UITests/AppearanceSnapshotTests.swift` (FR-028)
+- [x] T092 Сверка с образцом Notion в `UITests/VisualReferenceTests.swift`: открыть страницу «MyNotion — образец» (`--generate-visual-sample`), окно 1440×900, снимки в обеих темах в `specs/001-core-pages-editor/visual-reference/mynotion-*.png`; по рамкам элементов проверить цифры contracts/visual-style.md (колонка 720 по центру, высоты блоков, строка дерева 30, позиции ручек) с допуском 1 pt; показать Юрию пары снимков «Notion / MyNotion» (FR-031, SC-012)
+- [x] T093 Несколько окон: одна страница в двух окнах, набор в обоих — текст общий, без потерь, в `UITests/MultiWindowTests.swift` (FR-029)
+- [x] T094 Крайние случаи из spec: глубокое дерево 10+ уровней читаемо, нет места на диске (подменённый отказ записи) — предупреждение без потери текста; дополнить `UITests/PageTreeTests.swift` и `PK/Tests/NotesCoreTests/SaveFailureTests.swift`
+- [ ] T095 (прогон и замеры сделаны 18.10.2026; переход между страницами p95 в виртуальном Mac 68–101 мс > 50 — ждёт замера на основном Mac) Полный прогон: `xcodebuild test -scheme MyNotion`, `xcodebuild test -scheme MyNotionPerformance -configuration Release` на эталонной базе, `pnpm test` в `server/`; результаты замеров записать в `specs/001-core-pages-editor/quickstart.md`
 - [ ] T096 Сборка Release, установка в `/Applications/MyNotion.app`, ручная проверка по quickstart.md
 
 ---
