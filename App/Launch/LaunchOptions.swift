@@ -19,6 +19,8 @@ struct LaunchOptions {
     var searchBenchmarkURL: URL?
     /// `--export-markdown <папка>`: выгрузить все записи в Markdown в эту папку без окна выбора и выйти (T057).
     var exportMarkdownURL: URL?
+    /// `--import-notion <путь>`: импортировать выгрузку Notion (ZIP или папку) без окна выбора, напечатать отчёт и выйти (T090).
+    var importNotionURL: URL?
     /// `--hover-sidebar-row <номер>`: на снимке окна строка дерева с этим номером (с нуля) — как под мышью.
     var hoveredSidebarRow: Int?
     /// `--appearance light|dark`: тема окна вместо системной.
@@ -43,6 +45,7 @@ struct LaunchOptions {
             case "--typing-benchmark": typingBenchmarkURL = remaining.popFirst().map(Self.fileURL)
             case "--search-benchmark": searchBenchmarkURL = remaining.popFirst().map(Self.fileURL)
             case "--export-markdown": exportMarkdownURL = remaining.popFirst().map(Self.fileURL)
+            case "--import-notion": importNotionURL = remaining.popFirst().map(Self.fileURL)
             case "--ui-gallery": uiGalleryURL = remaining.popFirst().map(Self.fileURL)
             case "--ui-gallery-only": uiGalleryFilter = remaining.popFirst()
             case "--hover-sidebar-row": hoveredSidebarRow = remaining.popFirst().flatMap { Int($0) }

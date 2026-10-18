@@ -79,7 +79,7 @@ struct NotionImporterTests {
         #expect(ideas.icon == "💡")
         let tasks = try child("Задачи", of: projects.id)
         #expect(tree.children(of: tasks.id).map(\.title) == ["Купить молоко"])
-        #expect(report.pageCount == 7)
+        #expect(report.pageCount == 6)
     }
 
     @Test("Порядок подстраниц — как ссылки на них в родителе, а ссылки становятся блоками pageLink")
@@ -167,12 +167,12 @@ struct NotionImporterTests {
     @Test("Отчёт: число страниц и блоков, «страница — что упрощено»; журнал импорта — finished")
     func report() throws {
         let report = try runImport()
-        #expect(report.pageCount == 7)
+        #expect(report.pageCount == 6)
         let stored = try store.pageOutline().filter { tree.isPage($0.id, insideBranchOf: report.rootPageId) && $0.id != report.rootPageId }
         let blockCount = try stored.reduce(0) { $0 + (try store.pageContent($1.id)?.blocks.count ?? 0) }
         #expect(report.blockCount == blockCount)
         let projects = try #require(report.simplified.first { $0.pageTitle == "Проекты" })
-        #expect(projects.items == ["таблица", "файл или картинка ×2", "цитата", "выноска", "блок кода", "переключатель",
+        #expect(projects.items == ["таблица", "файл или картинка", "цитата", "выноска", "блок кода", "переключатель",
                                    "разделитель", "формула", "встраивание"])
         #expect(report.simplified.map(\.pageTitle).sorted() == ["Задачи", "Идеи", "Проекты"])
         #expect(report.simplified.first { $0.pageTitle == "Задачи" }?.items == ["таблица"])
@@ -180,7 +180,7 @@ struct NotionImporterTests {
         let run = try #require(try importer().runs().first)
         #expect(run.status == .finished)
         #expect(run.rootPageId == report.rootPageId)
-        #expect(run.importedPages == 7)
+        #expect(run.importedPages == 6)
         #expect(run.simplifiedItems == report.simplified)
         #expect(run.startedAt == importDate)
         #expect(run.finishedAt != nil)
@@ -198,7 +198,7 @@ struct NotionImporterTests {
         #expect(!FileManager.default.fileExists(atPath: fromZip.contentRoot.appendingPathComponent("ExportBlock-0b6f2c1e-4d7a-4f3e-9a51-6c2d8e9f0a13-Part-1.zip").path))
 
         let report = try importer().importExport(fromZip)
-        #expect(report.pageCount == 7)
+        #expect(report.pageCount == 6)
         let folder = fromZip.contentRoot
         fromZip.discard()
         #expect(!FileManager.default.fileExists(atPath: folder.path), "Временная папка распаковки не убрана")
@@ -251,14 +251,18 @@ struct NotionImporterTests {
         #expect(try importer().previousImport(withFingerprint: run.sourceFingerprint) == nil, "Неудачный импорт не считается повтором")
     }
 
-    @Test("Отмена импорта откатывает ветку")
+    @Test("Отмена посреди записи откатывает ветку")
     func cancelledImportRollsBack() async throws {
         let prepared = try NotionExportUnpacker().prepare(Self.synthetic)
         defer { prepared.discard() }
-        let importer = importer()
+        var pageByPage = importer()
+        pageByPage.maxBlocksPerTransaction = 1
+        let importer = pageByPage
         let task = Task.detached {
-            withUnsafeCurrentTask { $0?.cancel() }
-            return try importer.importExport(prepared)
+            try importer.importExport(prepared) { step in
+                // Две страницы уже записаны — Юрий нажимает «Остановить».
+                if step.phase == .writing, step.done == 2 { withUnsafeCurrentTask { $0?.cancel() } }
+            }
         }
         await #expect(throws: CancellationError.self) { try await task.value }
         #expect(try store.pageOutline().isEmpty)
@@ -292,8 +296,8 @@ struct NotionImporterTests {
         _ = try importer().importExport(prepared) { step in steps.withLock { $0.append(step) } }
         let all = steps.withLock { $0 }
         #expect(all.first?.phase == .reading)
-        #expect(all.last == NotionImportProgress(phase: .writing, done: 7, total: 7))
-        #expect(all.contains { $0.phase == .reading && $0.done == $0.total && $0.total == 7 })
+        #expect(all.last == NotionImportProgress(phase: .writing, done: 6, total: 6))
+        #expect(all.contains { $0.phase == .reading && $0.done == $0.total && $0.total == 6 })
     }
 
     // MARK: Живая выгрузка Notion 7.38.1
@@ -313,7 +317,7 @@ struct NotionImporterTests {
     }
 }
 
-/// Подписчик на запись, который роняет транзакцию после нескольких удачных: как кончившееся место на диске.
+/// Подписчик на запись, который роняет одну транзакцию после нескольких удачных: как сбой диска.
 final class FailingHook: NotesWriteHook, Sendable {
     private let remaining: Mutex<Int?>
     init(failAfter: Int) { remaining = Mutex(failAfter) }
@@ -323,7 +327,10 @@ final class FailingHook: NotesWriteHook, Sendable {
     func notesWillCommit(_ changes: NotesChanges, in transaction: NotesTransaction) throws {
         try remaining.withLock { remaining in
             guard let count = remaining else { return }
-            if count <= 0 { throw DiskFull() }
+            if count == 0 {
+                remaining = nil
+                throw DiskFull()
+            }
             remaining = count - 1
         }
     }

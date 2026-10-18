@@ -55,6 +55,17 @@ public enum GalleryScene: Hashable, Sendable {
     case saveErrorBanner
     /// Верхняя полоса с длинным путём страницы четвёртого уровня.
     case longBreadcrumb
+    /// Импорт из Notion (US6): карточка хода, вопрос о повторе той же выгрузки, отчёт.
+    case notionImport(GalleryNotionImport)
+}
+
+public enum GalleryNotionImport: String, Hashable, Sendable, CaseIterable {
+    /// Карточка внизу окна: «записываю страницы — 420 из 1000» и «Остановить».
+    case progress
+    /// Лист «Эта выгрузка уже импортирована».
+    case repeatWarning
+    /// Лист отчёта: сколько перенесено и что упрощено.
+    case report
 }
 
 /// Где курсор на странице типа блока.
@@ -130,7 +141,7 @@ public struct GalleryShot: Hashable, Sendable {
 
 public enum GalleryCatalog {
     /// Все состояния по порядку съёмки.
-    public static let states: [GalleryState] = pageStates + blockStates + editingStates + sidebarStates + trashStates
+    public static let states: [GalleryState] = pageStates + blockStates + editingStates + sidebarStates + trashStates + importStates
 
     /// Все снимки: каждое состояние в каждом размере, светлая и тёмная тема подряд.
     public static var shots: [GalleryShot] {
@@ -253,5 +264,14 @@ public enum GalleryCatalog {
         GalleryState("trash-confirm-delete-forever", .trash(.confirmDeleteForever),
                      "Диалог подтверждения «Удалить навсегда»", section: "Корзина"),
         GalleryState("trash-open-empty", .trash(.openEmpty), "Окно пустой корзины", section: "Корзина"),
+    ]
+
+    private static let importStates: [GalleryState] = [
+        GalleryState("notion-import-progress", .notionImport(.progress),
+                     "Импорт из Notion идёт: карточка хода внизу окна с кнопкой «Остановить»", section: "Импорт из Notion", narrowToo: true),
+        GalleryState("notion-import-repeat", .notionImport(.repeatWarning),
+                     "Та же выгрузка уже импортирована: вопрос до начала", section: "Импорт из Notion"),
+        GalleryState("notion-import-report", .notionImport(.report),
+                     "Отчёт после импорта: страницы, блоки, что упрощено по страницам", section: "Импорт из Notion", narrowToo: true),
     ]
 }

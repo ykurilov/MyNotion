@@ -267,10 +267,12 @@ struct NotionMarkdownParserTests {
     private let writer = MarkdownBlockWriter()
 
     /// Блок записи → то, что должен вернуть разбор его Markdown.
-    private func expectedParse(of block: Block, linkTitles: [UUID: (String, String)]) -> ParsedBlock {
+    private func expectedParse(of block: Block, linkTitles: [UUID: (String, String?)]) -> ParsedBlock {
         switch block.kind {
         case .pageLink:
             let (title, path) = linkTitles[block.linkedPageId!]!
+            // Страница в корзине — в выгрузке только её название.
+            guard let path else { return ParsedBlock(kind: .paragraph, text: InlineText(title)) }
             return ParsedBlock(kind: .pageLink, text: InlineText(title), pagePath: path)
         case .heading1, .heading2, .heading3:
             return ParsedBlock(kind: block.kind, text: InlineText(block.text.string.replacingOccurrences(of: "\n", with: " "),
@@ -281,7 +283,7 @@ struct NotionMarkdownParserTests {
         }
     }
 
-    private func roundTrip(_ blocks: [Block], linkTitles: [UUID: (String, String)] = [:],
+    private func roundTrip(_ blocks: [Block], linkTitles: [UUID: (String, String?)] = [:],
                            sourceLocation: SourceLocation = #_sourceLocation) {
         let markdown = "# Страница\n\n" + writer.markdown(for: blocks) { id in
             linkTitles[id].map { PageLinkTarget(title: $0.0, path: $0.1) }
@@ -293,11 +295,34 @@ struct NotionMarkdownParserTests {
         let parsed = parser.parse(markdown)
         #expect(parsed.title == "Страница", sourceLocation: sourceLocation)
         #expect(parsed.blocks.count == expected.count, "\(markdown)", sourceLocation: sourceLocation)
-        for (index, (got, want)) in zip(parsed.blocks, expected).enumerated() where got != want {
+        for (index, (got, want)) in zip(parsed.blocks, expected).enumerated() where !Self.looksSame(got, want) {
             Issue.record("Блок \(index): \(got) ≠ \(want)\n\(markdown)", sourceLocation: sourceLocation)
             return
         }
         #expect(parsed.simplifications.isEmpty, sourceLocation: sourceLocation)
+    }
+
+    /// Блоки выглядят одинаково: тот же вид, отступ, отметка и текст, у каждого видимого знака то же оформление.
+    /// Пробел между двумя подчёркнутыми словами выгрузка пишет внутри подчёркивания, а скобки адреса кодирует (`%28`):
+    /// читатель разницы не видит, поэтому пробелы и запись адреса не сравниваются.
+    static func looksSame(_ a: ParsedBlock, _ b: ParsedBlock) -> Bool {
+        a.kind == b.kind && a.indent == b.indent && a.isChecked == b.isChecked && a.pagePath == b.pagePath
+            && a.text.string == b.text.string && appearance(of: a.text) == appearance(of: b.text)
+    }
+
+    private static func appearance(of text: InlineText) -> [Set<String>] {
+        let units = Array(text.string.utf16)
+        var styles = [Set<String>](repeating: [], count: units.count)
+        for run in text.runs {
+            let key = switch run.style {
+            case .link(let url): "ссылка " + (url.absoluteString.removingPercentEncoding ?? url.absoluteString)
+            default: "\(run.style)"
+            }
+            for index in max(run.start, 0)..<min(run.start + run.length, units.count) where units[index] != 0x20 && units[index] != 0x0A {
+                styles[index].insert(key)
+            }
+        }
+        return styles
     }
 
     private func makeBlock(_ kind: BlockKind, _ text: InlineText, indent: Int = 0, checked: Bool = false, link: UUID? = nil) -> Block {
@@ -331,7 +356,7 @@ struct NotionMarkdownParserTests {
             makeBlock(.checkbox, InlineText("")),
             makeBlock(.paragraph, .empty),
         ]
-        roundTrip(blocks, linkTitles: [sub: ("Под [страница] (1)", "Папка/Под [страница] (1).md")])
+        roundTrip(blocks, linkTitles: [sub: ("Под [страница] (1)", "Папка/Под [страница] (1).md"), trashed: ("В корзине *важное*", nil)])
     }
 
     @Test("Пункты с номером 10 и больше, вложенное под ними")

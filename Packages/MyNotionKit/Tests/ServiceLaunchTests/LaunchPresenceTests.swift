@@ -21,6 +21,8 @@ struct LaunchPresenceTests {
         ["--search-benchmark", "/tmp/s.json"],
         ["--export-markdown", "/tmp/out"],
         ["--database", "/tmp/r.sqlite", "--export-markdown", "/tmp/out"],
+        ["--import-notion", "/tmp/Export.zip"],
+        ["--database", "/tmp/r.sqlite", "--import-notion", "/tmp/Export"],
     ])
     func serviceFlagsRunInBackground(flags: [String]) {
         #expect(LaunchPresence(arguments: [Self.app] + flags) == .background)

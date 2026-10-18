@@ -1,6 +1,7 @@
 import AppKit
 import MarkdownExport
 import NotesCore
+import NotionImport
 import PageSearch
 import ServiceLaunch
 import SwiftUI
@@ -11,6 +12,7 @@ struct MyNotionApp: App {
     private let options: LaunchOptions
     private let library: Result<MainWindowModel, any Error>
     private let exportController: MarkdownExportController?
+    private let importController: NotionImportController?
 
     init() {
         // Флаги запуска — не файлы. Иначе AppKit склеивает флаг без значения со следующим флагом в свою
@@ -44,14 +46,22 @@ struct MyNotionApp: App {
         if let exportURL = options.exportMarkdownURL {
             Self.exportMarkdownAndExit(from: library, into: exportURL)
         }
+        if let importURL = options.importNotionURL {
+            Self.importNotionAndExit(from: library, source: importURL)
+        }
         exportController = model.map { model in
             MarkdownExportController(store: model.store, saveOpenPages: { model.saveAll() })
         }
+        importController = model.map { model in
+            NotionImportController(store: model.store, saveOpenPages: { model.saveAll() },
+                                   showBranch: { model.showImportedBranch($0) })
+        }
+        AppDelegate.importController = importController
     }
 
     var body: some Scene {
         WindowGroup {
-            MainWindowView(library: library, options: options, exportController: exportController)
+            MainWindowView(library: library, options: options, exportController: exportController, importController: importController)
         }
         .defaultSize(width: 1200, height: 800)
         .windowStyle(.hiddenTitleBar)
@@ -70,6 +80,7 @@ struct MyNotionApp: App {
             SidebarToggleCommands(model: try? library.get())
             FormatCommands()
             ExportCommands(controller: exportController)
+            NotionImportCommands(controller: importController)
         }
     }
 
@@ -78,6 +89,8 @@ struct MyNotionApp: App {
         let store = NotesStore(database: database, clock: HybridLogicalClock(deviceId: DeviceIdentity.deviceId()))
         // Индекс поиска пишется в той же транзакции, что и записи (research R6) — до первой записи.
         store.addWriteHook(SearchIndexer())
+        // Импорт из Notion, прерванный падением приложения, не оставляет недоделанной ветки (FR-027).
+        try NotionImporter(store: store).rollBackInterruptedImports()
         if options.generatesVisualSample {
             // Образец сразу открыт: для сверки с Notion и снимков окна.
             let sample = try VisualSamplePage.ensure(in: store)
@@ -101,6 +114,28 @@ struct MyNotionApp: App {
         }
     }
 
+    /// Служебный импорт без окна выбора: отчёт — в стандартный вывод. Код 0 — готово, 1 — ошибка (ветка откачена),
+    /// 2 — эта выгрузка уже импортирована, повтор не начат.
+    private static func importNotionAndExit(from library: Result<MainWindowModel, any Error>, source: URL) -> Never {
+        do {
+            let store = try library.get().store
+            let prepared = try NotionExportUnpacker().prepare(source)
+            defer { prepared.discard() }
+            let importer = NotionImporter(store: store)
+            if let previous = try importer.previousImport(withFingerprint: prepared.fingerprint) {
+                FileHandle.standardError.write(Data("Эта выгрузка уже импортирована \(NotionImportRepeatView.dateText(previous.startedAt)) (страниц: \(previous.importedPages)), повтор не начат\n".utf8))
+                exit(2)
+            }
+            let report = try importer.importExport(prepared)
+            print("Импорт готов: ветка «\(report.rootTitle)», страниц: \(report.pageCount), блоков: \(report.blockCount)")
+            for page in report.simplified { print("Упрощено: \(page.pageTitle) — \(page.items.joined(separator: ", "))") }
+            exit(0)
+        } catch {
+            FileHandle.standardError.write(Data("Импорт не удался: \(error.localizedDescription)\n".utf8))
+            exit(1)
+        }
+    }
+
     private static func generateReferenceLibraryAndExit(at url: URL) -> Never {
         do {
             try ReferenceLibraryGenerator().generate(at: url)
@@ -120,6 +155,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static var model: MainWindowModel?
     /// Страницы временной базы галереи (`--ui-gallery`).
     static var galleryLibrary: (GalleryLibrary, FailingWrites)?
+    /// Импорт из Notion — для галереи интерфейса.
+    static var importController: NotionImportController?
     static var presence = LaunchPresence.foreground
     static var backgroundActivity: (any NSObjectProtocol)?
 
