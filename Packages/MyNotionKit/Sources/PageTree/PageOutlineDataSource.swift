@@ -108,7 +108,8 @@ final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineV
             if outlineView.selectedRow != row {
                 outlineView.selectRowIndexes([row], byExtendingSelection: false)
             }
-            outlineView.scrollRowToVisible(row)
+            // Видимую строку не трогаем: прокрутка заново раскладывает видимые строки.
+            if !outlineView.rows(in: outlineView.visibleRect).contains(row) { outlineView.scrollRowToVisible(row) }
         } else {
             outlineView.deselectAll(nil)
         }

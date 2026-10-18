@@ -28,7 +28,8 @@ final class TypingAndNavigationTests: XCTestCase {
 
         let summary = """
             Набор в странице на 1 000 блоков: p95 \(Self.format(report.typingP95Ms)) мс, \(report.typingMs.count) нажатий
-            Переход между страницами: p95 \(Self.format(report.pageSwitchP95Ms)) мс, \(report.pageSwitchMs.count) переходов
+            Переход между страницами: p95 \(Self.format(report.pageSwitchP95Ms)) мс, медиана \(Self.format(Self.median(report.pageSwitchMs))) мс, \
+            худший \(Self.format(report.pageSwitchMs.max())) мс, \(report.pageSwitchMs.count) переходов
             Открытие страницы на 10 000 блоков: \(Self.format(report.hugePageOpenMs)) мс
             Набор в странице на 10 000 блоков: p95 \(Self.format(report.hugePageTypingP95Ms)) мс
             Прокрутка страницы на 10 000 блоков: p95 \(Self.format(report.hugePageScrollP95Ms)) мс
@@ -95,6 +96,10 @@ final class TypingAndNavigationTests: XCTestCase {
         let path: String
         let timeout: TimeInterval
         var description: String { "Приложение не записало отчёт замера за \(Int(timeout)) с: \(path)" }
+    }
+
+    private static func median(_ values: [Double]) -> Double? {
+        values.isEmpty ? nil : values.sorted()[values.count / 2]
     }
 
     private static func format(_ value: Double?) -> String {

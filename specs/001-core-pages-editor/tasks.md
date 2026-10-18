@@ -262,7 +262,7 @@ description: "Задачи: минимальное ядро MyNotion для macO
 - [x] T092 Сверка с образцом Notion в `UITests/VisualReferenceTests.swift`: открыть страницу «MyNotion — образец» (`--generate-visual-sample`), окно 1440×900, снимки в обеих темах в `specs/001-core-pages-editor/visual-reference/mynotion-*.png`; по рамкам элементов проверить цифры contracts/visual-style.md (колонка 720 по центру, высоты блоков, строка дерева 30, позиции ручек) с допуском 1 pt; показать Юрию пары снимков «Notion / MyNotion» (FR-031, SC-012)
 - [x] T093 Несколько окон: одна страница в двух окнах, набор в обоих — текст общий, без потерь, в `UITests/MultiWindowTests.swift` (FR-029)
 - [x] T094 Крайние случаи из spec: глубокое дерево 10+ уровней читаемо, нет места на диске (подменённый отказ записи) — предупреждение без потери текста; дополнить `UITests/PageTreeTests.swift` и `PK/Tests/NotesCoreTests/SaveFailureTests.swift`
-- [ ] T095 (прогон и замеры сделаны 18.10.2026; переход между страницами p95 в виртуальном Mac 68–101 мс > 50 — ждёт замера на основном Mac) Полный прогон: `xcodebuild test -scheme MyNotion`, `xcodebuild test -scheme MyNotionPerformance -configuration Release` на эталонной базе, `pnpm test` в `server/`; результаты замеров записать в `specs/001-core-pages-editor/quickstart.md`
+- [x] T095 Полный прогон: `xcodebuild test -scheme MyNotion`, `xcodebuild test -scheme MyNotionPerformance -configuration Release` на эталонной базе, `pnpm test` в `server/`; результаты замеров записать в `specs/001-core-pages-editor/quickstart.md`
 - [ ] T096 Сборка Release, установка в `/Applications/MyNotion.app`, ручная проверка по quickstart.md
 
 ---

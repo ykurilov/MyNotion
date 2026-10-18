@@ -169,12 +169,18 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
     let documentIcon = NSImageView()
     /// Прозрачная кнопка поверх иконки: щелчок открывает окно выбора иконки.
     let iconButton = NSButton()
-    private let disclosureButton = RowAccessoryButton()
     let titleLabel = NSTextField(labelWithString: "")
-    let menuButton = RowAccessoryButton()
-    let addButton = RowAccessoryButton()
+    /// Стрелка, «⋯» и «+» нужны только строке под мышью, поле переименования — только при переименовании:
+    /// они создаются по требованию. Так строка дешевле, и дерево быстрее показывает новые строки при прокрутке
+    /// (переход к странице далеко в дереве, принцип II).
+    private(set) lazy var disclosureButton = makeDisclosureButton()
+    private(set) lazy var menuButton = makeAccessories().menu
+    private(set) lazy var addButton = makeAccessories().add
+    private var accessories: (menu: RowAccessoryButton, add: RowAccessoryButton)?
+    private var hasDisclosureButton = false
     /// Поле переименования: стоит ровно на месте названия, текст не сдвигается; длинное прокручивается.
-    let renameField = RenameField()
+    private(set) lazy var renameField = makeRenameField()
+    private var hasRenameField = false
     private var title = ""
     private var hasChildren = false
     private var isExpanded = false
@@ -202,42 +208,17 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
         iconButton.setAccessibilityLabel("Сменить иконку")
         iconButton.setAccessibilityIdentifier("page-tree-icon")
 
-        configureIconButton(disclosureButton, symbol: "chevron.right", label: "Свернуть или развернуть",
-                            pointSize: Metrics.Sidebar.disclosureSymbolSize, action: #selector(toggleExpanded), tint: Palette.handleIcon)
-        disclosureButton.setAccessibilityIdentifier("page-tree-disclosure")
-        configureIconButton(menuButton, symbol: "ellipsis", label: "Действия со страницей",
-                            pointSize: Metrics.Sidebar.accessorySymbolSize, action: #selector(showMenu))
-        menuButton.setAccessibilityIdentifier("page-tree-menu")
-        configureIconButton(addButton, symbol: "plus", label: "Добавить подстраницу",
-                            pointSize: Metrics.Sidebar.accessorySymbolSize, action: #selector(addSubpage))
-        addButton.setAccessibilityIdentifier("page-tree-add-subpage")
-
         titleLabel.font = Typography.sidebarRow.font
         titleLabel.lineBreakMode = .byTruncatingTail
         titleLabel.cell?.truncatesLastVisibleLine = true
         titleLabel.maximumNumberOfLines = 1
         titleLabel.setAccessibilityIdentifier("page-tree-title")
 
-        renameField.font = Typography.sidebarRow.font
-        renameField.textColor = Palette.textPrimary
-        renameField.isBordered = false
-        renameField.isBezeled = false
-        renameField.drawsBackground = false
-        renameField.focusRingType = .none
-        renameField.usesSingleLineMode = true
-        renameField.cell?.isScrollable = true
-        renameField.cell?.wraps = false
-        renameField.lineBreakMode = .byClipping
-        renameField.delegate = self
-        renameField.isHidden = true
-        renameField.setAccessibilityIdentifier("page-tree-rename")
-
-        for view in [iconLabel, documentIcon, iconButton, disclosureButton, titleLabel, renameField, menuButton, addButton] as [NSView] {
+        for view in [iconLabel, documentIcon, iconButton, titleLabel] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             addSubview(view)
         }
         let iconSize = Metrics.Sidebar.rowIconSize
-        let accessorySize = Metrics.Sidebar.rowAccessorySize
         let padding = Metrics.Sidebar.rowHorizontalPadding
         NSLayoutConstraint.activate([
             // Эмодзи — по центру квадрата иконки, как значок документа: ширина эмодзи своя.
@@ -251,31 +232,90 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
             iconButton.centerYAnchor.constraint(equalTo: centerYAnchor),
             iconButton.widthAnchor.constraint(equalToConstant: iconSize),
             iconButton.heightAnchor.constraint(equalToConstant: iconSize),
-            disclosureButton.leadingAnchor.constraint(equalTo: documentIcon.leadingAnchor),
-            disclosureButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            disclosureButton.widthAnchor.constraint(equalToConstant: iconSize),
-            disclosureButton.heightAnchor.constraint(equalToConstant: iconSize),
 
             titleLabel.leadingAnchor.constraint(equalTo: documentIcon.trailingAnchor, constant: Metrics.Sidebar.rowIconSpacing),
-            renameField.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor, constant: Self.renameTextOffset),
-            renameField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -padding + Self.renameTextOffset),
-            renameField.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
             titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
             titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -padding),
-
-            addButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -padding),
-            addButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            addButton.widthAnchor.constraint(equalToConstant: accessorySize),
-            addButton.heightAnchor.constraint(equalToConstant: accessorySize),
-            menuButton.trailingAnchor.constraint(equalTo: addButton.leadingAnchor, constant: -Metrics.Sidebar.rowAccessorySpacing),
-            menuButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            menuButton.widthAnchor.constraint(equalToConstant: accessorySize),
-            menuButton.heightAnchor.constraint(equalToConstant: accessorySize),
         ])
         titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        titleBeforeAccessories = titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: menuButton.leadingAnchor,
-                                                                      constant: -Metrics.Sidebar.rowAccessorySpacing)
         updateHoverState()
+    }
+
+    // MARK: Части по требованию
+
+    private func makeDisclosureButton() -> RowAccessoryButton {
+        let button = RowAccessoryButton()
+        configureIconButton(button, symbol: "chevron.right", label: "Свернуть или развернуть",
+                            pointSize: Metrics.Sidebar.disclosureSymbolSize, action: #selector(toggleExpanded), tint: Palette.handleIcon)
+        button.setAccessibilityIdentifier("page-tree-disclosure")
+        add(button)
+        let iconSize = Metrics.Sidebar.rowIconSize
+        NSLayoutConstraint.activate([
+            button.leadingAnchor.constraint(equalTo: documentIcon.leadingAnchor),
+            button.centerYAnchor.constraint(equalTo: centerYAnchor),
+            button.widthAnchor.constraint(equalToConstant: iconSize),
+            button.heightAnchor.constraint(equalToConstant: iconSize),
+        ])
+        hasDisclosureButton = true
+        return button
+    }
+
+    private func makeAccessories() -> (menu: RowAccessoryButton, add: RowAccessoryButton) {
+        if let accessories { return accessories }
+        let menu = RowAccessoryButton(), add = RowAccessoryButton()
+        configureIconButton(menu, symbol: "ellipsis", label: "Действия со страницей",
+                            pointSize: Metrics.Sidebar.accessorySymbolSize, action: #selector(showMenu))
+        menu.setAccessibilityIdentifier("page-tree-menu")
+        configureIconButton(add, symbol: "plus", label: "Добавить подстраницу",
+                            pointSize: Metrics.Sidebar.accessorySymbolSize, action: #selector(addSubpage))
+        add.setAccessibilityIdentifier("page-tree-add-subpage")
+        self.add(menu)
+        self.add(add)
+        let size = Metrics.Sidebar.rowAccessorySize
+        NSLayoutConstraint.activate([
+            add.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Metrics.Sidebar.rowHorizontalPadding),
+            add.centerYAnchor.constraint(equalTo: centerYAnchor),
+            add.widthAnchor.constraint(equalToConstant: size),
+            add.heightAnchor.constraint(equalToConstant: size),
+            menu.trailingAnchor.constraint(equalTo: add.leadingAnchor, constant: -Metrics.Sidebar.rowAccessorySpacing),
+            menu.centerYAnchor.constraint(equalTo: centerYAnchor),
+            menu.widthAnchor.constraint(equalToConstant: size),
+            menu.heightAnchor.constraint(equalToConstant: size),
+        ])
+        titleBeforeAccessories = titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: menu.leadingAnchor,
+                                                                      constant: -Metrics.Sidebar.rowAccessorySpacing)
+        accessories = (menu, add)
+        return (menu, add)
+    }
+
+    private func makeRenameField() -> RenameField {
+        let field = RenameField()
+        field.font = Typography.sidebarRow.font
+        field.textColor = Palette.textPrimary
+        field.isBordered = false
+        field.isBezeled = false
+        field.drawsBackground = false
+        field.focusRingType = .none
+        field.usesSingleLineMode = true
+        field.cell?.isScrollable = true
+        field.cell?.wraps = false
+        field.lineBreakMode = .byClipping
+        field.delegate = self
+        field.isHidden = true
+        field.setAccessibilityIdentifier("page-tree-rename")
+        add(field)
+        NSLayoutConstraint.activate([
+            field.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor, constant: Self.renameTextOffset),
+            field.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Metrics.Sidebar.rowHorizontalPadding + Self.renameTextOffset),
+            field.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
+        ])
+        hasRenameField = true
+        return field
+    }
+
+    private func add(_ view: NSView) {
+        view.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(view)
     }
 
     @available(*, unavailable)
@@ -327,7 +367,7 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
 
     private func finishRenaming() {
         isRenaming = false
-        renameField.isHidden = true
+        if hasRenameField { renameField.isHidden = true }
         titleLabel.isHidden = false
         updateHoverState()
     }
@@ -380,20 +420,28 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
 
     private func updateHoverState() {
         let showsDisclosure = isRowHovered && hasChildren && !isRenaming
-        disclosureButton.isHidden = !showsDisclosure
-        disclosureButton.frameCenterRotation = 0
-        let symbol = isExpanded ? "chevron.down" : "chevron.right"
-        let configuration = NSImage.SymbolConfiguration(pointSize: Metrics.Sidebar.disclosureSymbolSize, weight: .semibold)
-        disclosureButton.image = NSImage(systemSymbolName: symbol, accessibilityDescription: "Свернуть или развернуть")?
-            .withSymbolConfiguration(configuration)
+        if showsDisclosure || hasDisclosureButton {
+            disclosureButton.isHidden = !showsDisclosure
+            disclosureButton.frameCenterRotation = 0
+            disclosureButton.image = isExpanded ? Self.chevronDown : Self.chevronRight
+        }
         iconLabel.alphaValue = showsDisclosure ? 0 : 1
         documentIcon.alphaValue = showsDisclosure ? 0 : 1
         iconButton.isHidden = showsDisclosure
         let showsAccessories = isRowHovered && !isRenaming
-        menuButton.isHidden = !showsAccessories
-        addButton.isHidden = !showsAccessories
-        titleBeforeAccessories?.isActive = showsAccessories
+        if showsAccessories || accessories != nil {
+            menuButton.isHidden = !showsAccessories
+            addButton.isHidden = !showsAccessories
+            titleBeforeAccessories?.isActive = showsAccessories
+        }
     }
+
+    private static func chevron(_ symbol: String) -> NSImage? {
+        let configuration = NSImage.SymbolConfiguration(pointSize: Metrics.Sidebar.disclosureSymbolSize, weight: .semibold)
+        return NSImage(systemSymbolName: symbol, accessibilityDescription: "Свернуть или развернуть")?.withSymbolConfiguration(configuration)
+    }
+    private static let chevronRight = chevron("chevron.right")
+    private static let chevronDown = chevron("chevron.down")
 
     private func updateTitleColor() {
         titleLabel.textColor = isRowSelected ? Palette.textPrimary : Palette.sidebarText
