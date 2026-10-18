@@ -55,7 +55,7 @@ public struct Page: Sendable, Hashable, Identifiable {
         case trashedAt
     }
 
-    func changedFields(comparedTo old: Page) -> Set<Field> {
+    public func changedFields(comparedTo old: Page) -> Set<Field> {
         var fields: Set<Field> = []
         if title != old.title { fields.insert(.title) }
         if icon != old.icon { fields.insert(.icon) }
@@ -79,7 +79,7 @@ public struct PageFieldClocks: Sendable, Hashable, Codable {
         self.trashedAt = trashedAt
     }
 
-    mutating func stamp(_ fields: Set<Page.Field>, with timestamp: HybridTimestamp) {
+    public mutating func stamp(_ fields: Set<Page.Field>, with timestamp: HybridTimestamp) {
         for field in fields {
             switch field {
             case .title: title = timestamp

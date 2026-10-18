@@ -26,7 +26,7 @@ public final class OpenDocuments {
             return entry.autosave.document
         }
         guard let content = try store.pageContent(pageId) else { throw NotesStoreError.pageNotFound(pageId) }
-        let document = PageDocument(content: content)
+        let document = PageDocument(content: content, conflicts: try store.unresolvedConflicts(ofPage: pageId))
         entries[pageId] = Entry(autosave: AutosaveCoordinator(document: document, store: store, scheduler: scheduler), openCount: 1)
         return document
     }
@@ -57,6 +57,28 @@ public final class OpenDocuments {
             allSaved = false
         }
         return allSaved
+    }
+
+    /// Документ страницы, если она сейчас открыта.
+    public func document(for pageId: UUID) -> PageDocument? {
+        entries[pageId]?.autosave.document
+    }
+
+    public var openPageIds: Set<UUID> { Set(entries.keys) }
+
+    /// Базу поменяли не через документы (синхронизация, импорт): открытые страницы из `pageIds` принимают
+    /// записанное, не теряя несохранённого (research R5). Страницы, которых больше нет, остаются как есть —
+    /// окно само закрывает их.
+    @discardableResult
+    public func applyExternalChanges(toPages pageIds: Set<UUID>) -> [UUID: PageDocument.ExternalChange] {
+        var result: [UUID: PageDocument.ExternalChange] = [:]
+        for pageId in pageIds {
+            guard let document = document(for: pageId),
+                  let content = try? store.pageContent(pageId),
+                  let conflicts = try? store.unresolvedConflicts(ofPage: pageId) else { continue }
+            result[pageId] = document.applyExternalChanges(content, conflicts: conflicts)
+        }
+        return result
     }
 
     /// Есть ли неудачная запись (для вопроса при выходе).

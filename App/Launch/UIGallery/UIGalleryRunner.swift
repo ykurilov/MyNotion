@@ -1,8 +1,11 @@
 import AppKit
+import CryptoKit
 import NotesCore
 import NotionImport
 import PageEditor
 import PageTree
+import SwiftUI
+import Sync
 import Synchronization
 import UIGallery
 import VisualStyle
@@ -22,6 +25,8 @@ final class UIGalleryRunner {
     private let folder: URL
     private var window: NSWindow!
     private var isTrashShown = false
+    /// Окно настроек синхронизации, показанное листом над окном.
+    private var settingsSheet: NSWindow?
     private var missing: [String: String] = [:]
 
     private let filter: String?
@@ -339,6 +344,65 @@ final class UIGalleryRunner {
             controller.showPreview(Self.importPreview(state))
             await settle()
             if state != .progress, window.attachedSheet == nil { return "лист импорта не открылся" }
+        case .sync(let state):
+            return await showSync(state)
+        }
+        return nil
+    }
+
+    /// Синхронизация (US5): значок и уведомления — по образцам состояний, без сервера; «Две версии» — настоящие.
+    private func showSync(_ state: GallerySync) async -> String? {
+        let sync = model.sync!
+        switch state {
+        case .badgeReady, .badgeSending, .badgeError, .badgeErrorDetails:
+            await open(library.notesPage)
+            sync.previewBadge = switch state {
+            case .badgeReady: SyncBadgeState(kind: .ready, detail: "Все правки этого Mac отправлены, правки других Mac получены.",
+                                             lastSyncedAt: Date())
+            case .badgeSending: SyncBadgeState(kind: .sending, detail: "Правки этого Mac уходят на сервер.")
+            default: SyncBadgeState(kind: .error, detail: "Нет связи с сервером — правки сохранены здесь и уйдут, когда связь появится",
+                                    lastSyncedAt: Date().addingTimeInterval(-25 * 60))
+            }
+            await settle()
+            if state == .badgeErrorDetails {
+                GalleryInput.clickSyncBadge(in: window)
+                await settle()
+                if window.childWindows?.contains(where: \.isVisible) != true {
+                    return "подробности синхронизации не открылись"
+                }
+            }
+        case .conflictLabel:
+            await open(library.conflictPage)
+            if !PageEditorPreview.hasConflictLabel(forBlock: library.conflictBlock, in: window) { return "метки «Две версии» нет" }
+        case .conflictComparison:
+            await open(library.conflictPage)
+            if !PageEditorPreview.openConflictComparison(forBlock: library.conflictBlock, in: window) {
+                return "окно сравнения не открылось"
+            }
+        case .settingsDisconnected, .settingsJoinCode:
+            await open(library.notesPage)
+            let preview = SyncController(store: model.store, openDocuments: model.openDocuments, secrets: InMemorySyncSecrets(),
+                                         startsEngine: false)
+            preview.deviceName = "MacBook Pro Юрия"
+            if state == .settingsJoinCode {
+                preview.showPreview(
+                    account: SyncAccount(serverURL: SyncAccount.defaultServerURL, deviceId: "mac-pro", deviceName: "MacBook Pro Юрия"),
+                    joinCode: JoinCode(inviteCode: "7K2M9QXH4TVBN8RZC3JW", encryptionKey: SymmetricKey(data: Data(repeating: 7, count: 32))),
+                    expiresAt: Date().addingTimeInterval(15 * 60),
+                    devices: [
+                        SyncDevice(deviceId: "mac-pro", deviceName: "MacBook Pro Юрия", lastSeenAt: Date(), lastAckSeq: 120),
+                        SyncDevice(deviceId: "mac-air", deviceName: "MacBook Air", lastSeenAt: Date().addingTimeInterval(-3600),
+                                   lastAckSeq: 118),
+                    ])
+            }
+            let sheet = NSWindow(contentViewController: NSHostingController(rootView: SyncSettingsView(controller: preview)))
+            settingsSheet = sheet
+            window.beginSheet(sheet) { _ in }
+            await settle()
+        case .noticeReturnedFromTrash:
+            await open(library.notesPage)
+            sync.showPreviewNotice(.pageReturnedFromTrash(pageId: library.notesPage, title: "Заметки на неделю"))
+            await settle()
         }
         return nil
     }
@@ -365,6 +429,13 @@ final class UIGalleryRunner {
             model.search.dismiss()
         case .notionImport:
             AppDelegate.importController?.showPreview(.idle)
+        case .sync:
+            model.sync.previewBadge = nil
+            model.sync.clearNotices()
+            if let settingsSheet {
+                window.endSheet(settingsSheet)
+                self.settingsSheet = nil
+            }
             await settle()
         default:
             break
@@ -460,6 +531,13 @@ enum GalleryInput {
 
     /// Строка «Корзина» внизу боковой панели.
     static func clickTrashRow(in window: NSWindow) {
+        let point = NSPoint(x: Metrics.Sidebar.panelInset + Metrics.Sidebar.rowHorizontalPadding + 40,
+                            y: Metrics.Sidebar.footerBottomInset + Metrics.Sidebar.rowHeight / 2)
+        click(at: point, in: window)
+    }
+
+    /// Значок синхронизации — самая нижняя строка панели, под «Корзиной».
+    static func clickSyncBadge(in window: NSWindow) {
         let point = NSPoint(x: Metrics.Sidebar.panelInset + Metrics.Sidebar.rowHorizontalPadding + 40,
                             y: Metrics.Sidebar.footerBottomInset + Metrics.Sidebar.rowHeight / 2)
         click(at: point, in: window)

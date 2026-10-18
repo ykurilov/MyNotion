@@ -32,6 +32,9 @@ struct GalleryLibrary {
     /// Страница, в которой набирают текст для полосы «Изменения не сохранены».
     let notesPage: UUID
     let notesBlock: UUID
+    /// Страница, где один блок правили на двух Mac: «Две версии» (US5).
+    let conflictPage: UUID
+    let conflictBlock: UUID
 
     /// Первый блок образца нужного типа.
     func sampleBlock(_ kind: BlockKind) -> Block? {
@@ -125,6 +128,17 @@ struct GalleryLibrary {
             let notesPage = try page("Заметки на неделю", icon: "📅")
             let notesBlock = try blocks(notesPage, [(.paragraph, "Купить молоко", 0, false)])[0]
 
+            let conflictPage = try page("План поездки", icon: "🧳")
+            let conflictBlocks = try blocks(conflictPage, [
+                (.heading2, "Что взять", 0, false),
+                (.paragraph, "Паспорт, зарядку и тёплую куртку — вечером там холодно.", 0, false),
+                (.paragraph, "Билеты уже в почте.", 0, false),
+            ])
+            try transaction.recordConflict(blockId: conflictBlocks[1],
+                                           localVersion: InlineText("Паспорт, зарядку и тёплую куртку — вечером там холодно."),
+                                           remoteVersion: InlineText("Паспорт, зарядку, зонт и куртку."),
+                                           remoteDeviceName: "MacBook Air")
+
             let oldNotes = try page("Старые заметки", trashed: true)
             _ = try page("Список покупок", parent: oldNotes)
             _ = try page("Удалённая страница с очень длинным названием, которое обрезается в корзине", trashed: true)
@@ -135,7 +149,8 @@ struct GalleryLibrary {
                                   nestedListGroup: nestedListIds[1], emptyPage: emptyPage,
                                   untitledPage: untitledPage, projects: projects, projectBranch: [projects, work, report],
                                   deepPage: deepPage, longTitlePage: longTitlePage, archive: archive,
-                                  notesPage: notesPage, notesBlock: notesBlock)
+                                  notesPage: notesPage, notesBlock: notesBlock,
+                                  conflictPage: conflictPage, conflictBlock: conflictBlocks[1])
         }
     }
 

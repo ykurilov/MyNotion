@@ -32,7 +32,7 @@ let package = Package(
         .target(name: "MarkdownExport", dependencies: ["NotesCore"]),
         // Импорт из Notion (US6): записи и журнал импортов (`import_run`) пишет прямо через GRDB, как поиск свой индекс.
         .target(name: "NotionImport", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
-        .target(name: "Sync", dependencies: ["NotesCore"]),
+        .target(name: "Sync", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
         .target(name: "UIGallery", dependencies: ["NotesCore"]),
         .target(name: "ServiceLaunch"),
 
@@ -44,7 +44,7 @@ let package = Package(
         .testTarget(name: "PageSearchTests", dependencies: ["PageSearch", "NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "MarkdownExportTests", dependencies: ["MarkdownExport", "NotesCore"]),
         .testTarget(name: "NotionImportTests", dependencies: ["NotionImport", "NotesCore", "MarkdownExport", .product(name: "GRDB", package: "GRDB.swift")]),
-        .testTarget(name: "SyncTests", dependencies: ["Sync"]),
+        .testTarget(name: "SyncTests", dependencies: ["Sync", "NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "UIGalleryTests", dependencies: ["UIGallery", "NotesCore"]),
         .testTarget(name: "ServiceLaunchTests", dependencies: ["ServiceLaunch"]),
     ],

@@ -19,12 +19,16 @@ public struct PageTreeSidebar<SearchField: View>: View {
     /// «✎» в верхней строке — то же, что ⌘N.
     let newPage: () -> Void
     let searchField: SearchField
+    /// Значок синхронизации внизу (FR-022); `nil` — синхронизация выключена, строки нет.
+    let syncBadge: SyncBadgeState?
+    let openSyncSettings: () -> Void
 
     @State private var trashPanel = TrashPanelController()
 
     public init(tree: PageTreeSnapshot, treeRevision: Int, collapsedPageIds: Set<UUID>, selectedPageId: UUID?,
                 liveTitle: String?, trashEntries: [Page], actions: PageTreeActions, trashActions: TrashActions,
-                newPage: @escaping () -> Void, @ViewBuilder searchField: () -> SearchField) {
+                newPage: @escaping () -> Void, syncBadge: SyncBadgeState? = nil,
+                openSyncSettings: @escaping () -> Void = {}, @ViewBuilder searchField: () -> SearchField) {
         self.tree = tree
         self.treeRevision = treeRevision
         self.collapsedPageIds = collapsedPageIds
@@ -34,6 +38,8 @@ public struct PageTreeSidebar<SearchField: View>: View {
         self.actions = actions
         self.trashActions = trashActions
         self.newPage = newPage
+        self.syncBadge = syncBadge
+        self.openSyncSettings = openSyncSettings
         self.searchField = searchField()
     }
 
@@ -52,6 +58,9 @@ public struct PageTreeSidebar<SearchField: View>: View {
                         selectedPageId: selectedPageId, liveTitle: liveTitle, actions: actions)
             footerDivider
             trashRow
+            if let syncBadge {
+                SyncStatusBadge(state: syncBadge, openSettings: openSyncSettings)
+            }
         }
         .padding(.horizontal, Metrics.Sidebar.panelInset)
         .padding(.bottom, Metrics.Sidebar.footerBottomInset)

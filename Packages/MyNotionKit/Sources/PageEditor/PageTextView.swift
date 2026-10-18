@@ -35,6 +35,11 @@ public final class PageTextView: NSTextView {
     public var linkedPages: [UUID: LinkedPage] = [:] {
         didSet { if linkedPages != oldValue { redrawBlockDecorations() } }
     }
+    /// Юрий выбрал версию в «Двух версиях»: хозяин снимает конфликт в базе (`NotesTransaction.resolveConflict`)
+    /// и отдаёт документу новый список (`PageDocument.replacePendingConflicts`).
+    public var onResolveConflict: (@MainActor (Conflict) -> Void)?
+    /// Метки «Две версии» у блоков в конфликте.
+    private(set) lazy var conflictMarks = ConflictMarksOverlay(textView: self)
     /// Щелчок по блоку-подстранице: открыть страницу.
     public var onOpenPage: (@MainActor (UUID) -> Void)?
     /// ⌘-щелчок по ссылке: открыть адрес (по умолчанию — в браузере по умолчанию).
@@ -88,6 +93,8 @@ public final class PageTextView: NSTextView {
         for name in [NSNotification.Name.NSUndoManagerDidUndoChange, .NSUndoManagerDidRedoChange] {
             NotificationCenter.default.addObserver(self, selector: #selector(undoManagerDidRestore(_:)), name: name, object: nil)
         }
+        NotificationCenter.default.addObserver(self, selector: #selector(documentDidApplyExternalChanges(_:)),
+                                               name: PageDocument.didApplyExternalChanges, object: document)
 
         addSubview(header)
         slashQueryHighlight.wantsLayer = true
@@ -149,6 +156,26 @@ public final class PageTextView: NSTextView {
         updateEmptyParagraphHint()
     }
 
+    /// Правка с другого Mac легла в документ (research R5): перерисовать затронутые блоки, курсор оставить
+    /// в своём блоке на том же месте. Прежние шаги ⌘Z относятся к старому тексту — их больше нет.
+    @objc private func documentDidApplyExternalChanges(_ notification: Notification) {
+        guard let change = notification.userInfo?[PageDocument.externalChangeKey] as? PageDocument.ExternalChange else { return }
+        if change.titleChanged, header.titleField.currentEditor() == nil {
+            header.titleField.stringValue = document.page.title
+            layoutColumn()
+        }
+        if change.iconChanged { showIcon(document.page.icon) }
+        if change.touchesBlocks {
+            let anchors = selectionAnchors()
+            mapper.renderExternalChanges(change)
+            undoManager?.removeAllActions()
+            restoreSelection(anchors, fallbackBlock: 0)
+            redrawBlockDecorations()
+            updateEmptyParagraphHint()
+        }
+        if change.touchesBlocks || change.conflictsChanged { conflictMarks.update() }
+    }
+
     public override func didChangeText() {
         super.didChangeText()
         // Посреди набора с помощью IME текст ещё не окончательный.
@@ -159,6 +186,7 @@ public final class PageTextView: NSTextView {
         updateEmptyParagraphHint()
         textDidChangeForPopups()
         updateSelectionLook()
+        if !document.pendingConflicts.isEmpty { conflictMarks.update() }
     }
 
     /// Вставка: адрес поверх выделения — ссылка, текст других программ — с поддерживаемым оформлением.
@@ -673,6 +701,7 @@ public final class PageTextView: NSTextView {
         updateEmptyParagraphHint()
         if formatBar.isShown { updateFormatBar() }
         updateSelectionLook()
+        if !document.pendingConflicts.isEmpty { conflictMarks.update() }
     }
 
     // MARK: Курсор и выделение
