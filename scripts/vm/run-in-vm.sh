@@ -6,6 +6,8 @@
 #   scripts/vm/run-in-vm.sh run <флаги приложения...>      # любой служебный режим, вывод в консоль
 #   scripts/vm/run-in-vm.sh ssh <команда>                   # команда внутри виртуального Mac
 #   scripts/vm/run-in-vm.sh uitest [-only-testing:UITests/<Класс>]  # UI-тесты Xcode внутри
+#   scripts/vm/run-in-vm.sh run --release <флаги>           # сборка Release (замеры бюджета)
+#   scripts/vm/run-in-vm.sh uitest --release [-only-testing:PerformanceTests/<Класс>]  # схема MyNotionPerformance, Release
 #   scripts/vm/run-in-vm.sh status
 set -euo pipefail
 
@@ -18,7 +20,10 @@ REPO=${0:A:h:h:h}
 # Папки сборки — свои у каждой копии кода (git worktree): MYNOTION_VM_DD и MYNOTION_UITEST_DD.
 DERIVED=${MYNOTION_VM_DD:-/tmp/mynotion-vm-dd}
 UITEST_DERIVED=${MYNOTION_UITEST_DD:-/tmp/mynotion-uitest-dd}
-APP_LOCAL=$DERIVED/Build/Products/Debug/MyNotion.app
+# `--release` сразу после режима: сборка Release (замеры бюджета, принцип II), своя папка сборки.
+CONFIG=Debug
+if [[ ${2:-} == --release ]]; then CONFIG=Release; set -- $1 "${@:3}"; DERIVED=$DERIVED-release; UITEST_DERIVED=$UITEST_DERIVED-release; fi
+APP_LOCAL=$DERIVED/Build/Products/$CONFIG/MyNotion.app
 APP_REMOTE=/Users/$VM_USER/MyNotion.app
 
 vm_ip() {
@@ -44,7 +49,7 @@ vm_ssh() { local ip=$1; shift; ssh -i $SSH_KEY -o BatchMode=yes $VM_USER@$ip "$@
 
 build_and_push() {
   local ip=$1
-  (cd $REPO && xcodegen generate -q && xcodebuild -scheme MyNotion -configuration Debug -derivedDataPath $DERIVED build -quiet)
+  (cd $REPO && xcodegen generate -q && xcodebuild -scheme MyNotion -configuration $CONFIG -derivedDataPath $DERIVED build -quiet)
   rsync -a --delete -e "ssh -i $SSH_KEY" $APP_LOCAL $VM_USER@$ip:/Users/$VM_USER/
 }
 
@@ -52,6 +57,7 @@ build_and_push() {
 # Сам гость после перезапуска ставит 1024×768, поэтому режим ставится перед каждой галереей.
 set_screen() {
   local ip=$1 tool=$DERIVED/displaymode
+  mkdir -p $DERIVED
   [[ $tool -nt $REPO/scripts/vm/displaymode.swift ]] || swiftc -O $REPO/scripts/vm/displaymode.swift -o $tool
   scp -q -i $SSH_KEY $tool $VM_USER@$ip:/Users/$VM_USER/displaymode
   vm_ssh $ip "./displaymode 1512 982 && defaults write com.apple.dock autohide -bool true"
@@ -99,7 +105,8 @@ case ${1:-} in
     # Штатные UI-тесты Xcode внутри виртуального Mac: сборка здесь, прогон там.
     #   scripts/vm/run-in-vm.sh uitest [-only-testing:UITests/<Класс>] ...
     shift; ip=$(ensure_vm_running); set_screen $ip; close_stale_prompts $ip
-    (cd $REPO && xcodegen generate -q && xcodebuild -scheme MyNotion -derivedDataPath $UITEST_DERIVED build-for-testing -quiet)
+    scheme=MyNotion; [[ $CONFIG == Release ]] && scheme=MyNotionPerformance
+    (cd $REPO && xcodegen generate -q && xcodebuild -scheme $scheme -configuration $CONFIG -derivedDataPath $UITEST_DERIVED build-for-testing -quiet)
     rsync -a --delete -e "ssh -i $SSH_KEY" $UITEST_DERIVED/Build/Products/ $VM_USER@$ip:/Users/$VM_USER/uitest-products/
     run=$(cd $UITEST_DERIVED/Build/Products && ls *.xctestrun | head -1)
     # UI-тестам нужен режим автоматизации, а его можно включить только из GUI-сессии, не из SSH:
@@ -113,7 +120,8 @@ osascript -e 'tell application \"Terminal\" to quit' &
 SCRIPT
 chmod +x ~/run-uitest.command; rm -f ~/uitest.done ~/uitest.log; open ~/run-uitest.command"
     for _ in {1..360}; do vm_ssh $ip "test -f ~/uitest.done" && break; perl -e 'select(undef,undef,undef,5)'; done
-    vm_ssh $ip "grep -E 'Test Case .*(passed|failed)|error:|Executed|TEST (EXECUTE )?(SUCCEEDED|FAILED)' ~/uitest.log | tail -40; echo exit=\$(cat ~/uitest.done 2>/dev/null)";;
+    # Замеры печатают итоги строками «Запуск…», «Память…», «Набор…», «Поиск…», «Импорт…».
+    vm_ssh $ip "grep -E 'Test Case .*(passed|failed)|error:|Executed|TEST (EXECUTE )?(SUCCEEDED|FAILED)|^(Запуск|Из них|Память|Набор|Переход|Открытие|Прокрутка|Поиск|Импорт|Снимок)' ~/uitest.log | tail -60; echo exit=\$(cat ~/uitest.done 2>/dev/null)";;
   ssh)
     shift; ip=$(ensure_vm_running); vm_ssh $ip "$@";;
   status)
