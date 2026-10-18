@@ -46,8 +46,9 @@ xcodebuild test -scheme MyNotionPerformance -configuration Release -destination 
 | `--ui-gallery-only <часть имени>` | вместе с `--ui-gallery`: снять только состояния, в имени которых есть эта строка |
 | `--appearance light\|dark` | светлая или тёмная тема вместо системной |
 | `--typing-benchmark <путь>` | замер отклика: 200 нажатий в странице на 1 000 блоков, переходы между страницами, набор и прокрутка страницы на 10 000 блоков; отчёт с p95 в файл и выход |
+| `--export-markdown <папка>` | выгрузить все записи в Markdown в `<папка>/MyNotion-выгрузка-<дата>/` без окна выбора папки, напечатать путь и выйти (код 0 — готово, 1 — ошибка, частичной папки не остаётся) |
 
-**Служебные режимы не берут фокус.** Галерея, снимки окна, замеры и эталонная база (`--ui-gallery`, `--ui-gallery-only`, `--window-snapshot`, `--hover-sidebar-row`, `--generate-reference-library`, `--launch-report`, `--typing-benchmark`, а также `--generate-visual-sample` вместе с ними) идут, пока человек работает в других программах. Приложение не становится активным, не стоит в Dock, его окна лежат под всеми окнами. Нигде в этих режимах нет `activate`, `makeKeyAndOrderFront` и `orderFrontRegardless`. Новый служебный флаг обязан работать так же: он добавляется в `LaunchPresence.serviceFlags` (модуль `ServiceLaunch`) и в его тест. Запуск без служебных флагов — обычное приложение.
+**Служебные режимы не берут фокус.** Галерея, снимки окна, замеры и эталонная база (`--ui-gallery`, `--ui-gallery-only`, `--window-snapshot`, `--hover-sidebar-row`, `--generate-reference-library`, `--launch-report`, `--typing-benchmark`, `--export-markdown`, а также `--generate-visual-sample` вместе с ними) идут, пока человек работает в других программах. Приложение не становится активным, не стоит в Dock, его окна лежат под всеми окнами. Нигде в этих режимах нет `activate`, `makeKeyAndOrderFront` и `orderFrontRegardless`. Новый служебный флаг обязан работать так же: он добавляется в `LaunchPresence.serviceFlags` (модуль `ServiceLaunch`) и в его тест. Запуск без служебных флагов — обычное приложение.
 
 ## Сервер синхронизации (появится в этапе 7)
 

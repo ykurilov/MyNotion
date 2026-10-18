@@ -175,9 +175,9 @@ description: "Задачи: минимальное ядро MyNotion для macO
 
 **Может идти параллельно с US4.**
 
-- [ ] T055 [P] Тест выгрузки в `PK/Tests/MarkdownExportTests/MarkdownExporterTests.swift` по таблице contracts/files-import-export.md: все типы блоков и оформление, папки подстраниц, замена `/` и `:` на `-`, ` (2)` для одинаковых соседей, корзина не выгружается
-- [ ] T056 `MarkdownBlockWriter` в `PK/Sources/MarkdownExport/MarkdownBlockWriter.swift` и `MarkdownExporter` в `PK/Sources/MarkdownExport/MarkdownExporter.swift` (папка `MyNotion-выгрузка-<ГГГГ-ММ-ДД>/`)
-- [ ] T057 Команда меню «Выгрузить в Markdown…» (⌘⇧E) с выбором папки в `App/Settings/ExportCommand.swift`
+- [x] T055 [P] Тест выгрузки в `PK/Tests/MarkdownExportTests/MarkdownExporterTests.swift` по таблице contracts/files-import-export.md: все типы блоков и оформление, папки подстраниц, замена `/` и `:` на `-`, ` (2)` для одинаковых соседей, корзина не выгружается
+- [x] T056 `MarkdownBlockWriter` в `PK/Sources/MarkdownExport/MarkdownBlockWriter.swift` и `MarkdownExporter` в `PK/Sources/MarkdownExport/MarkdownExporter.swift` (папка `MyNotion-выгрузка-<ГГГГ-ММ-ДД>/`)
+- [x] T057 Команда меню «Выгрузить в Markdown…» (⌘⇧E) с выбором папки в `App/Settings/ExportCommand.swift`
 
 **Checkpoint**: Записи можно забрать в обычные файлы. Сборка, затронутые тесты и замеры (`PerformanceTests`), галерея `--ui-gallery` и проверяющий интерфейса, показ Юрию, коммит.
 

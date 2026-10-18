@@ -12,12 +12,12 @@ public enum LaunchPresence: Equatable, Sendable {
     /// Флаги служебных режимов. Новый служебный флаг — сюда же.
     public static let serviceFlags: Set<String> = [
         "--ui-gallery", "--ui-gallery-only", "--window-snapshot", "--hover-sidebar-row",
-        "--generate-reference-library", "--launch-report", "--typing-benchmark",
+        "--generate-reference-library", "--launch-report", "--typing-benchmark", "--export-markdown",
     ]
     /// Флаги, за которыми идёт значение: значение — не флаг, даже если похоже.
     static let flagsWithValue: Set<String> = [
         "--database", "--generate-reference-library", "--launch-report", "--window-snapshot", "--typing-benchmark",
-        "--ui-gallery", "--ui-gallery-only", "--hover-sidebar-row", "--appearance",
+        "--ui-gallery", "--ui-gallery-only", "--hover-sidebar-row", "--appearance", "--export-markdown",
     ]
 
     /// `--generate-visual-sample` сам по себе — для человека (сверка с Notion); вместе со снимком — служебный.
