@@ -28,6 +28,11 @@
 ### `GET /devices`
 `200 [{"deviceId","deviceName","lastSeenAt","lastAckSeq"}]`
 
+### `GET /devices/me`
+Устройство, которому принадлежит токен из `Authorization`.
+- `200 {"deviceId","deviceName","lastSeenAt","lastAckSeq"}` — те же поля, что в элементе `GET /devices`.
+- `401` — токена нет, он неверный или устройство отключено.
+
 ### `DELETE /devices/{deviceId}`
 Отключает устройство. `204`.
 

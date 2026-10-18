@@ -19,11 +19,26 @@ export interface Devices {
   /** null — приглашение неизвестно, просрочено или уже использовано. */
   join(inviteCode: string, deviceName: string, initialAckSeq: number): { deviceId: string; deviceToken: string } | null;
   list(): DeviceInfo[];
+  get(deviceId: string): DeviceInfo | null;
   disable(deviceId: string): 'disabled' | 'already' | 'unknown';
   recordAck(deviceId: string, seq: number): void;
   /** Наименьшее подтверждение среди активных устройств; null, если активных нет. */
   minActiveAck(): number | null;
 }
+
+interface DeviceRow {
+  id: string;
+  name: string;
+  last_seen_at: number | null;
+  last_ack_seq: number;
+}
+
+const toInfo = (row: DeviceRow): DeviceInfo => ({
+  deviceId: row.id,
+  deviceName: row.name,
+  lastSeenAt: row.last_seen_at === null ? null : new Date(row.last_seen_at).toISOString(),
+  lastAckSeq: row.last_ack_seq,
+});
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
 
@@ -49,6 +64,9 @@ export function createDevices(db: Db, options: { now?: () => number } = {}): Dev
   const dropOldInvites = db.prepare('DELETE FROM invites WHERE expires_at < ?');
   const listActive = db.prepare(
     'SELECT id, name, last_seen_at, last_ack_seq FROM devices WHERE disabled_at IS NULL ORDER BY created_at, id',
+  );
+  const findActiveById = db.prepare(
+    'SELECT id, name, last_seen_at, last_ack_seq FROM devices WHERE id = ? AND disabled_at IS NULL',
   );
   const findById = db.prepare('SELECT disabled_at FROM devices WHERE id = ?');
   const disableById = db.prepare('UPDATE devices SET disabled_at = ? WHERE id = ?');
@@ -94,18 +112,12 @@ export function createDevices(db: Db, options: { now?: () => number } = {}): Dev
     },
 
     list() {
-      const rows = listActive.all() as Array<{
-        id: string;
-        name: string;
-        last_seen_at: number | null;
-        last_ack_seq: number;
-      }>;
-      return rows.map((row) => ({
-        deviceId: row.id,
-        deviceName: row.name,
-        lastSeenAt: row.last_seen_at === null ? null : new Date(row.last_seen_at).toISOString(),
-        lastAckSeq: row.last_ack_seq,
-      }));
+      return (listActive.all() as DeviceRow[]).map(toInfo);
+    },
+
+    get(deviceId) {
+      const row = findActiveById.get(deviceId) as DeviceRow | undefined;
+      return row ? toInfo(row) : null;
     },
 
     disable(deviceId) {
