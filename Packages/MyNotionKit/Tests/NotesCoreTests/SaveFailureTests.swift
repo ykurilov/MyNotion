@@ -160,3 +160,56 @@ extension SaveStatus {
         if case .failed = self { true } else { false }
     }
 }
+
+/// Крайний случай spec «Кончилось место на диске»: подменённый отказ SQLite «диск полон».
+@MainActor
+@Suite("Нет места на диске")
+struct DiskFullTests {
+    let folder: TemporaryFolder
+    let store: NotesStore
+    let disk = FullDisk()
+    let scheduler = ManualAutosaveScheduler()
+    let documents: OpenDocuments
+    let pageId: UUID
+
+    init() throws {
+        folder = try TemporaryFolder()
+        store = try NotesStore(database: AppDatabase.open(at: folder.databaseURL), clock: HybridLogicalClock(deviceId: UUID()))
+        pageId = try store.write { try $0.createPage(title: "Черновик").id }
+        store.addWriteHook(disk)
+        documents = OpenDocuments(store: store, scheduler: scheduler)
+    }
+
+    @Test("Диск полон — явное предупреждение «на диске нет места», текст в окне цел и записывается, когда место есть")
+    func diskFullWarnsAndKeepsText() throws {
+        let document = try documents.open(pageId)
+        disk.isFull = true
+
+        document.setText(InlineText("последняя мысль"), ofBlock: document.blocks[0].id)
+        scheduler.advance(by: .milliseconds(300))
+
+        #expect(document.saveStatus == .failed(reason: "на диске нет места"))
+        #expect(document.blocks[0].text.string == "последняя мысль")
+        #expect(!documents.saveAll(), "Выход знает, что записать не удалось")
+        #expect(try store.pageContent(pageId)?.blocks.first?.text.string == "")
+
+        disk.isFull = false
+        scheduler.advance(by: AutosaveCoordinator.retryDelay)
+        #expect(document.saveStatus == .saved)
+        #expect(try store.pageContent(pageId)?.blocks.first?.text.string == "последняя мысль")
+    }
+}
+
+/// Диск, на котором по команде теста кончается место: запись падает с SQLITE_FULL, как у настоящего SQLite.
+final class FullDisk: NotesWriteHook {
+    private let full = Mutex(false)
+
+    var isFull: Bool {
+        get { full.withLock { $0 } }
+        set { full.withLock { $0 = newValue } }
+    }
+
+    func notesWillCommit(_ changes: NotesChanges, in transaction: NotesTransaction) throws {
+        if isFull { throw DatabaseError(resultCode: .SQLITE_FULL) }
+    }
+}

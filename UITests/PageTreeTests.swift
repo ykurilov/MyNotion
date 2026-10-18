@@ -61,6 +61,28 @@ final class PageTreeTests: XCTestCase {
         app.terminate()
     }
 
+    /// Крайний случай spec: глубокое дерево (10+ уровней) остаётся читаемым — на самом глубоком уровне
+    /// название видно целиком в своей строке, не уходит за край панели и не сжимается до пары букв.
+    @MainActor
+    func testDeepTreeStaysReadable() throws {
+        let app = launchApp()
+        let depth = 12
+        createPage(app, title: "Уровень 1", shortcut: [.command])
+        for level in 2...depth {
+            createPage(app, title: "Уровень \(level)", shortcut: [.command, .shift])
+        }
+        XCTAssertTrue(waitForTitles(app, (1...depth).map { "Уровень \($0)" }))
+
+        let outline = app.outlines["page-tree"].frame
+        let deepest = row(app, "Уровень \(depth)").descendants(matching: .any).matching(identifier: "page-tree-title").firstMatch
+        XCTAssertTrue(deepest.exists)
+        let title = deepest.frame
+        XCTAssertLessThanOrEqual(title.maxX, outline.maxX + 0.5, "Название уходит за край панели: \(title) в \(outline)")
+        XCTAssertGreaterThanOrEqual(outline.maxX - title.minX, 100,
+                                    "Названию на \(depth)-м уровне остаётся \(outline.maxX - title.minX) pt из \(outline.width)")
+        app.terminate()
+    }
+
     // MARK: Помощники
 
     @MainActor
