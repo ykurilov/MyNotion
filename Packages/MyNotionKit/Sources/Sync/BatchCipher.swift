@@ -77,8 +77,8 @@ public enum BatchCipherError: Error, Equatable, LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .tampered: "Пачка изменений не прошла проверку: она повреждена или зашифрована другим ключом"
-        case .newerFormat: "Изменения записаны более новой версией MyNotion — обновите MyNotion на этом Mac"
+        case .tampered: "Правки с другого Mac не открылись — похоже, этот Mac подключён другим кодом. Подключите его заново кодом с другого Mac"
+        case .newerFormat: "Правки пришли из более новой версии MyNotion — обновите MyNotion на этом Mac"
         }
     }
 }

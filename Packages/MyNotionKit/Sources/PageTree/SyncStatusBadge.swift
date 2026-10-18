@@ -88,7 +88,7 @@ public struct SyncStatusBadge: View {
                 .foregroundStyle(Color(nsColor: Palette.textPrimary))
                 .fixedSize(horizontal: false, vertical: true)
             if let lastSyncedAt = state.lastSyncedAt {
-                Text("Последний раз всё сошлось: \(lastSyncedAt.formatted(date: .omitted, time: .shortened))")
+                Text("Все Mac совпадали в \(lastSyncedAt.formatted(date: .omitted, time: .shortened))")
                     .font(.system(size: 12))
                     .foregroundStyle(Color(nsColor: Palette.textSecondary))
             }
@@ -101,6 +101,7 @@ public struct SyncStatusBadge: View {
         }
         .padding(14)
         .frame(width: 300, alignment: .leading)
+        .focusEffectDisabled()
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("sync-details")
     }
@@ -111,12 +112,14 @@ public struct SyncStatusBadge: View {
 final class SyncDetailsCard {
     let card = PopupCard()
     weak var anchorView: NSView?
+    static let gapFromRow = Metrics.Sidebar.panelInset + Metrics.TrashPanel.sidebarGap
 
     func toggle(content: some View) {
         if card.isShown { return card.close() }
         guard let anchorView else { return }
         let hosting = NSHostingView(rootView: content)
-        card.show(hosting, size: hosting.fittingSize, besides: anchorView)
+        // Строка значка отстоит от края панели на `panelInset`: карточка — правее края панели, как окно корзины.
+        card.show(hosting, size: hosting.fittingSize, besides: anchorView, gap: Self.gapFromRow)
     }
 }
 

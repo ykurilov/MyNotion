@@ -240,24 +240,21 @@ public final class SyncEngine {
 
     // MARK: Сообщения
 
-    private static func isCancellation(_ error: any Error) -> Bool {
+    nonisolated private static func isCancellation(_ error: any Error) -> Bool {
         if error is CancellationError { return true }
         if let urlError = error as? URLError, urlError.code == .cancelled { return true }
         return false
     }
 
-    public static func message(for error: any Error) -> String {
-        if let urlError = error as? URLError {
-            switch urlError.code {
-            case .notConnectedToInternet, .networkConnectionLost, .cannotFindHost, .cannotConnectToHost, .timedOut,
-                 .dnsLookupFailed, .internationalRoamingOff, .dataNotAllowed:
-                return "Нет связи с сервером — правки сохранены здесь и уйдут, когда связь появится"
-            default:
-                return "Сервер недоступен: \(urlError.localizedDescription)"
-            }
+    nonisolated public static func message(for error: any Error) -> String {
+        if error is URLError {
+            return "Нет связи — правки сохранены на этом Mac и уйдут сами, когда связь вернётся"
         }
         if let cipherError = error as? BatchCipherError { return cipherError.localizedDescription }
         if let serverError = error as? SyncServerError { return serverError.localizedDescription }
-        return "Синхронизация не удалась: \(SaveStatus.reason(for: error))"
+        if let setupError = error as? SyncSetupError { return setupError.localizedDescription }
+        if let codeError = error as? JoinCodeError { return codeError.localizedDescription }
+        return "Не получилось принять правки с другого Mac: \(SaveStatus.reason(for: error)). Попробую ещё раз сам"
     }
+
 }

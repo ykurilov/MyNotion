@@ -9,6 +9,28 @@ final class PageOutlineView: NSOutlineView {
     var onRename: ((_ row: Int) -> Void)?
     var onTrash: ((_ row: Int) -> Void)?
     var onContextMenu: ((_ row: Int) -> NSMenu?)?
+    private var clipObserver: (any NSObjectProtocol)?
+
+    /// Видимая часть списка сменила высоту (внизу панели появилась строка): выбранная строка, срезанная краем,
+    /// докручивается целиком — иначе её подсветка торчит полоской над разделителем. Скрытую целиком не трогаем:
+    /// список прокрутили сами.
+    override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        if let clipObserver { NotificationCenter.default.removeObserver(clipObserver) }
+        clipObserver = nil
+        guard let clip = superview as? NSClipView else { return }
+        clip.postsFrameChangedNotifications = true
+        clipObserver = NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: clip,
+                                                              queue: nil) { [weak self] _ in
+            MainActor.assumeIsolated { self?.keepSelectedRowWhole() }
+        }
+    }
+
+    private func keepSelectedRowWhole() {
+        guard selectedRow >= 0 else { return }
+        let row = rect(ofRow: selectedRow), visible = visibleRect
+        if row.intersects(visible), !visible.contains(row) { scrollRowToVisible(selectedRow) }
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)

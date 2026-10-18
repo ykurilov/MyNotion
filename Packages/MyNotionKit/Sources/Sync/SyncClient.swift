@@ -87,12 +87,12 @@ public enum SyncServerError: Error, Equatable, LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .unauthorized: "Этот Mac отключён от синхронизации или токен не подходит"
-        case .inviteExpired: "Код подключения просрочен или уже использован — получите новый на первом Mac"
-        case .tooLarge: "Пачка изменений слишком большая для сервера"
-        case .logCompacted: "Журнал на сервере сжат — нужен снимок"
-        case .notFound: "На сервере этого нет"
-        case .badRequest(let message), .server(let message): message
+        case .unauthorized: "Этот Mac убрали из списка ваших Mac — подключите его заново в настройках"
+        case .inviteExpired: "Код устарел или им уже подключили другой Mac — нажмите «Добавить Mac» на другом Mac ещё раз"
+        case .tooLarge: "Правка слишком большая, чтобы отправить её за раз"
+        case .logCompacted: "Догоняю другие Mac — загружаю все записи целиком"
+        case .notFound: "Не нашлось того, что нужно для связи с другими Mac — попробую ещё раз сам"
+        case .badRequest, .server: "Другие Mac сейчас не отвечают — попробую ещё раз сам"
         }
     }
 }
@@ -228,7 +228,7 @@ struct HTTPSyncTransport: SyncTransport {
 
     private static func error(status: Int, data: Data) -> SyncServerError {
         let body = try? JSONDecoder().decode(ErrorBody.self, from: data)
-        let message = body?.message ?? "Сервер ответил кодом \(status)"
+        let message = body?.message ?? "HTTP \(status)"
         switch (status, body?.error) {
         case (401, _), (_, "unauthorized"): return .unauthorized
         case (410, "log_compacted"): return .logCompacted(snapshotSeq: body?.snapshotSeq ?? 0)
