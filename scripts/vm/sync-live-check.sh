@@ -63,4 +63,7 @@ vm "cat /tmp/mn-sync-live/mac-a.log /tmp/mn-sync-live/mac-b.log 2>/dev/null; kil
 push "$VM_USER@$ip:/tmp/mn-sync-live/shots/" "$VM_USER@$ip:/tmp/mn-sync-live/server.log" $OUT/ 2>/dev/null || true
 # Без адреса сервера обычный прогон UI-тестов пропускает проверку двух Mac.
 vm "rm -f /tmp/mn-sync-live/server-url"
+# Секреты экземпляров — из связки ключей виртуального Mac: следующая сборка (с другой подписью) при встрече с ними
+# вызвала бы запрос пароля, и его окно закрыло бы кнопки другим UI-тестам. Само окно, если уже всплыло, — тоже.
+vm "while security delete-generic-password -s cloud.kurilov.mynotion.sync >/dev/null 2>&1; do :; done; pkill -9 -x SecurityAgent || true"
 echo "Итог: $OUT"

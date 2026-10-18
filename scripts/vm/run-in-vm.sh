@@ -57,6 +57,11 @@ set_screen() {
   vm_ssh $ip "./displaymode 1512 982 && defaults write com.apple.dock autohide -bool true"
 }
 
+# Системный запрос пароля к связке ключей (SecurityAgent) переживает приложение, которое его вызвало, и висит
+# посреди экрана: следующий тест щёлкает в него вместо своей кнопки. Перед каждым запуском окно закрываем;
+# SIGTERM SecurityAgent пропускает, поэтому -9 (служба поднимет его снова, когда понадобится).
+close_stale_prompts() { vm_ssh $1 "pkill -9 -x SecurityAgent || true"; }
+
 # Приложение запускается в GUI-сессии виртуального Mac через `open` (из SSH так можно, `launchctl asuser` — нет).
 run_app() {
   local ip=$1; shift
@@ -83,17 +88,17 @@ case ${1:-} in
   gallery)
     shift; only=(); out=/tmp/mynotion-gallery-vm-$(date +%H%M%S)
     while (( $# )); do case $1 in --only) only=(--ui-gallery-only $2); shift 2;; --out) out=$2; shift 2;; *) shift;; esac; done
-    ip=$(ensure_vm_running); build_and_push $ip; set_screen $ip
+    ip=$(ensure_vm_running); build_and_push $ip; set_screen $ip; close_stale_prompts $ip
     vm_ssh $ip "rm -rf ~/gallery && mkdir ~/gallery"
     run_app $ip --ui-gallery /Users/$VM_USER/gallery $only
     mkdir -p $out && rsync -a --delete -e "ssh -i $SSH_KEY" $VM_USER@$ip:/Users/$VM_USER/gallery/ $out/
     echo "Галерея: $out ($(ls $out | grep -c png) снимков)";;
   run)
-    shift; ip=$(ensure_vm_running); build_and_push $ip; run_app $ip "$@";;
+    shift; ip=$(ensure_vm_running); build_and_push $ip; close_stale_prompts $ip; run_app $ip "$@";;
   uitest)
     # Штатные UI-тесты Xcode внутри виртуального Mac: сборка здесь, прогон там.
     #   scripts/vm/run-in-vm.sh uitest [-only-testing:UITests/<Класс>] ...
-    shift; ip=$(ensure_vm_running); set_screen $ip
+    shift; ip=$(ensure_vm_running); set_screen $ip; close_stale_prompts $ip
     (cd $REPO && xcodegen generate -q && xcodebuild -scheme MyNotion -derivedDataPath $UITEST_DERIVED build-for-testing -quiet)
     rsync -a --delete -e "ssh -i $SSH_KEY" $UITEST_DERIVED/Build/Products/ $VM_USER@$ip:/Users/$VM_USER/uitest-products/
     run=$(cd $UITEST_DERIVED/Build/Products && ls *.xctestrun | head -1)
