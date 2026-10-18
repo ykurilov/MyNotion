@@ -35,8 +35,11 @@ public final class PageTextView: NSTextView {
     public var linkedPages: [UUID: LinkedPage] = [:] {
         didSet { if linkedPages != oldValue { redrawBlockDecorations() } }
     }
-    /// Изменился список «Двух версий» документа — перерисовать метки.
-    var onConflictsChange: (@MainActor () -> Void)?
+    /// Юрий выбрал версию в «Двух версиях»: хозяин снимает конфликт в базе (`NotesTransaction.resolveConflict`)
+    /// и отдаёт документу новый список (`PageDocument.replacePendingConflicts`).
+    public var onResolveConflict: (@MainActor (Conflict) -> Void)?
+    /// Метки «Две версии» у блоков в конфликте.
+    private(set) lazy var conflictMarks = ConflictMarksOverlay(textView: self)
     /// Щелчок по блоку-подстранице: открыть страницу.
     public var onOpenPage: (@MainActor (UUID) -> Void)?
     /// ⌘-щелчок по ссылке: открыть адрес (по умолчанию — в браузере по умолчанию).
@@ -170,7 +173,7 @@ public final class PageTextView: NSTextView {
             redrawBlockDecorations()
             updateEmptyParagraphHint()
         }
-        if change.conflictsChanged { onConflictsChange?() }
+        if change.touchesBlocks || change.conflictsChanged { conflictMarks.update() }
     }
 
     public override func didChangeText() {
@@ -183,6 +186,7 @@ public final class PageTextView: NSTextView {
         updateEmptyParagraphHint()
         textDidChangeForPopups()
         updateSelectionLook()
+        if !document.pendingConflicts.isEmpty { conflictMarks.update() }
     }
 
     /// Вставка: адрес поверх выделения — ссылка, текст других программ — с поддерживаемым оформлением.
@@ -697,6 +701,7 @@ public final class PageTextView: NSTextView {
         updateEmptyParagraphHint()
         if formatBar.isShown { updateFormatBar() }
         updateSelectionLook()
+        if !document.pendingConflicts.isEmpty { conflictMarks.update() }
     }
 
     // MARK: Курсор и выделение

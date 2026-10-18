@@ -81,6 +81,7 @@ private struct PagesWindow: View {
     @State private var widthAtDragStart: Double?
     /// Окно выбора иконки для строк боковой панели; у шапки страницы — своё в редакторе.
     @State private var sidebarIconPicker = EmojiPickerController()
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         HStack(spacing: 0) {
@@ -105,7 +106,10 @@ private struct PagesWindow: View {
         // Шторка — у светофора и не двигается, когда панель уезжает.
         .overlay(alignment: .topLeading) { sidebarToggle }
         .overlay(alignment: .bottom) {
-            if let exportController { ExportNoticeView(controller: exportController) }
+            VStack(spacing: 8) {
+                SyncNoticeView(controller: model.sync)
+                if let exportController { ExportNoticeView(controller: exportController) }
+            }
         }
         .animation(.easeInOut(duration: Metrics.Window.sidebarToggleDuration), value: model.isSidebarCollapsed)
         // Путь страницы — в самой верхней полосе окна, как в Notion; кнопки окна — над боковой панелью.
@@ -142,7 +146,9 @@ private struct PagesWindow: View {
                 deleteForever: { model.deleteForever($0) },
                 emptyTrash: { model.emptyTrash() }
             ),
-            newPage: { model.createPage() }
+            newPage: { model.createPage() },
+            syncBadge: model.sync.badge,
+            openSyncSettings: { openSettings() }
         ) {
             SidebarSearchField(controller: model.search)
         }
@@ -202,6 +208,7 @@ private struct PagesWindow: View {
                 linkedPages: linkedPages,
                 onOpenPage: { model.select($0) },
                 onSetIcon: { model.setIcon(document.pageId, to: $0) },
+                onResolveConflict: { model.resolveConflict($0, in: document) },
                 onReady: onEditorReady
             )
             // Новый документ — новый редактор: страницу перечитали после операции с деревом.

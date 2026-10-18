@@ -1,0 +1,85 @@
+import XCTest
+
+/// Два Mac вживую (quickstart.md, US5): два экземпляра MyNotion со своими базами против локального сервера синхронизации.
+/// Первый подключается токеном устройства и пишет код подключения, второй подключается этим кодом.
+/// Правка в открытой странице одного появляется в открытой странице другого не позже чем через 10 с (SC-007).
+/// Запускается сценарием `scripts/vm/sync-live-check.sh`: он поднимает сервер в виртуальном Mac и кладёт
+/// в `/tmp/mn-sync-live` адрес сервера, токен первого устройства и копию приложения со своим bundle id.
+final class SyncTwoMacsUITests: XCTestCase {
+    private let live = URL(fileURLWithPath: "/tmp/mn-sync-live", isDirectory: true)
+
+    override func setUpWithError() throws {
+        continueAfterFailure = false
+        guard FileManager.default.fileExists(atPath: live.appendingPathComponent("server-url").path) else {
+            throw XCTSkip("Нет локального сервера: запустите scripts/vm/sync-live-check.sh")
+        }
+    }
+
+    @MainActor
+    func testEditOnOneMacAppearsOnTheOtherWithinTenSeconds() throws {
+        let server = try String(contentsOf: live.appendingPathComponent("server-url"), encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let code = live.appendingPathComponent("join-code")
+        try? FileManager.default.removeItem(at: code)
+
+        let first = XCUIApplication()
+        first.launchArguments = ["--database", live.appendingPathComponent("mac-a.sqlite").path, "--generate-visual-sample",
+                                 "--sync-server", server, "--sync-device-name", "Mac A",
+                                 "--sync-connect-token-file", live.appendingPathComponent("token").path,
+                                 "--sync-write-join-code", code.path]
+        first.launch()
+        XCTAssertTrue(first.pageBody.waitForExistence(timeout: 15))
+        XCTAssertTrue(waitFor(timeout: 20) { FileManager.default.fileExists(atPath: code.path) }, "Первый Mac не выдал код подключения")
+        XCTAssertTrue(first.syncBadge.waitForExistence(timeout: 10), "Нет значка синхронизации")
+
+        let second = XCUIApplication(url: live.appendingPathComponent("MyNotionB.app"))
+        second.launchArguments = ["--database", live.appendingPathComponent("mac-b.sqlite").path,
+                                  "--sync-server", server, "--sync-device-name", "Mac B", "--sync-join-code-file", code.path]
+        second.launch()
+        XCTAssertTrue(second.syncBadge.waitForExistence(timeout: 20), "Второй Mac не подключился")
+        XCTAssertTrue(waitFor(timeout: 20) { second.pageBodyText.contains("Заголовок первого уровня") },
+                      "Страница с первого Mac не дошла до второго")
+
+        // Правка на первом Mac — в открытой странице второго.
+        first.activate()
+        first.pageBody.click()
+        first.typeKey(.downArrow, modifierFlags: .command)
+        first.typeKey(.return, modifierFlags: [])
+        first.typeText("Правка с Mac A")
+        let started = Date()
+        XCTAssertTrue(waitFor(timeout: 10) { second.pageBodyText.contains("Правка с Mac A") }, "Правка не дошла за 10 с")
+        let firstDelay = Date().timeIntervalSince(started)
+
+        // И обратно: второй Mac дописывает, первый видит.
+        second.activate()
+        second.pageBody.click()
+        second.typeKey(.downArrow, modifierFlags: .command)
+        second.typeText(" и ответ с Mac B")
+        let back = Date()
+        XCTAssertTrue(waitFor(timeout: 10) { first.pageBodyText.contains("Правка с Mac A и ответ с Mac B") }, "Ответ не дошёл за 10 с")
+        let secondDelay = Date().timeIntervalSince(back)
+
+        XCTAssertTrue(waitFor(timeout: 10) { first.syncBadge.label == "Синхронизировано" && second.syncBadge.label == "Синхронизировано" },
+                      "Значок: \(first.syncBadge.label) / \(second.syncBadge.label)")
+        try "A→B \(String(format: "%.2f", firstDelay)) с, B→A \(String(format: "%.2f", secondDelay)) с\n"
+            .write(to: live.appendingPathComponent("delays.txt"), atomically: true, encoding: .utf8)
+        try first.windows.firstMatch.screenshot().pngRepresentation.write(to: live.appendingPathComponent("mac-a.png"))
+        try second.windows.firstMatch.screenshot().pngRepresentation.write(to: live.appendingPathComponent("mac-b.png"))
+        first.terminate()
+        second.terminate()
+    }
+
+    private func waitFor(timeout: TimeInterval, _ condition: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if condition() { return true }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        return condition()
+    }
+}
+
+private extension XCUIApplication {
+    var syncBadge: XCUIElement { buttons["sidebar-sync-status"] }
+    var pageBodyText: String { (pageBody.exists ? pageBody.value as? String : nil) ?? "" }
+}

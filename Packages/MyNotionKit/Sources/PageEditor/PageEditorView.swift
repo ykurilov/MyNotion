@@ -15,11 +15,14 @@ public struct PageEditorView: View {
     let onOpenPage: @MainActor (UUID) -> Void
     /// Выбрана иконка страницы (`nil` — убрать): правку делает владелец дерева, иконка возвращается в `document`.
     let onSetIcon: @MainActor (String?) -> Void
+    /// Выбрана версия в «Двух версиях»: снять конфликт в базе.
+    let onResolveConflict: @MainActor (Conflict) -> Void
     let onReady: @MainActor () -> Void
 
     public init(document: PageDocument, ancestorTitles: [String] = [], initialFocus: PageTextView.InitialFocus,
                 linkedPages: [UUID: LinkedPage] = [:], onOpenPage: @escaping @MainActor (UUID) -> Void = { _ in },
                 onSetIcon: @escaping @MainActor (String?) -> Void = { _ in },
+                onResolveConflict: @escaping @MainActor (Conflict) -> Void = { _ in },
                 onReady: @escaping @MainActor () -> Void = {}) {
         self.document = document
         self.ancestorTitles = ancestorTitles
@@ -27,6 +30,7 @@ public struct PageEditorView: View {
         self.linkedPages = linkedPages
         self.onOpenPage = onOpenPage
         self.onSetIcon = onSetIcon
+        self.onResolveConflict = onResolveConflict
         self.onReady = onReady
     }
 
@@ -37,7 +41,7 @@ public struct PageEditorView: View {
                 SaveStatusBanner(reason: reason)
             }
             PageTextEditor(document: document, icon: document.page.icon, initialFocus: initialFocus, linkedPages: linkedPages,
-                           onOpenPage: onOpenPage, onSetIcon: onSetIcon, onReady: onReady)
+                           onOpenPage: onOpenPage, onSetIcon: onSetIcon, onResolveConflict: onResolveConflict, onReady: onReady)
                 .overlay(alignment: .top) { scrollEdgeFade }
         }
         .background(Color(nsColor: Palette.pageBackground))
@@ -79,6 +83,7 @@ struct PageTextEditor: NSViewRepresentable {
     let linkedPages: [UUID: LinkedPage]
     let onOpenPage: @MainActor (UUID) -> Void
     let onSetIcon: @MainActor (String?) -> Void
+    let onResolveConflict: @MainActor (Conflict) -> Void
     let onReady: @MainActor () -> Void
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -87,6 +92,7 @@ struct PageTextEditor: NSViewRepresentable {
         textView.linkedPages = linkedPages
         textView.onOpenPage = onOpenPage
         textView.onSetIcon = onSetIcon
+        textView.onResolveConflict = onResolveConflict
         return Self.makeScrollView(around: textView)
     }
 
@@ -107,6 +113,7 @@ struct PageTextEditor: NSViewRepresentable {
         textView.linkedPages = linkedPages
         textView.onOpenPage = onOpenPage
         textView.onSetIcon = onSetIcon
+        textView.onResolveConflict = onResolveConflict
         textView.showIcon(icon)
     }
 

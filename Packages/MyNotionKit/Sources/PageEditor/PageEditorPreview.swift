@@ -5,6 +5,21 @@ import NotesCore
 /// Каждое действие идёт тем же путём, что и у пользователя: показ ручек, набор «/», щелчок по «⋮⋮».
 @MainActor
 public enum PageEditorPreview {
+    /// Открыть окно сравнения «Двух версий» у блока, как по щелчку на метке.
+    @discardableResult
+    public static func openConflictComparison(forBlock blockId: UUID, in window: NSWindow) -> Bool {
+        guard let textView = textView(in: window) else { return false }
+        textView.conflictMarks.update()
+        textView.showConflictComparison(forBlock: blockId)
+        return textView.conflictMarks.comparison.isShown
+    }
+
+    /// Видна ли метка «Две версии» у блока.
+    public static func hasConflictLabel(forBlock blockId: UUID, in window: NSWindow) -> Bool {
+        guard let textView = textView(in: window) else { return false }
+        textView.conflictMarks.update()
+        return textView.conflictMarks.label(forBlock: blockId)?.isHidden == false
+    }
     /// Текст открытой страницы в окне.
     public static func textView(in window: NSWindow) -> PageTextView? {
         window.contentView.flatMap(findTextView)

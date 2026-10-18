@@ -43,6 +43,10 @@ public enum Palette {
         dark: .hex(0xF0EFED).withAlphaComponent(0.4)
     )
 
+    /// Метка «Две версии» у блока в конфликте (FR-021): оранжевая метка Notion (≈ по Notion: текст #D9730D / #FFA344,
+    /// фон #FBECDD / #5C3B23).
+    public static let conflictLabelText = themed(light: .hex(0xD9730D), dark: .hex(0xFFA344))
+    public static let conflictLabelBackground = themed(light: .hex(0xFBECDD), dark: .hex(0x5C3B23))
     /// Разрушающие действия: «Удалить» в меню блока, «Очистить корзину» под мышью — красный Notion (≈).
     public static let destructiveText = themed(light: .hex(0xD44C47), dark: .hex(0xFF7369))
     /// Кнопка необратимого действия в вопросе («Удалить навсегда»): насыщенный красный под белый текст в обеих темах (≈ по Notion).

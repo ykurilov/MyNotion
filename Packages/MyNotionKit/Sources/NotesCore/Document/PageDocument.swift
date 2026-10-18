@@ -269,6 +269,15 @@ public final class PageDocument {
         return change
     }
 
+    /// Новый список «Двух версий» (после выбора версии): редактор перерисует метки.
+    public func replacePendingConflicts(_ conflicts: [Conflict]) {
+        guard conflicts != pendingConflicts else { return }
+        pendingConflicts = conflicts
+        var change = ExternalChange()
+        change.conflictsChanged = true
+        NotificationCenter.default.post(name: Self.didApplyExternalChanges, object: self, userInfo: [Self.externalChangeKey: change])
+    }
+
     /// Блок, который правится здесь и изменился в базе: свои изменённые поля — свои, остальные — из базы.
     /// Возвращает, что показать, и с чем потом сравнивать автосохранению (свои поля — по старой основе).
     private static func threeWayMerge(local: Block, base: Block, stored: Block) -> (shown: Block, saved: Block) {

@@ -55,6 +55,29 @@ public enum GalleryScene: Hashable, Sendable {
     case saveErrorBanner
     /// Верхняя полоса с длинным путём страницы четвёртого уровня.
     case longBreadcrumb
+    /// Синхронизация между Mac (US5): значок, «Две версии», настройки подключения, уведомление.
+    case sync(GallerySync)
+}
+
+public enum GallerySync: String, Hashable, Sendable, CaseIterable {
+    /// Значок внизу панели: всё отправлено.
+    case badgeReady
+    /// Значок: идёт отправка.
+    case badgeSending
+    /// Значок: ошибка (нет связи).
+    case badgeError
+    /// Подробности ошибки по щелчку на значке.
+    case badgeErrorDetails
+    /// Блок в конфликте: оранжевая метка «Две версии».
+    case conflictLabel
+    /// Окно сравнения двух версий с выбором.
+    case conflictComparison
+    /// Настройки: синхронизация не включена — подключить кодом или токеном.
+    case settingsDisconnected
+    /// Настройки: «Добавить Mac» показал код с предупреждением, список устройств.
+    case settingsJoinCode
+    /// Уведомление внизу окна: страница вернулась из корзины.
+    case noticeReturnedFromTrash
 }
 
 /// Где курсор на странице типа блока.
@@ -130,7 +153,7 @@ public struct GalleryShot: Hashable, Sendable {
 
 public enum GalleryCatalog {
     /// Все состояния по порядку съёмки.
-    public static let states: [GalleryState] = pageStates + blockStates + editingStates + sidebarStates + trashStates
+    public static let states: [GalleryState] = pageStates + blockStates + editingStates + sidebarStates + trashStates + syncStates
 
     /// Все снимки: каждое состояние в каждом размере, светлая и тёмная тема подряд.
     public static var shots: [GalleryShot] {
@@ -244,6 +267,31 @@ public enum GalleryCatalog {
         GalleryState("sidebar-hidden", .sidebarHidden,
                      "Боковая панель свёрнута шторкой: шторка у светофора, страница во всю ширину", section: "Боковая панель",
                      narrowToo: true),
+    ]
+
+    private static let syncStates: [GalleryState] = [
+        GalleryState("sync-badge-ready", .sync(.badgeReady), "Значок синхронизации внизу панели: «Синхронизировано»",
+                     section: "Синхронизация", narrowToo: true),
+        GalleryState("sync-badge-sending", .sync(.badgeSending), "Значок синхронизации: «Отправка…»", section: "Синхронизация"),
+        GalleryState("sync-badge-error", .sync(.badgeError), "Значок синхронизации: «Ошибка синхронизации» красным",
+                     section: "Синхронизация"),
+        GalleryState("sync-badge-error-details", .sync(.badgeErrorDetails),
+                     "Щелчок по значку: что случилось (нет связи — правки уйдут позже), когда всё сошлось, «Настройки…»",
+                     section: "Синхронизация"),
+        GalleryState("sync-conflict-label", .sync(.conflictLabel),
+                     "Блок, который правили на двух Mac: оранжевая метка «Две версии» справа", section: "Синхронизация",
+                     narrowToo: true),
+        GalleryState("sync-conflict-comparison", .sync(.conflictComparison),
+                     "Окно сравнения: «Сейчас в блоке» и «Вторая версия · с MacBook Air», «Оставить эту», «Оставить обе»",
+                     section: "Синхронизация"),
+        GalleryState("sync-settings-disconnected", .sync(.settingsDisconnected),
+                     "Настройки синхронизации, не подключено: сервер, имя Mac, код со второго Mac или токен первого",
+                     section: "Синхронизация"),
+        GalleryState("sync-settings-join-code", .sync(.settingsJoinCode),
+                     "«Добавить Mac»: код подключения, предупреждение «не пересылайте в мессенджерах», устройства",
+                     section: "Синхронизация"),
+        GalleryState("sync-notice-returned-from-trash", .sync(.noticeReturnedFromTrash),
+                     "Уведомление внизу окна: страница возвращена из корзины, её правили на другом Mac", section: "Синхронизация"),
     ]
 
     private static let trashStates: [GalleryState] = [

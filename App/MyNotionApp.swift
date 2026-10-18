@@ -4,6 +4,7 @@ import NotesCore
 import PageSearch
 import ServiceLaunch
 import SwiftUI
+import Sync
 
 @main
 struct MyNotionApp: App {
@@ -36,7 +37,10 @@ struct MyNotionApp: App {
         library = Result {
             let store = try Self.openLibrary(options)
             if options.uiGalleryURL != nil { galleryLibrary = try UIGalleryRunner.prepareLibrary(in: store) }
-            return MainWindowModel(store: store)
+            // Служебные запуски (галерея, замеры, снимки) с сервером не связываются.
+            let model = MainWindowModel(store: store, startsSync: options.allowsSync)
+            if let automation = options.syncAutomation { SyncAutomation.start(automation, controller: model.sync) }
+            return model
         }
         AppDelegate.galleryLibrary = galleryLibrary
         let model = try? library.get()
@@ -71,13 +75,23 @@ struct MyNotionApp: App {
             FormatCommands()
             ExportCommands(controller: exportController)
         }
+        Settings {
+            if let model = try? library.get() {
+                SyncSettingsView(controller: model.sync)
+            }
+        }
     }
 
     private static func openLibrary(_ options: LaunchOptions) throws -> NotesStore {
-        let database = try AppDatabase.open(at: options.databaseURL ?? AppDatabase.defaultURL)
-        let store = NotesStore(database: database, clock: HybridLogicalClock(deviceId: DeviceIdentity.deviceId()))
-        // Индекс поиска пишется в той же транзакции, что и записи (research R6) — до первой записи.
+        let databaseURL = options.databaseURL ?? AppDatabase.defaultURL
+        let database = try AppDatabase.open(at: databaseURL)
+        // У каждой базы свой id в часах: два экземпляра с разными базами — как два Mac.
+        let deviceId = options.databaseURL == nil ? DeviceIdentity.deviceId() : DeviceIdentity.deviceId(forDatabaseAt: databaseURL)
+        let store = NotesStore(database: database, clock: HybridLogicalClock(deviceId: deviceId))
+        // Индекс поиска и очередь синхронизации пишутся в той же транзакции, что и записи (research R6, R4) —
+        // до первой записи. Пока синхронизация не включена, очередь ничего не пишет.
         store.addWriteHook(SearchIndexer())
+        Outbox.install(on: store)
         if options.generatesVisualSample {
             // Образец сразу открыт: для сверки с Notion и снимков окна.
             let sample = try VisualSamplePage.ensure(in: store)

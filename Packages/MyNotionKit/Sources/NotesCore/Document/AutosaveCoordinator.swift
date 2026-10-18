@@ -52,7 +52,7 @@ public final class AutosaveCoordinator {
             let result = try store.write { try PageDocumentWriter.write(changes, pageId: pageId, in: $0) }
             document.didSave(changes, result: result)
             if !result.conflictedBlockIds.isEmpty, let conflicts = try? store.unresolvedConflicts(ofPage: pageId) {
-                document.pendingConflicts = conflicts
+                document.replacePendingConflicts(conflicts)
             }
             firstUnsavedEditAt = nil
             document.saveStatus = .saved

@@ -28,8 +28,10 @@ final class MainWindowModel {
     private(set) var loadError: String?
     /// Поле поиска вверху боковой панели и его выдача (FR-018).
     @ObservationIgnored private(set) var search: PageSearchController!
+    /// Синхронизация между Mac (US5); выключена — ничего не делает.
+    @ObservationIgnored private(set) var sync: SyncController!
 
-    init(store: NotesStore) {
+    init(store: NotesStore, startsSync: Bool = true) {
         self.store = store
         openDocuments = OpenDocuments(store: store)
         treeOperations = PageTreeOperations(store: store)
@@ -45,6 +47,8 @@ final class MainWindowModel {
         }
         search = PageSearchController(store: store, tree: { [weak self] in self?.tree ?? PageTreeSnapshot(allPages: []) },
                                       open: { [weak self] in self?.select($0) })
+        sync = SyncController(store: store, openDocuments: openDocuments, startsEngine: startsSync)
+        sync.onRemoteChange = { [weak self] _ in self?.remoteChangesApplied() }
         let lastOpen = windowState?.openPageId.flatMap { tree.page($0)?.id }
         if let pageId = lastOpen ?? tree.children(of: nil).first?.id {
             open(pageId, focus: .body, remember: false)
@@ -161,7 +165,27 @@ final class MainWindowModel {
 
     var hasFailedSaves: Bool { openDocuments.hasFailedSaves }
 
+    /// Юрий выбрал версию в «Двух версиях»: конфликт снят, правка уйдёт на другие Mac.
+    func resolveConflict(_ conflict: Conflict, in document: PageDocument) {
+        do {
+            try store.write { try $0.resolveConflict(conflict.id) }
+            document.replacePendingConflicts(try store.unresolvedConflicts(ofPage: document.pageId))
+        } catch {
+            loadError = "Не удалось записать выбор версии: \(SaveStatus.reason(for: error))"
+        }
+    }
+
     // MARK: Внутреннее
+
+    /// Правки с другого Mac легли в базу; открытая страница их уже приняла (research R5). Дерево перечитать;
+    /// если открытая страница ушла в корзину или стёрта — открыть другую.
+    private func remoteChangesApplied() {
+        reloadTree()
+        if let openPageId, tree.page(openPageId) != nil { return }
+        if openPageId != nil { closeOpenDocument() }
+        // Пустой Mac получил первые страницы — открыть первую, как при запуске.
+        if let first = tree.children(of: nil).first { open(first.id, focus: .unchanged, remember: true) }
+    }
 
     /// Иконка сменилась (выбор, отмена, повтор): дерево перечитать, открытой странице — новую иконку без перечитывания
     /// текста, чтобы не терять курсор и выделение.

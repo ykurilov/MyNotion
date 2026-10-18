@@ -246,7 +246,7 @@ public final class SyncEngine {
         return false
     }
 
-    static func message(for error: any Error) -> String {
+    public static func message(for error: any Error) -> String {
         if let urlError = error as? URLError {
             switch urlError.code {
             case .notConnectedToInternet, .networkConnectionLost, .cannotFindHost, .cannotConnectToHost, .timedOut,

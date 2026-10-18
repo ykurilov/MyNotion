@@ -104,11 +104,20 @@ public enum DeviceIdentity {
     static let defaultsKey = "MyNotion.deviceId"
 
     public static func deviceId(in defaults: UserDefaults = .standard) -> UUID {
-        if let stored = defaults.string(forKey: defaultsKey), let id = UUID(uuidString: stored) {
+        deviceId(key: defaultsKey, in: defaults)
+    }
+
+    /// Свой id для базы не на обычном месте (`--database`): два экземпляра с разными базами — как два Mac.
+    public static func deviceId(forDatabaseAt url: URL, in defaults: UserDefaults = .standard) -> UUID {
+        deviceId(key: defaultsKey + "." + url.standardizedFileURL.path, in: defaults)
+    }
+
+    private static func deviceId(key: String, in defaults: UserDefaults) -> UUID {
+        if let stored = defaults.string(forKey: key), let id = UUID(uuidString: stored) {
             return id
         }
         let id = UUID()
-        defaults.set(id.uuidString, forKey: defaultsKey)
+        defaults.set(id.uuidString, forKey: key)
         return id
     }
 }

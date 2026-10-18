@@ -56,6 +56,11 @@ struct GalleryCatalogTests {
         #expect(scenes.contains { if case .slashMenu(let filter) = $0 { !filter.isEmpty } else { false } })
     }
 
+    @Test("Синхронизация: значок в трёх состояниях и подробности, «Две версии» и сравнение, настройки с кодом, уведомление")
+    func syncStatesPresent() {
+        for state in GallerySync.allCases { #expect(scenes.contains(.sync(state)), "\(state)") }
+    }
+
     @Test("Иконка страницы: «Добавить иконку» под мышью, окно эмодзи, поиск в нём")
     func pageIconStatesPresent() {
         for state in GalleryPageIcon.allCases { #expect(scenes.contains(.pageIcon(state)), "\(state)") }

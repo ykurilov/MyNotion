@@ -47,6 +47,10 @@ xcodebuild test -scheme MyNotionPerformance -configuration Release -destination 
 | `--appearance light\|dark` | светлая или тёмная тема вместо системной |
 | `--search-benchmark <путь>` | замер поиска (T054, SC-009): слова печатаются в поле поиска по букве, время от нажатия до выдачи на экране; отчёт с p95 в файл и выход |
 | `--typing-benchmark <путь>` | замер отклика: 200 нажатий в странице на 1 000 блоков, переходы между страницами, набор и прокрутка страницы на 10 000 блоков; отчёт с p95 в файл и выход |
+| `--sync-server <адрес>`, `--sync-device-name <имя>` | живая проверка синхронизации: адрес сервера и имя Mac без окна настроек |
+| `--sync-connect-token-file <путь>` | подключить как первый Mac токеном из файла (файл стирается) |
+| `--sync-write-join-code <путь>` | после подключения записать код для второго Mac в файл |
+| `--sync-join-code-file <путь>` | подключить кодом из файла (ждёт, пока файл появится); вместе — `scripts/vm/sync-live-check.sh` |
 | `--export-markdown <папка>` | выгрузить все записи в Markdown в `<папка>/MyNotion-выгрузка-<дата>/` без окна выбора папки, напечатать путь и выйти (код 0 — готово, 1 — ошибка, частичной папки не остаётся) |
 
 **Служебные режимы не берут фокус.** Галерея, снимки окна, замеры и эталонная база (`--ui-gallery`, `--ui-gallery-only`, `--window-snapshot`, `--hover-sidebar-row`, `--generate-reference-library`, `--launch-report`, `--typing-benchmark`, `--search-benchmark`, `--export-markdown`, а также `--generate-visual-sample` вместе с ними) идут, пока человек работает в других программах. Приложение не становится активным, не стоит в Dock, его окна лежат под всеми окнами. Нигде в этих режимах нет `activate`, `makeKeyAndOrderFront` и `orderFrontRegardless`. Новый служебный флаг обязан работать так же: он добавляется в `LaunchPresence.serviceFlags` (модуль `ServiceLaunch`) и в его тест. Запуск без служебных флагов — обычное приложение.
