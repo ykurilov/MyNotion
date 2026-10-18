@@ -26,11 +26,13 @@ public struct MarkdownBlockWriter: Sendable {
         for block in blocks {
             let isListItem = Self.family(of: block.kind) != nil
             let indent = isListItem ? block.indent : 0
-            guard let content = blockLines(block, ordinal: list.nextOrdinal(atIndent: indent), resolveLink: resolveLink) else { continue }
+            let ordinal = list.nextOrdinal(atIndent: indent)
+            guard let content = blockLines(block, ordinal: ordinal, nesting: list.nestingWidth(atIndent: indent), resolveLink: resolveLink)
+            else { continue }
             let continuesList = isListItem && previousWasListItem && !list.startsNewList(kind: block.kind, atIndent: indent)
             if !lines.isEmpty, !continuesList { lines.append("") }
             lines.append(contentsOf: content)
-            list.record(kind: block.kind, atIndent: indent)
+            list.record(kind: block.kind, atIndent: indent, markerWidth: Self.nestingStep(of: block, ordinal: ordinal))
             previousWasListItem = isListItem
         }
         while lines.last == "" { lines.removeLast() }
@@ -46,7 +48,7 @@ public struct MarkdownBlockWriter: Sendable {
     // MARK: Блоки
 
     /// Строки блока без разделяющих пустых строк. `nil` — блок ничего не пишет; пустой массив — пустой абзац.
-    private func blockLines(_ block: Block, ordinal: Int, resolveLink: (UUID) -> PageLinkTarget?) -> [String]? {
+    private func blockLines(_ block: Block, ordinal: Int, nesting: Int, resolveLink: (UUID) -> PageLinkTarget?) -> [String]? {
         switch block.kind {
         case .paragraph:
             return Self.splitLines(InlineMarkdown.render(block.text), firstPrefix: "", continuation: "")
@@ -55,12 +57,8 @@ public struct MarkdownBlockWriter: Sendable {
             // В заголовке Markdown строки одна: перенос заменяется пробелом той же длины, смещения оформления не сдвигаются.
             let flattened = InlineText(block.text.string.replacingOccurrences(of: "\n", with: " "), runs: block.text.runs)
             return ["\(String(repeating: "#", count: level)) \(InlineMarkdown.render(flattened))"]
-        case .bulletItem:
-            return listLines(block, marker: "- ")
-        case .checkbox:
-            return listLines(block, marker: block.isChecked ? "- [x] " : "- [ ] ")
-        case .numberedItem:
-            return listLines(block, marker: "\(ordinal). ")
+        case .bulletItem, .checkbox, .numberedItem:
+            return listLines(block, marker: Self.marker(for: block, ordinal: ordinal) ?? "", nesting: nesting)
         case .pageLink:
             guard let target = block.linkedPageId.flatMap(resolveLink) else { return nil }
             let title = escapedTitle(target.title)
@@ -69,10 +67,25 @@ public struct MarkdownBlockWriter: Sendable {
         }
     }
 
-    private func listLines(_ block: Block, marker: String) -> [String] {
-        let nesting = String(repeating: " ", count: block.indent * 2)
-        return Self.splitLines(InlineMarkdown.render(block.text), firstPrefix: nesting + marker,
-                               continuation: String(repeating: " ", count: nesting.count + marker.count))
+    /// Знак начала пункта. Его ширина задаёт отступ вложенных пунктов.
+    private static func marker(for block: Block, ordinal: Int) -> String? {
+        switch block.kind {
+        case .bulletItem: "- "
+        case .checkbox: block.isChecked ? "- [x] " : "- [ ] "
+        case .numberedItem: "\(ordinal). "
+        default: nil
+        }
+    }
+
+    /// На сколько сдвинуты вложенные пункты. У чекбокса — ширина «- »: «[ ]» уже часть текста пункта, не знака.
+    private static func nestingStep(of block: Block, ordinal: Int) -> Int {
+        block.kind == .checkbox ? 2 : marker(for: block, ordinal: ordinal)?.count ?? 0
+    }
+
+    private func listLines(_ block: Block, marker: String, nesting: Int) -> [String] {
+        let indentation = String(repeating: " ", count: nesting)
+        return Self.splitLines(InlineMarkdown.render(block.text), firstPrefix: indentation + marker,
+                               continuation: String(repeating: " ", count: nesting + marker.count))
     }
 
     /// Перенос строки внутри блока — два пробела в конце строки; следующая строка начинается с отступа текста.
@@ -101,6 +114,14 @@ public struct MarkdownBlockWriter: Sendable {
     private struct ListState {
         private var counts: [Int: Int] = [:]
         private var families: [Int: ListFamily] = [:]
+        /// Ширина знака последнего пункта на каждом уровне: «- » — 2, «1. » — 3, «10. » — 4.
+        private var markerWidths: [Int: Int] = [:]
+
+        /// Отступ пункта: сумма ширин знаков предков (CommonMark вкладывает пункт в тот, под чьим текстом он начинается).
+        /// Пропущенный уровень считается пунктом «- ».
+        func nestingWidth(atIndent indent: Int) -> Int {
+            (0..<indent).reduce(0) { $0 + (markerWidths[$1] ?? 2) }
+        }
 
         func nextOrdinal(atIndent indent: Int) -> Int { (counts[indent] ?? 0) + 1 }
 
@@ -110,14 +131,17 @@ public struct MarkdownBlockWriter: Sendable {
             return previous != family
         }
 
-        mutating func record(kind: BlockKind, atIndent indent: Int) {
+        mutating func record(kind: BlockKind, atIndent indent: Int, markerWidth: Int) {
             guard let family = MarkdownBlockWriter.family(of: kind) else {
                 counts = [:]
                 families = [:]
+                markerWidths = [:]
                 return
             }
             counts = counts.filter { $0.key <= indent }
             families = families.filter { $0.key <= indent }
+            markerWidths = markerWidths.filter { $0.key < indent }
+            markerWidths[indent] = markerWidth
             counts[indent] = kind == .numberedItem ? (counts[indent] ?? 0) + 1 : nil
             families[indent] = family
         }

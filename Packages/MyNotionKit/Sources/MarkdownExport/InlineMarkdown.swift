@@ -8,9 +8,10 @@ enum InlineMarkdown {
         let units = Array(text.string.utf16)
         guard !units.isEmpty else { return "" }
         // Наложение и выход за край текста разбирают сами отрезки: полная нормализация на каждый блок только тормозит.
-        var builder = Builder(units: units)
-        for segment in segments(of: text, unitCount: units.count) { builder.add(segment) }
-        return builder.finish()
+        let segments = segments(of: text, unitCount: units.count)
+        var plan = Plan(units: units)
+        for (index, segment) in segments.enumerated() { plan.add(segment, at: index, in: segments) }
+        return plan.rendered()
     }
 
     // MARK: Отрезки
@@ -67,38 +68,74 @@ enum InlineMarkdown {
         case link(URL)
         case bold, italic, strikethrough, underline
 
-        var opening: String {
+        func contains(in segment: Segment) -> Bool {
             switch self {
+            case .link(let url): segment.link == url
+            case .bold: segment.marks.contains(.bold)
+            case .italic: segment.marks.contains(.italic)
+            case .strikethrough: segment.marks.contains(.strikethrough)
+            case .underline: segment.marks.contains(.underline)
+            }
+        }
+    }
+
+    /// Один открытый и закрытый знак оформления. Знаки `**`, `*`, `~~` читалка принимает не везде (рядом с буквой,
+    /// скобкой, другим таким же знаком), тогда оформление пишется тегом: `<strong>`, `<em>`, `<del>`.
+    private struct Span {
+        let delimiter: Delimiter
+        var usesTag = false
+
+        var opening: String {
+            switch delimiter {
             case .link: "["
-            case .bold: "**"
-            case .italic: "*"
-            case .strikethrough: "~~"
+            case .bold: usesTag ? "<strong>" : "**"
+            case .italic: usesTag ? "<em>" : "*"
+            case .strikethrough: usesTag ? "<del>" : "~~"
             case .underline: "<u>"
             }
         }
 
         var closing: String {
-            switch self {
+            switch delimiter {
             case .link(let url): "](\(InlineMarkdown.encodedDestination(url)))"
-            case .bold: "**"
-            case .italic: "*"
-            case .strikethrough: "~~"
+            case .bold: usesTag ? "</strong>" : "**"
+            case .italic: usesTag ? "</em>" : "*"
+            case .strikethrough: usesTag ? "</del>" : "~~"
             case .underline: "</u>"
+            }
+        }
+
+        /// Знак, из которого состоит запись: подряд идущие одинаковые читалка сливает в одну серию.
+        var markCharacter: Character? {
+            guard !usesTag else { return nil }
+            switch delimiter {
+            case .bold, .italic: return "*"
+            case .strikethrough: return "~"
+            case .link, .underline: return nil
             }
         }
     }
 
-    /// Открытые знаки оформления идут стопкой. Пробелы на краю отрезка стоят снаружи знаков
+    private enum Item {
+        case text(String)
+        case space(String)
+        case open(Int)
+        case close(Int)
+    }
+
+    /// Сначала план: где открываются и закрываются знаки (стопкой: закрывается то, что открыто позже), потом проверка
+    /// каждого стыка по правилам читалки, потом запись. Пробелы на краю отрезка стоят снаружи знаков
     /// (`**жирный** текст`, а не `**жирный **текст`): иначе Markdown не распознает оформление.
-    private struct Builder {
+    private struct Plan {
         let units: [UInt16]
-        var output = ""
-        var pendingSpace = ""
-        var open: [Delimiter] = []
+        private var items: [Item] = []
+        private var spans: [Span] = []
+        private var open: [Int] = []
+        private var pendingSpace = ""
 
         init(units: [UInt16]) { self.units = units }
 
-        mutating func add(_ segment: Segment) {
+        mutating func add(_ segment: Segment, at index: Int, in segments: [Segment]) {
             var start = segment.range.lowerBound
             var end = segment.range.upperBound
             while start < end, InlineMarkdown.isSpace(units[start]) { start += 1 }
@@ -106,49 +143,169 @@ enum InlineMarkdown {
             pendingSpace += String(decoding: units[segment.range.lowerBound..<start], as: UTF16.self)
             guard start < end else { return }
 
-            transition(to: desiredDelimiters(for: segment))
+            transition(to: desiredDelimiters(at: index, in: segments))
             if segment.marks.contains(.code) {
-                output += InlineMarkdown.codeSpan(String(decoding: units[start..<end], as: UTF16.self))
+                items.append(.text(InlineMarkdown.codeSpan(String(decoding: units[start..<end], as: UTF16.self))))
             } else {
-                output += InlineMarkdown.escape(units, range: start..<end)
+                items.append(.text(InlineMarkdown.escape(units, range: start..<end)))
             }
             pendingSpace = String(decoding: units[end..<segment.range.upperBound], as: UTF16.self)
         }
 
-        mutating func finish() -> String {
-            transition(to: [])
-            return output + pendingSpace
-        }
-
-        private func desiredDelimiters(for segment: Segment) -> [Delimiter] {
-            var desired: [Delimiter] = []
-            if let link = segment.link { desired.append(.link(link)) }
-            if segment.marks.contains(.bold) { desired.append(.bold) }
-            if segment.marks.contains(.italic) { desired.append(.italic) }
-            if segment.marks.contains(.strikethrough) { desired.append(.strikethrough) }
-            if segment.marks.contains(.underline) { desired.append(.underline) }
-            return desired
-        }
-
-        /// Закрыть всё, что дальше не нужно (вместе с открытым после него — оно откроется заново), пробелы, затем открыть новое.
-        private mutating func transition(to desired: [Delimiter]) {
-            let firstUnwanted = open.firstIndex { !desired.contains($0) } ?? open.count
-            var closers = ""
-            for delimiter in open[firstUnwanted...].reversed() { closers += delimiter.closing }
-            open.removeSubrange(firstUnwanted...)
-            var openers = ""
-            for delimiter in desired where !open.contains(delimiter) {
-                openers += delimiter.opening
-                open.append(delimiter)
+        /// Нужные отрезку знаки. Что охватывает больше отрезков подряд — снаружи: так меньше закрытий и повторных открытий.
+        private func desiredDelimiters(at index: Int, in segments: [Segment]) -> [Delimiter] {
+            let segment = segments[index]
+            var candidates: [Delimiter] = []
+            if let link = segment.link { candidates.append(.link(link)) }
+            for (delimiter, isMarked) in [(Delimiter.bold, Marks.bold), (.italic, .italic), (.strikethrough, .strikethrough),
+                                          (.underline, .underline)] where segment.marks.contains(isMarked) {
+                candidates.append(delimiter)
             }
-            output += closers + pendingSpace + openers
-            pendingSpace = ""
+            func reach(_ delimiter: Delimiter) -> Int {
+                segments[index...].prefix { delimiter.contains(in: $0) }.count
+            }
+            let reaches = candidates.map(reach)
+            return candidates.indices.sorted { reaches[$0] != reaches[$1] ? reaches[$0] > reaches[$1] : $0 < $1 }.map { candidates[$0] }
         }
+
+        /// Закрыть всё, что дальше не нужно (вместе с открытым после него — оно откроется заново), затем пробелы и новое.
+        private mutating func transition(to desired: [Delimiter]) {
+            let firstUnwanted = open.firstIndex { !desired.contains(spans[$0].delimiter) } ?? open.count
+            for id in open[firstUnwanted...].reversed() { items.append(.close(id)) }
+            open.removeSubrange(firstUnwanted...)
+            if !pendingSpace.isEmpty {
+                items.append(.space(pendingSpace))
+                pendingSpace = ""
+            }
+            for delimiter in desired where !open.contains(where: { spans[$0].delimiter == delimiter }) {
+                spans.append(Span(delimiter: delimiter))
+                open.append(spans.count - 1)
+                items.append(.open(spans.count - 1))
+            }
+        }
+
+        mutating func rendered() -> String {
+            transition(to: [])
+            resolveTags()
+            var output = ""
+            for item in items {
+                // «!» прямо перед «[» читалка складывает в картинку.
+                if case .open(let id) = item, case .link = spans[id].delimiter, output.last == "!" {
+                    output.removeLast()
+                    output += "\\!"
+                }
+                output += text(of: item)
+            }
+            return output
+        }
+
+        private func text(of item: Item) -> String {
+            switch item {
+            case .text(let string), .space(let string): string
+            case .open(let id): spans[id].opening
+            case .close(let id): spans[id].closing
+            }
+        }
+
+        // MARK: Стыки
+
+        /// Между двумя кусками текста стоят закрывающие знаки, пробелы и открывающие. Читалка принимает серию звёздочек
+        /// или тильд как оформление, только если она «прилегает» к тексту с нужной стороны (правила CommonMark про
+        /// пробелы и знаки препинания). Что не прошло — пишется тегом. Теги убирают серии, поэтому проверка идёт, пока
+        /// есть что менять.
+        private mutating func resolveTags() {
+            var changed = true
+            while changed {
+                changed = false
+                let textIndices = items.indices.filter { if case .text = items[$0] { true } else { false } }
+                for position in 0...textIndices.count {
+                    let lower = position == 0 ? 0 : textIndices[position - 1] + 1
+                    let upper = position == textIndices.count ? items.count : textIndices[position]
+                    guard lower < upper else { continue }
+                    let before = position == 0 ? nil : lastCharacter(of: items[textIndices[position - 1]])
+                    let after = position == textIndices.count ? nil : firstCharacter(of: items[textIndices[position]])
+                    for id in spansNeedingTags(in: lower..<upper, before: before, after: after) where !spans[id].usesTag {
+                        spans[id].usesTag = true
+                        changed = true
+                    }
+                }
+            }
+        }
+
+        private func firstCharacter(of item: Item) -> Character? { text(of: item).first }
+        private func lastCharacter(of item: Item) -> Character? { text(of: item).last }
+
+        private func spansNeedingTags(in range: Range<Int>, before: Character?, after: Character?) -> [Int] {
+            let junction = Array(items[range])
+            var result: [Int] = []
+            var start = 0
+            while start < junction.count {
+                guard let mark = markCharacter(of: junction[start]) else { start += 1; continue }
+                var end = start
+                while end < junction.count, markCharacter(of: junction[end]) == mark { end += 1 }
+                let run = junction[start..<end]
+                let characterBefore = start == 0 ? before : text(of: junction[start - 1]).last
+                let characterAfter = end == junction.count ? after : text(of: junction[end]).first
+                let openers = run.compactMap { if case .open(let id) = $0 { id } else { nil } }
+                let closers = run.compactMap { if case .close(let id) = $0 { id } else { nil } }
+                if InlineMarkdown.isBetweenPunctuation(before: characterBefore, after: characterAfter) {
+                    // Серия между знаками препинания и открывает, и закрывает; как читалка её сопоставит, зависит от длин соседних серий.
+                    result += openers + closers
+                } else if !openers.isEmpty, !closers.isEmpty {
+                    // «**а**» и сразу «*б*»: серия из пяти звёздочек — не разобрать, где что закрывается.
+                    result += openers
+                } else if !openers.isEmpty, !InlineMarkdown.isLeftFlanking(before: characterBefore, after: characterAfter) {
+                    result += openers
+                } else if !closers.isEmpty, !InlineMarkdown.isRightFlanking(before: characterBefore, after: characterAfter) {
+                    result += closers
+                }
+                start = end
+            }
+            return result
+        }
+
+        private func markCharacter(of item: Item) -> Character? {
+            switch item {
+            case .open(let id), .close(let id): spans[id].markCharacter
+            case .text, .space: nil
+            }
+        }
+    }
+
+    // MARK: Прилегание знаков (CommonMark, «flanking»)
+
+    private enum CharacterClass { case whitespace, punctuation, other }
+
+    private static func characterClass(_ character: Character?) -> CharacterClass {
+        guard let character else { return .whitespace }
+        if character.isWhitespace { return .whitespace }
+        if character.isPunctuation || character.isSymbol { return .punctuation }
+        return .other
+    }
+
+    fileprivate static func isBetweenPunctuation(before: Character?, after: Character?) -> Bool {
+        characterClass(before) == .punctuation && characterClass(after) == .punctuation
+    }
+
+    /// Серия может открыть оформление: за ней не пробел, а знак препинания за ней допустим, только если перед серией пробел или знак.
+    fileprivate static func isLeftFlanking(before: Character?, after: Character?) -> Bool {
+        let next = characterClass(after)
+        return next != .whitespace && (next != .punctuation || characterClass(before) != .other)
+    }
+
+    /// Серия может закрыть оформление: перед ней не пробел, а знак препинания перед ней допустим, только если за серией пробел или знак.
+    fileprivate static func isRightFlanking(before: Character?, after: Character?) -> Bool {
+        let previous = characterClass(before)
+        return previous != .whitespace && (previous != .punctuation || characterClass(after) != .other)
     }
 
     // MARK: Код, адреса, экранирование
 
-    fileprivate static func isSpace(_ unit: UInt16) -> Bool { unit == 0x20 || unit == 0x09 || unit == 0x0A }
+    /// Пробел, табуляция, перенос, неразрывный и прочие пробелы Юникода: читалка считает их пробелами у знаков оформления.
+    fileprivate static func isSpace(_ unit: UInt16) -> Bool {
+        if unit < 0x80 { return unit == 0x20 || unit == 0x09 || unit == 0x0A || unit == 0x0D }
+        return Unicode.Scalar(unit)?.properties.isWhitespace ?? false
+    }
 
     /// Код в обратных кавычках: рамка длиннее самой длинной серии кавычек внутри, внутри ничего не экранируется.
     static func codeSpan(_ code: String) -> String {

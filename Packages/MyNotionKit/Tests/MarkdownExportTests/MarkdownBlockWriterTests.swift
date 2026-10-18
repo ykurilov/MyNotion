@@ -41,7 +41,7 @@ struct MarkdownBlockWriterTests {
         #expect(markdown(block(.heading1, "А"), block(.heading2, "Б"), block(.heading3, "В")) == "# А\n\n## Б\n\n### В\n")
     }
 
-    @Test("Маркированный список: отступ два пробела на уровень")
+    @Test("Маркированный список: вложенный пункт сдвинут на ширину «- »")
     func bulletsNest() {
         let text = markdown(block(.bulletItem, "a"), block(.bulletItem, "b", indent: 1), block(.bulletItem, "c", indent: 2),
                             block(.bulletItem, "d"))
@@ -52,7 +52,7 @@ struct MarkdownBlockWriterTests {
     func numberedCountsPerLevel() {
         let text = markdown(block(.numberedItem, "a"), block(.numberedItem, "b", indent: 1), block(.numberedItem, "c", indent: 1),
                             block(.numberedItem, "d"), block(.numberedItem, "e", indent: 1))
-        #expect(text == "1. a\n  1. b\n  2. c\n2. d\n  1. e\n")
+        #expect(text == "1. a\n   1. b\n   2. c\n2. d\n   1. e\n")
     }
 
     @Test("Нумерация начинается заново после другого блока")
@@ -79,7 +79,41 @@ struct MarkdownBlockWriterTests {
         #expect(markdown(block(.bulletItem, "a"), block(.numberedItem, "b", indent: 1), block(.bulletItem, "c"))
                 == "- a\n  1. b\n- c\n")
         #expect(markdown(block(.numberedItem, "a"), block(.bulletItem, "b", indent: 1), block(.numberedItem, "c"))
-                == "1. a\n  - b\n2. c\n")
+                == "1. a\n   - b\n2. c\n")
+    }
+
+
+    @Test("Вложенный пункт сдвинут на ширину маркера родителя: «- » — 2, «1. » — 3, «10. » — 4")
+    func nestingFollowsParentMarkerWidth() {
+        #expect(markdown(block(.numberedItem, "a"), block(.bulletItem, "b", indent: 1)) == "1. a\n   - b\n")
+        #expect(markdown(block(.checkbox, "a"), block(.bulletItem, "b", indent: 1)) == "- [ ] a\n  - b\n")
+        #expect(markdown(block(.bulletItem, "a"), block(.numberedItem, "b", indent: 1), block(.numberedItem, "c", indent: 1))
+                == "- a\n  1. b\n  2. c\n")
+        #expect(markdown(block(.numberedItem, "a"), block(.bulletItem, "b", indent: 1), block(.numberedItem, "c", indent: 2))
+                == "1. a\n   - b\n     1. c\n")
+    }
+
+    @Test("Десятый пункт нумерованного списка: вложенное — на 4 пробела, и у одиннадцатого тоже")
+    func nestingUnderTwoDigitNumbers() {
+        var blocks = (1...9).map { block(.numberedItem, "п\($0)") }
+        blocks.append(block(.numberedItem, "п10"))
+        blocks.append(block(.bulletItem, "вложенный", indent: 1))
+        blocks.append(block(.numberedItem, "п11"))
+        blocks.append(block(.numberedItem, "вложенный нумерованный", indent: 1))
+        let text = writer.markdown(for: blocks, resolveLink: { _ in nil })
+        #expect(text.hasSuffix("10. п10\n    - вложенный\n11. п11\n    1. вложенный нумерованный\n"))
+    }
+
+    @Test("Ширину берёт ближайший предок, пропущенный уровень считается пунктом «- »")
+    func nestingWithSkippedLevel() {
+        #expect(markdown(block(.bulletItem, "a"), block(.bulletItem, "c", indent: 2)) == "- a\n    - c\n")
+        #expect(markdown(block(.numberedItem, "a"), block(.bulletItem, "b", indent: 1), block(.numberedItem, "c"),
+                         block(.bulletItem, "d", indent: 1)) == "1. a\n   - b\n2. c\n   - d\n")
+    }
+
+    @Test("Перенос строки во вложенном пункте — с отступом его текста")
+    func softBreakInNestedItems() {
+        #expect(markdown(block(.numberedItem, "a"), block(.bulletItem, "b\nc", indent: 1)) == "1. a\n   - b  \n     c\n")
     }
 
     @Test("Отступ есть только у списков и чекбоксов")
@@ -202,6 +236,74 @@ struct MarkdownBlockWriterTests {
     @Test("Соседние отрезки разных стилей")
     func adjacentStyles() {
         #expect(inline("абвг", run(0, 2, .bold), run(2, 2, .strikethrough)) == "**аб**~~вг~~\n")
+    }
+
+    // MARK: Пересекающиеся и соседние стили
+
+    @Test("Частично перекрытые стили: общая часть внутри, остаток — тегом, без «****»")
+    func partiallyOverlappingStyles() {
+        #expect(inline("abc", run(0, 2, .bold), run(1, 2, .italic)) == "**a*b***<em>c</em>\n")
+        #expect(inline("abc", run(0, 2, .italic), run(1, 2, .bold)) == "*a**b***<strong>c</strong>\n")
+    }
+
+    @Test("Ссылка и жирный частично перекрыты: знаки ссылки разводят звёздочки")
+    func linkPartiallyOverlappingBold() {
+        let url = URL(string: "https://e.com")!
+        #expect(inline("abc", run(0, 2, .link(url)), run(1, 2, .bold)) == "[a**b**](https://e.com)**c**\n")
+    }
+
+    @Test("Восклицательный знак перед ссылкой экранируется, иначе читалка сделает картинку")
+    func exclamationBeforeLink() {
+        let url = URL(string: "https://e.com")!
+        #expect(inline("!а", run(1, 1, .link(url))) == "\\![а](https://e.com)\n")
+    }
+
+    @Test("Стыки между знаками препинания пишутся тегами: звёздочки там читалки сопоставляют по-разному")
+    func punctuationOnBothSides() {
+        let out = inline("«-*", run(2, 1, .italic), run(2, 1, .bold), run(0, 2, .bold), run(0, 1, .italic))
+        #expect(!out.contains("***«*"))
+        #expect(out.contains("<em>") || out.contains("<strong>"))
+    }
+
+    @Test("Соседние стили с одинаковым знаком: второй — тегом, иначе звёздочки сливаются")
+    func adjacentStylesWithSameMark() {
+        #expect(inline("абвг", run(0, 2, .italic), run(2, 2, .bold)) == "*аб*<strong>вг</strong>\n")
+        #expect(inline("абвг", run(0, 2, .bold), run(2, 2, .italic)) == "**аб**<em>вг</em>\n")
+        #expect(inline("абвг", run(0, 2, .strikethrough), run(2, 2, .strikethrough)) == "~~абвг~~\n")
+    }
+
+    @Test("Соседние отрезки одного стиля сливаются, пробел между ними остаётся внутри")
+    func sameStyleNeighborsMerge() {
+        #expect(inline("абвг", run(0, 2, .bold), run(2, 2, .bold)) == "**абвг**\n")
+        #expect(inline("а б", run(0, 1, .bold), run(2, 1, .bold)) == "**а б**\n")
+    }
+
+    @Test("Пустые знаки не пишутся: оформлены только пробелы или пустой отрезок")
+    func noEmptyMarkers() {
+        #expect(inline("а б", run(1, 1, .italic)) == "а б\n")
+        #expect(inline("а б", run(1, 0, .bold)) == "а б\n")
+        #expect(inline("а   б", run(1, 3, .bold), run(1, 3, .italic)) == "а   б\n")
+    }
+
+    @Test("Жирный внутри курсива: порядок знаков по длине охвата")
+    func boldInsideItalic() {
+        #expect(inline("ab", run(0, 2, .italic), run(0, 1, .bold)) == "***a**b*\n")
+        #expect(inline("abcde", run(0, 5, .italic), run(1, 3, .bold)) == "*a**bcd**e*\n")
+    }
+
+    @Test("Знак у скобки или кавычки при букве снаружи читалка не примет: такое оформление — тегом")
+    func punctuationAtEdgeNextToLetter() {
+        #expect(inline("«а»б", run(0, 3, .bold)) == "<strong>«а»</strong>б\n")
+        #expect(inline("б(а)", run(1, 3, .bold)) == "б<strong>(а)</strong>\n")
+        #expect(inline("б,в", run(1, 1, .italic)) == "б<em>,</em>в\n")
+        // Рядом пробел или край строки — обычные знаки подходят.
+        #expect(inline("(а) б", run(0, 3, .italic)) == "*(а)* б\n")
+        #expect(inline("абв", run(1, 1, .bold)) == "а**б**в\n")
+    }
+
+    @Test("Неразрывный пробел на краю оформления тоже выносится за знаки")
+    func nonBreakingSpaceOutsideDelimiters() {
+        #expect(inline("а\u{00A0}б", run(0, 2, .bold)) == "**а**\u{00A0}б\n")
     }
 
     @Test("Оформление в пункте списка, заголовке и чекбоксе")
