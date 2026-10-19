@@ -29,7 +29,17 @@ final class PageFindClient: NSObject, @preconcurrency NSTextFinderClient {
         self.root = root
     }
 
-    /// Текст страницы поменялся: собрать текст поиска заново при следующем обращении.
+    /// Полоса поиска закрылась: курсор — на последнее найденное, в его редактор (как у Notion).
+    func focusLastMatch() {
+        guard hasFoundMatch else { return }
+        hasFoundMatch = false
+        selectedRanges = [NSValue(range: lastSelection)]
+    }
+
+    /// Поиск ставил выделение с тех пор, как полоса открылась.
+    private var hasFoundMatch = false
+
+        /// Текст страницы поменялся: собрать текст поиска заново при следующем обращении.
     func invalidate() {
         cache = nil
     }
@@ -148,6 +158,7 @@ final class PageFindClient: NSObject, @preconcurrency NSTextFinderClient {
         set {
             guard let range = newValue.first?.rangeValue, let segment = segment(at: range.location) else { return }
             lastSelection = range
+            hasFoundMatch = true
             reveal(segment, focusing: true)
             let local = NSRange(location: range.location - segment.range.location,
                                 length: min(range.length, NSMaxRange(segment.range) - range.location))
@@ -237,13 +248,22 @@ final class PageFind: NSObject {
 
     func perform(_ sender: Any?) {
         guard let tag = (sender as? NSValidatedUserInterfaceItem)?.tag, let action = NSTextFinder.Action(rawValue: tag) else { return }
-        if finder.findBarContainer == nil { finder.findBarContainer = root?.enclosingScrollView }
+        attachFindBar()
         finder.performAction(action)
+    }
+
+    /// Полоса — над прокруткой страницы; закрылась — курсор на найденное.
+    private func attachFindBar() {
+        guard finder.findBarContainer == nil, let scrollView = root?.enclosingScrollView else { return }
+        finder.findBarContainer = scrollView
+        (scrollView as? PageScrollView)?.onFindBarHidden = { [weak self] in
+            DispatchQueue.main.async { self?.client.focusLastMatch() }
+        }
     }
 
     func validate(_ tag: Int) -> Bool {
         guard let action = NSTextFinder.Action(rawValue: tag) else { return false }
-        if finder.findBarContainer == nil { finder.findBarContainer = root?.enclosingScrollView }
+        attachFindBar()
         return finder.validateAction(action)
     }
 }
@@ -281,5 +301,14 @@ extension PageTextView {
             return pageEditor.pageFind.validate(item.tag)
         }
         return super.validateMenuItem(item)
+    }
+}
+
+/// Прокрутка страницы: сообщает, что полоса поиска закрылась.
+final class PageScrollView: NSScrollView {
+    var onFindBarHidden: (() -> Void)?
+
+    override var isFindBarVisible: Bool {
+        didSet { if oldValue, !isFindBarVisible { onFindBarHidden?() } }
     }
 }

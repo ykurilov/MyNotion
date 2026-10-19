@@ -143,5 +143,12 @@ struct PageFindTests {
         let item = NSMenuItem(title: "Найти", action: #selector(NSResponder.performTextFinderAction(_:)), keyEquivalent: "f")
         item.tag = NSTextFinder.Action.showFindInterface.rawValue
         #expect(editor.textView.validateMenuItem(item))
+        editor.textView.performTextFinderAction(item)
+        #expect(editor.textView.enclosingScrollView?.isFindBarVisible == true, "полоса поиска не показалась")
+        // ⌘F из колонки — та же полоса страницы.
+        let column = try #require(editor.textView.embeddedFlowEditors.first)
+        let find = NSMenuItem(title: "Найти", action: #selector(NSTextView.performFindPanelAction(_:)), keyEquivalent: "f")
+        find.tag = NSTextFinder.Action.showFindInterface.rawValue
+        #expect(column.validateMenuItem(find))
     }
 }

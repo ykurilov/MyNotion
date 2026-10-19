@@ -78,6 +78,7 @@ struct MyNotionApp: App {
             PageCommands(library: try? library.get())
             SidebarToggleCommands(library: try? library.get())
             FormatCommands()
+            PageFindCommands()
             ExportCommands(controller: exportController)
             NotionImportCommands(controller: importController)
         }

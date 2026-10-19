@@ -245,7 +245,7 @@ description: "Задачи: новые блоки и оформление тек
 - [x] T102 [P] [US6] `PK/Tests/PageEditorTests/PageFindTests.swift`: ⌘F находит в потоке страницы, колонке, ячейке и свёрнутом; переход по совпадениям; совпадение в свёрнутом раскрывает его
 - [x] T103 [P] [US6] `PK/Tests/SyncTests/TablesColumnsConvergenceTests.swift`: правки разных ячеек на двух Mac — без конфликта; одна ячейка — «Две версии»; перенос блока между колонками одной меткой `placement`; блок удалённой колонки виден за колонками
 - [x] T104 [P] [US6] Выгрузка и импорт: `PK/Tests/MarkdownExportTests/TablesColumnsExportTests.swift` (GFM, `<!-- mynotion:table … -->`, `|` и `<br>` в ячейке; `<div data-columns>`), `PK/Tests/NotionImportTests/TablesImportTests.swift` (таблица Markdown Notion — таблица, первая строка — заголовки)
-- [ ] T105 [P] [US6] `UITests/TablesAndColumnsTests.swift`: сценарий Independent Test + ⌘F в колонке
+- [x] T105 [P] [US6] `UITests/TablesAndColumnsTests.swift`: сценарий Independent Test + ⌘F в колонке
 
 ### Код
 

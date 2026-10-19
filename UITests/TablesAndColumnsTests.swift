@@ -65,11 +65,14 @@ final class TablesAndColumnsTests: XCTestCase {
 
         // ⌘F находит слово в колонке: фокус — в редакторе правой колонки.
         app.typeKey("f", modifierFlags: .command)
+        XCTAssertTrue(app.searchFields.firstMatch.waitForExistence(timeout: 5), "⌘F не открыл полосу поиска")
         app.typeText("Правый")
         app.typeKey(.return, modifierFlags: [])
-        XCTAssertTrue(waitUntil { columns.allElementsBoundByIndex.contains { ($0.value(forKey: "hasKeyboardFocus") as? Bool) == true } },
-                      "⌘F не перевёл фокус в колонку")
+        let focused = app.descendants(matching: .any).matching(NSPredicate(format: "hasKeyboardFocus == true")).allElementsBoundByIndex
+            .map { "\($0.elementType.rawValue):\($0.identifier)" }
         app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(waitUntil { columns.allElementsBoundByIndex.contains { ($0.value(forKey: "hasKeyboardFocus") as? Bool) == true } },
+                      "После ⌘F и Esc курсор не в колонке; фокус был: \(focused)")
         app.quit()
 
         let saved = try savedTree(ofPage: "Таблицы и колонки")
