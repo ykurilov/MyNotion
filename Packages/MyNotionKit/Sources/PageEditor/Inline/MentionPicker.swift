@@ -230,6 +230,7 @@ extension PageTextView {
 
     /// Стрелки, Enter, Tab и Esc, пока окно открыто.
     func handleMentionPickerCommand(_ selector: Selector) -> Bool {
+        if selector == #selector(NSResponder.cancelOperation(_:)), inlineAtoms.datePopover.handleCancel() { return true }
         let picker = mentionPicker
         guard picker.isOpen else { return false }
         // Пустой список: клавиши — тексту, Enter и Esc закрывают ожидание.

@@ -4,7 +4,7 @@ import XCTest
 /// Упоминания, даты и напоминания (US3, Independent Test): упомянуть страницу, переименовать её — упоминание
 /// обновилось; дата «завтра» с напоминанием — уведомление macOS отдано системе и отмечено показанным.
 /// Баннер macOS 26 в дерево доступности не попадает, поэтому щелчок по нему тест не делает: открытие страницы
-/// у блока — `PagesLibrary.openBlock`, живым щелчком не проверено.
+/// у блока — `PagesLibrary.openBlock`; синтетический щелчок по телу баннера в виртуальном Mac не срабатывает.
 /// Время напоминания не ждётся по-настоящему: часы напоминаний приложения сдвинуты вперёд
 /// (`--reminders-clock-offset`), и напоминание уже «пропущено во сне» — система показывает его сразу.
 final class MentionsAndDatesTests: XCTestCase {
@@ -58,7 +58,7 @@ final class MentionsAndDatesTests: XCTestCase {
                       "Дата не вставилась: \(app.pageBodyValue)")
 
         // Щелчок по дате — календарик; «Напомнить» → «В момент события».
-        let reminder = app.popUpButtons["date-picker-reminder"]
+        let reminder = app.buttons["date-picker-reminder"]
         XCTAssertTrue(clickAtom(app, line: 0, startX: 20) { reminder.exists }, "Календарик не открылся")
         reminder.click()
         app.menuItems["В момент события"].click()

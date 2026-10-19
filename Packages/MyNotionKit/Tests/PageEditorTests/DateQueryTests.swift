@@ -125,3 +125,24 @@ struct DateQueryTests {
         #expect(dayOnly.edited(reminder: ReminderChoice.none).reminder == nil)
     }
 }
+
+/// Сетка месяца календарика (как у Notion): 6 недель с понедельника, соседние месяцы серые.
+@Suite("Календарик: сетка месяца")
+struct DatePickerGridTests {
+    @Test("Октябрь 2026: с понедельника 28 сентября, 42 дня, заголовок «Октябрь 2026»")
+    func octoberGrid() {
+        let grid = DatePickerMonth(year: 2026, month: 10)
+        #expect(grid.title == "Октябрь 2026")
+        #expect(grid.days.count == 42)
+        #expect(grid.days.first?.month == 9 && grid.days.first?.day == 28)
+        #expect(grid.days.filter(\.isInMonth).count == 31)
+        #expect(grid.days[3].day == 1 && grid.days[3].isInMonth)
+        #expect(DatePickerMonth.weekdayTitles == ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"])
+    }
+
+    @Test("Стрелки листают через год")
+    func paging() {
+        #expect(DatePickerMonth(year: 2026, month: 12).next.title == "Январь 2027")
+        #expect(DatePickerMonth(year: 2026, month: 1).previous.title == "Декабрь 2025")
+    }
+}

@@ -77,7 +77,7 @@ extension DateMention {
     static let genitiveMonths = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября",
                                  "октября", "ноября", "декабря"]
 
-    static func absoluteDayText(year: Int, month: Int, day: Int) -> String {
+    public static func absoluteDayText(year: Int, month: Int, day: Int) -> String {
         guard (1...12).contains(month) else { return "\(day).\(month).\(year)" }
         return "\(day) \(genitiveMonths[month - 1]) \(year)"
     }
