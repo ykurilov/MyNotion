@@ -20,20 +20,25 @@ final class ColorTests: XCTestCase {
         app.createPage(titled: "Цвета")
         app.typeText("раз два три")
 
-        // Слово «три» — красный текст: кнопка «A» панели, строка «Красный текст» окна цветов.
+        // Слово «три» — красный текст: кнопка «A» панели, строка «Красный текст» окна цветов. «Последних» ещё нет.
         app.typeKey(.leftArrow, modifierFlags: [.option, .shift])
         XCTAssertTrue(app.colorButton.waitForExistence(timeout: 5), "Панель форматирования не всплыла")
         app.colorButton.click()
         XCTAssertTrue(app.colorRow("text", "text", "red").waitForExistence(timeout: 5), "Окно цветов не открылось")
+        XCTAssertFalse(app.colorRow("recent", "text", "red").exists, "«Последние» не сброшены перед тестом")
+        XCTAssertEqual(app.colorRow("text", "text", "default").value as? String, "текущий", "Текущий цвет слова не отмечен")
         app.chooseColor("text", "text", "red")
         XCTAssertTrue(app.colorRow("text", "text", "red").waitForNonExistence(timeout: 5), "Окно цветов не закрылось после выбора")
 
-        // Слово «два » — жёлтый фон: строки фона ниже, окно прокручивают.
+        // Слово «два » — жёлтый фон: строки фона ниже видимой части окна, поэтому выбор с клавиатуры (↓ до строки, Enter):
+        // «Последние» (красный текст) + 10 строк текста + «Без фона», «Серый», «Коричневый», «Оранжевый» — жёлтый пятнадцатым ↓.
         app.typeKey(.leftArrow, modifierFlags: [])
         app.typeKey(.leftArrow, modifierFlags: [.option, .shift])
         XCTAssertTrue(app.colorButton.waitForExistence(timeout: 5))
         app.colorButton.click()
-        app.chooseColor("background", "background", "yellow")
+        XCTAssertTrue(app.colorRow("recent", "text", "red").waitForExistence(timeout: 5), "В «Последних» нет красного текста")
+        for _ in 0..<15 { app.typeKey(.downArrow, modifierFlags: []) }
+        app.typeKey(.return, modifierFlags: [])
         XCTAssertTrue(app.colorRow("background", "background", "yellow").waitForNonExistence(timeout: 5),
                       "Окно цветов не закрылось после выбора фона")
 
@@ -100,21 +105,15 @@ final class ColorTests: XCTestCase {
 }
 
 private extension XCUIApplication {
-    /// Выбрать строку окна цветов: окно прокручивают, пока строка не окажется в видимой части карточки, затем щёлкают по её точке
-    /// (строка за краем карточки есть в дереве, но щелчок по ней попал бы в прозрачную рамку тени).
+    /// Щёлкнуть по строке окна цветов. Строка должна быть в видимой части карточки (сверху и снизу — поля 6 + тень 32):
+    /// щелчок по строке за краем попал бы в прозрачную рамку тени.
     func chooseColor(_ section: String, _ target: String, _ color: String, file: StaticString = #filePath, line: UInt = #line) {
         let menu = descendants(matching: .any)["color-menu"]
         let row = colorRow(section, target, color)
         XCTAssertTrue(row.waitForExistence(timeout: 5), "В окне цветов нет строки \(section)-\(target)-\(color)", file: file, line: line)
-        // Карточка внутри окна: по 32 pt тени с каждой стороны, сверху и снизу ещё поля.
-        let visible = menu.frame.insetBy(dx: 0, dy: 32 + 12)
-        var direction: CGFloat = -150
-        for _ in 0..<10 where !(row.frame.minY >= visible.minY && row.frame.maxY <= visible.maxY) {
-            let before = row.frame.minY
-            menu.scroll(byDeltaX: 0, deltaY: row.frame.minY > visible.minY ? direction : -direction)
-            if row.frame.minY == before { direction = -direction }
-        }
-        XCTAssertTrue(row.frame.minY >= visible.minY && row.frame.maxY <= visible.maxY, "Строка \(color) не оказалась в видимой части окна", file: file, line: line)
+        let visible = menu.frame.insetBy(dx: 0, dy: 32 + 6)
+        XCTAssertTrue(row.frame.minY >= visible.minY && row.frame.maxY <= visible.maxY,
+                      "Строка \(section)-\(target)-\(color) за краем окна цветов", file: file, line: line)
         row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
     }
 

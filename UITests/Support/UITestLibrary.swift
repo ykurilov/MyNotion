@@ -27,7 +27,8 @@ struct UITestLibrary {
     @MainActor
     func launchApp(appearance: String? = nil) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["--database", databaseURL.path] + (appearance.map { ["--appearance", $0] } ?? [])
+        // «-MyNotion.recentColors ""» перекрывает сохранённые «Последние цвета» пустым значением: у каждого запуска свои, чистые.
+        app.launchArguments = ["--database", databaseURL.path, "-MyNotion.recentColors", ""] + (appearance.map { ["--appearance", $0] } ?? [])
         app.launch()
         return app
     }
