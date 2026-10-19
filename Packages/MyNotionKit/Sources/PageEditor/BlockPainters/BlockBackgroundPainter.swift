@@ -13,6 +13,9 @@ struct BlockBackgroundPainter: BlockPainter {
 
     var layer: BlockPaintLayer { .background }
 
+    /// Выноска красит свою подложку сама (`CalloutBoxPainter`, с полями и детьми): общий прямоугольник ей не нужен.
+    @MainActor func applies(to block: Block, in textView: PageTextView) -> Bool { block.kind != .callout }
+
     /// Подложка блока с цветом `color` в области `rect`; без цвета фона подложки нет.
     static func shape(for color: BlockColor, in rect: CGRect) -> Shape? {
         guard let fill = Palette.notionBackground(color.background?.tone) else { return nil }

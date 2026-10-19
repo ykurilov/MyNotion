@@ -29,10 +29,12 @@ public final class EmojiPickerController: NSObject, NSWindowDelegate {
     }
 
     /// Открыть под `anchor` (иконка, координаты экрана) над окном `parent`. Невидимый `parent` — окно на экран не выходит.
-    public func show(below anchor: NSRect, in parent: NSWindow, onChoose: @escaping (String?) -> Void) {
+    /// `allowsRemoving: false` — без «Убрать»: иконка обязательна (выноска).
+    public func show(below anchor: NSRect, in parent: NSWindow, allowsRemoving: Bool = true, onChoose: @escaping (String?) -> Void) {
         close()
         self.onChoose = onChoose
         let view = EmojiPickerView(catalog: catalog, recents: recents.emojis)
+        view.removeButton.isHidden = !allowsRemoving
         view.onChoose = { [weak self] emoji, closes in self?.choose(emoji, closes: closes) }
         view.onCancel = { [weak self] in self?.close() }
         let size = NSSize(width: Metrics.EmojiPicker.width, height: Metrics.EmojiPicker.height)

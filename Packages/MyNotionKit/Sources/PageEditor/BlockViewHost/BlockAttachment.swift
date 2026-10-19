@@ -40,6 +40,17 @@ final class BlockAttachment: NSTextAttachment, @unchecked Sendable {
         return CGRect(x: 0, y: 0, width: width, height: height(forWidth: width))
     }
 
+    /// Без вида (снимок окна, печать) знак ничего не рисует: вид блока — во вложении или у рисователей типа,
+    /// а не картинка файла по умолчанию.
+    override func image(forBounds imageBounds: CGRect, textContainer: NSTextContainer?, characterIndex charIndex: Int) -> NSImage? {
+        NSImage(size: NSSize(width: 1, height: 1))
+    }
+
+    override func image(for bounds: CGRect, attributes: [NSAttributedString.Key: Any], location: any NSTextLocation,
+                        textContainer: NSTextContainer?) -> NSImage? {
+        NSImage(size: NSSize(width: 1, height: 1))
+    }
+
     override func viewProvider(for parentView: NSView?, location: any NSTextLocation, textContainer: NSTextContainer?) -> NSTextAttachmentViewProvider? {
         let provider = BlockAttachmentViewProvider(textAttachment: self, parentView: parentView,
                                                    textLayoutManager: textContainer?.textLayoutManager, location: location)

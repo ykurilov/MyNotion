@@ -97,22 +97,22 @@ description: "Задачи: новые блоки и оформление тек
 
 ### Тесты
 
-- [ ] T029 [P] [US1] `PK/Tests/PageEditorTests/StructuralBlockTests.swift`: `> `, `" `, `---`, «/» → «Выноска»; Tab под переключателем, выноской, цитатой; Enter в конце раскрытого переключателя — первый ребёнок, в свёрнутом — после детей; Enter в пустом ребёнке — выход на уровень; ⌫ в начале — абзац, дети поднимаются; заголовок вкладывается только внутрь переключателя, выноски, цитаты; ⌘Z каждого шага
-- [ ] T030 [P] [US1] `PK/Tests/PageEditorTests/CollapsingTests.swift`: скрытые абзацы не раскладываются; курсор, попавший внутрь, уходит к концу строки переключателя; ⌫ под свёрнутым склеивает с текстом переключателя; выделение через свёрнутое захватывает детей; выделение внутрь скрытого раскрывает всех предков; ⌘Enter и ⌘⌥T; ⌘Z/⇧⌘Z не задеты свёртыванием
-- [ ] T031 [P] [US1] `PK/Tests/NotesCoreTests/BlockViewStateTests.swift`: свёрнутость пишется сразу в `block_view_state`, переживает перезапуск, не попадает в очередь исходящих и в отмену
-- [ ] T032 [P] [US1] `PK/Tests/MarkdownExportTests/StructuralBlocksExportTests.swift` и `PK/Tests/NotionImportTests/StructuralBlocksImportTests.swift`: `<details>`/`<summary>`, `<aside data-icon>`, `>` с детьми, `---` по contracts/markdown-and-notion.md; выгрузка → импорт — те же блоки; выгрузка Notion: `<details>`, `<aside>`, `>` больше не «упрощены»
-- [ ] T033 [P] [US1] `UITests/StructuralBlocksTests.swift`: сценарий Independent Test + поиск страниц (⇧⌘F) по слову в свёрнутом раскрывает до найденного
+- [x] T029 [P] [US1] `PK/Tests/PageEditorTests/StructuralBlockTests.swift`: `> `, `" `, `---`, «/» → «Выноска»; Tab под переключателем, выноской, цитатой; Enter в конце раскрытого переключателя — первый ребёнок, в свёрнутом — после детей; Enter в пустом ребёнке — выход на уровень; ⌫ в начале — абзац, дети поднимаются; заголовок вкладывается только внутрь переключателя, выноски, цитаты; ⌘Z каждого шага
+- [x] T030 [P] [US1] `PK/Tests/PageEditorTests/CollapsingTests.swift`: скрытые абзацы не раскладываются; курсор, попавший внутрь, уходит к концу строки переключателя; ⌫ под свёрнутым склеивает с текстом переключателя; выделение через свёрнутое захватывает детей; выделение внутрь скрытого раскрывает всех предков; ⌘Enter и ⌘⌥T; ⌘Z/⇧⌘Z не задеты свёртыванием
+- [x] T031 [P] [US1] `PK/Tests/NotesCoreTests/BlockViewStateTests.swift`: свёрнутость пишется сразу в `block_view_state`, переживает перезапуск, не попадает в очередь исходящих и в отмену
+- [x] T032 [P] [US1] `PK/Tests/MarkdownExportTests/StructuralBlocksExportTests.swift` и `PK/Tests/NotionImportTests/StructuralBlocksImportTests.swift`: `<details>`/`<summary>`, `<aside data-icon>`, `>` с детьми, `---` по contracts/markdown-and-notion.md; выгрузка → импорт — те же блоки; выгрузка Notion: `<details>`, `<aside>`, `>` больше не «упрощены»
+- [x] T033 [P] [US1] `UITests/StructuralBlocksTests.swift`: сценарий Independent Test + поиск страниц (⇧⌘F) по слову в свёрнутом раскрывает до найденного
 
 ### Код
 
-- [ ] T034 [US1] Описатели `PK/Sources/PageEditor/BlockKinds/Toggle.swift`, `Quote.swift`, `Callout.swift`, `Divider.swift`: меню «/» и слова поиска, быстрые символы, клавиши по contracts/blocks-and-keys.md
-- [ ] T035 [US1] Свёртывание `PK/Sources/PageEditor/Collapsing/CollapsedParagraphs.swift` (из пробы T003 или её запасного пути), правила курсора и ⌫ в `PageTextView.swift`, раскрытие предков при выделении внутри скрытого; чтение и запись `block_view_state` через `PK/Sources/NotesCore/Storage/BlockViewStateStore.swift`
-- [ ] T036 [US1] Правило глубины в `PK/Sources/PageEditor/BlockMoveController.swift` и `BlockDraft.apply` (`PageDocument.swift`): кто может иметь детей, заголовок внутри контейнеров
-- [ ] T037 [P] [US1] Рисователи `PK/Sources/PageEditor/BlockPainters/TogglePainter.swift` (▸/▾), `QuoteBarPainter.swift`, `CalloutBoxPainter.swift` (по поддереву), разделитель — вид-вложение высотой 13; размеры в `PK/Sources/VisualStyle/Metrics.swift`
-- [ ] T038 [US1] Иконка выноски — окно эмодзи 001 без «Убрать» (`PK/Sources/EmojiPicker/`); `props.icon` по умолчанию 💡, фон gray в `color`
-- [ ] T039 [US1] Переход к найденному из поиска страниц раскрывает свёрнутых предков: `App/MainWindow/MainWindowModel.swift`
-- [ ] T040 [P] [US1] Выгрузка `PK/Sources/MarkdownExport/BlockWriters/StructuralBlockWriters.swift`, импорт `PK/Sources/NotionImport/BlockReaders/StructuralBlockReaders.swift`; убрать «упрощено» для цитаты, выноски, переключателя, разделителя
-- [ ] T041 [US1] Галерея (`scripts/vm/run-in-vm.sh gallery --only structural`) в обеих темах, сверка с живым Notion, цифры — в contracts/blocks-and-keys.md; замер набора на «богатой» странице p95 ≤ 50 мс; затронутые тесты зелёные; коммит
+- [x] T034 [US1] Описатели `PK/Sources/PageEditor/BlockKinds/Toggle.swift`, `Quote.swift`, `Callout.swift`, `Divider.swift`: меню «/» и слова поиска, быстрые символы, клавиши по contracts/blocks-and-keys.md
+- [x] T035 [US1] Свёртывание `PK/Sources/PageEditor/Collapsing/CollapsedParagraphs.swift` (из пробы T003 или её запасного пути), правила курсора и ⌫ в `PageTextView.swift`, раскрытие предков при выделении внутри скрытого; чтение и запись `block_view_state` через `PK/Sources/NotesCore/Storage/BlockViewStateStore.swift`
+- [x] T036 [US1] Правило глубины в `PK/Sources/PageEditor/BlockMoveController.swift` и `BlockDraft.apply` (`PageDocument.swift`): кто может иметь детей, заголовок внутри контейнеров
+- [x] T037 [P] [US1] Рисователи `PK/Sources/PageEditor/BlockPainters/TogglePainter.swift` (▸/▾), `QuoteBarPainter.swift`, `CalloutBoxPainter.swift` (по поддереву), разделитель — вид-вложение высотой 13; размеры в `PK/Sources/VisualStyle/Metrics.swift`
+- [x] T038 [US1] Иконка выноски — окно эмодзи 001 без «Убрать» (`PK/Sources/EmojiPicker/`); `props.icon` по умолчанию 💡, фон gray в `color`
+- [x] T039 [US1] Переход к найденному из поиска страниц раскрывает свёрнутых предков: `App/MainWindow/MainWindowModel.swift`
+- [x] T040 [P] [US1] Выгрузка `PK/Sources/MarkdownExport/BlockWriters/StructuralBlockWriters.swift`, импорт `PK/Sources/NotionImport/BlockReaders/StructuralBlockReaders.swift`; убрать «упрощено» для цитаты, выноски, переключателя, разделителя
+- [x] T041 [US1] Галерея (`scripts/vm/run-in-vm.sh gallery --only structural`) в обеих темах, сверка с живым Notion, цифры — в contracts/blocks-and-keys.md; замер набора на «богатой» странице p95 ≤ 50 мс; затронутые тесты зелёные; коммит
 
 **Checkpoint**: US1 работает сам по себе — MVP.
 
@@ -151,24 +151,24 @@ description: "Задачи: новые блоки и оформление тек
 
 ### Тесты
 
-- [ ] T053 [P] [US3] `PK/Tests/PageEditorTests/MentionTests.swift`: «@» и «[[» открывают окно, выбор вставляет U+FFFC с `mention`; название и иконка из справочника, обновляются при переименовании; корзина — «Удалённая страница», нет на Mac — «Страница загружается»; курсор перешагивает, ⌫ удаляет целиком; простой текст — название
-- [ ] T054 [P] [US3] `PK/Tests/PageEditorTests/DateQueryTests.swift`: «сегодня», «завтра», «вчера», «через неделю», «25 окт», «25.10», «25.10.2026», «25 октября 14:30»; показ «Сегодня», «Завтра», «20 октября 2026», «9:00»; часовой пояс
-- [ ] T055 [P] [US3] `PK/Tests/RemindersTests/ReminderIndexTests.swift`: индекс обновляется в той же транзакции, что текст; блок удалён, страница в корзине, дата стёрта — напоминание снято; вставка копии даты — новый id, ⌘Z — прежний
-- [ ] T056 [P] [US3] `PK/Tests/RemindersTests/ReminderSchedulerTests.swift` с подменёнными часами и центром уведомлений: ставятся ближайшие 50 несделанных; идентификатор = id упоминания, повтор не дублирует; после «пробуждения» просроченные за 7 дней показываются сразу один раз; `doneAt` снимает доставленное и запланированное
-- [ ] T057 [P] [US3] `PK/Tests/SyncTests/ReminderSyncTests.swift`: `reminder.doneAt` сходится на двух Mac; «Готово» на одном снимает уведомление на другом
-- [ ] T058 [P] [US3] Выгрузка и импорт упоминаний и дат: `PK/Tests/MarkdownExportTests/MentionDateExportTests.swift` (`<time datetime data-remind>`, ссылка на файл страницы) и `PK/Tests/NotionImportTests/MentionDateImportTests.swift` (`@October 20, 2026`, ссылки на страницы выгрузки внутри текста — упоминания)
-- [ ] T059 [P] [US3] `UITests/MentionsAndDatesTests.swift`: сценарий Independent Test (напоминание через подменённые часы приложения), щелчок по уведомлению открывает страницу у блока
+- [x] T053 [P] [US3] `PK/Tests/PageEditorTests/MentionTests.swift`: «@» и «[[» открывают окно, выбор вставляет U+FFFC с `mention`; название и иконка из справочника, обновляются при переименовании; корзина — «Удалённая страница», нет на Mac — «Страница загружается»; курсор перешагивает, ⌫ удаляет целиком; простой текст — название
+- [x] T054 [P] [US3] `PK/Tests/PageEditorTests/DateQueryTests.swift`: «сегодня», «завтра», «вчера», «через неделю», «25 окт», «25.10», «25.10.2026», «25 октября 14:30»; показ «Сегодня», «Завтра», «20 октября 2026», «9:00»; часовой пояс
+- [x] T055 [P] [US3] `PK/Tests/RemindersTests/ReminderIndexTests.swift`: индекс обновляется в той же транзакции, что текст; блок удалён, страница в корзине, дата стёрта — напоминание снято; вставка копии даты — новый id, ⌘Z — прежний
+- [x] T056 [P] [US3] `PK/Tests/RemindersTests/ReminderSchedulerTests.swift` с подменёнными часами и центром уведомлений: ставятся ближайшие 50 несделанных; идентификатор = id упоминания, повтор не дублирует; после «пробуждения» просроченные за 7 дней показываются сразу один раз; `doneAt` снимает доставленное и запланированное
+- [x] T057 [P] [US3] `PK/Tests/SyncTests/ReminderSyncTests.swift`: `reminder.doneAt` сходится на двух Mac; «Готово» на одном снимает уведомление на другом
+- [x] T058 [P] [US3] Выгрузка и импорт упоминаний и дат: `PK/Tests/MarkdownExportTests/MentionDateExportTests.swift` (`<time datetime data-remind>`, ссылка на файл страницы) и `PK/Tests/NotionImportTests/MentionDateImportTests.swift` (`@October 20, 2026`, ссылки на страницы выгрузки внутри текста — упоминания)
+- [x] T059 [P] [US3] `UITests/MentionsAndDatesTests.swift`: сценарий Independent Test (напоминание через подменённые часы приложения), щелчок по уведомлению открывает страницу у блока
 
 ### Код
 
-- [ ] T060 [US3] Справочник страниц `PK/Sources/PageEditor/Inline/MentionDirectory.swift` и вложение-картинка `MentionAttachment.swift`; поиск страниц для окна — протокол `PageLookup`, реализация через FTS5 в `App/`
-- [ ] T061 [US3] Окно «@»/«[[» `PK/Sources/PageEditor/Inline/MentionPicker.swift` (по образцу `SlashCommandMenu.swift`)
-- [ ] T062 [US3] Даты `PK/Sources/PageEditor/Inline/DateQuery.swift`, `DateMentionAttachment.swift`, календарик `DatePickerPopover.swift` с «Напомнить» по contracts/blocks-and-keys.md
-- [ ] T063 [US3] Модуль `PK/Sources/Reminders/`: `ReminderIndexer.swift` (хук транзакции), `ReminderScheduler.swift` (обёртка `UNUserNotificationCenter` за протоколом), наблюдение `NSWorkspace.didWakeNotification`; перепланирование — после готовности редактора, не при запуске
-- [ ] T064 [US3] `App/Notifications/ReminderNotifications.swift`: делегат уведомлений, кнопка «Готово», открытие страницы у блока, запрос разрешения при первом «Напомнить», подсказка при отказе
-- [ ] T065 [US3] Применение `reminder` в `PK/Sources/Sync/ChangeMerger.swift` и `Outbox.swift`
-- [ ] T066 [P] [US3] Выгрузка и импорт: `PK/Sources/MarkdownExport/InlineMarkdown.swift`, `PK/Sources/NotionImport/NotionInlineParser.swift`
-- [ ] T067 [US3] Галерея, опоздание напоминания ≤ 1 мин (SC-104) в виртуальном Mac; затронутые тесты зелёные; коммит
+- [x] T060 [US3] Справочник страниц `PK/Sources/PageEditor/Inline/MentionDirectory.swift` и вложение-картинка `MentionAttachment.swift`; поиск страниц для окна — протокол `PageLookup`, реализация через FTS5 в `App/`
+- [x] T061 [US3] Окно «@»/«[[» `PK/Sources/PageEditor/Inline/MentionPicker.swift` (по образцу `SlashCommandMenu.swift`)
+- [x] T062 [US3] Даты `PK/Sources/PageEditor/Inline/DateQuery.swift`, `DateMentionAttachment.swift`, календарик `DatePickerPopover.swift` с «Напомнить» по contracts/blocks-and-keys.md
+- [x] T063 [US3] Модуль `PK/Sources/Reminders/`: `ReminderIndexer.swift` (хук транзакции), `ReminderScheduler.swift` (обёртка `UNUserNotificationCenter` за протоколом), наблюдение `NSWorkspace.didWakeNotification`; перепланирование — после готовности редактора, не при запуске
+- [x] T064 [US3] `App/Notifications/ReminderNotifications.swift`: делегат уведомлений, кнопка «Готово», открытие страницы у блока, запрос разрешения при первом «Напомнить», подсказка при отказе
+- [x] T065 [US3] Применение `reminder` в `PK/Sources/Sync/ChangeMerger.swift` и `Outbox.swift`
+- [x] T066 [P] [US3] Выгрузка и импорт: `PK/Sources/MarkdownExport/InlineMarkdown.swift`, `PK/Sources/NotionImport/NotionInlineParser.swift`
+- [x] T067 [US3] Галерея, опоздание напоминания ≤ 1 мин (SC-104) в виртуальном Mac; затронутые тесты зелёные; коммит
 
 ---
 

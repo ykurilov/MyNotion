@@ -251,6 +251,7 @@ extension PageTextView {
     public func paste(from pasteboard: NSPasteboard) {
         commitEdits()
         let selection = selectedRange()
+        if pasteInlineText(from: pasteboard, replacing: selection) { return }
         let plain = pasteboard.string(forType: .string)
         if selection.length > 0, let plain, let url = InlineFormatting.pastedLinkURL(from: plain) {
             setLink(url)

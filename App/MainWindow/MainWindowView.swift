@@ -44,6 +44,8 @@ struct MainWindowView: View {
     /// Замеры, галерея и снимки идут в первом окне — других окон в служебных запусках нет.
     private func editorReady(_ model: MainWindowModel?) {
         if options.presence == .background { BackgroundWindows.shared.orderInMainWindow() }
+        // Напоминания ставятся после готовности редактора, не при запуске (research R11); служебные запуски — без них.
+        if options.allowsSync, case .success(let library) = library { library.reminders.start() }
         LaunchMilestones.editorReady(reportTo: options.launchReportURL)
         if let snapshotURL = options.windowSnapshotURL {
             WindowSnapshot.capture(to: snapshotURL, hoveredSidebarRow: options.hoveredSidebarRow)
@@ -62,6 +64,9 @@ struct MainWindowView: View {
         }
         if let benchmarkURL = options.searchBenchmarkURL, case .success(let library) = library {
             SearchBenchmark.editorReady(model: model ?? library.firstWindow, reportTo: benchmarkURL)
+        }
+        if let latencyURL = options.reminderLatencyURL, case .success(let library) = library {
+            ReminderLatencyCheck.start(library: library, reportTo: latencyURL)
         }
     }
 }
@@ -268,6 +273,16 @@ private struct PagesWindow: View {
         Dictionary(model.tree.pagesInTreeOrder.map { ($0.id, LinkedPage(title: $0.title, icon: $0.icon)) }) { first, _ in first }
     }
 
+    /// Упоминания и даты открытой страницы: названия, корзина, поиск для «@», разрешение на уведомления.
+    private var mentionSettings: MentionSettings {
+        let library = model.library
+        let directory = MentionDirectory(pages: linkedPages, trashedPageIds: library.trashedPageIds,
+                                         expectsMissingPages: library.sync.isEnabled,
+                                         doneReminderIds: library.reminders.doneReminderIds)
+        return MentionSettings(directory: directory, lookup: PageTitleLookup(search: PageSearch(store: library.store), tree: model.tree),
+                               requestReminderPermission: { [reminders = library.reminders] in await reminders.requestPermission() })
+    }
+
     @ViewBuilder
     private var pageArea: some View {
         if let document = model.openDocument {
@@ -279,7 +294,10 @@ private struct PagesWindow: View {
                 onOpenPage: { model.select($0) },
                 onSetIcon: { model.setIcon(document.pageId, to: $0) },
                 onResolveConflict: { model.resolveConflict($0, in: document) },
-                onReady: onEditorReady
+                blockViewState: model.blockViewState,
+                blockReveal: model.blockReveal,
+                onReady: onEditorReady,
+                mentions: mentionSettings
             )
             // Новый документ — новый редактор: страницу перечитали после операции с деревом.
             .id(ObjectIdentifier(document))

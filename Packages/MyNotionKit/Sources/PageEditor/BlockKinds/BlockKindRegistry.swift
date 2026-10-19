@@ -34,7 +34,7 @@ extension BlockKind {
 /// Что приложение и галерея берут из описателей типов.
 public enum BlockKinds {
     /// Снимки галереи всех типов, по порядку типов.
-    public static var gallerySamples: [BlockGallerySample] { BlockKindRegistry.gallerySamples }
+    public static var gallerySamples: [BlockGallerySample] { BlockKindRegistry.gallerySamples + InlineAtomGallery.samples }
 
     /// Части «богатой» страницы от типов, у которых они есть.
     public static var richPageParts: [RichPagePart] {

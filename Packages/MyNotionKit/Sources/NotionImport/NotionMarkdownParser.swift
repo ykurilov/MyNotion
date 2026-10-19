@@ -38,6 +38,8 @@ public struct ParsedBlock: Sendable, Hashable {
     public var props: BlockProps
     /// Блоки внутри контейнера (колонки, таблица): их `containerId` — этот блок.
     public var contained: [ParsedBlock]
+    /// Упоминания страниц в тексте: импорт найдёт их страницы (`NotionImporter.resolvingMentions`).
+    var mentions: [NotionPageMention] = []
 
     public init(kind: BlockKind, text: InlineText = .empty, indent: Int = 0, isChecked: Bool = false,
                 pagePath: String? = nil, standaloneURL: URL? = nil, color: BlockColor = .none, props: BlockProps = .empty,
@@ -86,6 +88,13 @@ public struct NotionMarkdownParser: Sendable {
         return ParsedNotionPage(title: title, icon: icon, blocks: builder.blocks, simplifications: builder.simplifications)
     }
 
+    /// Блоки куска Markdown без строки названия — то, что внутри переключателя, выноски, цитаты.
+    static func blocks(in lines: [String]) -> (blocks: [ParsedBlock], simplifications: [NotionSimplification: Int]) {
+        var builder = PageBuilder()
+        builder.consume(lines[...])
+        return (builder.blocks, builder.simplifications)
+    }
+
     // MARK: Строки
 
     static func isBlank(_ line: some StringProtocol) -> Bool {
@@ -120,7 +129,7 @@ public struct NotionMarkdownParser: Sendable {
 }
 
 /// Сборка блоков страницы строка за строкой.
-private struct PageBuilder {
+struct PageBuilder {
     private(set) var blocks: [ParsedBlock] = []
     private(set) var simplifications: [NotionSimplification: Int] = [:]
 
@@ -158,7 +167,9 @@ private struct PageBuilder {
             }
             if let reading = NotionBlockReaders.all.lazy.compactMap({ $0.read(lines, at: index - 1) }).first {
                 closeOpenBlock()
+                listColumns = []
                 for block in reading.blocks { emit(block) }
+                simplifications.merge(reading.simplifications, uniquingKeysWith: +)
                 index = max(reading.nextIndex, index)
                 continue
             }
@@ -233,7 +244,9 @@ private struct PageBuilder {
                 let level: BlockKind = heading.level == 1 ? .heading1 : heading.level == 2 ? .heading2 : .heading3
                 let parsed = NotionInlineParser.parse(heading.text)
                 note(files: parsed.files)
-                emit(ParsedBlock(kind: level, text: parsed.text))
+                var headingBlock = ParsedBlock(kind: level, text: parsed.text)
+                headingBlock.mentions = parsed.pageMentions
+                emit(headingBlock)
                 continue
             }
             if trimmed.hasPrefix(">") {
@@ -296,7 +309,9 @@ private struct PageBuilder {
         } else {
             let parsed = NotionInlineParser.parse(Self.joined(block.lines))
             note(files: parsed.files)
-            emit(ParsedBlock(kind: block.kind, text: parsed.text, indent: block.indent, isChecked: block.isChecked))
+            var parsedBlock = ParsedBlock(kind: block.kind, text: parsed.text, indent: block.indent, isChecked: block.isChecked)
+            parsedBlock.mentions = parsed.pageMentions
+            emit(parsedBlock)
         }
     }
 
@@ -307,7 +322,10 @@ private struct PageBuilder {
         switch parsed.soleLink {
         case .page(let path)?: return ParsedBlock(kind: .pageLink, text: InlineText(parsed.text.string), pagePath: path)
         case .url(let url)?: return ParsedBlock(kind: .paragraph, text: parsed.text, standaloneURL: url)
-        default: return ParsedBlock(kind: .paragraph, text: parsed.text)
+        default:
+            var block = ParsedBlock(kind: .paragraph, text: parsed.text)
+            block.mentions = parsed.pageMentions
+            return block
         }
     }
 
@@ -382,7 +400,7 @@ private struct PageBuilder {
         return nil
     }
 
-    private static func isThematicBreak(_ trimmed: String) -> Bool {
+    static func isThematicBreak(_ trimmed: String) -> Bool {
         guard let mark = trimmed.first, mark == "-" || mark == "*" || mark == "_" else { return false }
         let compact = trimmed.filter { $0 != " " && $0 != "\t" }
         return compact.count >= 3 && compact.allSatisfy { $0 == mark }

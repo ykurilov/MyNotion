@@ -54,8 +54,9 @@ struct PopupMenuLookTests {
     func slashMenuLayout() throws {
         let view = Self.menu(.slash)
         let top = PopupMenuWindow.shadowMargin
-        let rows = view.subviews.compactMap { $0 as? PopupMenuRowView }
-        try #require(rows.count == 7)
+        // Видны первые строки, остальные — прокруткой выбора.
+        let rows = view.subviews.compactMap { $0 as? PopupMenuRowView }.filter { !$0.isHidden }
+        try #require(rows.count == min(PopupMenuItem.blockKinds.count, Metrics.PopupMenu.maximumVisibleRows))
         #expect(view.sectionTitle == "Основные блоки")
         // У Notion: середина заголовка раздела ≈ 18,6 ниже верха меню, середина первой строки ≈ 49,8.
         #expect(abs(rows[0].frame.midY - top - 49.8) <= 1.2, "Первая строка с \(rows[0].frame.minY - top) от верха меню")
@@ -65,7 +66,7 @@ struct PopupMenuLookTests {
         }
         let footer = try #require(view.footer, "Нет строки «Закрыть меню»")
         #expect(footer.title == "Закрыть меню" && footer.key == "esc")
-        #expect(footer.frame.minY == rows[6].frame.maxY && footer.frame.height == 33)
+        #expect(footer.frame.minY == rows[rows.count - 1].frame.maxY && footer.frame.height == 33)
         let bottom = top + view.fittingMenuSize.height
         #expect(abs(bottom - footer.frame.midY - 18.6) <= 1.2, "Под серединой «Закрыть меню» \(bottom - footer.frame.midY), у Notion 18,6")
     }
@@ -109,7 +110,7 @@ struct PopupMenuLookTests {
 
     @Test("Быстрые символы типов — как в Notion")
     func shortcuts() {
-        #expect(PopupMenuItem.blockKinds.map(\.shortcut) == [nil, "#", "##", "###", "-", "1.", "[]"])
+        #expect(PopupMenuItem.blockKinds.map(\.shortcut).prefix(11) == [nil, "#", "##", "###", "-", "1.", "[]", ">", "\"", nil, nil])
     }
 
     /// Строка без выделения отдельно, в обеих темах.

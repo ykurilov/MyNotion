@@ -64,8 +64,9 @@ enum PopupMenuStyle {
     var width: CGFloat { self == .slash ? Metrics.PopupMenu.slashMenuWidth : Metrics.PopupMenu.blockMenuWidth }
     var sectionTitle: String? { self == .slash ? "Основные блоки" : nil }
     var hasCloseRow: Bool { self == .slash }
-    /// Сколько строк видно без прокрутки.
-    var maximumVisibleRows: Int { self == .block ? Metrics.PopupMenu.blockMenuVisibleRows : Metrics.PopupMenu.maximumVisibleRows }
+    /// Сколько строк видно без прокрутки. В меню блока «Цвет» и «Удалить» — действия в конце списка: типы блоков
+    /// (сколько бы их ни было) и эти две строки видны целиком, прокручивать действия за типы нельзя.
+    var maximumVisibleRows: Int { self == .block ? PopupMenuItem.blockKinds.count + 2 : Metrics.PopupMenu.maximumVisibleRows }
 
     var windowIdentifier: String {
         switch self {

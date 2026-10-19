@@ -402,8 +402,9 @@ struct FormatBarTests {
         view.layoutSubtreeIfNeeded()
         let pixels = try ViewPixels(view, appearance: .aqua)
         let rows = view.subviews.compactMap { $0 as? PopupMenuRowView }
-        for (index, row) in rows.enumerated() {
-            let right = NSRect(x: row.frame.maxX - 30, y: row.frame.minY + 2, width: 30, height: row.frame.height - 4)
+        for (index, row) in rows.enumerated() where !row.isHidden {
+            // Место галочки: длинное название («Раскрывающийся список») доходит почти до него.
+            let right = NSRect(x: row.frame.maxX - 22, y: row.frame.minY + 2, width: 22, height: row.frame.height - 4)
             let ink = pixels.inkBounds(in: right, over: Palette.popupMenuBackground.resolved(in: .aqua))
             #expect((ink != nil) == (index == 2), "\(row.item.title): галочка \(ink == nil ? "нет" : "есть")")
         }

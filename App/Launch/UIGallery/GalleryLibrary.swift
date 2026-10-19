@@ -90,6 +90,10 @@ struct GalleryLibrary {
                 blockKindPages[kind] = BlockKindPage(pageId: pageId, emptyInMiddle: ids[1], paragraphAfterEmpty: ids[2], emptyAtEnd: ids[3])
             }
 
+            // Страница, на которую ссылается образец упоминаний (US3).
+            try transaction.insertPage(Page(id: InlineAtomGallery.mentionTargetId, title: InlineAtomGallery.mentionTargetTitle,
+                                            icon: InlineAtomGallery.mentionTargetIcon, parentId: kindsParent,
+                                            sortKey: .between(nil, nil), createdAt: now, updatedAt: now))
             var kindSamplePages: [String: UUID] = [:]
             for sample in BlockKinds.gallerySamples {
                 let pageId = try page(sample.summary, parent: kindsParent)

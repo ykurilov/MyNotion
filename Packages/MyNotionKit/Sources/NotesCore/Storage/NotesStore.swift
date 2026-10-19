@@ -106,8 +106,12 @@ public struct NotesChanges: Sendable {
     public internal(set) var textBaseClocks: [UUID: HybridTimestamp] = [:]
     /// Конфликты, по которым Юрий сделал выбор.
     public internal(set) var resolvedConflicts: [Conflict] = []
+    /// Отметки «сделано» напоминаний — свои и пришедшие с других Mac.
+    public internal(set) var reminderStates: [ReminderState] = []
 
-    public var isEmpty: Bool { pages.isEmpty && blocks.isEmpty && erasedPageIds.isEmpty && resolvedConflicts.isEmpty }
+    public var isEmpty: Bool {
+        pages.isEmpty && blocks.isEmpty && erasedPageIds.isEmpty && resolvedConflicts.isEmpty && reminderStates.isEmpty
+    }
 }
 
 public struct PageChange: Sendable {

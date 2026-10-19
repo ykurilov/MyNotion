@@ -7,10 +7,13 @@ public struct PageLinkTarget: Sendable, Hashable {
     /// Путь с `/`, как есть: пробелы и скобки кодируются при записи. Пути нет — страницы нет в выгрузке
     /// (она в корзине): в Markdown остаётся только название.
     public var path: String?
+    /// Иконка страницы — перед названием в упоминании.
+    public var icon: String?
 
-    public init(title: String, path: String?) {
+    public init(title: String, path: String?, icon: String? = nil) {
         self.title = title
         self.path = path
+        self.icon = icon
     }
 }
 
@@ -99,14 +102,14 @@ public struct MarkdownBlockWriter: Sendable {
     private func blockLines(_ block: Block, ordinal: Int, nesting: Int, resolveLink: (UUID) -> PageLinkTarget?) -> [String]? {
         switch block.kind {
         case .paragraph:
-            return Self.splitLines(InlineMarkdown.render(block.text), firstPrefix: "", continuation: "")
+            return Self.splitLines(InlineMarkdown.render(block.text, resolveLink: resolveLink), firstPrefix: "", continuation: "")
         case .heading1, .heading2, .heading3:
             let level = block.kind == .heading1 ? 1 : block.kind == .heading2 ? 2 : 3
             // В заголовке Markdown строки одна: перенос заменяется пробелом той же длины, смещения оформления не сдвигаются.
             let flattened = InlineText(block.text.string.replacingOccurrences(of: "\n", with: " "), runs: block.text.runs)
-            return ["\(String(repeating: "#", count: level)) \(InlineMarkdown.render(flattened))"]
+            return ["\(String(repeating: "#", count: level)) \(InlineMarkdown.render(flattened, resolveLink: resolveLink))"]
         case .bulletItem, .checkbox, .numberedItem:
-            return listLines(block, marker: Self.marker(for: block, ordinal: ordinal) ?? "", nesting: nesting)
+            return listLines(block, marker: Self.marker(for: block, ordinal: ordinal) ?? "", nesting: nesting, resolveLink: resolveLink)
         case .pageLink:
             guard let target = block.linkedPageId.flatMap(resolveLink) else { return nil }
             let title = escapedTitle(target.title)
@@ -114,7 +117,7 @@ public struct MarkdownBlockWriter: Sendable {
             return ["[\(title)](\(InlineMarkdown.encodedPath(path)))"]
         default:
             // Блок 002, у которого ещё нет своей записи: текст не теряется — абзацем.
-            return Self.splitLines(InlineMarkdown.render(block.text), firstPrefix: "", continuation: "")
+            return Self.splitLines(InlineMarkdown.render(block.text, resolveLink: resolveLink), firstPrefix: "", continuation: "")
         }
     }
 
@@ -133,9 +136,9 @@ public struct MarkdownBlockWriter: Sendable {
         block.kind == .checkbox ? 2 : marker(for: block, ordinal: ordinal)?.count ?? 0
     }
 
-    private func listLines(_ block: Block, marker: String, nesting: Int) -> [String] {
+    private func listLines(_ block: Block, marker: String, nesting: Int, resolveLink: (UUID) -> PageLinkTarget?) -> [String] {
         let indentation = String(repeating: " ", count: nesting)
-        return Self.splitLines(InlineMarkdown.render(block.text), firstPrefix: indentation + marker,
+        return Self.splitLines(InlineMarkdown.render(block.text, resolveLink: resolveLink), firstPrefix: indentation + marker,
                                continuation: String(repeating: " ", count: nesting + marker.count))
     }
 

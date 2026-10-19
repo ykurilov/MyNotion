@@ -39,9 +39,11 @@ struct MyNotionApp: App {
         var galleryLibrary: (GalleryLibrary, FailingWrites)?
         library = Result {
             let store = try Self.openLibrary(options)
+            let reminders = ReminderNotifications(store: store, clockOffset: options.remindersClockOffset)
+            reminders.installIndex()
             if options.uiGalleryURL != nil { galleryLibrary = try UIGalleryRunner.prepareLibrary(in: store) }
             // Служебные запуски (галерея, замеры, снимки) с сервером не связываются.
-            let pages = PagesLibrary(store: store, startsSync: options.allowsSync)
+            let pages = PagesLibrary(store: store, startsSync: options.allowsSync, reminders: reminders)
             if let automation = options.syncAutomation { SyncAutomation.start(automation, controller: pages.sync) }
             return pages
         }

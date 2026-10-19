@@ -140,6 +140,7 @@ private struct ExportPlan {
     private(set) var orderedPages: [Page] = []
     private var locations: [UUID: Location] = [:]
     private var titles: [UUID: String] = [:]
+    private var icons: [UUID: String] = [:]
     private var titlesOfTrashedPages: [UUID: String] = [:]
 
     init(pages: [Page]) {
@@ -153,6 +154,7 @@ private struct ExportPlan {
         for (page, name) in zip(children, names) {
             orderedPages.append(page)
             titles[page.id] = page.displayTitle
+            icons[page.id] = page.icon
             locations[page.id] = Location(folder: folder, fileName: name + ".md")
             let subpages = tree.children(of: page.id)
             if !subpages.isEmpty { place(children: subpages, folder: folder + [name], in: tree) }
@@ -167,7 +169,7 @@ private struct ExportPlan {
             var common = 0
             while common < source.folder.count, common < target.folder.count, source.folder[common] == target.folder[common] { common += 1 }
             let path = Array(repeating: "..", count: source.folder.count - common) + target.components[common...]
-            return PageLinkTarget(title: titles[pageId] ?? Page.untitledTitle, path: path.joined(separator: "/"))
+            return PageLinkTarget(title: titles[pageId] ?? Page.untitledTitle, path: path.joined(separator: "/"), icon: icons[pageId])
         }
         return titlesOfTrashedPages[pageId].map { PageLinkTarget(title: $0, path: nil) }
     }
