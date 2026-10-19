@@ -35,9 +35,12 @@ public struct AttachmentReferenceCounter: NotesWriteHook {
 
         var queueChanged = false
         for ref in referenced {
-            // Файл с другого Mac: здесь его ещё нет — в очередь скачивания.
+            // Файл с другого Mac: здесь его ещё нет — в очередь скачивания. Пока не скачан, запись следует за описанием
+            // в блоке: другой Mac мог прислать блок раньше, чем докопировал файл и узнал его SHA-256.
             try db.execute(sql: """
-                INSERT INTO attachment (id, ref, localPath, state) VALUES (?, ?, NULL, 'remote') ON CONFLICT(id) DO NOTHING
+                INSERT INTO attachment (id, ref, localPath, state) VALUES (?, ?, NULL, 'remote')
+                ON CONFLICT(id) DO UPDATE SET ref = excluded.ref
+                    WHERE attachment.state IN ('remote', 'downloading') AND attachment.ref != excluded.ref
                 """, arguments: [ref.id.attachmentKey, AttachmentRecord.json(ref)])
             queueChanged = queueChanged || db.changesCount > 0
             try db.execute(sql: "UPDATE attachment SET orphanedAt = NULL WHERE id = ? AND orphanedAt IS NOT NULL",

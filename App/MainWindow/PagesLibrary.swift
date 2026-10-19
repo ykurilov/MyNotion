@@ -43,6 +43,7 @@ final class PagesLibrary {
         self.store = store
         self.reminders = reminders
         attachments = AttachmentStore(store: store, folder: AttachmentStore.folder(forDatabaseAt: store.database.url))
+        try? attachments.abandonInterruptedCopies()
         MediaBlocks.install(AppMediaServices(attachments: attachments))
         openDocuments = OpenDocuments(store: store)
         reloadTree()
