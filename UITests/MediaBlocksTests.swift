@@ -65,7 +65,7 @@ final class MediaBlocksTests: XCTestCase {
         paste(app, files: [huge])
         let message = app.staticTexts["Файл больше 100 МБ — MyNotion такие не хранит"]
         XCTAssertTrue(message.waitForExistence(timeout: 10), "Нет сообщения о 100 МБ")
-        app.buttons["Понятно"].click()
+        app.typeKey(.return, modifierFlags: [])
 
         app.quit()
         XCTAssertEqual(try library.savedBlocks(ofPage: "Медиа").map(\.kind),
@@ -76,7 +76,9 @@ final class MediaBlocksTests: XCTestCase {
         app = library.launchApp()
         XCTAssertTrue(app.pageBody.waitForExistence(timeout: 10))
         let copies = try attachmentCopies()
-        XCTAssertEqual(copies.count, 4)
+        // Обложка ролика и картинка сайта приходят из сети вложениями — их может быть больше четырёх.
+        XCTAssertTrue(Set(["Снимок экрана.png", "Картинка.png", "Договор.pdf", "Ролик.mov"]).isSubset(of: Set(copies.map(\.lastPathComponent))),
+                      "Не все копии на месте: \(copies.map(\.lastPathComponent))")
         let pngCopy = try XCTUnwrap(copies.first { $0.lastPathComponent == "Снимок экрана.png" })
         XCTAssertEqual(try Data(contentsOf: pngCopy), Self.png(width: 320, height: 180))
         XCTAssertNotNil(NSImage(contentsOf: pngCopy), "Копия картинки не открывается")
