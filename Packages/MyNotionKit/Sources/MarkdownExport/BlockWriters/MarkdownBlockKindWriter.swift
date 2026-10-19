@@ -22,11 +22,14 @@ struct MarkdownWriteContext {
     /// Markdown потока блоков — для колонок и других контейнеров.
     let render: ([Block]) -> String
     let resolveLink: (UUID) -> PageLinkTarget?
+    /// Путь копии файла от файла страницы (`Страница/имя.png`), как есть; `nil` — файла нет на этом Mac.
+    let resolveAttachment: (AttachmentRef) -> String?
 }
 
 enum MarkdownBlockWriters {
     /// Писатели типов 002; у кого писателя нет, тот пишется текстом абзаца — текст не теряется.
-    static let all: [any MarkdownBlockKindWriter] = [ToggleWriter(), QuoteWriter(), CalloutWriter(), DividerWriter()]
+    static let all: [any MarkdownBlockKindWriter] = [ToggleWriter(), QuoteWriter(), CalloutWriter(), DividerWriter(),
+                                                     ImageWriter(), FileWriter(), VideoWriter(), BookmarkWriter()]
 
     private static let byKind: [BlockKind: any MarkdownBlockKindWriter] = Dictionary(
         all.flatMap { writer in writer.kinds.map { ($0, writer) } }, uniquingKeysWith: { first, _ in first })

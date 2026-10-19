@@ -159,11 +159,14 @@ struct NotionMarkdownParserTests {
 
     // MARK: Упрощение до текста (FR-026)
 
-    @Test("Картинки и вложения — «[файл: имя]»")
+    @Test("Вложение внутри текста — «[файл: имя]»; картинка на своей строке — блок-картинка (002, contracts/markdown-and-notion.md)")
     func files() {
         let page = parser.parse("# С\n\n![schema.png](%D0%98%D0%B4%D0%B5%D0%B8/schema.png)\n\nОтчёт: [отчёт.pdf](%D0%9F/%D0%BE%D1%82%D1%87%D1%91%D1%82.pdf)\n")
-        #expect(page.blocks == [block(.paragraph, "[файл: schema.png]"), block(.paragraph, "Отчёт: [файл: отчёт.pdf]")])
-        #expect(page.simplifications == [.file: 2])
+        // Подпись, равная имени файла, — так Notion пишет картинку без подписи.
+        var image = block(.image, "")
+        image.attachmentPath = "Идеи/schema.png"
+        #expect(page.blocks == [image, block(.paragraph, "Отчёт: [файл: отчёт.pdf]")])
+        #expect(page.simplifications == [.file: 1])
     }
 
     @Test("Код, формула, встраивание — абзацы с исходным текстом; цитата, выноска, переключатель, разделитель — блоками (US1)")

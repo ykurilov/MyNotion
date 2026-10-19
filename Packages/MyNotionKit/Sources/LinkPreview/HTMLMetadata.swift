@@ -101,7 +101,7 @@ public enum HTMLMetadata {
         return String(data: data, encoding: .windowsCP1251) ?? String(decoding: data, as: UTF8.self)
     }
 
-    static func decodeEntities(_ text: String) -> String {
+    public static func decodeEntities(_ text: String) -> String {
         guard text.contains("&") else { return text }
         let named = ["amp": "&", "lt": "<", "gt": ">", "quot": "\"", "apos": "'", "nbsp": " ", "laquo": "«", "raquo": "»",
                      "mdash": "—", "ndash": "–", "hellip": "…"]

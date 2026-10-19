@@ -40,6 +40,9 @@ public struct ParsedBlock: Sendable, Hashable {
     public var contained: [ParsedBlock]
     /// Упоминания страниц в тексте: импорт найдёт их страницы (`NotionImporter.resolvingMentions`).
     var mentions: [NotionPageMention] = []
+    /// Картинка, файл, видео-файл: путь файла в выгрузке от папки страницы, раскодированный. Импорт копирует файл
+    /// во вложения; файла нет или он больше 100 МБ — абзац «[файл: имя]».
+    public var attachmentPath: String?
 
     public init(kind: BlockKind, text: InlineText = .empty, indent: Int = 0, isChecked: Bool = false,
                 pagePath: String? = nil, standaloneURL: URL? = nil, color: BlockColor = .none, props: BlockProps = .empty,

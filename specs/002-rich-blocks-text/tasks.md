@@ -213,7 +213,7 @@ description: "Задачи: новые блоки и оформление тек
 - [x] T084 [P] [US5] `PK/Tests/AttachmentsTests/AttachmentTransferTests.swift` с файлами в `PK/Tests/SyncTests/Support/FakeSyncServer.swift`: отправка по частям и докачка с первой отсутствующей; пачка с блоком не ждёт файла; скачивание по одному, файлы открытой страницы первыми; `409 file_incomplete` и `404` — повтор 1, 2, 4 … 60 мин; `507` — сообщение, файл цел; выключение синхронизации файлы не трогает
 - [x] T085 [P] [US5] `PK/Tests/LinkPreviewTests/LinkPreviewTests.swift`: `og:title|description|image`, `<title>`, `<link rel="icon">` на образцах; предел 512 КБ и 10 с; oEmbed YouTube и Vimeo; без сети — только адрес
 - [ ] T086 [P] [US5] `PK/Tests/PageEditorTests/MediaBlocksTests.swift`: картинка по ширине колонки, ширина 10–100 %, подпись в `text`; заглушки «Загружается…» и «Ждёт отправки с другого Mac»; блок-файл — значок, имя, размер; меню вставки ссылки YouTube «Встроить видео / Закладка / Ссылка»
-- [ ] T087 [P] [US5] Выгрузка и импорт: `PK/Tests/MarkdownExportTests/AttachmentsExportTests.swift` (копии в папке страницы, « (2)» при совпадении, `[файл не скачан: …]` и итог), `PK/Tests/NotionImportTests/AttachmentsImportTests.swift` (картинки и файлы из выгрузки — вложения; больше 100 МБ или нет файла — «[файл: имя]»; ссылки YouTube/Vimeo — видео; одиночная ссылка — закладка)
+- [x] T087 [P] [US5] Выгрузка и импорт: `PK/Tests/MarkdownExportTests/AttachmentsExportTests.swift` (копии в папке страницы, « (2)» при совпадении, `[файл не скачан: …]` и итог), `PK/Tests/NotionImportTests/AttachmentsImportTests.swift` (картинки и файлы из выгрузки — вложения; больше 100 МБ или нет файла — «[файл: имя]»; ссылки YouTube/Vimeo — видео; одиночная ссылка — закладка)
 - [ ] T088 [P] [US5] `UITests/MediaBlocksTests.swift`: сценарий Independent Test, удаление оригинала, сообщение о 100 МБ
 
 ### Код
@@ -226,7 +226,7 @@ description: "Задачи: новые блоки и оформление тек
 - [ ] T094 [US5] Модуль `PK/Sources/LinkPreview/` и `PK/Sources/PageEditor/BlockKinds/Bookmark.swift` (картинка и значок — вложениями, «Обновить»)
 - [ ] T095 [US5] Вставка: перетаскивание из Finder, ⌘V картинки, окно «Выбрать файл… / Вставить ссылку» — `PK/Sources/PageEditor/BlockViewHost/AttachmentInsertion.swift`; фабрики видов — в `App/MainWindow/`
 - [ ] T096 [US5] Место файлов и квота сервера в `App/Settings/SyncSettingsView.swift` (`GET /files/usage`)
-- [ ] T097 [P] [US5] Выгрузка и импорт: `PK/Sources/MarkdownExport/BlockWriters/AttachmentWriters.swift`, `PK/Sources/NotionImport/BlockReaders/AttachmentReaders.swift`
+- [x] T097 [P] [US5] Выгрузка и импорт: `PK/Sources/MarkdownExport/BlockWriters/AttachmentWriters.swift`, `PK/Sources/NotionImport/BlockReaders/AttachmentReaders.swift`
 - [ ] T098 [US5] Галерея; память в покое после просмотра и закрытия YouTube — исходная ± 10 МБ, память во время игры — записать для Юрия; прокрутка «богатой» страницы p95 ≤ 50 мс; живая проверка двух Mac, quickstart.md шаги 1–3 и 5; затронутые тесты зелёные; коммит
 
 ---
