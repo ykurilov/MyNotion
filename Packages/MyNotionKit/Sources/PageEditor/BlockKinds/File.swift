@@ -117,7 +117,7 @@ final class FileBlockView: MediaBlockView {
 
     override func mouseDown(with event: NSEvent) {
         if event.clickCount == 2, let url = availability.fileURL {
-            NSWorkspace.shared.open(url)
+            MediaFileActions.open(url)
             return
         }
         super.mouseDown(with: event)
@@ -131,7 +131,7 @@ final class FileBlockView: MediaBlockView {
     override func menuItems() -> [NSMenuItem] {
         var items: [NSMenuItem] = []
         if let url = availability.fileURL {
-            items.append(menuItem("Открыть") { NSWorkspace.shared.open(url) })
+            items.append(menuItem("Открыть") { MediaFileActions.open(url) })
             items.append(menuItem("Показать в Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) })
             items.append(menuItem("Скачать копию…") { [block] in
                 MediaFileActions.saveCopy(of: url, suggestedName: block.props.attachment?.name)

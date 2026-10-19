@@ -12,10 +12,12 @@ import UniformTypeIdentifiers
 @MainActor
 final class AppMediaServices: MediaBlockServices {
     let attachments: AttachmentStore
+    let openDocuments: OpenDocuments
     let loader = LinkPreviewLoader()
 
-    init(attachments: AttachmentStore) {
+    init(attachments: AttachmentStore, openDocuments: OpenDocuments) {
         self.attachments = attachments
+        self.openDocuments = openDocuments
     }
 
     func availability(of ref: AttachmentRef) -> MediaAvailability {
@@ -33,14 +35,19 @@ final class AppMediaServices: MediaBlockServices {
         return try attachments.reserveFileImport(at: url)
     }
 
-    /// Копирование большого файла — в фоне: окно не замирает, ход копирования — в `progress`.
+    /// Копирование большого файла — в фоне: окно не замирает, ход копирования — в `progress`. Готовое описание
+    /// сразу ложится в блоки базы и открытых страниц: страницу могли закрыть, пока файл копировался.
     func importFile(at url: URL, into reserved: AttachmentRef, progress: @escaping @Sendable (Double) -> Void) async throws -> AttachmentRef {
         let attachments = attachments
-        return try await Task.detached(priority: .userInitiated) {
+        let ref = try await Task.detached(priority: .userInitiated) {
             let accessed = url.startAccessingSecurityScopedResource()
             defer { if accessed { url.stopAccessingSecurityScopedResource() } }
             return try attachments.importFile(at: url, into: reserved, progress: progress)
         }.value
+        // Не записалось — описание всё равно ляжет в блок открытой страницы через редактор.
+        let pageIds = (try? attachments.placeInBlocks(ref)) ?? []
+        openDocuments.applyExternalChanges(toPages: pageIds.intersection(openDocuments.openPageIds))
+        return ref
     }
 
     func importData(_ data: Data, name: String, contentType: String) async throws -> AttachmentRef {

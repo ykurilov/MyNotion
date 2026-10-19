@@ -104,6 +104,27 @@ import Testing
         #expect(try mac.record(reserved.id)?.orphanedAt == nil, "Блок уже ссылается — не сирота")
     }
 
+    @Test func copiedFileDescriptionReachesBlockWithoutOpenPage() throws {
+        let mac = try AttachmentTestMac()
+        let original = try mac.folder.file("отчёт.pdf", sampleBytes(1_000))
+        let reserved = try mac.attachments.reserveFileImport(at: original)
+        let block = try mac.insertBlock(attachment: reserved)
+        var bookmark = BlockProps()
+        bookmark.image = reserved
+        let other = try mac.store.write { tx in
+            try tx.insertBlock(Block(pageId: mac.pageId, kind: .bookmark, sortKey: .between(nil, nil), props: bookmark))
+        }
+
+        // Страницу закрыли посреди копирования: описание с SHA-256 ложится в блоки прямо в базе.
+        let ref = try mac.attachments.importFile(at: original, into: reserved) { _ in }
+        let pages = try mac.attachments.placeInBlocks(ref)
+
+        #expect(pages == [mac.pageId])
+        #expect(try mac.store.write { try $0.block(block.id) }?.props.attachment == ref)
+        #expect(try mac.store.write { try $0.block(other.id) }?.props.image == ref)
+        #expect(try mac.attachments.placeInBlocks(ref).isEmpty, "Повтор ничего не меняет")
+    }
+
     @Test func reservingOver100MegabytesIsRefused() throws {
         let mac = try AttachmentTestMac()
         let huge = try mac.folder.sparseFile("фильм.mov", byteCount: AttachmentRef.maximumByteCount + 1)

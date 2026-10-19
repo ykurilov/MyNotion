@@ -61,6 +61,14 @@ extension BlockProps {
     public var attachmentRefs: [AttachmentRef] {
         [attachment, poster, image, iconAttachment].compactMap { $0 }
     }
+
+    /// Подставить новое описание файла (например, с SHA-256 после копирования) всюду, где блок ссылается на тот же id.
+    public mutating func replaceAttachment(_ ref: AttachmentRef) {
+        if attachment?.id == ref.id { attachment = ref }
+        if poster?.id == ref.id { poster = ref }
+        if image?.id == ref.id { image = ref }
+        if iconAttachment?.id == ref.id { iconAttachment = ref }
+    }
 }
 
 extension BlockKind {

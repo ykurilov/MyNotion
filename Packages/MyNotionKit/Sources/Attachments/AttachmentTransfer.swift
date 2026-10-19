@@ -206,6 +206,7 @@ public actor AttachmentTransfer {
         let destination = directory.appendingPathComponent(name)
         try? FileManager.default.removeItem(at: destination)
         try FileManager.default.moveItem(at: temporary, to: destination)
+        FileQuarantine.mark(destination)
         try attachments.update(ref.id) {
             $0.localPath = "\(ref.id.attachmentKey)/\(name)"
             $0.state = .uploaded

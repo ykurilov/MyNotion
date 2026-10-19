@@ -1,5 +1,6 @@
 import AppKit
 import NotesCore
+import UniformTypeIdentifiers
 import VisualStyle
 
 extension BlockKindDescriptor {
@@ -286,6 +287,32 @@ enum MediaSamples {
 /// Действия с файлом копии: «Скачать копию…».
 @MainActor
 enum MediaFileActions {
+    /// Открыть копию файла: документ — в своей программе; программу, скрипт, установщик или ссылку на них
+    /// не запускать, а показать в Finder — файл мог прийти с другого Mac или из сети.
+    static func open(_ url: URL) {
+        if opensDirectly(url) {
+            NSWorkspace.shared.open(url)
+        } else {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
+    }
+
+    /// Не программа и не то, что запускает команды при открытии.
+    static func opensDirectly(_ url: URL) -> Bool {
+        if runnableExtensions.contains(url.pathExtension.lowercased()) { return false }
+        if let type = UTType(filenameExtension: url.pathExtension),
+           runnableTypes.contains(where: { type.conforms(to: $0) }) { return false }
+        return !FileManager.default.isExecutableFile(atPath: url.path)
+    }
+
+    private static let runnableTypes: [UTType] = [.executable, .application, .applicationBundle, .script, .shellScript,
+                                                   UTType("com.apple.installer-package-archive")].compactMap { $0 }
+    /// Запускают команды или указывают на другие файлы, хотя `UTType` не считает их программами.
+    private static let runnableExtensions: Set<String> = [
+        "app", "command", "tool", "sh", "bash", "zsh", "csh", "ksh", "pkg", "mpkg", "terminal", "workflow", "action",
+        "scpt", "scptd", "applescript", "jar", "webloc", "inetloc", "fileloc", "mobileconfig", "prefpane", "saver", "osax",
+    ]
+
     static func saveCopy(of url: URL, suggestedName: String? = nil) {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = suggestedName ?? url.lastPathComponent

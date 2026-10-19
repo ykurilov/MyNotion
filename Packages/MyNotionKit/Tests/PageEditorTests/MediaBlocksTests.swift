@@ -32,6 +32,25 @@ struct MediaBlocksTests {
 
     // MARK: Картинка
 
+    @Test("Программы и скрипты из файлов не запускаются — показываются в Finder; документы открываются")
+    func runnableFilesAreNotOpenedDirectly() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("MyNotionOpenTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        func file(_ name: String, executable: Bool = false) throws -> URL {
+            let url = folder.appendingPathComponent(name)
+            try Data("x".utf8).write(to: url)
+            if executable { try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path) }
+            return url
+        }
+        for name in ["Установка.app", "запуск.command", "скрипт.sh", "пакет.pkg", "ссылка.webloc", "a.terminal", "a.workflow", "a.scpt"] {
+            #expect(!MediaFileActions.opensDirectly(try file(name)), "\(name)")
+        }
+        #expect(!MediaFileActions.opensDirectly(try file("без расширения", executable: true)))
+        #expect(MediaFileActions.opensDirectly(try file("отчёт.pdf")))
+        #expect(MediaFileActions.opensDirectly(try file("заметки.txt")))
+    }
+
     @Test("Картинка по ширине колонки с пропорциями файла; ширина — доля колонки 10–100 %; подпись добавляет строку")
     func imageGeometry() throws {
         _ = try fixture()

@@ -42,7 +42,7 @@ public final class AttachmentStore: Sendable {
         }
         guard byteCount <= AttachmentRef.maximumByteCount else { throw AttachmentError.tooLarge(name: name) }
         let contentType = UTType(filenameExtension: source.pathExtension)?.identifier ?? UTType.data.identifier
-        return try importCopy(name: name, contentType: contentType) { destination in
+        return try importCopy(name: name, contentType: contentType, origin: .outside) { destination in
             try Self.copy(source, to: destination)
         }
     }
@@ -78,13 +78,36 @@ public final class AttachmentStore: Sendable {
     /// остаётся `failed` с причиной, копии нет.
     public func importFile(at source: URL, into reserved: AttachmentRef, progress: @escaping @Sendable (Double) -> Void) throws -> AttachmentRef {
         do {
-            return try importCopy(name: reserved.name, contentType: reserved.contentType, id: reserved.id) { destination in
+            return try importCopy(name: reserved.name, contentType: reserved.contentType, id: reserved.id,
+                                  origin: .finder(source)) { destination in
                 try Self.copy(source, to: destination, expectedByteCount: reserved.byteCount, progress: progress)
             }
         } catch {
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             try? update(reserved.id) { $0.lastError = message }
             throw error
+        }
+    }
+
+    /// Копия готова: описание с SHA-256 — во все живые блоки, которые ссылаются на файл, прямо в базе, без шага ⌘Z.
+    /// Страницу могли закрыть посреди копирования: иначе на другие Mac ушло бы описание без SHA-256, и скачивание там
+    /// кончилось бы «повреждён». Возвращает страницы изменённых блоков — открытые документы примут записанное.
+    @discardableResult
+    public func placeInBlocks(_ ref: AttachmentRef) throws -> Set<UUID> {
+        try store.write { transaction in
+            let ids = try String.fetchAll(transaction.database, sql: """
+                SELECT id FROM block WHERE isDeleted = 0 AND instr(upper(props), upper(?)) > 0
+                """, arguments: [ref.id.attachmentKey]).compactMap(UUID.init(uuidString:))
+            var pageIds: Set<UUID> = []
+            for id in ids {
+                guard var block = try transaction.block(id) else { continue }
+                let before = block.props
+                block.props.replaceAttachment(ref)
+                guard block.props != before else { continue }
+                try transaction.updateBlock(block)
+                pageIds.insert(block.pageId)
+            }
+            return pageIds
         }
     }
 
@@ -100,19 +123,30 @@ public final class AttachmentStore: Sendable {
     /// Записать содержимое из буфера (картинка — PNG) как файл.
     public func importData(_ data: Data, name: String, contentType: String) throws -> AttachmentRef {
         guard data.count <= AttachmentRef.maximumByteCount else { throw AttachmentError.tooLarge(name: name) }
-        return try importCopy(name: name, contentType: contentType) { destination in
+        return try importCopy(name: name, contentType: contentType, origin: .outside) { destination in
             try data.write(to: destination)
             return (data.count, Self.hex(SHA256.hash(data: data)))
         }
     }
 
-    private func importCopy(name: String, contentType: String, id: UUID = .timeOrdered(),
+    /// Откуда копия: файл Finder несёт пометку карантина исходника, всё остальное (сеть, буфер, импорт) — помечается.
+    private enum CopyOrigin {
+        case finder(URL)
+        case outside
+    }
+
+    private func importCopy(name: String, contentType: String, id: UUID = .timeOrdered(), origin: CopyOrigin,
                             write: (URL) throws -> (byteCount: Int, sha256: String)) throws -> AttachmentRef {
         let directory = folder.appendingPathComponent(id.attachmentKey, isDirectory: true)
         let fileName = Self.safeFileName(name)
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let (byteCount, sha256) = try write(directory.appendingPathComponent(fileName))
+            let destination = directory.appendingPathComponent(fileName)
+            let (byteCount, sha256) = try write(destination)
+            switch origin {
+            case .finder(let source): FileQuarantine.carryOver(from: source, to: destination)
+            case .outside: FileQuarantine.mark(destination)
+            }
             guard byteCount <= AttachmentRef.maximumByteCount else { throw AttachmentError.tooLarge(name: name) }
             let ref = AttachmentRef(id: id, name: fileName, byteCount: byteCount, contentType: contentType, sha256: sha256)
             try store.database.dbWriter.write { db in

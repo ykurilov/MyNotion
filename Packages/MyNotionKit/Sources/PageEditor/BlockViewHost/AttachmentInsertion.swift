@@ -93,6 +93,7 @@ extension PageTextView {
     }
 
     /// Файл скопирован: в блоке — готовое описание с SHA-256, без шага ⌘Z (блок уже вставлен правкой Юрия).
+    /// В базу и открытые страницы его кладут службы; здесь — несохранённые правки этого окна.
     private func completeCopy(_ ref: AttachmentRef) {
         guard let index = document.blocks.firstIndex(where: { $0.props.attachment?.id == ref.id }) else { return }
         var draft = BlockDraft(document.blocks[index])
@@ -172,7 +173,8 @@ extension PageTextView {
     private func showAttachmentError(_ error: any Error) {
         let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         mediaInsertion.lastError = message
-        guard let window, window.isVisible else { return }
+        // Со страницы могли уйти, пока файл копировался: сообщение — в окне, где Юрий сейчас.
+        guard let window = window?.isVisible == true ? window : NSApp.keyWindow else { return }
         let alert = NSAlert()
         alert.messageText = message
         alert.addButton(withTitle: "Понятно")
