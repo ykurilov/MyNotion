@@ -151,8 +151,8 @@ description: "Задачи: новые блоки и оформление тек
 
 ### Тесты
 
-- [ ] T053 [P] [US3] `PK/Tests/PageEditorTests/MentionTests.swift`: «@» и «[[» открывают окно, выбор вставляет U+FFFC с `mention`; название и иконка из справочника, обновляются при переименовании; корзина — «Удалённая страница», нет на Mac — «Страница загружается»; курсор перешагивает, ⌫ удаляет целиком; простой текст — название
-- [ ] T054 [P] [US3] `PK/Tests/PageEditorTests/DateQueryTests.swift`: «сегодня», «завтра», «вчера», «через неделю», «25 окт», «25.10», «25.10.2026», «25 октября 14:30»; показ «Сегодня», «Завтра», «20 октября 2026», «9:00»; часовой пояс
+- [x] T053 [P] [US3] `PK/Tests/PageEditorTests/MentionTests.swift`: «@» и «[[» открывают окно, выбор вставляет U+FFFC с `mention`; название и иконка из справочника, обновляются при переименовании; корзина — «Удалённая страница», нет на Mac — «Страница загружается»; курсор перешагивает, ⌫ удаляет целиком; простой текст — название
+- [x] T054 [P] [US3] `PK/Tests/PageEditorTests/DateQueryTests.swift`: «сегодня», «завтра», «вчера», «через неделю», «25 окт», «25.10», «25.10.2026», «25 октября 14:30»; показ «Сегодня», «Завтра», «20 октября 2026», «9:00»; часовой пояс
 - [x] T055 [P] [US3] `PK/Tests/RemindersTests/ReminderIndexTests.swift`: индекс обновляется в той же транзакции, что текст; блок удалён, страница в корзине, дата стёрта — напоминание снято; вставка копии даты — новый id, ⌘Z — прежний
 - [x] T056 [P] [US3] `PK/Tests/RemindersTests/ReminderSchedulerTests.swift` с подменёнными часами и центром уведомлений: ставятся ближайшие 50 несделанных; идентификатор = id упоминания, повтор не дублирует; после «пробуждения» просроченные за 7 дней показываются сразу один раз; `doneAt` снимает доставленное и запланированное
 - [x] T057 [P] [US3] `PK/Tests/SyncTests/ReminderSyncTests.swift`: `reminder.doneAt` сходится на двух Mac; «Готово» на одном снимает уведомление на другом
@@ -162,8 +162,8 @@ description: "Задачи: новые блоки и оформление тек
 ### Код
 
 - [ ] T060 [US3] Справочник страниц `PK/Sources/PageEditor/Inline/MentionDirectory.swift` и вложение-картинка `MentionAttachment.swift`; поиск страниц для окна — протокол `PageLookup`, реализация через FTS5 в `App/`
-- [ ] T061 [US3] Окно «@»/«[[» `PK/Sources/PageEditor/Inline/MentionPicker.swift` (по образцу `SlashCommandMenu.swift`)
-- [ ] T062 [US3] Даты `PK/Sources/PageEditor/Inline/DateQuery.swift`, `DateMentionAttachment.swift`, календарик `DatePickerPopover.swift` с «Напомнить» по contracts/blocks-and-keys.md
+- [x] T061 [US3] Окно «@»/«[[» `PK/Sources/PageEditor/Inline/MentionPicker.swift` (по образцу `SlashCommandMenu.swift`)
+- [x] T062 [US3] Даты `PK/Sources/PageEditor/Inline/DateQuery.swift`, `DateMentionAttachment.swift`, календарик `DatePickerPopover.swift` с «Напомнить» по contracts/blocks-and-keys.md
 - [ ] T063 [US3] Модуль `PK/Sources/Reminders/`: `ReminderIndexer.swift` (хук транзакции), `ReminderScheduler.swift` (обёртка `UNUserNotificationCenter` за протоколом), наблюдение `NSWorkspace.didWakeNotification`; перепланирование — после готовности редактора, не при запуске
 - [ ] T064 [US3] `App/Notifications/ReminderNotifications.swift`: делегат уведомлений, кнопка «Готово», открытие страницы у блока, запрос разрешения при первом «Напомнить», подсказка при отказе
 - [x] T065 [US3] Применение `reminder` в `PK/Sources/Sync/ChangeMerger.swift` и `Outbox.swift`
