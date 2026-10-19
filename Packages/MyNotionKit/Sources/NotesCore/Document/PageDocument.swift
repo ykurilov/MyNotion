@@ -227,7 +227,7 @@ public final class PageDocument {
                 change.insertedBlockIds.insert(block.id)
             }
         }
-        if let containerId, change.touchesBlocks { change.changedFlowIds.insert(containerId) }
+        if change.touchesBlocks { change.changedFlowIds.insert(containerId ?? pageId) }
         change.changedFlowIds.formUnion(removedFlows)
         postLocalEdits(change, origin: origin)
         return newBlocks.map(\.id)
@@ -294,6 +294,8 @@ public final class PageDocument {
         let pageMembers = Set(blocks.map(\.id))
         for id in oldPageOrder where byId[id] != nil && !pageMembers.contains(id) { change.changedBlockIds.insert(id) }
         for id in Set(oldFlowOrder.keys).union(flowOrder.keys) where oldFlowOrder[id] != flowOrder[id] { change.changedFlowIds.insert(id) }
+        let touched = change.changedBlockIds.union(change.insertedBlockIds).union(change.removedBlockIds)
+        if oldPageOrder != blocks.map(\.id) || touched.contains(where: pageMembers.contains) { change.changedFlowIds.insert(pageId) }
         didEdit?()
         postLocalEdits(change, origin: origin)
         return inverse
@@ -339,7 +341,7 @@ public final class PageDocument {
         public var changedBlockIds: Set<UUID> = []
         public var insertedBlockIds: Set<UUID> = []
         public var removedBlockIds: Set<UUID> = []
-        /// Контейнеры, чей поток поменялся: блоки внутри, их порядок или состав.
+        /// Потоки, которые поменялись: блоки внутри, их порядок или состав. Контейнер — его id, поток страницы — id страницы.
         public var changedFlowIds: Set<UUID> = []
         public var titleChanged = false
         public var iconChanged = false
@@ -433,6 +435,9 @@ public final class PageDocument {
         let pageMembers = Set(pageOrder)
         for id in oldPageOrder where newIds.contains(id) && !pageMembers.contains(id) { change.changedBlockIds.insert(id) }
         let touched = change.changedBlockIds.union(change.insertedBlockIds).union(change.removedBlockIds)
+        if oldPageOrder != pageOrder || touched.contains(where: pageMembers.contains) || oldPageOrder.contains(where: touched.contains) {
+            change.changedFlowIds.insert(pageId)
+        }
         for containerId in Set(oldFlowOrder.keys).union(flowOrder.keys) {
             let old = oldFlowOrder[containerId] ?? []
             let new = flowOrder[containerId] ?? []

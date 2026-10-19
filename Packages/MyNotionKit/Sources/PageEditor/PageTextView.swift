@@ -7,8 +7,9 @@ import VisualStyle
 /// Системное поведение текста — выделение, ⌘Z, проверка орфографии, ввод с IME, ⌘F — от `NSTextView`;
 /// правки уходят в `PageDocument` через `PageTextStorageMapper`. Над текстом — шапка с иконкой и названием.
 @MainActor
-public final class PageTextView: NSTextView {
-    public let document: PageDocument
+public class PageTextView: NSTextView {
+    /// Блоки, которые правит этот редактор: поток страницы, колонки или ячейка таблицы (`FlowDocument`).
+    public let document: FlowDocument
     public let header: PageHeaderView
     private(set) var mapper: PageTextStorageMapper!
     let emptyParagraphHint = NSTextField(labelWithString: "Введите «/» для выбора блока")
@@ -79,7 +80,11 @@ public final class PageTextView: NSTextView {
     /// Протяжка мышью с поля: где нажали и сдвинулась ли мышь.
     var marginDrag: (start: NSPoint, moved: Bool)?
 
-    public init(document: PageDocument, initialFocus: InitialFocus) {
+    public convenience init(document: PageDocument, initialFocus: InitialFocus) {
+        self.init(flow: FlowDocument(document), initialFocus: initialFocus)
+    }
+
+    init(flow document: FlowDocument, initialFocus: InitialFocus) {
         self.document = document
         header = PageHeaderView(page: document.page)
         pendingFocus = initialFocus
@@ -103,7 +108,7 @@ public final class PageTextView: NSTextView {
         colorMenu.textView = self
 
         configureTextBehaviour()
-        mapper = PageTextStorageMapper(document: document, textStorage: textStorage!)
+        mapper = PageTextStorageMapper(flow: document, textStorage: textStorage!)
         // После загрузки текста система ставит выделение в конец, и место курсора там считалось бы раскладкой
         // всей страницы (на 10 000 блоках — секунды). Пока текст загружается, вид выделения не обновляется;
         // курсор — в начало, куда его потом и ставит открытие страницы.
@@ -117,9 +122,10 @@ public final class PageTextView: NSTextView {
             NotificationCenter.default.addObserver(self, selector: #selector(undoManagerDidRestore(_:)), name: name, object: nil)
         }
         NotificationCenter.default.addObserver(self, selector: #selector(documentDidApplyExternalChanges(_:)),
-                                               name: PageDocument.didApplyExternalChanges, object: document)
+                                               name: PageDocument.didApplyExternalChanges, object: document.pageDocument)
         NotificationCenter.default.addObserver(self, selector: #selector(documentDidApplyLocalEdits(_:)),
-                                               name: PageDocument.didApplyLocalEdits, object: document)
+                                               name: PageDocument.didApplyLocalEdits, object: document.pageDocument)
+        Self.liveEditors.add(self)
 
         addSubview(header)
         slashQueryHighlight.wantsLayer = true
@@ -186,19 +192,28 @@ public final class PageTextView: NSTextView {
     /// в своём блоке на том же месте. Прежние шаги ⌘Z относятся к старому тексту — их больше нет.
     @objc private func documentDidApplyExternalChanges(_ notification: Notification) {
         guard let change = notification.userInfo?[PageDocument.externalChangeKey] as? PageDocument.ExternalChange else { return }
-        render(change)
+        render(change, keepsUndo: false)
     }
 
     /// Ту же страницу правят в другом окне (FR-029): показать их правку так же, как пришедшую с другого Mac.
     /// Свою правку этот редактор уже показывает — её он не перерисовывает, и его ⌘Z цела.
     @objc private func documentDidApplyLocalEdits(_ notification: Notification) {
+        let origin = notification.userInfo?[PageDocument.editOriginKey] as? ObjectIdentifier
         guard let change = notification.userInfo?[PageDocument.externalChangeKey] as? PageDocument.ExternalChange,
-              let textStorage, notification.userInfo?[PageDocument.editOriginKey] as? ObjectIdentifier != ObjectIdentifier(textStorage)
+              let textStorage, origin != ObjectIdentifier(textStorage)
         else { return }
-        render(change)
+        render(change, keepsUndo: sharesUndo(withEditOrigin: origin))
     }
 
-    private func render(_ change: PageDocument.ExternalChange) {
+    /// `keepsUndo` — правку сделал редактор с той же отменой (колонка, ячейка, этот же редактор через документ):
+    /// её шаг лежит в общей отмене окна, и прежние шаги остаются верны.
+    private func render(_ change: PageDocument.ExternalChange, keepsUndo: Bool) {
+        // Правка чужого потока (колонки, ячейки) этот текст не трогает.
+        if change.touchesBlocks, !change.changedFlowIds.contains(document.flowKey),
+           !change.changedBlockIds.contains(where: { document.index(ofBlock: $0) != nil }) {
+            if change.conflictsChanged { conflictMarks.update() }
+            return
+        }
         if change.titleChanged, header.titleField.currentEditor() == nil {
             header.titleField.stringValue = document.page.title
             layoutColumn()
@@ -208,7 +223,7 @@ public final class PageTextView: NSTextView {
             let anchors = selectionAnchors()
             mapper.renderExternalChanges(change)
             refreshBlockStructure()
-            undoManager?.removeAllActions()
+            if !keepsUndo { undoManager?.removeAllActions() }
             restoreSelection(anchors, fallbackBlock: 0)
             redrawBlockDecorations()
             updateEmptyParagraphHint()

@@ -103,8 +103,8 @@ public struct TableGrid: Sendable, Hashable {
 
     // MARK: Правки
 
-    /// Текст ячейки; отсутствующая создаётся.
-    public func settingText(_ text: InlineText, row: Int, column: Int) -> BlockChanges {
+    /// Текст ячейки; отсутствующая создаётся — с id `newCellId`, если он дан (поле правки уже показывает её этим id).
+    public func settingText(_ text: InlineText, row: Int, column: Int, newCellId: UUID? = nil) -> BlockChanges {
         let text = text.normalized()
         if var cell = cell(row: row, column: column) {
             guard cell.text != text else { return BlockChanges() }
@@ -119,7 +119,8 @@ public struct TableGrid: Sendable, Hashable {
         let after = existing.map(\.sortKey).filter { key in before.map { key > $0 } ?? true }.min()
         var props = BlockProps()
         props.columnId = columns[column].id
-        let cell = Block(pageId: table.pageId, kind: .tableCell, text: text, sortKey: .between(before, after), containerId: rowId, props: props)
+        let cell = Block(id: newCellId ?? .timeOrdered(), pageId: table.pageId, kind: .tableCell, text: text, sortKey: .between(before, after),
+                         containerId: rowId, props: props)
         return BlockChanges(upserts: [cell])
     }
 
