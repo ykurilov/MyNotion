@@ -39,7 +39,7 @@ let package = Package(
         .target(name: "PageSearch", dependencies: ["NotesCore", "VisualStyle", .product(name: "GRDB", package: "GRDB.swift")]),
         .target(name: "MarkdownExport", dependencies: ["NotesCore"]),
         // Импорт из Notion (US6): записи и журнал импортов (`import_run`) пишет прямо через GRDB, как поиск свой индекс.
-        .target(name: "NotionImport", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
+        .target(name: "NotionImport", dependencies: ["NotesCore", "CodeHighlighting", .product(name: "GRDB", package: "GRDB.swift")]),
         .target(name: "Sync", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
         // Состояния галереи для блоков 002 — из описателей типов редактора (`BlockKinds.gallerySamples`).
         .target(name: "UIGallery", dependencies: ["NotesCore", "PageEditor"]),

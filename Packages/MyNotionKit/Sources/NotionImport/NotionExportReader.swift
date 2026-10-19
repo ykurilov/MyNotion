@@ -11,6 +11,7 @@ struct PlannedPage: Sendable {
     var icon: String?
     var blocks: [ParsedBlock] = []
     var simplifications: [NotionSimplification: Int] = [:]
+    var unknownCodeLanguages: [String] = []
     var parent: Int?
     var children: [Int] = []
 }
@@ -157,6 +158,7 @@ struct NotionExportReader {
             page.icon = parsed.icon
             page.blocks = parsed.blocks
             page.simplifications = parsed.simplifications
+            page.unknownCodeLanguages = parsed.unknownCodeLanguages
         }
         return page
     }

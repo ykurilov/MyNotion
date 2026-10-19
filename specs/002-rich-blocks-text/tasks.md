@@ -180,22 +180,22 @@ description: "Задачи: новые блоки и оформление тек
 
 ### Тесты
 
-- [ ] T068 [P] [US4] `PK/Tests/CodeHighlightingTests/HighlighterTests.swift`: по образцу на каждый из 24 языков (research R5) — ключевые слова, строки, числа, комментарии; многострочный комментарий и строка через правку; перекраска останавливается, когда состояние конца строки совпало; полный разбор 500 строк — замер
+- [x] T068 [P] [US4] `PK/Tests/CodeHighlightingTests/HighlighterTests.swift`: по образцу на каждый из 24 языков (research R5) — ключевые слова, строки, числа, комментарии; многострочный комментарий и строка через правку; перекраска останавливается, когда состояние конца строки совпало; полный разбор 500 строк — замер
 - [ ] T069 [P] [US4] `PK/Tests/PageEditorTests/CodeBlockEditingTests.swift` (блок кода — встроенный редактор внутри вида-вложения, строка кода — свой абзац; research R5 «Решение 19.10.2026»): ```` ``` ```` создаёт блок-вложение с редактором и курсором в нём; правка в редакторе кода пишет `text` блока (строки через `\n`) и отменяется общим ⌘Z окна; ↑ на первой строке и ↓ на последней — в соседний блок страницы; Enter — строка внутри; Tab — два пробела, у выделения — у каждой строки; ⇧Tab; ⌘Enter — абзац под блоком; ↓ на последней строке; «/» и быстрые символы внутри не работают; «Копировать» — весь код; цвета — атрибуты показа, не в тексте и не в отмене
-- [ ] T070 [P] [US4] `PK/Tests/MathRenderingTests/FormulaRenderingTests.swift`: дроби, корни, индексы, матрицы, `aligned`, `cases`; ошибка — признак «Неверная формула», запись цела; кэш по (запись, размер, тема); шрифт грузится при первой формуле
+- [x] T070 [P] [US4] `PK/Tests/MathRenderingTests/FormulaRenderingTests.swift`: дроби, корни, индексы, матрицы, `aligned`, `cases`; ошибка — признак «Неверная формула», запись цела; кэш по (запись, размер, тема); шрифт грузится при первой формуле
 - [ ] T071 [P] [US4] `PK/Tests/PageEditorTests/EquationTests.swift`: формула-блок и в строке (⌃⇧E, кнопка «√x»), окно правки: Enter, ⇧Enter, Esc; пустая — «Новая формула»
 - [ ] T072 [P] [US4] `PK/Tests/PageEditorTests/TableOfContentsTests.swift`: строки заголовков с отступами; правка заголовка обновляет; щелчок прокручивает и раскрывает свёрнутых предков; без заголовков — подсказка
-- [ ] T073 [P] [US4] Выгрузка и импорт кода, `$$`, `$…$`, `<nav data-toc>`: `PK/Tests/MarkdownExportTests/CodeMathExportTests.swift`, `PK/Tests/NotionImportTests/CodeMathImportTests.swift` (язык из ограды; незнакомый — `plain` и строка в отчёте)
+- [x] T073 [P] [US4] Выгрузка и импорт кода, `$$`, `$…$`, `<nav data-toc>`: `PK/Tests/MarkdownExportTests/CodeMathExportTests.swift`, `PK/Tests/NotionImportTests/CodeMathImportTests.swift` (язык из ограды; незнакомый — `plain` и строка в отчёте)
 - [ ] T074 [P] [US4] `UITests/CodeMathTocTests.swift`: сценарий Independent Test
 
 ### Код
 
-- [ ] T075 [US4] Модуль `PK/Sources/CodeHighlighting/`: `LanguageDefinition.swift`, `Languages/*.swift` (24 таблицы), `LineScanner.swift`, `IncrementalHighlighter.swift`
+- [x] T075 [US4] Модуль `PK/Sources/CodeHighlighting/`: `LanguageDefinition.swift`, `Languages/*.swift` (24 таблицы), `LineScanner.swift`, `IncrementalHighlighter.swift`
 - [ ] T076 [US4] Блок кода — встроенный редактор (research R5, «Решение 19.10.2026»; проба T004 провалилась: один абзац на 500 строк TextKit 2 перекладывает за 310 мс): `PK/Sources/PageEditor/BlockKinds/Code.swift` (описатель, фабрика вида через `BlockViewFactories`), `PK/Sources/PageEditor/BlockKinds/CodeBlockEditor.swift` (свой `NSTextView` на TextKit 2, строка кода — абзац; запись в документ по правке; клавиши кода; переходы курсора к соседним блокам страницы; общий `UndoManager` окна) и `CodeBlockChrome.swift` (язык с поиском, «Копировать» / «Скопировано»); раскраска через `setRenderingAttributes` встроенного редактора. `BlockKind.code` уже абзац-вложение (`rendersAsAttachment`, этап 0)
-- [ ] T077 [US4] Модуль `PK/Sources/MathRendering/`: исходники SwiftMath 1.7.3 (MIT, `LICENSE` рядом) с одним шрифтом `latinmodern-math.otf`; `FormulaImageCache.swift`
+- [x] T077 [US4] Модуль `PK/Sources/MathRendering/`: исходники SwiftMath 1.7.3 (MIT, `LICENSE` рядом) с одним шрифтом `latinmodern-math.otf`; `FormulaImageCache.swift`
 - [ ] T078 [US4] `PK/Sources/PageEditor/BlockKinds/Equation.swift`, `PK/Sources/PageEditor/Inline/InlineEquationAttachment.swift`, `EquationEditorPopover.swift`; кнопка «√x» в `FormatBar.swift`
 - [ ] T079 [US4] `PK/Sources/PageEditor/BlockKinds/TableOfContents.swift`: вид по уведомлению о правке документа
-- [ ] T080 [P] [US4] Выгрузка и импорт: `PK/Sources/MarkdownExport/BlockWriters/CodeMathWriters.swift`, `PK/Sources/NotionImport/BlockReaders/CodeMathReaders.swift`
+- [x] T080 [P] [US4] Выгрузка и импорт: `PK/Sources/MarkdownExport/BlockWriters/CodeMathWriters.swift`, `PK/Sources/NotionImport/BlockReaders/CodeMathReaders.swift`
 - [ ] T081 [US4] Галерея в обеих темах, сверка с Notion; набор в середине блока кода на 500 строк p95 ≤ 50 мс (SC-103) — в виртуальном Mac, по образцу `PerformanceTests/Probes/LongCodeTypingProbeTests.swift`, но во встроенном редакторе кода; размер сборки до и после `MathRendering`; затронутые тесты зелёные; коммит
 
 ---
