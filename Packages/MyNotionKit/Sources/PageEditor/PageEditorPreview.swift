@@ -145,6 +145,14 @@ public enum PageEditorPreview {
         return true
     }
 
+    /// В открытом меню блока — подменю «Преобразовать в», как стрелкой →; `false` — меню блока не открыто.
+    @discardableResult
+    public static func openBlockMenuTurnInto(in window: NSWindow) -> Bool {
+        guard let textView = textView(in: window), textView.popups.isOpen else { return false }
+        textView.popups.openSubmenu(for: .turnInto, focus: true)
+        return textView.popups.submenu == .turnInto
+    }
+
     /// Взять блок за «⋮⋮» и сдвинуть мышь на `offset` (вниз — плюс), не отпуская кнопку: идёт перетаскивание.
     @discardableResult
     public static func beginDrag(ofBlock blockId: UUID, by offset: CGSize, in window: NSWindow) -> Bool {

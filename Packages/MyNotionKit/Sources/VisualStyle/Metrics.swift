@@ -262,7 +262,18 @@ public enum Metrics {
     public enum PopupMenu {
         public static let cornerRadius: CGFloat = 10
         public static let slashMenuWidth: CGFloat = 324
-        public static let blockMenuWidth: CGFloat = 240
+        /// Меню блока «⋮⋮» и подменю «Преобразовать в», как у Notion 7.39 (дерево доступности, 19.10.2026): ширины 265 и 220,
+        /// строки 28 с шагом 29, черта между группами добавляет 8, подменю заходит на меню на 4. Список типов у Notion 220,
+        /// у нас 248: «Раскрывающийся список» длиннее «Toggle list».
+        public static let blockMenuWidth: CGFloat = 265
+        public static let kindListWidth: CGFloat = 248
+        public static let listMenuWidth: CGFloat = 240
+        public static let compactRowHeight: CGFloat = 29
+        public static let groupSeparatorHeight: CGFloat = 8
+        public static let submenuOverlap: CGFloat = 4
+        /// Полоса прокрутки длинного списка: ширина 4, в 4 от правого края карточки.
+        public static let scrollIndicatorWidth: CGFloat = 4
+        public static let scrollIndicatorInset: CGFloat = 4
         /// Шаг строк; подсветка выбранной строки — на 1 меньше сверху и снизу, скругление 6.
         public static let rowHeight: CGFloat = 33
         public static let rowHighlightInset: CGFloat = 1

@@ -475,6 +475,8 @@ public class PageTextView: NSTextView {
         case .applyBlockColor(let choice): applyBlockColor(choice)
         case .repeatLastColor: repeatLastColor()
         case .insertInlineEquation: insertInlineEquation()
+        case .duplicateBlocks:
+            if let selected = selectedBlockRange() { duplicateBlocks(at: selected) }
         }
     }
 

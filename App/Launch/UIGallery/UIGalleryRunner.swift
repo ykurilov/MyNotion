@@ -217,12 +217,13 @@ final class UIGalleryRunner {
                 return "перетаскивание не началось"
             }
 
-        case .blockMenu:
+        case .blockMenu(let turnInto):
             await open(library.sample.page.id)
             guard let block = library.sampleBlock(.heading1), GalleryTarget.scrollToBlock(block.id, in: window),
                   PageEditorPreview.openBlockMenu(forBlock: block.id, in: window) else {
                 return "меню блока не открылось"
             }
+            if turnInto, !PageEditorPreview.openBlockMenuTurnInto(in: window) { return "подменю «Преобразовать в» не открылось" }
             if let problem = GalleryTarget.handlesProblem("ручки блока", in: window) ?? GalleryTarget.popupsProblem("меню блока", in: window) {
                 return problem
             }

@@ -25,8 +25,8 @@ public enum GalleryScene: Hashable, Sendable {
     case blockHover(BlockKind)
     /// Меню «/» в пустом абзаце; `filter` — набранное после «/».
     case slashMenu(filter: String)
-    /// Меню блока по щелчку на «⋮⋮».
-    case blockMenu
+    /// Меню блока по щелчку на «⋮⋮»; `turnInto` — открыто подменю «Преобразовать в».
+    case blockMenu(turnInto: Bool)
     /// Последний пустой блок страницы списка стал пунктом от «- »: маркер и подсказка там же, где у пункта выше.
     case bulletByShortcutAtEnd
     /// Пункт с вложенными тянут за «⋮⋮»: копия едет за мышью, линия показывает место сброса.
@@ -276,7 +276,12 @@ public enum GalleryCatalog {
     } + [
         GalleryState("slash-menu", .slashMenu(filter: ""), "Меню «/» в пустом абзаце, все типы", section: "Правка", narrowToo: true),
         GalleryState("slash-menu-filtered", .slashMenu(filter: "заг"), "Меню «/» с фильтром «заг»", section: "Правка"),
-        GalleryState("block-menu", .blockMenu, "Меню блока по щелчку на «⋮⋮»", section: "Правка"),
+        GalleryState("block-menu", .blockMenu(turnInto: false),
+                     "Меню блока по щелчку на «⋮⋮», как у Notion: тип блока, «Преобразовать в ▸», «Цвет ▸», черта, «Дублировать ⌘D», «Удалить Del»",
+                     section: "Правка", narrowToo: true),
+        GalleryState("block-menu-turn-into", .blockMenu(turnInto: true),
+                     "Подменю «Преобразовать в» справа от меню блока: текущий тип с галочкой, список по высоте окна с прокруткой",
+                     section: "Правка", narrowToo: true),
         GalleryState("bullet-shortcut-at-end", .bulletByShortcutAtEnd,
                      "Последний пустой блок стал пунктом от «- »: маркер с отступом, «Список» там, где начнётся текст", section: "Правка"),
         GalleryState("block-dragging", .blockDragging,
@@ -298,7 +303,7 @@ public enum GalleryCatalog {
                      "Окно цветов под панелью форматирования: «Недавние», «Цвет текста» и «Цвет фона», у каждого цвета образец «A»",
                      section: "Правка"),
         GalleryState("color-menu-block", .colorMenu(fromBlockMenu: true),
-                     "Окно цветов от пункта «Цвет» меню блока: на месте меню блока, те же разделы", section: "Правка"),
+                     "Окно цветов — подменю пункта «Цвет» меню блока, справа от меню, верх вровень со строкой", section: "Правка"),
         GalleryState("page-icon-add-hover", .pageIcon(.addIconHover),
                      "Мышь над шапкой страницы без иконки: серая «Добавить иконку» со значком над названием, как у Notion", section: "Правка"),
         GalleryState("page-icon-picker", .pageIcon(.picker),

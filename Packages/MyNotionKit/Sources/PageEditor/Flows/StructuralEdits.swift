@@ -34,6 +34,41 @@ extension PageTextView {
                                actionName: "Переместить блок")
     }
 
+    /// «Дублировать» (⌘D, меню блока): копии блоков `range` со всем вложенным — детьми, колонками, ячейками таблиц —
+    /// встают сразу под ними одним шагом ⌘Z. У копий новые id; ячейки ссылаются на копии своих столбцов.
+    /// Подстраница не дублируется: у страницы одна ссылка (data-model.md).
+    func duplicateBlocks(at range: Range<Int>) {
+        commitEdits()
+        let blocks = document.blocks
+        guard !range.isEmpty, range.upperBound <= blocks.count else { return }
+        let end = BlockMoveController.subtreeEnd(blocks, of: range.upperBound - 1)
+        let originals = blocks[range.lowerBound..<end].filter { $0.kind != .pageLink }
+        guard !originals.isEmpty else { return }
+        var newIds: [UUID: UUID] = [:]
+        var copies: [Block] = []
+        func copy(_ block: Block, sortKey: FractionalSortKey, containerId: UUID?) {
+            let id = UUID.timeOrdered()
+            newIds[block.id] = id
+            copies.append(Block(id: id, pageId: document.pageId, kind: block.kind, text: block.text, indent: block.indent,
+                                isChecked: block.isChecked, sortKey: sortKey, containerId: containerId, color: block.color,
+                                props: block.props))
+            for inner in document.pageDocument.flow(block.id) { copy(inner, sortKey: inner.sortKey, containerId: id) }
+        }
+        var key = blocks[end - 1].sortKey
+        let upper = blocks[safe: end]?.sortKey
+        for block in originals {
+            key = .between(key, upper)
+            copy(block, sortKey: key, containerId: document.containerId)
+        }
+        // Ячейка таблицы помнит свой столбец по id: у копии — копия столбца.
+        for index in copies.indices {
+            if let column = copies[index].props.columnId, let copied = newIds[column] { copies[index].props.columnId = copied }
+        }
+        applyStructuralChanges(BlockChanges(upserts: copies), actionName: "Дублировать")
+        textLayoutManager?.textViewportLayoutController.layoutViewport()
+        blockViews.update()
+    }
+
     /// «/» → «Колонки: N»: пустой блок сам становится колонками, под блоком с текстом колонки встают ниже.
     /// В каждой колонке — пустой абзац, курсор — в первой.
     func insertColumns(_ count: Int, at index: Int) {
