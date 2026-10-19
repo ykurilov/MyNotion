@@ -219,13 +219,16 @@ public final class AttachmentStore: Sendable {
         }
     }
 
-    /// Есть ли что отправить или скачать: живой блок ссылается, а файл ещё не на сервере или не здесь.
+    /// Есть ли что отправить или скачать: живой блок ссылается, а файл ещё не на сервере или не здесь
+    /// (в том числе ждёт повтора после сбоя).
     public func hasPendingTransfers() throws -> Bool {
         try store.database.dbWriter.read { db in
             try Bool.fetchOne(db, sql: """
                 SELECT EXISTS (SELECT 1 FROM attachment WHERE orphanedAt IS NULL
-                               AND state IN ('local', 'uploading', 'remote', 'downloading'))
-                """) ?? false
+                               AND (state IN ('local', 'uploading', 'remote', 'downloading')
+                                    OR (state = 'failed' AND lastError IN (?, ?, ?))))
+                """, arguments: [AttachmentTransfer.uploadFailedMessage, AttachmentTransfer.downloadFailedMessage,
+                                 AttachmentError.damaged.localizedDescription]) ?? false
         }
     }
 

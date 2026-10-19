@@ -152,6 +152,37 @@ import Testing
         #expect(try mac.record(ref.id)?.orphanedAt == nil)
     }
 
+    @Test func blockOfKindWithoutFilesDoesNotQueueDownload() throws {
+        let mac = try AttachmentTestMac()
+        let ref = AttachmentRef(name: "с другого.pdf", byteCount: 100, contentType: "com.adobe.pdf", sha256: String(repeating: "0", count: 64))
+        // Абзац с оставшимся в props описанием файла: блок файла не показывает — как и в подсчёте сирот.
+        try mac.insertBlock(.paragraph, attachment: ref)
+        #expect(try mac.record(ref.id) == nil)
+        #expect(try !mac.attachments.hasPendingTransfers())
+    }
+
+    @Test func returnedBlockSendsItsCopyAgainAfterServerErasedIt() async throws {
+        let mac = try AttachmentTestMac()
+        let server = FakeFileServer()
+        let ref = try mac.attachments.importFile(at: try mac.folder.file("a.txt", sampleBytes(10)))
+        let block = try mac.insertBlock(attachment: ref)
+        let transfer = AttachmentTransfer(attachments: mac.attachments, transport: server.transport,
+                                          cipher: FileCipher(syncKey: testSyncKey), now: mac.now.reading)
+        _ = try await transfer.runDue()
+        try mac.store.write { try $0.deleteBlock(block.id) }
+        // Сборщик другого Mac стёр файл на сервере (в корзину).
+        try await server.transport.deleteFile(ref.id)
+
+        // ⌘Z: блок вернулся — копия этого Mac уходит на сервер снова.
+        try mac.insertBlock(attachment: ref, id: block.id)
+        #expect(try mac.attachments.hasPendingTransfers())
+        _ = try await transfer.runDue()
+        let stored = try #require(await server.file(ref.id))
+        #expect(!stored.deleted)
+        #expect(stored.complete)
+        #expect(try mac.record(ref.id)?.state == .uploaded)
+    }
+
     @Test func replacingAttachmentOrphansTheOldOne() throws {
         let mac = try AttachmentTestMac()
         let first = try mac.attachments.importFile(at: try mac.folder.file("1.txt", sampleBytes(10, seed: 1)))
