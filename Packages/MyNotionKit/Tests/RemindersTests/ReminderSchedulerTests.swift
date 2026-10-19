@@ -41,6 +41,21 @@ struct ReminderSchedulerTests {
         #expect(Set(center.pending.keys) == Set(dates[2...51].map { $0.id.uuidString.lowercased() }))
     }
 
+    @Test("Система не приняла одно уведомление — остальные ставятся, показанные не показываются второй раз")
+    func refusedNotificationDoesNotStopOthers() async throws {
+        let overdue = (1...3).map { reminderDate(referenceMoment.addingTimeInterval(Double(-$0) * 600)) }
+        let upcoming = (1...3).map { reminderDate(referenceMoment.addingTimeInterval(Double($0) * 600)) }
+        try library.page(dates: overdue + upcoming)
+        center.refused = [overdue[0].id.uuidString.lowercased(), upcoming[0].id.uuidString.lowercased()]
+
+        await scheduler.reschedule()
+
+        #expect(Set(center.pending.keys) == Set(upcoming[1...].map { $0.id.uuidString.lowercased() }))
+        #expect(Set(center.shownCount.keys) == Set(overdue[1...].map { $0.id.uuidString.lowercased() }))
+        await scheduler.reschedule()
+        #expect(center.shownCount.values.allSatisfy { $0 == 1 }, "\(center.shownCount)")
+    }
+
     @Test("Mac спал: после пробуждения просроченные за 7 дней показываются сразу и один раз")
     func catchUpAfterSleep() async throws {
         let soon = reminderDate(referenceMoment.addingTimeInterval(3600))
