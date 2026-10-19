@@ -492,12 +492,12 @@ enum FormatBarPlacement {
 }
 
 extension FormatBarPlacement {
-    /// Окно цветов, как список типов: сбоку от карточки (справа, а если там нет места, слева), заходит на неё на
-    /// `kindMenuOverlap`, верхним краем вровень с карточкой; в пределах `visible`. Координаты экрана.
+    /// Окно цветов: сбоку от карточки (справа, а если там нет места, слева) с зазором `colorMenuGap`, верхним краем
+    /// вровень с карточкой; в пределах `visible`. Координаты экрана.
     static func colorMenu(size: NSSize, card: NSRect, visible: NSRect) -> NSRect {
-        let overlap = Metrics.FormatBar.kindMenuOverlap
-        var origin = NSPoint(x: (card.maxX - overlap).rounded(.up), y: card.maxY - size.height)
-        if origin.x + size.width > visible.maxX { origin.x = (card.minX + overlap).rounded(.down) - size.width }
+        let gap = Metrics.FormatBar.colorMenuGap
+        var origin = NSPoint(x: (card.maxX + gap).rounded(.up), y: card.maxY - size.height)
+        if origin.x + size.width > visible.maxX { origin.x = (card.minX - gap).rounded(.down) - size.width }
         origin.x = max(visible.minX, min(origin.x, visible.maxX - size.width))
         origin.y = max(visible.minY, min(origin.y, visible.maxY - size.height))
         return NSRect(origin: origin, size: size)

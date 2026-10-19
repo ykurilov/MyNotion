@@ -388,6 +388,8 @@ public enum Metrics {
         /// Список типов — сбоку от карточки (Notion, сверено 18.10.2026: ≈ 8,8 ± 1,3) и заходит на неё до подсветки
         /// последней кнопки: поле карточки 6 + половина зазора между местом кнопки 36 и подсветкой 32.
         public static let kindMenuOverlap: CGFloat = horizontalPadding + (buttonWidth - buttonHighlightSize.width) / 2
+        /// Окно цветов — сбоку от карточки с зазором: у Notion 7.39 оно ниже кнопки «A» на ≈ 3 px снимка ≈ 4 pt.
+        public static let colorMenuGap: CGFloat = 4
         /// Между строкой выделения и карточкой (под строкой, а если внизу нет места — над ней).
         public static let selectionSpacing: CGFloat = 8
         /// Левый край карточки правее указателя мыши (или конца выделения, если указатель не над страницей).

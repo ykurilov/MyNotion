@@ -72,7 +72,7 @@ enum ColorMenuRow: Equatable {
 /// Образец цвета: квадрат с буквой «A». Цвет текста — буква цвета на пустом квадрате, цвет фона — квадрат цвета.
 @MainActor
 enum ColorSwatch {
-    static func draw(_ choice: ColorChoice, in rect: NSRect) {
+    static func draw(_ choice: ColorChoice, isCurrent: Bool = false, in rect: NSRect) {
         let radius = Metrics.ColorMenu.swatchCornerRadius
         let tone = choice.color?.tone
         let shape = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), xRadius: radius, yRadius: radius)
@@ -87,9 +87,16 @@ enum ColorSwatch {
                 shape.fill()
             }
         }
-        Palette.popupDivider.setStroke()
+        let border = tone.map { Palette.notionText($0).withAlphaComponent(Metrics.ColorMenu.swatchToneBorderAlpha) } ?? Palette.popupDivider
+        border.setStroke()
         shape.lineWidth = Metrics.ColorMenu.swatchBorderWidth
         shape.stroke()
+        if isCurrent {
+            let ring = NSBezierPath(roundedRect: rect.insetBy(dx: 1, dy: 1), xRadius: radius, yRadius: radius)
+            Palette.textPrimary.setStroke()
+            ring.lineWidth = Metrics.ColorMenu.currentRingWidth
+            ring.stroke()
+        }
         let font = NSFont.systemFont(ofSize: Metrics.ColorMenu.swatchGlyphSize, weight: .medium)
         let glyph = NSAttributedString(string: "A", attributes: [.font: font, .foregroundColor: letter])
         let size = glyph.size()
@@ -102,6 +109,14 @@ enum ColorSwatch {
 final class ColorMenuRowView: NSView {
     let choice: ColorChoice
     var isSelected = false { didSet { if isSelected != oldValue { needsDisplay = true } } }
+    /// Текущий цвет того, что красит окно: образец обведён кольцом.
+    var isCurrent = false {
+        didSet {
+            guard isCurrent != oldValue else { return }
+            setAccessibilityValue(isCurrent ? "текущий" : nil)
+            needsDisplay = true
+        }
+    }
     var onHover: (() -> Void)?
     var onClick: (() -> Void)?
 
@@ -141,7 +156,7 @@ final class ColorMenuRowView: NSView {
         if isSelected { PopupMenuRowView.drawHighlight(in: bounds) }
         let padding = Metrics.PopupMenu.rowHorizontalPadding
         let side = Metrics.ColorMenu.swatchSize
-        ColorSwatch.draw(choice, in: NSRect(x: padding, y: (bounds.height - side) / 2, width: side, height: side))
+        ColorSwatch.draw(choice, isCurrent: isCurrent, in: NSRect(x: padding, y: (bounds.height - side) / 2, width: side, height: side))
         let style = Typography.popupMenuTitle
         let textX = padding + side + Metrics.PopupMenu.iconToTitleSpacing
         NSAttributedString(string: choice.title, attributes: [.font: style.font, .foregroundColor: Palette.textPrimary])
@@ -160,7 +175,7 @@ final class ColorMenuListView: NSView {
 
     static func contentHeight(of rows: [ColorMenuRow]) -> CGFloat { rows.reduce(0) { $0 + $1.height } }
 
-    func setRows(_ rows: [ColorMenuRow], onHover: @escaping (Int) -> Void, onClick: @escaping (ColorChoice) -> Void) {
+    func setRows(_ rows: [ColorMenuRow], current: Set<ColorChoice>, onHover: @escaping (Int) -> Void, onClick: @escaping (ColorChoice) -> Void) {
         self.rows = rows
         rowViews.forEach { $0.removeFromSuperview() }
         rowViews = []
@@ -172,8 +187,9 @@ final class ColorMenuListView: NSView {
             switch row {
             case .header(let title):
                 headerFrames.append((title, frame))
-            case .choice(let choice, _):
+            case .choice(let choice, let section):
                 let view = ColorMenuRowView(row: row, choice: choice)
+                view.isCurrent = section != .recent && current.contains(choice)
                 let index = rowViews.count
                 view.frame = frame
                 view.onHover = { onHover(index) }
@@ -227,8 +243,12 @@ final class ColorMenuView: NSView {
     var choices: [ColorChoice] { list.rows.compactMap(\.choice) }
     var selectedChoice: ColorChoice? { choices.indices.contains(selectedIndex) ? choices[selectedIndex] : nil }
 
-    func setRows(_ rows: [ColorMenuRow]) {
-        list.setRows(rows, onHover: { [weak self] in self?.select($0, scroll: false) }, onClick: { [weak self] in self?.onChoose?($0) })
+    /// Какие строки отмечены кольцом как текущий цвет (в «Последних» — никогда).
+    private(set) var currentChoices: Set<ColorChoice> = []
+
+    func setRows(_ rows: [ColorMenuRow], current: Set<ColorChoice> = []) {
+        currentChoices = current
+        list.setRows(rows, current: current, onHover: { [weak self] in self?.select($0, scroll: false) }, onClick: { [weak self] in self?.onChoose?($0) })
         select(0)
         scrollView.contentView.scroll(to: .zero)
         needsLayout = true
@@ -329,6 +349,8 @@ final class ColorMenuController {
     var isOpen: Bool { target != nil }
     var rows: [ColorMenuRow] { isOpen ? window?.menuView.rows ?? [] : [] }
     var selectedChoice: ColorChoice? { isOpen ? window?.menuView.selectedChoice : nil }
+    /// Текущие цвета того, что красит окно: отмечены кольцом.
+    var currentChoices: Set<ColorChoice> { isOpen ? window?.menuView.currentChoices ?? [] : [] }
     /// Место окна без тени, в координатах экрана; `nil` — закрыто.
     var menuFrame: NSRect? { isOpen ? window?.menuFrame : nil }
 
@@ -338,7 +360,7 @@ final class ColorMenuController {
         let menu = window ?? ColorMenuWindow()
         window = menu
         menu.menuView.onChoose = { [weak self] in self?.choose($0) }
-        menu.menuView.setRows(ColorMenuRow.rows(recent: textView.recentColors.choices))
+        menu.menuView.setRows(ColorMenuRow.rows(recent: textView.recentColors.choices), current: textView.currentColors(for: target))
         let visible = parent.screen.map { $0.visibleFrame.intersection(parent.frame) } ?? parent.frame
         let size = menu.menuView.fittingMenuSize(availableHeight: visible.height)
         let frame = place(size, visible)

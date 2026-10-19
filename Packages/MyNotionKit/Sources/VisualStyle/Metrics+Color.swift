@@ -21,6 +21,10 @@ extension Metrics {
         public static let swatchCornerRadius: CGFloat = 4
         public static let swatchGlyphSize: CGFloat = 13
         public static let swatchBorderWidth: CGFloat = 1
+        /// Образец текущего цвета обведён кольцом (у Notion — толстая рамка основным цветом текста).
+        public static let currentRingWidth: CGFloat = 2
+        /// Рамка образца цвета — тот же оттенок, что у цвета текста, но слабее.
+        public static let swatchToneBorderAlpha: CGFloat = 0.55
         /// Подчёркивание кнопки «A» на панели последним цветом.
         public static let barUnderlineSize = CGSize(width: 14, height: 2)
         public static let barUnderlineSpacing: CGFloat = 2

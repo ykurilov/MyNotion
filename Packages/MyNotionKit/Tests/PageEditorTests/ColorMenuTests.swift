@@ -96,6 +96,61 @@ struct ColorMenuTests {
         #expect(!editor.textView.colorMenu.isOpen)
     }
 
+    @Test("Текущий цвет выделения помечен в окне: у слова без цвета — «По умолчанию», у окрашенного — его цвет")
+    func currentColorOfSelection() throws {
+        let editor = try editor([.paragraph("один два")])
+        editor.select(inBlock: 0, "два")
+        editor.textView.formatBar.press(.color)
+        #expect(editor.textView.colorMenu.currentChoices == [choice(.text, nil), choice(.background, nil)])
+        editor.step { editor.textView.colorMenu.choose(choice(.text, .red)) }
+        editor.step { editor.textView.colorMenu.close() }
+
+        editor.textView.formatBar.press(.color)
+        editor.step { editor.textView.colorMenu.choose(choice(.background, .yellow)) }
+        editor.textView.formatBar.press(.color)
+        #expect(editor.textView.colorMenu.currentChoices == [choice(.text, .red), choice(.background, .yellow)])
+    }
+
+    @Test("Выделение с разными цветами — в этом виде цвета отметки нет; цвет другого вида отмечен по-прежнему")
+    func mixedSelectionHasNoMark() throws {
+        let editor = try editor([.paragraph("один два")])
+        editor.select(inBlock: 0, "два")
+        editor.textView.formatBar.press(.color)
+        editor.step { editor.textView.colorMenu.choose(choice(.text, .red)) }
+        editor.select(inBlock: 0, "один два")
+        editor.textView.formatBar.press(.color)
+        #expect(editor.textView.colorMenu.currentChoices == [choice(.background, nil)])
+    }
+
+    @Test("Цвет блока отмечен в окне, открытом из меню блока")
+    func currentColorOfBlock() throws {
+        let editor = try editor([.paragraph("один"), .paragraph("два")])
+        let id = editor.document.blocks[1].id
+        editor.textView.openBlockMenu(forBlock: id, below: .zero)
+        editor.step { editor.textView.popups.choose(.color) }
+        #expect(editor.textView.colorMenu.currentChoices == [choice(.text, nil), choice(.background, nil)])
+        editor.step { editor.textView.colorMenu.choose(choice(.background, .blue)) }
+
+        editor.textView.openBlockMenu(forBlock: id, below: .zero)
+        editor.step { editor.textView.popups.choose(.color) }
+        #expect(editor.textView.colorMenu.currentChoices == [choice(.text, nil), choice(.background, .blue)])
+    }
+
+    @Test("Окно цветов — справа от панели с зазором colorMenuGap, а справа нет места — слева")
+    func placementKeepsGapFromBar() {
+        let visible = NSRect(x: 100, y: 100, width: 800, height: 700)
+        let size = NSSize(width: Metrics.ColorMenu.width, height: 300)
+        let barSize = NSSize(width: Metrics.FormatBar.width, height: Metrics.FormatBar.height)
+        let card = NSRect(origin: NSPoint(x: 300, y: 400), size: barSize)
+        let right = FormatBarPlacement.colorMenu(size: size, card: card, visible: visible)
+        #expect(right.minX == (card.maxX + Metrics.FormatBar.colorMenuGap).rounded(.up))
+        #expect(right.maxY == card.maxY, "Верхним краем вровень с карточкой")
+
+        let edgeCard = NSRect(origin: NSPoint(x: 600, y: 400), size: barSize)
+        let left = FormatBarPlacement.colorMenu(size: size, card: edgeCard, visible: visible)
+        #expect(left.maxX == (edgeCard.minX - Metrics.FormatBar.colorMenuGap).rounded(.down))
+    }
+
     @Test("Меню блока: пункт «Цвет» перед «Удалить»; выбор открывает окно цветов для блока и красит его целиком")
     func blockMenuColor() throws {
         let editor = try editor([.paragraph("один"), .heading(2, "два")])

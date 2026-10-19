@@ -52,6 +52,23 @@ enum InlineColors {
         }
     }
 
+    /// Какие цвета вида `target` есть на отрезке `range`; `nil` в наборе — часть отрезка без цвета.
+    static func colors(_ text: InlineText, of target: ColorTarget, in range: Range<Int>) -> Set<NotionColor?> {
+        var result: Set<NotionColor?> = []
+        var covered = IndexSet()
+        for run in text.runs where isColor(run.style, of: target) {
+            let clipped = max(run.start, range.lowerBound)..<min(run.start + run.length, range.upperBound)
+            guard !clipped.isEmpty else { continue }
+            switch run.style {
+            case .textColor(let color), .backgroundColor(let color): result.insert(color)
+            default: continue
+            }
+            covered.insert(integersIn: clipped)
+        }
+        if !range.isEmpty, !covered.contains(integersIn: range) { result.insert(nil) }
+        return result
+    }
+
     /// Весь ли отрезок `range` уже окрашен этим цветом.
     static func covers(_ text: InlineText, _ choice: ColorChoice, in range: Range<Int>) -> Bool {
         guard let color = choice.color, !range.isEmpty else { return false }
@@ -128,6 +145,32 @@ extension PageTextView {
         }
         changeBlocks(blocks, to: drafts, actionName: "Цвет")
         if enabled { recentColors.record(choice) }
+    }
+
+    /// Какие цвета сейчас у того, что красит окно цветов: у выделения — общий цвет каждого вида (если он один на всё
+    /// выделение), у блока — его цвет текста и фона. «По умолчанию» — тоже цвет.
+    func currentColors(for target: ColorMenuController.Target) -> Set<ColorChoice> {
+        var result: Set<ColorChoice> = []
+        switch target {
+        case .selection:
+            guard let blocks = selectedBlockRange() else { return [] }
+            let selection = selectedRange()
+            for kind in [ColorTarget.text, .background] {
+                var colors: Set<NotionColor?> = []
+                for index in blocks {
+                    let range = localRange(of: selection, inBlockAt: index)
+                    if !range.isEmpty { colors.formUnion(InlineColors.colors(document.blocks[index].text, of: kind, in: range)) }
+                }
+                if colors.count == 1, let only = colors.first { result.insert(ColorChoice(target: kind, color: only)) }
+            }
+        case .block(let id):
+            guard let index = document.index(ofBlock: id) else { return [] }
+            let color = document.blocks[index].color
+            for kind in [ColorTarget.text, .background] {
+                result.insert(ColorChoice(target: kind, color: color.color(for: kind)))
+            }
+        }
+        return result
     }
 
     private func applyTypingColor(_ choice: ColorChoice, force: Bool) {
