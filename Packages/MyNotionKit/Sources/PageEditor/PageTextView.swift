@@ -48,6 +48,8 @@ public class PageTextView: NSTextView {
     let layoutDelegate = BlockLayoutDelegate()
     /// Виды колонок и таблиц в тексте и их высоты (`Flows/`).
     let embeddedViews = EmbeddedBlockViews()
+    /// ⌘F по всей странице; у редакторов колонок и ячеек — не используется, поиск у страницы (`PageFind/`).
+    private(set) lazy var pageFind = PageFind(root: self)
     /// Абзацы детей свёрнутых переключателей: не раскладываются (research R1).
     let hiddenParagraphs = HiddenParagraphs()
     /// Свёрнутые переключатели этого Mac и отступы по поддеревьям (`Collapsing/`).
@@ -159,8 +161,9 @@ public class PageTextView: NSTextView {
         isRichText = true
         importsGraphics = false
         allowsUndo = true
-        usesFindBar = true
-        isIncrementalSearchingEnabled = true
+        // ⌘F — одна полоса поиска на всю страницу, с колонками и ячейками (`PageFind/`), а не поиск этого текста.
+        usesFindBar = false
+        isIncrementalSearchingEnabled = false
         isContinuousSpellCheckingEnabled = spellCheckingWanted
         isGrammarCheckingEnabled = false
         drawsBackground = true
