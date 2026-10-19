@@ -161,7 +161,7 @@ final class VideoBlockView: MediaBlockView {
     override func menuItems() -> [NSMenuItem] {
         var items = [menuItem("Подпись") { [weak self] in self?.beginCaption() }]
         if let url = block.props.url, isWebVideo {
-            items.append(menuItem("Открыть на сайте") { MediaBlocks.services?.open(url) })
+            items.append(menuItem("Открыть на сайте") { MediaBlocks.openLink(url) })
         } else if let url = fileAvailability.fileURL {
             items.append(menuItem("Скачать") { MediaFileActions.saveCopy(of: url) })
             items.append(menuItem("Показать в Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) })

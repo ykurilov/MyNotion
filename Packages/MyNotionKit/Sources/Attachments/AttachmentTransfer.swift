@@ -9,6 +9,8 @@ import Sync
 /// - Скачивание: по одному файлу, файлы открытой страницы — первыми; части пишутся во временный файл, после последней
 ///   сверяется SHA-256. `409 file_incomplete` и `404` — повтор через 1, 2, 4 … 60 мин, надпись «Ждёт отправки с другого Mac».
 /// - `507` — «Кончилось место для файлов, общих для ваших Mac — новые файлы пока ждут на этом Mac», повтор раз в час; файл на Mac не трогается.
+/// - Другой сбой одного файла (копию не прочитать, сервер отказал именно ему) — запись `failed`, повтор через те же
+///   1, 2, 4 … 60 мин; остальные файлы идут своим чередом. Только обрыв связи останавливает всю очередь.
 ///
 /// `runDue()` делает то, что пора сейчас, и говорит, когда пора в следующий раз: время не идёт внутри, его ведёт
 /// вызывающий (`AttachmentSyncWork`), а тесты — своими часами.
@@ -18,12 +20,18 @@ public actor AttachmentTransfer {
     /// Паузы перед повтором скачивания файла, которого ещё нет на сервере.
     static let waitingDelays: [TimeInterval] = [1, 2, 4, 8, 16, 32, 60].map { $0 * 60 }
     static let storageFullDelay: TimeInterval = 3_600
+    /// Надписи записей `failed`, которые повторяются сами; остальные `failed` (копирование, нет копии) — нет.
+    public static let uploadFailedMessage = "Не удалось отправить файл на другие Mac — попробую ещё раз сам"
+    public static let downloadFailedMessage = "Не удалось скачать файл — попробую ещё раз сам"
+    public static let missingCopyMessage = "Копии файла нет на этом Mac — вставьте файл ещё раз"
+    static var retriedDownloadMessages: [String] { [downloadFailedMessage, AttachmentError.damaged.localizedDescription] }
 
     let attachments: AttachmentStore
     let transport: any SyncFileTransport
     let cipher: FileCipher
     let now: @Sendable () -> Date
     private var priority: [UUID] = []
+    /// Пауза записи: файл ещё не на сервере или на нём сломалась отправка или скачивание.
     private var waiting: [UUID: (attempts: Int, dueAt: Date)] = [:]
     private var storageFullUntil: Date?
     /// Сообщение для значка синхронизации; `nil` — всё в порядке.
@@ -60,24 +68,42 @@ public actor AttachmentTransfer {
 
     private func uploadDue() async throws {
         if let until = storageFullUntil, now() < until { return }
-        let pending = try attachments.records(sql: """
-            SELECT * FROM attachment WHERE orphanedAt IS NULL AND state IN ('local', 'uploading') ORDER BY id
-            """)
-        for record in pending {
+        for record in try pendingUploads() {
+            if let wait = waiting[record.id], now() < wait.dueAt { continue }
             do {
                 try await upload(record)
+                waiting[record.id] = nil
             } catch SyncServerError.storageFull {
                 storageFullUntil = now().addingTimeInterval(Self.storageFullDelay)
                 setNotice(Self.storageFullMessage)
                 return
+            } catch where Self.isConnectionLoss(error) {
+                throw error
+            } catch {
+                try pauseAfterFailure(record.id, message: Self.uploadFailedMessage)
             }
         }
         storageFullUntil = nil
         if notice == Self.storageFullMessage { setNotice(nil) }
     }
 
+    private func pendingUploads() throws -> [AttachmentRecord] {
+        try attachments.records(sql: """
+            SELECT * FROM attachment WHERE orphanedAt IS NULL
+                AND (state IN ('local', 'uploading') OR (state = 'failed' AND localPath IS NOT NULL AND lastError = ?))
+            ORDER BY id
+            """, arguments: [Self.uploadFailedMessage])
+    }
+
     private func upload(_ record: AttachmentRecord) async throws {
-        guard let localPath = record.localPath else { return }
+        guard let localPath = record.localPath else {
+            // Отправлять нечего: без пометки запись брала бы очередь на каждом круге.
+            try attachments.update(record.id) {
+                $0.state = .failed
+                $0.lastError = Self.missingCopyMessage
+            }
+            return
+        }
         let url = attachments.folder.appendingPathComponent(localPath)
         let ref = record.ref
         try attachments.update(ref.id) { $0.state = .uploading }
@@ -126,21 +152,26 @@ public actor AttachmentTransfer {
                 }
                 attachments.postAvailabilityChange(id)
             } catch AttachmentError.damaged, FileCipherError.tampered {
-                try attachments.update(id) {
-                    $0.state = .failed
-                    $0.downloadedParts = []
-                    $0.lastError = AttachmentError.damaged.localizedDescription
-                }
                 try? FileManager.default.removeItem(at: temporaryURL(for: record.ref))
+                try pauseAfterFailure(id, message: AttachmentError.damaged.localizedDescription) { $0.downloadedParts = [] }
+                attachments.postAvailabilityChange(id)
+            } catch where Self.isConnectionLoss(error) {
+                throw error
+            } catch {
+                try pauseAfterFailure(id, message: Self.downloadFailedMessage)
                 attachments.postAvailabilityChange(id)
             }
         }
     }
 
     private func pendingDownloads() throws -> [AttachmentRecord] {
-        try attachments.records(sql: """
-            SELECT * FROM attachment WHERE orphanedAt IS NULL AND state IN ('remote', 'downloading') ORDER BY id
-            """)
+        let retried = Self.retriedDownloadMessages
+        return try attachments.records(sql: """
+            SELECT * FROM attachment WHERE orphanedAt IS NULL
+                AND (state IN ('remote', 'downloading')
+                     OR (state = 'failed' AND localPath IS NULL AND lastError IN (\(retried.map { _ in "?" }.joined(separator: ", ")))))
+            ORDER BY id
+            """, arguments: StatementArguments(retried))
     }
 
     private func download(_ record: AttachmentRecord) async throws {
@@ -175,6 +206,7 @@ public actor AttachmentTransfer {
         let destination = directory.appendingPathComponent(name)
         try? FileManager.default.removeItem(at: destination)
         try FileManager.default.moveItem(at: temporary, to: destination)
+        FileQuarantine.mark(destination)
         try attachments.update(ref.id) {
             $0.localPath = "\(ref.id.attachmentKey)/\(name)"
             $0.state = .uploaded
@@ -191,12 +223,28 @@ public actor AttachmentTransfer {
 
     // MARK: Срок
 
+    /// Сбой одного файла: запись `failed` с надписью, повтор после паузы 1, 2, 4 … 60 мин.
+    private func pauseAfterFailure(_ id: UUID, message: String, _ change: (inout AttachmentRecord) -> Void = { _ in }) throws {
+        let attempts = (waiting[id]?.attempts ?? 0) + 1
+        let delay = Self.waitingDelays[min(attempts, Self.waitingDelays.count) - 1]
+        waiting[id] = (attempts, now().addingTimeInterval(delay))
+        try attachments.update(id) {
+            $0.state = .failed
+            $0.lastError = message
+            change(&$0)
+        }
+    }
+
+    /// Связи нет или этот Mac больше не пускают: дальше идти бессмысленно, очередь запустится на следующем круге.
+    static func isConnectionLoss(_ error: any Error) -> Bool {
+        error is URLError || error is CancellationError || (error as? SyncServerError) == .unauthorized
+    }
+
     private func nextDueDate() throws -> Date? {
         var dates: [Date] = []
-        let uploads = try attachments.records(sql: """
-            SELECT * FROM attachment WHERE orphanedAt IS NULL AND state IN ('local', 'uploading') LIMIT 1
-            """)
-        if !uploads.isEmpty { dates.append(storageFullUntil ?? now()) }
+        for record in try pendingUploads() {
+            dates.append(max(storageFullUntil ?? now(), waiting[record.id]?.dueAt ?? now()))
+        }
         for record in try pendingDownloads() {
             dates.append(waiting[record.id]?.dueAt ?? now())
         }

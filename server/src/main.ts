@@ -40,7 +40,7 @@ async function dailyFilesBackup(): Promise<void> {
   }
 }
 
-/** Корзину и брошенные загрузки стираем до копии: в копию попадает уже убранное состояние. */
+/** Корзину и брошенные загрузки стираем после копии: стёртое сегодня ещё 14 дней лежит в копиях. */
 function dailyFilesSweep(): void {
   try {
     const { trashErased, abandonedErased } = files.sweep();

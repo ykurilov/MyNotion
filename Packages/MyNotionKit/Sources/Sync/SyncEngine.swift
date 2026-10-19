@@ -65,6 +65,10 @@ public final class SyncEngine {
     /// Отправка и докачка файлов; ставит приложение.
     @ObservationIgnored public var fileWork: (any SyncFileWork)?
     @ObservationIgnored private var fileTask: Task<Void, Never>?
+    /// Очередь, остановленная `stop()`, но ещё не вышедшая: новая ждёт её конца, чтобы две не шли разом.
+    @ObservationIgnored private var stoppedFileTask: Task<Void, Never>?
+    /// Номер текущей очереди: закончившаяся старая не сбрасывает новую.
+    @ObservationIgnored private var fileTaskGeneration = 0
     /// Версия формата отправляемых пачек; меняют только тесты.
     @ObservationIgnored var formatVersionForTests: Int?
 
@@ -92,6 +96,7 @@ public final class SyncEngine {
         loop?.cancel()
         loop = nil
         fileTask?.cancel()
+        if let fileTask { stoppedFileTask = fileTask }
         fileTask = nil
         cancelWaiting?()
         cancelWaiting = nil
@@ -143,9 +148,15 @@ public final class SyncEngine {
     /// Файлы — своей задачей рядом с циклом, одна за раз; пустая очередь ничего не запускает.
     private func startFileWorkIfNeeded() {
         guard fileTask == nil, let fileWork, fileWork.hasPendingWork() else { return }
+        fileTaskGeneration += 1
+        let generation = fileTaskGeneration
+        let previous = stoppedFileTask
+        stoppedFileTask = nil
         fileTask = Task { [weak self] in
-            await fileWork.run()
-            self?.fileTask = nil
+            await previous?.value
+            if !Task.isCancelled { await fileWork.run() }
+            guard let self, self.fileTaskGeneration == generation else { return }
+            self.fileTask = nil
         }
     }
 

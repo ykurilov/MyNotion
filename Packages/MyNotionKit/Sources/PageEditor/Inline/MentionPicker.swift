@@ -68,7 +68,12 @@ final class MentionPickerController {
     private(set) var session: Session?
     private var window: MentionPickerWindow?
     private var anchor: NSRect = .zero
-    private var deactivationObserver: NSObjectProtocol?
+    /// Подписка снимается в `deinit` — он не привязан к главному потоку.
+    nonisolated(unsafe) private var deactivationObserver: NSObjectProtocol?
+
+    deinit {
+        if let deactivationObserver { NotificationCenter.default.removeObserver(deactivationObserver) }
+    }
 
     var isOpen: Bool { session != nil }
     var visibleItems: [MentionPickerItem] { window?.pickerView.items ?? [] }

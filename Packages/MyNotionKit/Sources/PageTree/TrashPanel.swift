@@ -31,7 +31,12 @@ final class TrashPanelController {
     private var isConfirming = false
     private var monitors: [Any] = []
     /// Приложение ушло в фон — окно корзины закрывается.
-    private var deactivationObserver: NSObjectProtocol?
+    /// Подписка снимается в `deinit` — он не привязан к главному потоку.
+    nonisolated(unsafe) private var deactivationObserver: NSObjectProtocol?
+
+    deinit {
+        if let deactivationObserver { NotificationCenter.default.removeObserver(deactivationObserver) }
+    }
 
     var isShown: Bool { panel?.isVisible == true }
 

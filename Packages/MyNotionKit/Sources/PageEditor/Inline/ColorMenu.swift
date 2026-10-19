@@ -363,7 +363,12 @@ final class ColorMenuController {
     weak var textView: PageTextView?
     private(set) var target: Target?
     private var window: ColorMenuWindow?
-    private var deactivationObserver: NSObjectProtocol?
+    /// Подписка снимается в `deinit` — он не привязан к главному потоку.
+    nonisolated(unsafe) private var deactivationObserver: NSObjectProtocol?
+
+    deinit {
+        if let deactivationObserver { NotificationCenter.default.removeObserver(deactivationObserver) }
+    }
 
     var isOpen: Bool { target != nil }
     var rows: [ColorMenuRow] { isOpen ? window?.menuView.rows ?? [] : [] }

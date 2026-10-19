@@ -111,6 +111,27 @@ struct InlineStyleTests {
         #expect(opened == [url])
     }
 
+    @Test("⌘-щелчок не открывает ссылку со схемой не для браузера (пришла с другого Mac или из импорта)")
+    func commandClickIgnoresNonWebSchemes() throws {
+        let editor = try EditorFixture([.paragraph("Смотри сайт тут")])
+        editor.select(inBlock: 0, "сайт")
+        editor.step { editor.textView.setLink(URL(string: "smb://nas/share")!) }
+        var opened: [URL] = []
+        editor.textView.openURL = { opened.append($0) }
+        let textView = editor.textView
+        let found = (textView.string as NSString).range(of: "сайт")
+        let onScreen = textView.firstRect(forCharacterRange: NSRange(location: found.location + 1, length: 1), actualRange: nil)
+        let rect = textView.convert(editor.window.convertFromScreen(onScreen), from: nil)
+
+        _ = textView.openLink(at: NSPoint(x: rect.midX, y: rect.midY), modifiers: .command)
+
+        #expect(opened.isEmpty)
+        #expect(InlineFormatting.isOpenable(URL(string: "mailto:yury@example.com")!))
+        #expect(InlineFormatting.isOpenable(URL(string: "https://kurilov.cloud")!))
+        #expect(!InlineFormatting.isOpenable(URL(string: "https:///nohost")!))
+        #expect(!InlineFormatting.isOpenable(URL(string: "ssh://host")!))
+    }
+
     @Test("Адрес без выделения вставляется текстом")
     func pastingURLWithoutSelectionInsertsText() throws {
         let editor = try EditorFixture([.paragraph("см. ")])

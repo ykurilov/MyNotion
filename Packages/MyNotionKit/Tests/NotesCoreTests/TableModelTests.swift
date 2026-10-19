@@ -99,6 +99,26 @@ struct TableModelTests {
         #expect((0..<2).map { grid.text(row: 0, column: $0).string } == ["", ""])
     }
 
+    @Test("Удаление столбца уносит и вторую ячейку того же столбца в строке (ввод двух Mac разом): она не вернёт столбец")
+    func removingColumnTakesDuplicateCells() throws {
+        let document = try openDocument()
+        var grid = try #require(document.tableGrid(tableId))
+        document.apply(grid.settingText(InlineText("с этого Mac"), row: 0, column: 1))
+        grid = try #require(document.tableGrid(tableId))
+        let columnId = grid.columns[1].id
+        let first = try #require(grid.cell(row: 0, column: 1))
+        let twin = Block(pageId: pageId, kind: .tableCell, text: InlineText("с другого Mac"), sortKey: .between(first.sortKey, nil),
+                         containerId: grid.rows[0].id, props: { var props = BlockProps(); props.columnId = columnId; return props }())
+        document.apply(BlockChanges(upserts: [twin]))
+        grid = try #require(document.tableGrid(tableId))
+        #expect(grid.text(row: 0, column: 1).string == "с этого Mac", "показывается первая")
+
+        document.apply(grid.removingColumn(at: 1))
+
+        #expect(document.flow(grid.rows[0].id).allSatisfy { $0.props.columnId != columnId })
+        #expect(document.block(twin.id) == nil)
+    }
+
     @Test("Вставка строки и столбца в любое место; порядок — по ключам")
     func insertRowsAndColumns() throws {
         let document = try openDocument()

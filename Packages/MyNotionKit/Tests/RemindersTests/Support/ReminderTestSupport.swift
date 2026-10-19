@@ -41,7 +41,12 @@ final class FakeNotificationCenter: ReminderNotificationCenter {
     private(set) var shownCount: [String: Int] = [:]
     private(set) var addCount = 0
 
+    /// Эти уведомления система не принимает (например, их стало слишком много).
+    var refused: Set<String> = []
+
     nonisolated func add(_ request: ReminderNotificationRequest) async throws {
+        let isRefused = await MainActor.run { refused.contains(request.identifier) }
+        if isRefused { throw CocoaError(.featureUnsupported) }
         await MainActor.run { self.store(request) }
     }
 

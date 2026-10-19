@@ -9,7 +9,12 @@ final class PageOutlineView: NSOutlineView {
     var onRename: ((_ row: Int) -> Void)?
     var onTrash: ((_ row: Int) -> Void)?
     var onContextMenu: ((_ row: Int) -> NSMenu?)?
-    private var clipObserver: (any NSObjectProtocol)?
+    /// Подписка снимается в `deinit` — он не привязан к главному потоку.
+    nonisolated(unsafe) private var clipObserver: (any NSObjectProtocol)?
+
+    deinit {
+        if let clipObserver { NotificationCenter.default.removeObserver(clipObserver) }
+    }
 
     /// Видимая часть списка сменила высоту (внизу панели появилась строка): выбранная строка, срезанная краем,
     /// докручивается целиком — иначе её подсветка торчит полоской над разделителем. Скрытую целиком не трогаем:

@@ -44,7 +44,13 @@ public final class ReminderScheduler {
     public let index: ReminderIndex
     private let center: any ReminderNotificationCenter
     private let now: @Sendable () -> Date
-    private var wakeObservers: [NSObjectProtocol] = []
+    /// Подписка снимается в `deinit` — он не привязан к главному потоку.
+    nonisolated(unsafe) private var wakeObservers: [NSObjectProtocol] = []
+
+    deinit {
+        wakeObservers.forEach(NotificationCenter.default.removeObserver)
+    }
+
     /// Перестановка идёт — следующая просьба выполнится после неё одной перестановкой.
     private var isRescheduling = false
     private var needsAnotherPass = false
@@ -81,7 +87,8 @@ public final class ReminderScheduler {
             let identifier = entry.mentionId.uuidString.lowercased()
             guard entry.deliveredAt == nil || pending.contains(identifier) else { continue }
             if pending.contains(identifier) { await center.removePending([identifier]) }
-            try await center.add(request(for: entry, fireAt: nil))
+            // Система не приняла одно — остальные всё равно ставятся; это повторится на следующем проходе.
+            guard (try? await center.add(request(for: entry, fireAt: nil))) != nil else { continue }
             shownNow.append(entry.mentionId)
         }
         try index.setDelivered(shownNow, at: moment)
@@ -89,8 +96,13 @@ public final class ReminderScheduler {
         // Ближайшие будущие — в очередь системы; отданное системе считается показанным в свой момент.
         let upcoming = try index.activeEntries(after: moment, limit: Self.queueLimit)
         for entry in upcoming {
-            try await center.add(request(for: entry, fireAt: entry.fireAt))
-            keptIdentifiers.insert(entry.mentionId.uuidString.lowercased())
+            let identifier = entry.mentionId.uuidString.lowercased()
+            guard (try? await center.add(request(for: entry, fireAt: entry.fireAt))) != nil else {
+                // Прежнее уведомление в очереди, если было, остаётся.
+                if pending.contains(identifier) { keptIdentifiers.insert(identifier) }
+                continue
+            }
+            keptIdentifiers.insert(identifier)
             if entry.deliveredAt != entry.fireAt { try index.setDelivered([entry.mentionId], at: entry.fireAt) }
         }
         try index.clearHandedOver(after: moment, except: Set(upcoming.map(\.mentionId)))
