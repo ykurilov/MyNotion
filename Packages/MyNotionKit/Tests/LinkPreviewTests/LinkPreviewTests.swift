@@ -109,7 +109,7 @@ import Testing
     @Test func pageIsReadAtMost512Kilobytes() async throws {
         let big = "<title>Большая</title>" + String(repeating: "x", count: 1_048_576)
         StubProtocol.respond(with: Data(big.utf8))
-        let fetcher = URLSessionLinkFetcher(session: StubProtocol.session)
+        let fetcher = URLSessionLinkFetcher(configuration: StubProtocol.configuration)
         let fetched = try await fetcher.fetch(page)
         #expect(fetched.data.count == 512 * 1024)
         #expect(HTMLMetadata.parse(fetched.data, url: page).title == "Большая")
@@ -119,11 +119,65 @@ import Testing
 
     @Test func slowSiteGivesUpAfterTimeout() async {
         StubProtocol.hang()
-        let fetcher = URLSessionLinkFetcher(session: StubProtocol.session, timeout: 0.3)
+        let fetcher = URLSessionLinkFetcher(configuration: StubProtocol.configuration, timeout: 0.3)
         let started = ContinuousClock.now
         let metadata = await LinkPreviewLoader(fetcher: fetcher).metadata(for: page)
         #expect(metadata == LinkMetadata(url: page))
         #expect(ContinuousClock.now - started < .seconds(3))
+    }
+}
+
+extension LinkPreviewTests {
+    // MARK: Только интернет
+
+    /// Имена «из DNS» для тестов: сеть не нужна.
+    static let addresses = NetworkAddressPolicy { host in
+        switch host {
+        case "example.com": ["93.184.216.34"]
+        case "router.home": ["192.168.1.1"]
+        case "both.example": ["93.184.216.34", "10.0.0.7"]
+        default: []
+        }
+    }
+
+    @Test func thisMacAndLocalNetworkAreNotFetched() async throws {
+        StubProtocol.respond(with: Data("<title>Роутер</title>".utf8))
+        let fetcher = URLSessionLinkFetcher(configuration: StubProtocol.configuration, addresses: Self.addresses)
+        for text in ["http://127.0.0.1/", "http://localhost:8080/", "http://[::1]/", "http://192.168.0.1/", "http://10.1.2.3/",
+                     "http://172.16.5.4/", "http://169.254.169.254/latest/meta-data", "http://100.64.0.1/", "http://0.0.0.0/",
+                     "http://[fd00::1]/", "http://[fe80::1]/", "http://[::ffff:192.168.1.1]/", "http://router.home/",
+                     "http://both.example/", "http://printer.local/"] {
+            await #expect(throws: LinkFetchError.localAddress, "\(text)") { _ = try await fetcher.fetch(URL(string: text)!) }
+        }
+        #expect(try await fetcher.fetch(page).data == Data("<title>Роутер</title>".utf8))
+        // Картинка сайта (og:image) — тем же путём.
+        #expect(await LinkPreviewLoader(fetcher: fetcher).image(at: URL(string: "http://192.168.1.1/cam.jpg")!) == nil)
+    }
+
+    @Test func redirectIntoLocalNetworkIsNotFollowed() async throws {
+        StubProtocol.redirect(page, to: URL(string: "http://192.168.1.1/reboot")!, then: Data("<title>Роутер</title>".utf8))
+        let fetcher = URLSessionLinkFetcher(configuration: StubProtocol.configuration, addresses: Self.addresses)
+        await #expect(throws: LinkFetchError.localAddress) { _ = try await fetcher.fetch(page) }
+        #expect(!StubProtocol.requested.contains(URL(string: "http://192.168.1.1/reboot")!))
+
+        StubProtocol.redirect(page, to: URL(string: "https://example.com/new")!, then: Data("<title>Новая</title>".utf8))
+        let fetched = try await fetcher.fetch(page)
+        #expect(fetched.url == URL(string: "https://example.com/new"))
+        #expect(fetched.data == Data("<title>Новая</title>".utf8))
+    }
+
+    @Test func typedLocalAddressIsAllowedWhenAsked() async throws {
+        StubProtocol.respond(with: Data("файл".utf8))
+        let fetcher = URLSessionLinkFetcher(configuration: StubProtocol.configuration, addresses: Self.addresses, allowsLocalStart: true)
+        #expect(try await fetcher.fetchFile(URL(string: "http://192.168.1.1/a.pdf")!, byteLimit: 100).data == Data("файл".utf8))
+    }
+
+    @Test func fileIsReadWholeAndLimitIsKept() async throws {
+        let bytes = Data((0..<3_000_000).map { UInt8(truncatingIfNeeded: $0 &* 31) })
+        StubProtocol.respond(with: bytes)
+        let fetcher = URLSessionLinkFetcher(configuration: StubProtocol.configuration, addresses: Self.addresses)
+        #expect(try await fetcher.fetchFile(page, byteLimit: bytes.count).data == bytes)
+        await #expect(throws: URLError.self) { _ = try await fetcher.fetchFile(page, byteLimit: bytes.count - 1) }
     }
 }
 
@@ -144,23 +198,45 @@ struct FakeFetcher: LinkFetching {
 
 /// Подменённый ответ сервера для `URLSession`.
 final class StubProtocol: URLProtocol, @unchecked Sendable {
-    private enum Mode { case data(Data), hang }
+    private enum Mode { case data(Data), hang, redirect(from: URL, to: URL, then: Data) }
     private static let mode = Mutex<Mode>(.hang)
+    private static let log = Mutex<[URL]>([])
+    /// Адреса, которые дошли до «сервера».
+    static var requested: [URL] { log.withLock { $0 } }
 
-    static func respond(with data: Data) { mode.withLock { $0 = .data(data) } }
-    static func hang() { mode.withLock { $0 = .hang } }
+    static func respond(with data: Data) { set(.data(data)) }
+    static func hang() { set(.hang) }
+    static func redirect(_ from: URL, to: URL, then data: Data) { set(.redirect(from: from, to: to, then: data)) }
 
-    static let session: URLSession = {
+    private static func set(_ newMode: Mode) {
+        mode.withLock { $0 = newMode }
+        log.withLock { $0 = [] }
+    }
+
+    static let configuration: @Sendable () -> URLSessionConfiguration = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubProtocol.self]
-        return URLSession(configuration: configuration)
-    }()
+        return configuration
+    }
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
-        guard case .data(let data) = Self.mode.withLock({ $0 }) else { return }
+        Self.log.withLock { $0.append(request.url!) }
+        let data: Data
+        switch Self.mode.withLock({ $0 }) {
+        case .hang: return
+        case .data(let body): data = body
+        case .redirect(let from, let to, let body):
+            guard request.url == from else {
+                data = body
+                break
+            }
+            let response = HTTPURLResponse(url: from, statusCode: 302, httpVersion: nil, headerFields: ["Location": to.absoluteString])!
+            client?.urlProtocol(self, wasRedirectedTo: URLRequest(url: to), redirectResponse: response)
+            return
+        }
         let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "text/html"])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         var offset = 0

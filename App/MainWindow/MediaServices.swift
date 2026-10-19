@@ -58,7 +58,7 @@ final class AppMediaServices: MediaBlockServices {
     }
 
     func downloadFile(from url: URL) async throws -> AttachmentRef {
-        let fetcher = URLSessionLinkFetcher(timeout: 120)
+        let fetcher = URLSessionLinkFetcher(timeout: 120, allowsLocalStart: true)
         let page: FetchedPage
         do {
             page = try await fetcher.fetchFile(url, byteLimit: AttachmentRef.maximumByteCount)

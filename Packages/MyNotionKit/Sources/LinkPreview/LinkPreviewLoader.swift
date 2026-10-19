@@ -21,24 +21,38 @@ public protocol LinkFetching: Sendable {
     func fetchFile(_ url: URL, byteLimit: Int) async throws -> FetchedPage
 }
 
-/// Один запрос `URLSession` (research R15): до 512 КБ страницы и не дольше 10 с.
+/// Запрос ушёл бы на этот Mac или в локальную сеть (`NetworkAddressPolicy`).
+public enum LinkFetchError: Error, Equatable {
+    case localAddress
+}
+
+/// Один запрос `URLSession` (research R15): до 512 КБ страницы и не дольше 10 с. Тело читается кусками, как приходит;
+/// этот Mac и локальная сеть закрыты — и в начальном адресе, и в переадресации.
 public struct URLSessionLinkFetcher: LinkFetching {
     public static let pageByteLimit = 512 * 1024
     public static let timeout: TimeInterval = 10
-    let session: URLSession
+    let configuration: @Sendable () -> URLSessionConfiguration
     let timeout: TimeInterval
+    let addresses: NetworkAddressPolicy
+    /// Адрес в локальной сети, который Юрий ввёл сам («Вставить ссылку» на файл с NAS), открыт; переадресация
+    /// из интернета в локальную сеть — всё равно нет.
+    let allowsLocalStart: Bool
 
-    public init(session: URLSession = URLSessionLinkFetcher.session, timeout: TimeInterval = URLSessionLinkFetcher.timeout) {
-        self.session = session
+    public init(configuration: @escaping @Sendable () -> URLSessionConfiguration = URLSessionLinkFetcher.configuration,
+                timeout: TimeInterval = URLSessionLinkFetcher.timeout, addresses: NetworkAddressPolicy = .system,
+                allowsLocalStart: Bool = false) {
+        self.configuration = configuration
         self.timeout = timeout
+        self.addresses = addresses
+        self.allowsLocalStart = allowsLocalStart
     }
 
-    public static let session: URLSession = {
+    public static let configuration: @Sendable () -> URLSessionConfiguration = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.waitsForConnectivity = false
         configuration.httpCookieAcceptPolicy = .never
-        return URLSession(configuration: configuration)
-    }()
+        return configuration
+    }
 
     /// Многие сайты отдают пустую страницу без имени браузера.
     static let userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15"
@@ -56,25 +70,39 @@ public struct URLSessionLinkFetcher: LinkFetching {
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: timeout)
         request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("ru,en;q=0.8", forHTTPHeaderField: "Accept-Language")
-        let session = session
+        let configuration = configuration
         let timeout = timeout
+        let addresses = addresses
+        let allowsLocalStart = allowsLocalStart
         let preparedRequest = request
         // Предел времени — на весь ответ, а не на тишину между кусками.
         return try await withThrowingTaskGroup(of: FetchedPage.self) { group in
             group.addTask {
-                let (bytes, response) = try await session.bytes(for: preparedRequest)
-                let status = (response as? HTTPURLResponse)?.statusCode ?? 200
-                guard (200..<300).contains(status) else { throw URLError(.badServerResponse) }
+                let startsLocal = !addresses.allows(url)
+                if startsLocal, !allowsLocalStart { throw LinkFetchError.localAddress }
+                let delegate = ChunkedResponse { startsLocal || addresses.allows($0) }
+                let session = URLSession(configuration: configuration(), delegate: delegate, delegateQueue: nil)
+                defer { session.invalidateAndCancel() }
+                session.dataTask(with: preparedRequest).resume()
+                var response: URLResponse?
                 var data = Data()
-                data.reserveCapacity(min(byteLimit, 65_536))
-                for try await byte in bytes {
-                    guard data.count < byteLimit else {
-                        if truncates { break }
-                        throw URLError(.dataLengthExceedsMaximum)
+                reading: for try await piece in delegate.pieces {
+                    switch piece {
+                    case .response(let received):
+                        let status = (received as? HTTPURLResponse)?.statusCode ?? 200
+                        guard (200..<300).contains(status) else { throw URLError(.badServerResponse) }
+                        response = received
+                        data.reserveCapacity(min(byteLimit, max(0, Int(received.expectedContentLength)), 16 << 20))
+                    case .data(let chunk):
+                        guard data.count + chunk.count <= byteLimit else {
+                            guard truncates else { throw URLError(.dataLengthExceedsMaximum) }
+                            data.append(chunk.prefix(byteLimit - data.count))
+                            break reading
+                        }
+                        data.append(chunk)
                     }
-                    data.append(byte)
                 }
-                return FetchedPage(data: data, url: response.url ?? url, contentType: response.mimeType)
+                return FetchedPage(data: data, url: response?.url ?? url, contentType: response?.mimeType)
             }
             group.addTask {
                 try await Task.sleep(for: .seconds(timeout))
@@ -83,6 +111,48 @@ public struct URLSessionLinkFetcher: LinkFetching {
             defer { group.cancelAll() }
             return try await group.next()!
         }
+    }
+}
+
+/// Ответ запроса кусками, как их отдаёт сеть; переадресация — только туда, куда пускает `allowsRedirect`.
+private final class ChunkedResponse: NSObject, URLSessionDataDelegate, Sendable {
+    enum Piece {
+        case response(URLResponse)
+        case data(Data)
+    }
+
+    let pieces: AsyncThrowingStream<Piece, any Error>
+    private let continuation: AsyncThrowingStream<Piece, any Error>.Continuation
+    private let allowsRedirect: @Sendable (URL) -> Bool
+
+    init(allowsRedirect: @escaping @Sendable (URL) -> Bool) {
+        (pieces, continuation) = AsyncThrowingStream.makeStream()
+        self.allowsRedirect = allowsRedirect
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
+                    completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void) {
+        continuation.yield(.response(response))
+        completionHandler(.allow)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        continuation.yield(.data(data))
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
+        guard let url = request.url, ["http", "https"].contains(url.scheme?.lowercased()), allowsRedirect(url) else {
+            completionHandler(nil)
+            continuation.finish(throwing: LinkFetchError.localAddress)
+            task.cancel()
+            return
+        }
+        completionHandler(request)
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) {
+        continuation.finish(throwing: error)
     }
 }
 
