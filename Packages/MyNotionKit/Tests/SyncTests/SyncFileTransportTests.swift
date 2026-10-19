@@ -73,6 +73,37 @@ struct SyncFileTransportTests {
         work.finish()
     }
 
+    @MainActor
+    @Test("Перезапуск цикла не даёт двум очередям файлов работать разом, и старая не затирает новую")
+    func restartedEngineKeepsOneFileQueue() async throws {
+        let server = FakeTestServer()
+        let mac = try EngineTestMac(name: "Mac A", wallMillis: 1_000)
+        try await mac.connectFirst(server)
+        let work = StubFileWork()
+        work.pending = true
+        mac.engine.fileWork = work
+        mac.start()
+        defer { mac.stop() }
+        try await waitUntil { work.runs == 1 }
+
+        // Старая очередь не слушает отмену и ещё работает.
+        mac.stop()
+        mac.start()
+        try await waitUntil { mac.engine.status == .ready }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(work.runs == 1)
+
+        work.finish()
+        try await waitUntil { work.runs == 2 }
+        // Конец старой задачи не сбросил новую: третья рядом со второй не стартует.
+        mac.engine.syncNow()
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(work.runs == 2)
+        #expect(work.maxConcurrentRuns == 1)
+        work.pending = false
+        work.finish()
+    }
+
     private func waitUntil(_ condition: @MainActor () -> Bool) async throws {
         let deadline = ContinuousClock.now + .seconds(5)
         while await !condition() {
@@ -88,7 +119,9 @@ private final class StubFileWork: SyncFileWork, @unchecked Sendable {
     private(set) var checks = 0
     private(set) var runs = 0
     private(set) var isRunning = false
-    private var release: CheckedContinuation<Void, Never>?
+    private(set) var maxConcurrentRuns = 0
+    private var concurrentRuns = 0
+    private var releases: [CheckedContinuation<Void, Never>] = []
 
     nonisolated func hasPendingWork() -> Bool {
         MainActor.assumeIsolated {
@@ -100,16 +133,21 @@ private final class StubFileWork: SyncFileWork, @unchecked Sendable {
     nonisolated func run() async {
         await MainActor.run {
             runs += 1
+            concurrentRuns += 1
+            maxConcurrentRuns = max(maxConcurrentRuns, concurrentRuns)
             isRunning = true
         }
         await withCheckedContinuation { continuation in
-            Task { @MainActor in self.release = continuation }
+            Task { @MainActor in self.releases.append(continuation) }
         }
-        await MainActor.run { isRunning = false }
+        await MainActor.run {
+            concurrentRuns -= 1
+            isRunning = concurrentRuns > 0
+        }
     }
 
     func finish() {
-        release?.resume()
-        release = nil
+        guard !releases.isEmpty else { return }
+        releases.removeFirst().resume()
     }
 }
