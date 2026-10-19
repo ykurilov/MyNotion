@@ -23,7 +23,7 @@ struct PageFindTests {
         editor.step { editor.textView.insertTable(at: tableIndex) }
         let table = try #require(editor.document.blocks.first { $0.kind == .table })
         let grid = try #require(editor.document.tableGrid(table.id))
-        editor.step { editor.document.apply(grid.settingText(InlineText("а тут слово в ячейке"), row: 1, column: 2)) }
+        editor.step { editor.document.apply(grid.settingText(InlineText("а тут слово в ячейке"), row: 1, column: 1)) }
         editor.window.makeFirstResponder(editor.textView)
         editor.layoutViewport()
         return editor
@@ -77,7 +77,7 @@ struct PageFindTests {
         client.scrollRangeToVisible(match)
         client.selectedRanges = [NSValue(range: match)]
         let cell = try #require(editor.window.firstResponder as? TableCellEditor)
-        #expect(cell.table?.activeCell == TableCellPosition(row: 1, column: 2))
+        #expect(cell.table?.activeCell == TableCellPosition(row: 1, column: 1))
         #expect(cell.selectedRange() == NSRange(location: 6, length: 5))
         var effective = NSRange()
         #expect(client.contentView(at: match.location, effectiveCharacterRange: &effective) != nil)
@@ -129,10 +129,10 @@ struct PageFindTests {
         #expect(column.document.index(ofBlock: right.id) == 0)
 
         let table = try #require(editor.document.blocks.first { $0.kind == .table })
-        let cell = try #require(editor.document.tableGrid(table.id)?.cell(row: 1, column: 2))
+        let cell = try #require(editor.document.tableGrid(table.id)?.cell(row: 1, column: 1))
         editor.textView.revealBlock(cell.id)
         let cellEditor = try #require(editor.window.firstResponder as? TableCellEditor)
-        #expect(cellEditor.table?.activeCell == TableCellPosition(row: 1, column: 2))
+        #expect(cellEditor.table?.activeCell == TableCellPosition(row: 1, column: 1))
     }
 
         @Test("⌘F открывает одну полосу поиска страницы, а не поиск отдельного редактора")

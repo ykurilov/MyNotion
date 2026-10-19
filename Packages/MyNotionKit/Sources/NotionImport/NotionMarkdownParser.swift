@@ -45,6 +45,11 @@ public struct ParsedBlock: Sendable, Hashable {
     /// Картинка, файл, видео-файл: путь файла в выгрузке от папки страницы, раскодированный. Импорт копирует файл
     /// во вложения; файла нет или он больше 100 МБ — абзац «[файл: имя]».
     public var attachmentPath: String?
+    /// Обложка ролика, картинка и значок закладки из нашей выгрузки: пути файлов, как у `attachmentPath`.
+    /// Нет файла — блок остаётся, без картинки («Обновить» скачает её заново).
+    public var decorationPaths: [DecorationFile: String] = [:]
+
+    public enum DecorationFile: Sendable, Hashable, CaseIterable { case poster, image, icon }
 
     public init(kind: BlockKind, text: InlineText = .empty, indent: Int = 0, isChecked: Bool = false,
                 pagePath: String? = nil, standaloneURL: URL? = nil, color: BlockColor = .none, props: BlockProps = .empty,
@@ -166,7 +171,9 @@ struct PageBuilder {
             index += 1
             if NotionMarkdownParser.isBlank(line) {
                 closeOpenBlock()
-                blankLines += 1
+                // Строка из пробелов под пунктом списка — Notion так отделяет текст внутри пункта (и переключателя):
+                // это не лишняя пустая строка.
+                if listColumns.isEmpty || NotionMarkdownParser.leadingSpaces(line) == 0 { blankLines += 1 }
                 continue
             }
             if let comment = NotionColorComment.parse(trimmed) {
@@ -239,8 +246,10 @@ struct PageBuilder {
                 continue
             }
             closeOpenBlock()
-            if NotionMarkdownParser.leadingSpaces(line) == 0 { listColumns = [] }
-            open = OpenBlock(kind: .paragraph, lines: [trimmed])
+            // Абзац с отступом под пунктом списка, после пустой строки, — текст внутри пункта: вложен в него.
+            let spaces = NotionMarkdownParser.leadingSpaces(line)
+            listColumns = listColumns.filter { $0 <= spaces }
+            open = OpenBlock(kind: .paragraph, indent: min(listColumns.count, Block.indentRange.upperBound), lines: [trimmed])
         }
         closeOpenBlock()
     }
@@ -265,7 +274,9 @@ struct PageBuilder {
         guard let block = open else { return }
         open = nil
         if block.kind == .paragraph {
-            emit(paragraph(from: block.lines))
+            var parsed = paragraph(from: block.lines)
+            parsed.indent = block.indent
+            emit(parsed)
         } else {
             let parsed = NotionInlineParser.parse(Self.joined(block.lines))
             note(files: parsed.files)

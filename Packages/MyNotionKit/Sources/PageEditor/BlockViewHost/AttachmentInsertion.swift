@@ -144,8 +144,8 @@ extension PageTextView {
         var props = BlockProps()
         props.attachment = ref
         if kind == .video { props.videoSource = .file }
-        if kind == .image, let file, let size = ImageThumbnailCache.pixelSize(of: file) {
-            props.pixelSize = PixelSize(width: size.width, height: size.height)
+        if kind == .image, let file, let size = PixelSize(ofImageAt: file) {
+            props.pixelSize = size
         }
         return BlockDraft(id: nil, kind: kind, props: props)
     }

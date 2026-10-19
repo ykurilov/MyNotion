@@ -3,10 +3,11 @@ import NotesCore
 import PageEditor
 import XCTest
 
-/// Проба свёртывания (T003, research R1, R16): страница на 1 000 блоков, у одного блока 200 детей, они спрятаны
-/// от раскладки. Набор рядом со свёрнутым — p95 ≤ 50 мс; ⌘Z/⇧⌘Z, ⇧+стрелки, ⌫ и выделение внутри скрытого —
+/// Проба свёртывания (T003, research R1, R16): страница на 1 000 блоков, у переключателя 200 детей, он свёрнут.
+/// Набор рядом со свёрнутым — p95 ≤ 50 мс; ⌘Z/⇧⌘Z, ⇧+стрелки, ⌫ и выделение внутри скрытого —
 /// в видимом окне, с перерисовкой после каждого шага: без падений и потерь.
-/// Переключателя ещё нет (US1): родитель — пункт списка, скрытие от типа не зависит.
+/// На этапе 0 переключателя не было и дети прятались голым `setHiddenBlocks`; с US1 — настоящее свёртывание
+/// (`setCollapsed`): правила курсора и выделения у скрытого (R1) есть только у него.
 @MainActor
 final class CollapseProbeTests: XCTestCase {
     static let parentIndex = 400
@@ -15,24 +16,23 @@ final class CollapseProbeTests: XCTestCase {
 
     private func makeEditor() throws -> ProbeEditor {
         var specs: [ProbeEditor.Spec] = (0..<Self.parentIndex).map { .init(text: "Абзац \($0): обычный текст страницы, mixed with Latin words.") }
-        specs.append(.init(kind: .bulletItem, text: "Родитель"))
+        specs.append(.init(kind: .toggle, text: "Родитель"))
         specs += (0..<Self.childCount).map { .init(kind: .bulletItem, text: "Ребёнок \($0)", indent: 1) }
         specs += (Self.firstAfter..<1_000).map { .init(text: "Абзац \($0): обычный текст страницы, mixed with Latin words.") }
         return try ProbeEditor(specs)
     }
 
-    private func childIds(_ editor: ProbeEditor) -> Set<UUID> {
-        Set(editor.document.blocks[(Self.parentIndex + 1)...(Self.parentIndex + Self.childCount)].map(\.id))
+    private func setCollapsed(_ collapsed: Bool, _ editor: ProbeEditor) {
+        editor.textView.setCollapsed(collapsed, ofBlock: editor.document.blocks[Self.parentIndex].id)
     }
 
     func testTypingNextToCollapsedWithinBudget() async throws {
         let editor = try makeEditor()
         defer { editor.close() }
         try await editor.settle()
-        let children = childIds(editor)
         editor.placeCaret(editor.location(ofBlock: Self.parentIndex))
         let collapseMs = ProbeEditor.measure {
-            editor.textView.setHiddenBlocks(children)
+            setCollapsed(true, editor)
             editor.window.displayIfNeeded()
         }
 
@@ -42,7 +42,7 @@ final class CollapseProbeTests: XCTestCase {
         editor.placeCaret(editor.location(ofBlock: Self.firstAfter))
         samples += try await editor.type(100)
         let expandMs = ProbeEditor.measure {
-            editor.textView.setHiddenBlocks([])
+            setCollapsed(false, editor)
             editor.window.displayIfNeeded()
         }
 
@@ -82,7 +82,7 @@ final class CollapseProbeTests: XCTestCase {
 
         editor.placeCaret(editor.location(ofBlock: 5) + 3)
         type("до")
-        editor.textView.setHiddenBlocks(childIds(editor))
+        setCollapsed(true, editor)
         editor.window.displayIfNeeded()
         editor.placeCaret(editor.location(ofBlock: Self.firstAfter))
         type("после")

@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 
 /// Свойства блока по его типу (data-model.md, «props по типам»): объект JSON. Неизвестные ключи хранятся как есть —
 /// более новая версия MyNotion может добавить своё, и эта их не потеряет.
@@ -165,6 +166,17 @@ public struct PixelSize: Sendable, Hashable {
     public init(width: Int, height: Int) {
         self.width = width
         self.height = height
+    }
+
+    /// Размер картинки в файле по её заголовку, без чтения самой картинки. Снимок, повёрнутый меткой EXIF на бок,
+    /// показывается повёрнутым: ширина и высота меняются местами.
+    public init?(ofImageAt url: URL) {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int, let height = properties[kCGImagePropertyPixelHeight] as? Int
+        else { return nil }
+        let orientation = properties[kCGImagePropertyOrientation] as? Int ?? 1
+        self = orientation >= 5 ? PixelSize(width: height, height: width) : PixelSize(width: width, height: height)
     }
 }
 

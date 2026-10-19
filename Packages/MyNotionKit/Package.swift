@@ -67,7 +67,7 @@ let package = Package(
         .testTarget(name: "EmojiPickerTests", dependencies: ["EmojiPicker", "NotesCore"]),
         .testTarget(name: "PageSearchTests", dependencies: ["PageSearch", "NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "MarkdownExportTests", dependencies: ["MarkdownExport", "NotesCore"]),
-        .testTarget(name: "NotionImportTests", dependencies: ["NotionImport", "NotesCore", "MarkdownExport", .product(name: "GRDB", package: "GRDB.swift")],
+        .testTarget(name: "NotionImportTests", dependencies: ["NotionImport", "NotesCore", "MarkdownExport", "PageEditor", .product(name: "GRDB", package: "GRDB.swift")],
                     resources: [.copy("Fixtures")]),
         .testTarget(name: "SyncTests", dependencies: ["Sync", "NotesCore", "Reminders", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "UIGalleryTests", dependencies: ["UIGallery", "NotesCore", "PageEditor"]),

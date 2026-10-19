@@ -260,8 +260,14 @@ struct NotionImportReportView: View {
             Text(verbatim: "Перенесено страниц: \(number(report.pageCount)). Они лежат на новой странице «\(report.rootTitle)» в списке слева.")
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("notion-import-summary")
+            ForEach(report.notices, id: \.self) { notice in
+                Text(verbatim: notice + ".")
+                    .foregroundStyle(Color(nsColor: Palette.textSecondary))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("notion-import-notice-line")
+            }
             if report.simplified.isEmpty {
-                Text("Всё перенесено как было.")
+                Text(report.notices.isEmpty ? "Всё перенесено как было." : "Остальное перенесено как было.")
                     .foregroundStyle(Color(nsColor: Palette.textSecondary))
             } else {
                 Text("Кое-что из Notion здесь выглядеть так же не может. Текст сохранён, но обычными абзацами:")

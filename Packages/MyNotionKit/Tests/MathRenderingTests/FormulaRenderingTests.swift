@@ -10,6 +10,8 @@ struct FormulaRenderingTests {
         "\\frac{a+b}{c}", "\\sqrt{x^2+1}", "x_{i}^{2} + y_j", "\\begin{pmatrix} 1 & 0 \\\\ 0 & 1 \\end{pmatrix}",
         "\\begin{aligned} a &= b + c \\\\ d &= e \\end{aligned}", "f(x) = \\begin{cases} 1 & x > 0 \\\\ 0 & x \\le 0 \\end{cases}",
         "\\alpha + \\beta = \\gamma", "\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}", "E = mc^2",
+        // Формулы живой выгрузки Notion (T116).
+        "a^2+b^2",
     ]
 
     @Test("Дроби, корни, индексы, матрицы, aligned, cases — картинка без ошибки", arguments: formulas)

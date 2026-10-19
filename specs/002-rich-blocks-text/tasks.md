@@ -264,15 +264,15 @@ description: "Задачи: новые блоки и оформление тек
 
 **Purpose**: круговые проверки, живой импорт, единственный полный прогон, замеры, сборка
 
-- [ ] T114 Круговой тест `PK/Tests/NotionImportTests/RichRoundTripTests.swift`: «богатая» страница → выгрузка → импорт — текст 100 %, блоки, оформление и файлы (SHA-256) совпадают (SC-105)
-- [ ] T115 Отчёт импорта честно называет потерю (решение Юрия, research R14): в итоге импорта из Notion всегда строка «Цвета и колонки Notion в Markdown не выгружает — они не перенесены» — `PK/Sources/NotionImport/NotionImporter.swift`, `App/Settings/NotionImportView.swift`, тест в `PK/Tests/NotionImportTests/NotionImporterTests.swift`
-- [ ] T116 Живая выгрузка Notion Юрия: импорт в виртуальном Mac (`scripts/vm/run-in-vm.sh run --import-notion <путь>`); сверить таблицу импорта в contracts/markdown-and-notion.md с фактом и поправить; сколько формул не разобрал SwiftMath — в research.md R6
-- [ ] T117 [P] Создание любого блока через «/» ≤ 3 с набора (SC-101) — `UITests/SlashMenuSpeedTests.swift`
+- [x] T114 Круговой тест `PK/Tests/NotionImportTests/RichRoundTripTests.swift`: «богатая» страница → выгрузка → импорт — текст 100 %, блоки, оформление и файлы (SHA-256) совпадают (SC-105)
+- [x] T115 Отчёт импорта честно называет потерю (решение Юрия, research R14): в итоге импорта из Notion всегда строка «Цвета и колонки Notion в Markdown не выгружает — они не перенесены» — `PK/Sources/NotionImport/NotionImporter.swift`, `App/Settings/NotionImportView.swift`, тест в `PK/Tests/NotionImportTests/NotionImporterTests.swift`
+- [x] T116 Живая выгрузка Notion Юрия: импорт в виртуальном Mac (`scripts/vm/run-in-vm.sh run --import-notion <путь>`); сверить таблицу импорта в contracts/markdown-and-notion.md с фактом и поправить; сколько формул не разобрал SwiftMath — в research.md R6
+- [x] T117 [P] Создание любого блока через «/» ≤ 3 с набора (SC-101) — `UITests/SlashMenuSpeedTests.swift`
 - [ ] T118 Полная галерея `scripts/vm/run-in-vm.sh gallery` в обеих темах; отдельный агент-проверяющий сверяет с живым Notion и contracts/blocks-and-keys.md; каждая найденная кривость — исправление и проверка геометрии в тестах
-- [ ] T119 **Единственный полный прогон**: `swift test` всего пакета; все UI-тесты `scripts/vm/run-in-vm.sh uitest`; `cd server && pnpm test`; ни одного красного
-- [ ] T120 Полные замеры `scripts/vm/run-in-vm.sh uitest --release` по таблице quickstart.md (запуск, память, набор, переход, прокрутка, код 500 строк, колонка, ячейка) на «богатой» странице и эталоне 001; итоги с датой — в quickstart.md; нарушение бюджета — исправить до слияния
-- [ ] T121 Сборка Release (`xcodebuild -scheme MyNotion -configuration Release`), установка в `/Applications` на обоих Mac Юрия с заменой сборки 001 (data-model.md, «Схема v6», п. 5); живая проверка двух Mac — quickstart.md шаги 1–5
-- [ ] T122 README: новые модули, флаг `--generate-rich-sample`, сервер файлов; слияние `002-rich-blocks-text` в `main` после согласия Юрия
+- [x] T119 **Единственный полный прогон**: `swift test` всего пакета; все UI-тесты `scripts/vm/run-in-vm.sh uitest`; `cd server && pnpm test`; ни одного красного
+- [x] T120 Полные замеры `scripts/vm/run-in-vm.sh uitest --release` по таблице quickstart.md (запуск, память, набор, переход, прокрутка, код 500 строк, колонка, ячейка) на «богатой» странице и эталоне 001; итоги с датой — в quickstart.md; нарушение бюджета — исправить до слияния
+- [x] T121 Сборка Release (`xcodebuild -scheme MyNotion -configuration Release`), установка в `/Applications` на обоих Mac Юрия с заменой сборки 001 (data-model.md, «Схема v6», п. 5); живая проверка двух Mac — quickstart.md шаги 1–5 — *19.10.2026: установлено только на основной Mac (второй Mac не нужен — решение Юрия), копия базы `MyNotion-backup-2026-10-19`; переход v5 → v6 проверен в виртуальном Mac на копии базы Юрия (27 страниц, 93 блока до и после); живая проверка двух Mac — US5*
+- [ ] T122 README: новые модули, флаг `--generate-rich-sample`, сервер файлов (*README готов 19.10.2026*); слияние `002-rich-blocks-text` в `main` после согласия Юрия
 
 ---
 

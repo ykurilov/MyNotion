@@ -27,20 +27,27 @@ public struct SimplifiedPage: Sendable, Hashable, Codable {
     }
 }
 
-/// Отчёт после импорта (FR-026): сколько перенесено и что упрощено.
+/// Отчёт после импорта (FR-026): сколько перенесено, что упрощено и чего выгрузка не содержит вовсе.
 public struct NotionImportReport: Sendable, Equatable {
+    /// Цветов и колонок в выгрузке Notion «Markdown & CSV» нет: отчёт называет потерю всегда (research R14, решение Юрия).
+    public static let markdownLossNotice = "Цвета и колонки Notion в Markdown не выгружает — они не перенесены"
+
     public var rootPageId: UUID
     public var rootTitle: String
     public var pageCount: Int
     public var blockCount: Int
     public var simplified: [SimplifiedPage]
+    /// Потери самого формата выгрузки — не по страницам.
+    public var notices: [String]
 
-    public init(rootPageId: UUID, rootTitle: String, pageCount: Int, blockCount: Int, simplified: [SimplifiedPage]) {
+    public init(rootPageId: UUID, rootTitle: String, pageCount: Int, blockCount: Int, simplified: [SimplifiedPage],
+                notices: [String] = [Self.markdownLossNotice]) {
         self.rootPageId = rootPageId
         self.rootTitle = rootTitle
         self.pageCount = pageCount
         self.blockCount = blockCount
         self.simplified = simplified
+        self.notices = notices
     }
 }
 
@@ -181,16 +188,32 @@ public struct NotionImporter: Sendable {
         for index in plan.pages.indices {
             let folder = plan.pages[index].file.deletingLastPathComponent()
             var missing = 0
+            func copy(_ path: String) -> (URL, AttachmentRef)? {
+                let url = path.split(separator: "/").reduce(folder) { $0.appendingPathComponent(String($1)) }
+                let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize
+                guard let size, size <= AttachmentRef.maximumByteCount, let ref = try? attachments?.importFile(at: url) else { return nil }
+                return (url, ref)
+            }
             func attach(_ blocks: inout [ParsedBlock]) throws {
                 for position in blocks.indices {
                     try attach(&blocks[position].contained)
+                    for (file, path) in blocks[position].decorationPaths {
+                        try Task.checkCancellation()
+                        guard let (_, ref) = copy(path) else { continue }
+                        switch file {
+                        case .poster: blocks[position].props.poster = ref
+                        case .image: blocks[position].props.image = ref
+                        case .icon: blocks[position].props.iconAttachment = ref
+                        }
+                    }
+                    blocks[position].decorationPaths = [:]
                     guard let path = blocks[position].attachmentPath else { continue }
                     try Task.checkCancellation()
                     blocks[position].attachmentPath = nil
-                    let url = path.split(separator: "/").reduce(folder) { $0.appendingPathComponent(String($1)) }
-                    let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize
-                    if let size, size <= AttachmentRef.maximumByteCount, let ref = try? attachments?.importFile(at: url) {
+                    if let (url, ref) = copy(path) {
                         blocks[position].props.attachment = ref
+                        // Размер картинки — из файла: вид знает высоту блока до загрузки картинки (как при вставке).
+                        if blocks[position].kind == .image, let size = PixelSize(ofImageAt: url) { blocks[position].props.pixelSize = size }
                     } else {
                         let name = (path as NSString).lastPathComponent
                         blocks[position] = ParsedBlock(kind: .paragraph, text: InlineText("[файл: \(name)]"),

@@ -36,7 +36,7 @@ struct TableWriter: MarkdownBlockKindWriter {
     }
 }
 
-/// `<div data-columns>`, на колонку `<div data-column data-width="0.5">`, пустая строка, блоки Markdown, пустая строка,
+/// `<div data-columns>`, на колонку `<div data-column data-width="0.5">` (поровну — без `data-width`), пустая строка, блоки Markdown, пустая строка,
 /// `</div>`, … `</div>`.
 struct ColumnsWriter: MarkdownBlockKindWriter {
     var kinds: Set<BlockKind> { [.columnList] }
@@ -45,8 +45,10 @@ struct ColumnsWriter: MarkdownBlockKindWriter {
         let columns = context.flow(block.id).filter { $0.kind == .column }
         guard !columns.isEmpty else { return nil }
         var lines = ["<div data-columns>"]
+        // Колонки поровну (доли не заданы) — без долей: импорт вернёт «поровну», а не 0.333333.
+        let hasRatios = columns.contains { $0.props.widthRatio != nil }
         for (column, ratio) in zip(columns, ColumnLayout.ratios(of: columns)) {
-            lines.append("<div data-column data-width=\"\(String(format: "%g", ratio))\">")
+            lines.append(hasRatios ? "<div data-column data-width=\"\(String(format: "%g", ratio))\">" : "<div data-column>")
             let markdown = context.render(context.flow(column.id))
             lines.append("")
             if !markdown.isEmpty { lines += markdown.components(separatedBy: "\n").dropLast() + [""] }

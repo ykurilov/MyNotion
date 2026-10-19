@@ -124,14 +124,24 @@ public struct MarkdownExporter: Sendable {
         let refs = content.blocks.compactMap { block -> AttachmentRef? in
             [.image, .file, .video].contains(block.kind) ? block.props.attachment : nil
         }
-        guard !refs.isEmpty else { return ([:], 0) }
+        // Обложка ролика, картинка и значок закладки: без них карточка всё равно видна, «Обновить» скачает их заново —
+        // поэтому их нехватка в «Не выгружено файлов» не считается.
+        let decorations = content.blocks.flatMap { block -> [AttachmentRef] in
+            switch block.kind {
+            case .video: [block.props.poster].compactMap { $0 }
+            case .bookmark: [block.props.image, block.props.iconAttachment].compactMap { $0 }
+            default: []
+            }
+        }
+        guard !refs.isEmpty || !decorations.isEmpty else { return ([:], 0) }
         let pageFolder = location.folder + [location.stem]
         var taken = plan.entryNames(inFolder: pageFolder)
         var paths: [UUID: String] = [:]
         var missing = 0
-        for ref in refs where paths[ref.id] == nil {
+        let mainCount = refs.count
+        for (position, ref) in (refs + decorations).enumerated() where paths[ref.id] == nil {
             guard let source = attachmentFile(ref.id) else {
-                missing += 1
+                if position < mainCount { missing += 1 }
                 continue
             }
             let name = ExportFileNames.uniqueFileName(ref.name, taken: &taken)

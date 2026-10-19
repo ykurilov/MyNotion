@@ -38,16 +38,6 @@ final class ImageThumbnailCache {
         return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 
-    /// Размер картинки в пикселях без чтения самой картинки (с поворотом из EXIF).
-    nonisolated static func pixelSize(of url: URL) -> (width: Int, height: Int)? {
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-              let width = properties[kCGImagePropertyPixelWidth] as? Int, let height = properties[kCGImagePropertyPixelHeight] as? Int
-        else { return nil }
-        let orientation = properties[kCGImagePropertyOrientation] as? Int ?? 1
-        return orientation >= 5 ? (height, width) : (width, height)
-    }
-
     private static func key(_ url: URL, _ size: Int) -> NSString {
         "\(url.path)#\(size)" as NSString
     }

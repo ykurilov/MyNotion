@@ -83,11 +83,15 @@ final class VisualReferenceTests: XCTestCase {
         let topLeft = window.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: 1, dy: 1))
         topLeft.press(forDuration: 0.2, thenDragTo: topLeft.withOffset(CGVector(dx: -frame.minX, dy: 40 - frame.minY)))
         // Окно помнит размер прошлого запуска, а перетаскивание не всегда доходит до места: тянуть, пока не совпадёт.
+        // Большое окно уменьшается за левый верхний угол: правый нижний у края экрана, там всплывает Dock и забирает мышь.
         for _ in 0..<3 {
             let moved = window.frame
             guard abs(moved.width - size.width) > Self.tolerance || abs(moved.height - size.height) > Self.tolerance else { break }
-            let corner = window.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: moved.width - 1, dy: moved.height - 1))
-            corner.press(forDuration: 0.2, thenDragTo: corner.withOffset(CGVector(dx: size.width - moved.width, dy: size.height - moved.height)))
+            let shrinks = moved.width >= size.width && moved.height >= size.height
+            let corner = window.coordinate(withNormalizedOffset: .zero)
+                .withOffset(shrinks ? CGVector(dx: 1, dy: 1) : CGVector(dx: moved.width - 1, dy: moved.height - 1))
+            let delta = CGVector(dx: size.width - moved.width, dy: size.height - moved.height)
+            corner.press(forDuration: 0.2, thenDragTo: corner.withOffset(shrinks ? CGVector(dx: -delta.dx, dy: -delta.dy) : delta))
         }
         XCTAssertEqual(window.frame.width, size.width, accuracy: Self.tolerance, "Ширина окна")
         XCTAssertEqual(window.frame.height, size.height, accuracy: Self.tolerance, "Высота окна")

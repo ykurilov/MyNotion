@@ -35,6 +35,21 @@ struct StructuralBlocksImportTests {
         #expect(page.simplifications.isEmpty)
     }
 
+    @Test("Живая выгрузка Notion 7.39: переключатель — пункт списка, текст внутри — с отступом после пустой строки; строки из пробелов — не пустые абзацы")
+    func notionToggleAsListItem() {
+        // Так Notion 7.39 пишет переключатель с текстом внутри и цитату (выгрузка «MyNotion — блоки 002», 19.10.2026).
+        let page = parse("- Переключатель\n    \n    Внутри переключателя\n    \n\n> Цитата из книги\n> \n\nПосле\n")
+        #expect(shape(page.blocks) == ["0 bulletItem Переключатель", "1 paragraph Внутри переключателя", "0 quote Цитата из книги",
+                                       "0 paragraph После"])
+    }
+
+    @Test("Живая выгрузка Notion 7.39: эмодзи выноски — отдельной строкой, текст — следующим абзацем")
+    func notionCalloutIconOnOwnLine() {
+        let page = parse("<aside>\n💡\n\nСовет в выноске\n\n</aside>\n\nПосле\n")
+        #expect(shape(page.blocks) == ["0 callout Совет в выноске", "0 paragraph После"])
+        #expect(page.blocks.first?.props.icon == "💡")
+    }
+
     @Test("Notion: вложенные <details>")
     func nestedToggles() {
         let page = parse("<details>\n<summary>А</summary>\n\n<details>\n<summary>Б</summary>\n\nв\n\n</details>\n\n</details>\n")

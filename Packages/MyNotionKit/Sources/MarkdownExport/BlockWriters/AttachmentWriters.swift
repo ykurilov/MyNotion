@@ -41,7 +41,8 @@ struct VideoWriter: MarkdownBlockKindWriter {
         var lines: [String]
         if let url = block.props.url, let link = VideoLink(url: url) {
             let title = block.props.title ?? url.absoluteString
-            lines = ["<iframe src=\"\(AttachmentMarkup.attribute(link.plainEmbedURL.absoluteString))\" data-video=\"\(link.sourceName)\"></iframe>",
+            let poster = AttachmentMarkup.fileAttribute("data-poster", block.props.poster, context: context)
+            lines = ["<iframe src=\"\(AttachmentMarkup.attribute(link.plainEmbedURL.absoluteString))\" data-video=\"\(link.sourceName)\"\(poster)></iframe>",
                      "[\(AttachmentMarkup.bracketed(title))](\(url.absoluteString))"]
         } else if let ref = block.props.attachment {
             guard let path = context.resolveAttachment(ref) else { return [AttachmentMarkup.notDownloaded(ref)] }
@@ -55,14 +56,16 @@ struct VideoWriter: MarkdownBlockKindWriter {
     }
 }
 
-/// `<a href data-bookmark>заголовок или адрес</a>`, описание — курсивом строкой ниже.
+/// `<a href data-bookmark data-image data-icon>заголовок или адрес</a>`, описание — курсивом строкой ниже.
 struct BookmarkWriter: MarkdownBlockKindWriter {
     var kinds: Set<BlockKind> { [.bookmark] }
 
     func lines(for block: Block, children: [String], context: MarkdownWriteContext) -> [String]? {
         guard let url = block.props.url else { return nil }
         let title = block.props.title ?? url.absoluteString
-        var lines = ["<a href=\"\(AttachmentMarkup.attribute(url.absoluteString))\" data-bookmark>\(AttachmentMarkup.attribute(title))</a>"]
+        let files = AttachmentMarkup.fileAttribute("data-image", block.props.image, context: context)
+            + AttachmentMarkup.fileAttribute("data-icon", block.props.iconAttachment, context: context)
+        var lines = ["<a href=\"\(AttachmentMarkup.attribute(url.absoluteString))\" data-bookmark\(files)>\(AttachmentMarkup.attribute(title))</a>"]
         if let description = block.props.description?.replacingOccurrences(of: "\n", with: " "), !description.isEmpty {
             let units = Array(description.utf16)
             lines.append("*\(InlineMarkdown.escape(units, range: 0..<units.count))*")
@@ -74,6 +77,12 @@ struct BookmarkWriter: MarkdownBlockKindWriter {
 enum AttachmentMarkup {
     static func notDownloaded(_ ref: AttachmentRef) -> String {
         "[файл не скачан: \(ref.name)]"
+    }
+
+    /// ` data-poster="Страница/обложка.jpg"` — копия файла выгружена; нет файла или копии — пусто.
+    static func fileAttribute(_ name: String, _ ref: AttachmentRef?, context: MarkdownWriteContext) -> String {
+        guard let ref, let path = context.resolveAttachment(ref) else { return "" }
+        return " \(name)=\"\(attribute(InlineMarkdown.encodedPath(path)))\""
     }
 
     /// Значение атрибута HTML: `&`, `<`, `>`, `"` — мнемониками.

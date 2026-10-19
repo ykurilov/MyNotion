@@ -89,6 +89,10 @@ final class LongCodeTypingProbeTests: XCTestCase {
         add(XCTAttachment(string: summary))
         XCTAssertEqual(editor.document.blocks.count, 41)
         XCTAssertEqual((editor.document.blocks[20].text.string as NSString).length, source.length + 200)
-        XCTAssertLessThanOrEqual(ProbeEditor.p95(lineSamples), 50, "Набор в коде на 500 строк: p95 больше 50 мс")
+        // Путь «код одним абзацем» отвергнут на этапе 0 (2 049 мс, research R16): блок кода — свой редактор, его бюджет
+        // проверяет CodeBlockTypingTests. Проба остаётся мерилом TextKit 2; пройдёт — ожидание провала сообщит.
+        XCTExpectFailure("Код одним абзацем в TextKit 2 медленнее бюджета — путь отвергнут (research R16)", strict: true) {
+            XCTAssertLessThanOrEqual(ProbeEditor.p95(lineSamples), 50, "Набор в коде на 500 строк: p95 больше 50 мс")
+        }
     }
 }
