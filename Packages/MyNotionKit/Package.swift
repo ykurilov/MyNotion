@@ -66,7 +66,7 @@ let package = Package(
         .testTarget(name: "MarkdownExportTests", dependencies: ["MarkdownExport", "NotesCore"]),
         .testTarget(name: "NotionImportTests", dependencies: ["NotionImport", "NotesCore", "MarkdownExport", .product(name: "GRDB", package: "GRDB.swift")],
                     resources: [.copy("Fixtures")]),
-        .testTarget(name: "SyncTests", dependencies: ["Sync", "NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
+        .testTarget(name: "SyncTests", dependencies: ["Sync", "NotesCore", "Reminders", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "UIGalleryTests", dependencies: ["UIGallery", "NotesCore", "PageEditor"]),
         .testTarget(name: "ServiceLaunchTests", dependencies: ["ServiceLaunch"]),
         .testTarget(name: "CodeHighlightingTests", dependencies: ["CodeHighlighting"]),

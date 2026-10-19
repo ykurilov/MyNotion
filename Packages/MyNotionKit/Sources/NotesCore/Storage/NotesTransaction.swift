@@ -386,10 +386,20 @@ public final class NotesTransaction {
 
     /// Записать отметку ровно такой, какой она пришла с другого Mac.
     package func writeReplicatedReminderState(_ state: ReminderState) throws {
+        try saveReminderState(state)
+    }
+
+    /// Отметить напоминание сделанным (`doneAt`) или снова несделанным (`nil`) — на всех Mac (research R11).
+    public func setReminderDone(_ mentionId: UUID, at doneAt: Date?) throws {
+        try saveReminderState(ReminderState(mentionId: mentionId, doneAt: doneAt, doneClock: clock.now()))
+    }
+
+    private func saveReminderState(_ state: ReminderState) throws {
         try db.execute(sql: """
             INSERT INTO reminder_state (mentionId, doneAt, doneClock) VALUES (?, ?, ?)
             ON CONFLICT(mentionId) DO UPDATE SET doneAt = excluded.doneAt, doneClock = excluded.doneClock
             """, arguments: [state.mentionId.databaseText, state.doneAt, state.doneClock.description])
+        changes.reminderStates.append(state)
     }
 
     // MARK: Подписчики
