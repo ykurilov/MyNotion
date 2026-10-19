@@ -23,6 +23,7 @@ enum TypingBenchmark {
     private static let typedCharacters = Array("быстрый набор text ")
     private static var hasStarted = false
     private static var readyWaiter: CheckedContinuation<Bool, Never>?
+    private static var readyTimeout: Task<Void, Never>?
 
     struct Report: Encodable {
         var typingMs: [Double] = []
@@ -220,14 +221,14 @@ enum TypingBenchmark {
         let ready = await withCheckedContinuation { continuation in
             readyWaiter = continuation
             model.select(pageId)
-            Task {
-                try? await Task.sleep(for: .seconds(10))
-                if let waiter = readyWaiter {
-                    readyWaiter = nil
-                    waiter.resume(returning: false)
-                }
+            // Сторож этого перехода. Не отменённый, он через 10 с оборвал бы один из следующих переходов.
+            readyTimeout = Task {
+                guard (try? await Task.sleep(for: .seconds(10))) != nil, let waiter = readyWaiter else { return }
+                readyWaiter = nil
+                waiter.resume(returning: false)
             }
         }
+        readyTimeout?.cancel()
         NSApp.windows.forEach { $0.displayIfNeeded() }
         let elapsed = milliseconds(ContinuousClock.now - start)
         signposter.endInterval("PageSwitch", state)
