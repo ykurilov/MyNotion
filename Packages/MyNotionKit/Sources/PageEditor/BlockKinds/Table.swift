@@ -4,7 +4,7 @@ import VisualStyle
 
 extension BlockKindDescriptor {
     /// Простая таблица (US6): в потоке — один знак-вложение с видом `TableView`; столбцы, строки и ячейки — в её потоках.
-    /// В меню «/» — «Таблица» (3 × 2); «Превратить в» таблицы нет.
+    /// В меню «/» — «Таблица» (2 столбца × 3 строки во всю ширину, как у Notion 7.39); «Превратить в» таблицы нет.
     static let table: BlockKindDescriptor = {
         var descriptor = BlockKindDescriptor(
             kind: .table,

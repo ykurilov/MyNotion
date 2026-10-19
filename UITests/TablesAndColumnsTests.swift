@@ -22,8 +22,8 @@ final class TablesAndColumnsTests: XCTestCase {
         let cell = app.textViews["table-cell"]
         XCTAssertTrue(cell.waitForExistence(timeout: 5), "Нет поля правки ячейки")
 
-        // 3 × 2 → Tab в последней ячейке добавляет третью строку.
-        for (index, text) in ["Имя", "Роль", "Город", "Юрий", "Автор", "Бали", "Мишка"].enumerated() {
+        // 2 столбца × 3 строки, как у Notion 7.39 → Tab в последней ячейке добавляет четвёртую строку.
+        for (index, text) in ["Имя", "Роль", "Юрий", "Автор", "Мишка", "Тестер", "Оля"].enumerated() {
             if index > 0 { app.typeKey(.tab, modifierFlags: []) }
             app.typeText(text)
         }
@@ -77,9 +77,9 @@ final class TablesAndColumnsTests: XCTestCase {
 
         let saved = try savedTree(ofPage: "Таблицы и колонки")
         XCTAssertTrue(saved.contains("table header-row"), "\(saved)")
-        XCTAssertEqual(saved.filter { $0 == "tableColumn" }.count, 4, "\(saved)")
-        XCTAssertEqual(saved.filter { $0 == "tableRow" }.count, 4, "\(saved)")
-        for text in ["Имя", "Роль", "Город", "Юрий", "Автор", "Бали", "Мишка"] {
+        XCTAssertEqual(saved.filter { $0 == "tableColumn" }.count, 3, "\(saved)")
+        XCTAssertEqual(saved.filter { $0 == "tableRow" }.count, 5, "\(saved)")
+        for text in ["Имя", "Роль", "Юрий", "Автор", "Мишка", "Тестер", "Оля"] {
             XCTAssertTrue(saved.contains("tableCell \(text)"), "нет ячейки «\(text)»: \(saved)")
         }
         XCTAssertTrue(saved.contains("columnList") && saved.filter { $0 == "column" }.count == 2, "\(saved)")

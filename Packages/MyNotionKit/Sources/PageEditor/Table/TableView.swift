@@ -24,6 +24,13 @@ struct TableCellRange: Equatable {
     }
 
     func contains(_ cell: TableCellPosition) -> Bool { rows.contains(cell.row) && columns.contains(cell.column) }
+
+    /// Что выделяет следующий Esc, как у Notion: ячейки → их строки целиком; строки целиком → `nil`, таблица как блок.
+    func escaped(columnCount: Int) -> TableCellRange? {
+        let fullRows = TableCellRange(from: TableCellPosition(row: rows.lowerBound, column: 0),
+                                      to: TableCellPosition(row: rows.upperBound, column: max(0, columnCount - 1)))
+        return self == fullRows ? nil : fullRows
+    }
 }
 
 /// Раскладка таблицы: столбцы по своим ширинам, строки — по самой высокой ячейке (research R3).
@@ -124,8 +131,8 @@ enum TableAction: CaseIterable {
 }
 
 /// Вид простой таблицы (research R3): ячейки рисует сам, правит одно поле на таблицу — `TableCellEditor` над ячейкой.
-/// «+» под таблицей — строка, справа — столбец; ширина столбца — протяжкой правой границы; Esc — выделение ячейки,
-/// ещё Esc — таблица выделена как блок.
+/// «+» под таблицей — строка, справа — столбец; ширина столбца — протяжкой правой границы; Esc, как у Notion:
+/// выделение ячейки → её строка → таблица выделена как блок.
 @MainActor
 final class TableView: NSView {
     let tableId: UUID
@@ -134,6 +141,8 @@ final class TableView: NSView {
     private(set) var tableLayout = TableLayout()
     private(set) var activeCell: TableCellPosition?
     private(set) var selectedCells: TableCellRange?
+    /// Выделение клавишей Esc (ячейка, строка) — синяя рамка 2 вокруг, без заливки, как у Notion; мышью — заливка.
+    private var isOutlinedSelection = false
     private(set) var editor: TableCellEditor?
     /// Ширины, пока границу тянут: запись — одной правкой при отпускании.
     private var draftWidths: [CGFloat]?
@@ -244,7 +253,7 @@ final class TableView: NSView {
                     Palette.tableHeaderBackground.setFill()
                     rect.fill(using: .sourceOver)
                 }
-                if selectedCells?.contains(cell) == true {
+                if !isOutlinedSelection, selectedCells?.contains(cell) == true {
                     Palette.blockSelection.setFill()
                     rect.fill(using: .sourceOver)
                 }
@@ -258,11 +267,20 @@ final class TableView: NSView {
         }
         drawBorders(grid)
         if let activeCell, editor != nil {
-            Palette.tableActiveCell.setStroke()
-            let path = NSBezierPath(rect: tableLayout.cellRect(activeCell).insetBy(dx: 0.5, dy: 0.5))
-            path.lineWidth = 2
-            path.stroke()
+            strokeSelection(tableLayout.cellRect(activeCell))
+        } else if isOutlinedSelection, let selection = selectedCells {
+            let first = tableLayout.cellRect(TableCellPosition(row: selection.rows.lowerBound, column: selection.columns.lowerBound))
+            let last = tableLayout.cellRect(TableCellPosition(row: selection.rows.upperBound, column: selection.columns.upperBound))
+            strokeSelection(first.union(last))
         }
+    }
+
+    /// Синяя рамка 2 ячейки правки и выделения клавишей Esc.
+    private func strokeSelection(_ rect: NSRect) {
+        Palette.tableActiveCell.setStroke()
+        let path = NSBezierPath(rect: rect.insetBy(dx: 0.5, dy: 0.5))
+        path.lineWidth = 2
+        path.stroke()
     }
 
     private func drawBorders(_ grid: TableGrid) {
@@ -379,6 +397,7 @@ final class TableView: NSView {
         guard let cell = activeCell else { return }
         deactivateEditor()
         selectCells(TableCellRange(cell))
+        isOutlinedSelection = true
         window?.makeFirstResponder(self)
     }
 
@@ -387,13 +406,20 @@ final class TableView: NSView {
     func selectCells(_ range: TableCellRange) {
         if editor != nil { deactivateEditor() }
         selectedCells = range
+        isOutlinedSelection = false
         needsDisplay = true
     }
 
     override func doCommand(by selector: Selector) {
         switch selector {
         case #selector(NSResponder.cancelOperation(_:)):
-            // Ещё Esc — таблица выделена как блок.
+            // Ещё Esc — строка ячейки целиком, а у выделенной строки — таблица как блок.
+            if let grid, let rows = selectedCells?.escaped(columnCount: grid.columnCount) {
+                selectedCells = rows
+                isOutlinedSelection = true
+                needsDisplay = true
+                return
+            }
             guard let host, let index = host.document.index(ofBlock: tableId) else { return }
             selectedCells = nil
             needsDisplay = true

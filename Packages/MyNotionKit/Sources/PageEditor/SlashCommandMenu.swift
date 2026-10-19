@@ -10,7 +10,7 @@ struct PopupMenuItem: Equatable {
         /// Окно цветов для блока.
         case color
         case delete
-        /// Только в меню «/»: колонки из N пустых колонок, таблица 3 × 2 (US6).
+        /// Только в меню «/»: колонки из N пустых колонок, таблица 2 × 3 (US6).
         case insertColumns(Int)
         case insertTable
     }
