@@ -52,6 +52,8 @@ public final class PageTextView: NSTextView {
     let popups = EditorPopupController()
     /// Упоминания, даты и окно «@» (US3).
     let inlineAtoms = InlineAtomsState()
+    /// Виды блоков кода страницы и курсор между ними и текстом (US4).
+    let codeBlocks = CodeBlockRegistry()
     let formatBar = FormatBarController()
     /// Последние цвета текста и фона: окно цветов и ⌘⇧H.
     var recentColors = RecentColors()
@@ -103,6 +105,7 @@ public final class PageTextView: NSTextView {
         colorMenu.textView = self
 
         configureTextBehaviour()
+        BuiltInBlockViews.registerOnce()
         mapper = PageTextStorageMapper(document: document, textStorage: textStorage!)
         // После загрузки текста система ставит выделение в конец, и место курсора там считалось бы раскладкой
         // всей страницы (на 10 000 блоках — секунды). Пока текст загружается, вид выделения не обновляется;
@@ -274,6 +277,11 @@ public final class PageTextView: NSTextView {
             convertDashesToDivider()
             return
         }
+        if typed == "`", replacementRange.location == NSNotFound, !hasMarkedText(), isCaretAfterTwoBackticks {
+            super.insertText(string, replacementRange: replacementRange)
+            convertBackticksToCode()
+            return
+        }
         if replacementRange.location == NSNotFound, !hasMarkedText(), !typed.isEmpty, !typed.hasPrefix("\n"), isCaretInPageLink {
             // В блоке-подстранице текста нет: набранное уходит в новый абзац под ним.
             super.insertText("\n" + typed, replacementRange: replacementRange)
@@ -368,6 +376,7 @@ public final class PageTextView: NSTextView {
         if colorMenu.handleCommand(selector) { return }
         if formatBar.handleCommand(selector) { return }
         if handleBlockSelectionCommand(selector) { return }
+        if handleArrowIntoCode(selector) { return }
         super.doCommand(by: selector)
     }
 
@@ -447,6 +456,7 @@ public final class PageTextView: NSTextView {
     func setKind(_ kind: BlockKind, ofBlocksAt range: Range<Int>) {
         guard kind != .pageLink else { return }
         if kind == .divider, range.count == 1 { return insertDivider(at: range.lowerBound) }
+        if kind == .code, range.count == 1, document.blocks[range.lowerBound].kind != .code { return insertCode(at: range.lowerBound) }
         let blocks = document.blocks
         let drafts = range.map { index in
             let block = blocks[index]
