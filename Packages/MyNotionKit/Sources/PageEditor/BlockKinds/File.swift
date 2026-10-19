@@ -123,8 +123,9 @@ final class FileBlockView: MediaBlockView {
         super.mouseDown(with: event)
     }
 
+    /// Файл пришёл или сменил состояние: вид заново на том же месте, высота строки та же.
     override func availabilityDidChange() {
-        textView?.relayoutBlockView(block.id)
+        rebuild()
     }
 
     override func menuItems() -> [NSMenuItem] {

@@ -227,7 +227,7 @@ description: "Задачи: новые блоки и оформление тек
 - [x] T095 [US5] Вставка: перетаскивание из Finder, ⌘V картинки, окно «Выбрать файл… / Вставить ссылку» — `PK/Sources/PageEditor/BlockViewHost/AttachmentInsertion.swift`; фабрики видов — в `App/MainWindow/`
 - [x] T096 [US5] Место файлов и квота сервера в `App/Settings/SyncSettingsView.swift` (`GET /files/usage`)
 - [x] T097 [P] [US5] Выгрузка и импорт: `PK/Sources/MarkdownExport/BlockWriters/AttachmentWriters.swift`, `PK/Sources/NotionImport/BlockReaders/AttachmentReaders.swift`
-- [ ] T098 [US5] Галерея; память в покое после просмотра и закрытия YouTube — исходная ± 10 МБ, память во время игры — записать для Юрия; прокрутка «богатой» страницы p95 ≤ 50 мс; живая проверка двух Mac, quickstart.md шаги 1–3 и 5; затронутые тесты зелёные; коммит
+- [x] T098 [US5] Галерея; память в покое после просмотра и закрытия YouTube — исходная ± 10 МБ, память во время игры — записать для Юрия; прокрутка «богатой» страницы p95 ≤ 50 мс; живая проверка двух Mac, quickstart.md шаги 1–3 и 5; затронутые тесты зелёные; коммит
 
 ---
 

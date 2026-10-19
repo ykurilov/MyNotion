@@ -33,6 +33,9 @@ enum TypingBenchmark {
         var richPageOpenMs: Double?
         var richPageTypingMs: [Double] = []
         var richPageTypingP95Ms: Double?
+        /// Прокрутка «богатой» страницы с видами картинок, файлов, видео, закладок, кода и таблиц (US5, T098).
+        var richPageScrollMs: [Double] = []
+        var richPageScrollP95Ms: Double?
         /// Набор в колонке и в ячейке таблицы «богатой» страницы (US6).
         var columnTypingMs: [Double] = []
         var cellTypingMs: [Double] = []
@@ -50,6 +53,7 @@ enum TypingBenchmark {
             hugePageTypingP95Ms = TypingBenchmark.p95(hugePageTypingMs)
             hugePageScrollP95Ms = TypingBenchmark.p95(hugePageScrollMs)
             richPageTypingP95Ms = TypingBenchmark.p95(richPageTypingMs)
+            richPageScrollP95Ms = TypingBenchmark.p95(richPageScrollMs)
             columnTypingP95Ms = TypingBenchmark.p95(columnTypingMs)
             cellTypingP95Ms = TypingBenchmark.p95(cellTypingMs)
         }
@@ -139,8 +143,11 @@ enum TypingBenchmark {
 
         // «Богатая» страница 002: переключатели (один свёрнут с 200 детьми), выноски, цитаты, разделители, цвета.
         let richPageId = try RichPageGenerator(parts: BlockKinds.richPageParts).ensure(in: model.store)
+        // Картинки и файлы образцов — настоящими файлами: прокрутка уменьшает и рисует картинки, как у Юрия.
+        SampleMedia.materialize(in: model.store, attachments: model.library.attachments, pageIds: [richPageId])
         report.richPageOpenMs = try await switchPage(to: richPageId, model: model)
         report.richPageTypingMs = try await type(hugePageKeystrokes, in: try openTextView())
+        report.richPageScrollMs = try await scroll(try openTextView(), steps: scrollSteps)
 
         // Колонка и ячейка таблицы на той же странице: курсор — в конец первого блока колонки и в первую ячейку.
         let page = try openTextView()

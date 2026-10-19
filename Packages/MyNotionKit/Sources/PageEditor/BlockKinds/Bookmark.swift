@@ -52,11 +52,12 @@ final class BookmarkBlockView: MediaBlockView {
         super.init(block: block, width: width)
         setAccessibilityIdentifier("bookmark-block")
         card.borderColor = Palette.border
+        card.cornerRadius = Metrics.Media.bookmarkCornerRadius
         addSubview(card)
         let props = block.props
         let address = props.url?.absoluteString ?? ""
         titleLabel.stringValue = props.title ?? ""
-        titleLabel.font = .systemFont(ofSize: Metrics.Media.bookmarkTitleFontSize, weight: .medium)
+        titleLabel.font = .systemFont(ofSize: Metrics.Media.bookmarkTitleFontSize)
         titleLabel.textColor = Palette.textPrimary
         titleLabel.lineBreakMode = .byTruncatingTail
         descriptionLabel.stringValue = props.description ?? ""
@@ -67,38 +68,50 @@ final class BookmarkBlockView: MediaBlockView {
         descriptionLabel.cell?.truncatesLastVisibleLine = true
         urlLabel.stringValue = address
         urlLabel.font = .systemFont(ofSize: Metrics.Media.bookmarkURLFontSize)
-        urlLabel.textColor = Palette.textPrimary
+        urlLabel.textColor = Palette.textSecondary
         urlLabel.lineBreakMode = .byTruncatingTail
         iconView.imageScaling = .scaleProportionallyUpOrDown
         if let icon = MediaBlocks.availability(of: props.iconAttachment).fileURL { iconView.image = NSImage(contentsOf: icon) }
-        imageView.cornerRadius = 0
+        imageView.cornerRadius = Metrics.Media.bookmarkCornerRadius
+        imageView.roundsLeadingCornersOnly = true
         [titleLabel, descriptionLabel, iconView, urlLabel, imageView].forEach(card.addSubview)
-        frame.size.height = Metrics.Media.bookmarkHeight + 2 * Metrics.Media.verticalPadding
+        frame.size.height = Self.contentHeight(for: block) + 2 * Metrics.Media.verticalPadding
         loadImage()
     }
 
     /// Заголовок, описание и адрес — для проверок и VoiceOver.
     var cardTexts: [String] { [titleLabel.stringValue, descriptionLabel.stringValue, urlLabel.stringValue].filter { !$0.isEmpty } }
 
+    /// С данными сайта — высокая карточка, без них — низкая с одним адресом.
+    static func contentHeight(for block: Block) -> CGFloat {
+        let props = block.props
+        let hasData = props.title != nil || props.description != nil || props.image != nil
+        return hasData ? Metrics.Media.bookmarkHeight : Metrics.Media.bookmarkCompactHeight
+    }
+
     override func layout() {
         super.layout()
         let padding = Metrics.Media.bookmarkPadding
-        card.frame = NSRect(x: 0, y: Metrics.Media.verticalPadding, width: bounds.width, height: Metrics.Media.bookmarkHeight)
-        let hasImage = imageURL != nil
-        let imageWidth = hasImage ? (card.bounds.width * Metrics.Media.bookmarkImageFraction).rounded() : 0
-        imageView.frame = NSRect(x: card.bounds.width - imageWidth, y: 0, width: imageWidth, height: card.bounds.height)
-        let textWidth = max(0, card.bounds.width - imageWidth - 2 * padding)
-        // Без заголовка и описания — только адрес, по центру высоты.
-        let hasText = !titleLabel.stringValue.isEmpty || !descriptionLabel.stringValue.isEmpty
+        card.frame = NSRect(x: 0, y: Metrics.Media.verticalPadding, width: bounds.width, height: Self.contentHeight(for: block))
+        let imageWidth = imageURL != nil ? (card.bounds.width * Metrics.Media.bookmarkImageFraction).rounded() : 0
+        imageView.frame = NSRect(x: 0, y: 0, width: imageWidth, height: card.bounds.height)
+        let left = imageWidth > 0 ? imageWidth + Metrics.Media.bookmarkTextLeading : padding
+        let textWidth = max(0, card.bounds.width - left - padding)
         var y = padding
-        titleLabel.frame = NSRect(x: padding, y: y, width: textWidth, height: 20)
-        y += 20 + Metrics.Media.bookmarkLineSpacing
+        if iconView.image != nil {
+            iconView.frame = NSRect(x: left, y: y, width: Metrics.Media.bookmarkIconSize, height: Metrics.Media.bookmarkIconSize)
+            y += Metrics.Media.bookmarkIconSize + Metrics.Media.bookmarkLineSpacing
+        } else {
+            iconView.frame = .zero
+        }
+        titleLabel.frame = NSRect(x: left, y: y, width: textWidth, height: Metrics.Media.bookmarkTitleLineHeight)
+        y += Metrics.Media.bookmarkTitleLineHeight + 2
         descriptionLabel.preferredMaxLayoutWidth = textWidth
-        descriptionLabel.frame = NSRect(x: padding, y: y, width: textWidth, height: 32)
-        let urlY = hasText ? card.bounds.height - padding - Metrics.Media.bookmarkIconSize : (card.bounds.height - Metrics.Media.bookmarkIconSize) / 2
-        let iconWidth = iconView.image == nil ? 0 : Metrics.Media.bookmarkIconSize + 6
-        iconView.frame = NSRect(x: padding, y: urlY, width: Metrics.Media.bookmarkIconSize, height: Metrics.Media.bookmarkIconSize)
-        urlLabel.frame = NSRect(x: padding + iconWidth, y: urlY, width: max(0, textWidth - iconWidth), height: Metrics.Media.bookmarkIconSize)
+        descriptionLabel.frame = NSRect(x: left, y: y, width: textWidth, height: 2 * Metrics.Media.bookmarkDescriptionLineHeight)
+        let urlHeight: CGFloat = 16
+        let urlY = card.bounds.height == Metrics.Media.bookmarkCompactHeight
+            ? (card.bounds.height - urlHeight) / 2 : card.bounds.height - padding - urlHeight
+        urlLabel.frame = NSRect(x: left, y: urlY, width: textWidth, height: urlHeight)
         menuButton?.frame.origin = NSPoint(x: bounds.width - Metrics.Media.menuButtonSize - Metrics.Media.menuButtonInset,
                                            y: Metrics.Media.verticalPadding + Metrics.Media.menuButtonInset)
     }
@@ -113,8 +126,9 @@ final class BookmarkBlockView: MediaBlockView {
         }
     }
 
+    /// Файл пришёл или сменил состояние: вид заново на том же месте, высота строки та же.
     override func availabilityDidChange() {
-        textView?.relayoutBlockView(block.id)
+        rebuild()
     }
 
     override func hoverDidChange() {

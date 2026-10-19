@@ -140,8 +140,9 @@ final class VideoBlockView: MediaBlockView {
         }
     }
 
+    /// Файл пришёл или сменил состояние: вид заново на том же месте, высота строки та же.
     override func availabilityDidChange() {
-        textView?.relayoutBlockView(block.id)
+        rebuild()
     }
 
     // MARK: Проигрыватель

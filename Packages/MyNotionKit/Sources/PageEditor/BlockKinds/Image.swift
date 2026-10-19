@@ -122,9 +122,9 @@ final class ImageBlockView: MediaBlockView {
         }
     }
 
+    /// Файл пришёл или сменил состояние: вид заново на том же месте, высота строки та же.
     override func availabilityDidChange() {
-        // Файл пришёл: строку перекладывает страница, вид создаётся заново с картинкой.
-        textView?.relayoutBlockView(block.id)
+        rebuild()
     }
 
     // MARK: Под мышью

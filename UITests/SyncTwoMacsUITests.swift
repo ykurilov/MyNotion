@@ -1,3 +1,5 @@
+import AppKit
+import SQLite3
 import XCTest
 
 /// Два Mac вживую (quickstart.md, US5): два экземпляра MyNotion со своими базами против локального сервера синхронизации.
@@ -23,7 +25,7 @@ final class SyncTwoMacsUITests: XCTestCase {
         try? FileManager.default.removeItem(at: code)
 
         let first = XCUIApplication()
-        first.launchArguments = ["--database", live.appendingPathComponent("mac-a.sqlite").path, "--generate-visual-sample",
+        first.launchArguments = ["--database", live.appendingPathComponent("mac-a/MyNotion.sqlite").path, "--generate-visual-sample",
                                  "--sync-server", server, "--sync-device-name", "Mac A", "--sync-log", live.appendingPathComponent("mac-a.log").path,
                                  "--sync-connect-token-file", live.appendingPathComponent("token").path,
                                  "--sync-write-join-code", code.path]
@@ -34,7 +36,7 @@ final class SyncTwoMacsUITests: XCTestCase {
         XCTAssertTrue(first.syncBadge.waitForExistence(timeout: 10), "Нет значка синхронизации")
 
         let second = XCUIApplication(url: live.appendingPathComponent("MyNotionB.app"))
-        second.launchArguments = ["--database", live.appendingPathComponent("mac-b.sqlite").path,
+        second.launchArguments = ["--database", live.appendingPathComponent("mac-b/MyNotion.sqlite").path,
                                   "--sync-server", server, "--sync-device-name", "Mac B", "--sync-log", live.appendingPathComponent("mac-b.log").path, "--sync-join-code-file", code.path]
         second.launch()
         addTeardownBlock { @MainActor in if second.state != .notRunning { second.terminate() } }
@@ -75,7 +77,51 @@ final class SyncTwoMacsUITests: XCTestCase {
         XCTAssertTrue(waitFor(timeout: 10) { first.syncBadge.label == "Синхронизировано" && second.syncBadge.label == "Синхронизировано" },
                       "Значок: \(first.syncBadge.label) / \(second.syncBadge.label)")
         print("Задержка синхронизации: A→B \(String(format: "%.2f", firstDelay)) с, B→A \(String(format: "%.2f", secondDelay)) с")
+
+        // Картинка (US5): вставлена на первом Mac — на втором появляется файл с теми же байтами (части зашифрованы,
+        // идут через сервер), и вид картинки на открытой странице.
+        let picture = FileManager.default.temporaryDirectory.appendingPathComponent("Снимок с Mac A.png")
+        let bytes = Self.png(width: 800, height: 450)
+        try bytes.write(to: picture)
+        first.activate()
+        first.pageBody.click()
+        first.typeKey(.downArrow, modifierFlags: .command)
+        first.typeKey(.return, modifierFlags: [])
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.writeObjects([picture as NSURL])
+        first.typeKey("v", modifierFlags: .command)
+        let sent = Date()
+        let arrived = waitFor(timeout: 60) { (try? self.attachmentCopy(of: "mac-b", named: "Снимок с Mac A.png")) == bytes }
+        if !arrived { saveScreenshots(first, second, suffix: "-picture-failed") }
+        XCTAssertTrue(arrived, "Картинка не дошла до второго Mac за 60 с")
+        print("Картинка A→B: \(String(format: "%.2f", Date().timeIntervalSince(sent))) с")
+        second.activate()
+        RunLoop.current.run(until: Date().addingTimeInterval(2))
         saveScreenshots(first, second)
+    }
+
+    /// Копия файла на «Mac» по базе экземпляра: строка `attachment` с путём и сам файл в его `Attachments/`.
+    private func attachmentCopy(of mac: String, named name: String) throws -> Data? {
+        let folder = live.appendingPathComponent(mac, isDirectory: true)
+        var database: OpaquePointer?
+        guard sqlite3_open_v2(folder.appendingPathComponent("MyNotion.sqlite").path, &database, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_close(database) }
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, "SELECT localPath FROM attachment WHERE localPath LIKE ?", -1, &statement, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_text(statement, 1, "%/" + name, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
+        guard sqlite3_step(statement) == SQLITE_ROW, let path = sqlite3_column_text(statement, 0) else { return nil }
+        return try? Data(contentsOf: folder.appendingPathComponent("Attachments").appendingPathComponent(String(cString: path)))
+    }
+
+    private static func png(width: Int, height: Int) -> Data {
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height, bitsPerSample: 8, samplesPerPixel: 4,
+                                   hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        NSGradient(starting: .systemOrange, ending: .systemPurple)?.draw(in: NSRect(x: 0, y: 0, width: width, height: height), angle: 30)
+        NSGraphicsContext.restoreGraphicsState()
+        return rep.representation(using: .png, properties: [:])!
     }
 
     /// Снимки обоих окон — вложениями отчёта; сценарий выгружает их из .xcresult.

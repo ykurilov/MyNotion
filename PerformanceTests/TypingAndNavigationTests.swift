@@ -35,6 +35,7 @@ final class TypingAndNavigationTests: XCTestCase {
             Прокрутка страницы на 10 000 блоков: p95 \(Self.format(report.hugePageScrollP95Ms)) мс
             Открытие «богатой» страницы: \(Self.format(report.richPageOpenMs)) мс
             Набор на «богатой» странице: p95 \(Self.format(report.richPageTypingP95Ms)) мс, \(report.richPageTypingMs.count) нажатий
+            Прокрутка «богатой» страницы: p95 \(Self.format(report.richPageScrollP95Ms)) мс, худший \(Self.format(report.richPageScrollMs.max())) мс
             Набор в колонке: p95 \(Self.format(report.columnTypingP95Ms)) мс, \(report.columnTypingMs.count) нажатий
             Набор в ячейке таблицы: p95 \(Self.format(report.cellTypingP95Ms)) мс, \(report.cellTypingMs.count) нажатий
             """
@@ -50,6 +51,8 @@ final class TypingAndNavigationTests: XCTestCase {
                                  "Прокрутка 10 000 блоков: p95 больше 50 мс")
         XCTAssertLessThanOrEqual(try XCTUnwrap(report.richPageTypingP95Ms), Self.budgetMilliseconds,
                                  "Набор на «богатой» странице: p95 больше 50 мс (SC-102)")
+        XCTAssertLessThanOrEqual(try XCTUnwrap(report.richPageScrollP95Ms), Self.budgetMilliseconds,
+                                 "Прокрутка «богатой» страницы: p95 больше 50 мс (T098)")
         XCTAssertLessThanOrEqual(try XCTUnwrap(report.columnTypingP95Ms), Self.budgetMilliseconds, "Набор в колонке: p95 больше 50 мс")
         XCTAssertLessThanOrEqual(try XCTUnwrap(report.cellTypingP95Ms), Self.budgetMilliseconds, "Набор в ячейке: p95 больше 50 мс")
     }
@@ -89,6 +92,8 @@ final class TypingAndNavigationTests: XCTestCase {
         let richPageOpenMs: Double?
         let richPageTypingMs: [Double]
         let richPageTypingP95Ms: Double?
+        let richPageScrollMs: [Double]
+        let richPageScrollP95Ms: Double?
         let columnTypingMs: [Double]
         let cellTypingMs: [Double]
         let columnTypingP95Ms: Double?
