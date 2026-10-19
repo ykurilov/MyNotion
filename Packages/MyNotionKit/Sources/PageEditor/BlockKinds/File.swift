@@ -83,7 +83,7 @@ final class FileBlockView: MediaBlockView {
         var x = Metrics.Media.fileHorizontalPadding
         iconView.frame = NSRect(x: x, y: rowTop + (rowHeight - iconSize) / 2, width: iconSize, height: iconSize)
         x += iconSize + Metrics.Media.fileIconTextSpacing
-        let nameWidth = min(nameLabel.intrinsicContentSize.width, max(0, bounds.width * 0.6))
+        let nameWidth = min(ceil(nameLabel.attributedStringValue.size().width) + 6, max(0, bounds.width * 0.6))
         nameLabel.frame = NSRect(x: x, y: rowTop + (rowHeight - 20) / 2, width: nameWidth, height: 20)
         x += nameWidth + Metrics.Media.fileNameSizeSpacing
         sizeLabel.frame = NSRect(x: x, y: rowTop + (rowHeight - 16) / 2 + 1, width: max(0, bounds.width - x - 40), height: 16)

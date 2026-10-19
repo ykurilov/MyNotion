@@ -128,6 +128,9 @@ struct MediaBlocksTests {
         let pasteboard = NSPasteboard(name: .init("MediaBlocksTests-\(UUID().uuidString)"))
         pasteboard.clearContents()
         pasteboard.setData(try #require(FakeMediaServices.png(width: 20, height: 10)), forType: .png)
+        // «Вставить» включено и при одной картинке в буфере.
+        #expect(fixture.textView.readablePasteboardTypes.contains(.png))
+        #expect(fixture.textView.readablePasteboardTypes.contains(.fileURL))
 
         await asyncStep(fixture) { await fixture.textView.pasteAttachments(from: pasteboard) }
 
@@ -337,5 +340,78 @@ extension MediaBlocksTests {
         let card = BookmarkBlockView(block: Block(pageId: UUID(), kind: .bookmark, sortKey: .between(nil, nil), props: bookmark), width: 600)
         card.frame.size = NSSize(width: 600, height: Metrics.Media.bookmarkHeight + 2 * Metrics.Media.verticalPadding)
         #expect(try ViewPixels(card, appearance: .aqua).inkBounds(in: card.bounds, threshold: 0.05) != nil, "карточка закладки не нарисовалась")
+    }
+}
+
+extension MediaBlocksTests {
+    /// Снимки самих видов для сверки глазами (пока страница не показывает виды-вложения — их чинит US4):
+    /// `MYNOTION_MEDIA_SNAPSHOTS=<папка> swift test --filter mediaViewSnapshots`.
+    @Test("Снимки медиа-видов в обеих темах", .enabled(if: ProcessInfo.processInfo.environment["MYNOTION_MEDIA_SNAPSHOTS"] != nil))
+    func mediaViewSnapshots() async throws {
+        let folder = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["MYNOTION_MEDIA_SNAPSHOTS"]))
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let services = FakeMediaServices()
+        MediaBlocks.install(services)
+        let png = try services.sampleFile("закат.png", pngWidth: 1600, height: 900)
+        let ref = try await services.importFile(at: png)
+        _ = await ImageThumbnailCache.shared.thumbnail(png, maxPixelSize: 1440)
+        func block(_ kind: BlockKind, _ caption: String = "", _ props: BlockProps) -> Block {
+            Block(pageId: UUID(), kind: kind, text: InlineText(caption), sortKey: .between(nil, nil), props: props)
+        }
+        var image = BlockProps()
+        image.attachment = ref
+        image.pixelSize = PixelSize(width: 1600, height: 900)
+        var half = image
+        half.width = 0.5
+        var missing = image
+        missing.attachment = AttachmentRef(name: "фото с другого Mac.png", byteCount: 1, contentType: "public.png", sha256: "")
+        var file = BlockProps()
+        file.attachment = AttachmentRef(name: "Договор аренды.pdf", byteCount: 2_400_000, contentType: "com.adobe.pdf", sha256: "")
+        var youtube = BlockProps()
+        youtube.videoSource = .youtube
+        youtube.url = URL(string: "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+        youtube.title = "Видео YouTube"
+        youtube.poster = ref
+        var bookmark = BlockProps()
+        bookmark.url = URL(string: "https://www.notion.com/help/guides")
+        bookmark.title = "Руководства Notion — как устроены страницы и блоки"
+        bookmark.description = "Пошаговые руководства: страницы, блоки, базы данных и совместная работа. Всё, чтобы начать быстро."
+        bookmark.image = ref
+        let samples: [(String, Block, MediaAvailability?)] = [
+            ("image", block(.image, "Закат над морем", image), nil),
+            ("image-half", block(.image, "", half), nil),
+            ("image-waiting", block(.image, "", missing), .waitingForOtherMac),
+            ("file", block(.file, "", file), .ready(png)),
+            ("video-youtube", block(.video, "Подпись видео", youtube), nil),
+            ("bookmark", block(.bookmark, "", bookmark), nil),
+        ]
+        for (name, sample, availability) in samples {
+            services.availability = availability ?? .downloading
+            for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+                let factory = MediaBlockViewFactory(kind: sample.kind)
+                let height = try #require(factory.height(for: sample, width: 708))
+                let view = try #require(factory.makeView(for: sample, context: BlockViewContext(textView: nil, width: 708)))
+                let canvas = NSView(frame: NSRect(x: 0, y: 0, width: 740, height: height + 32))
+                canvas.wantsLayer = true
+                canvas.appearance = NSAppearance(named: appearance)
+                view.frame = NSRect(x: 16, y: 16, width: 708, height: height)
+                canvas.addSubview(view)
+                let background = NSView(frame: canvas.bounds)
+                canvas.addSubview(background, positioned: .below, relativeTo: view)
+                canvas.layoutSubtreeIfNeeded()
+                try await Task.sleep(for: .milliseconds(50))
+                let rep = try #require(canvas.bitmapImageRepForCachingDisplay(in: canvas.bounds))
+                canvas.appearance?.performAsCurrentDrawingAppearance {
+                    NSGraphicsContext.saveGraphicsState()
+                    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+                    (appearance == .aqua ? NSColor.white : NSColor(white: 0.098, alpha: 1)).setFill()
+                    canvas.bounds.fill()
+                    NSGraphicsContext.restoreGraphicsState()
+                }
+                canvas.cacheDisplay(in: canvas.bounds, to: rep)
+                try rep.representation(using: .png, properties: [:])?
+                    .write(to: folder.appendingPathComponent("\(name)-\(appearance == .aqua ? "light" : "dark").png"))
+            }
+        }
     }
 }

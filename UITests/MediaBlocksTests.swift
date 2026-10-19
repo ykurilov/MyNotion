@@ -48,7 +48,7 @@ final class MediaBlocksTests: XCTestCase {
         app.typeKey("v", modifierFlags: .command)
         let embed = app.popupItem("video")
         XCTAssertTrue(embed.waitForExistence(timeout: 5), "Нет меню «Встроить видео / Закладка / Ссылка»")
-        embed.click()
+        embed.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
 
         // Закладка через «/»: окно с полем адреса.
         app.typeText("/закладка")

@@ -68,6 +68,9 @@ struct MainWindowView: View {
         if let latencyURL = options.reminderLatencyURL, case .success(let library) = library {
             ReminderLatencyCheck.start(library: library, reportTo: latencyURL)
         }
+        if let videoURL = options.videoMemoryURL {
+            VideoMemoryCheck.start(window: (model ?? (try? library.get())?.firstWindow)?.window, reportTo: videoURL)
+        }
     }
 }
 

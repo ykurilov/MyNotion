@@ -365,6 +365,12 @@ extension PageTextView {
         selectedRanges = selection
     }
 
+    /// ⌘V доступна, и когда в буфере только картинка или файлы Finder: «Вставить» не выключается.
+    override public var readablePasteboardTypes: [NSPasteboard.PasteboardType] {
+        let types = super.readablePasteboardTypes
+        return types + [.fileURL, .png, .tiff].filter { !types.contains($0) }
+    }
+
     // MARK: Перетаскивание из Finder
 
     override public var acceptableDragTypes: [NSPasteboard.PasteboardType] {

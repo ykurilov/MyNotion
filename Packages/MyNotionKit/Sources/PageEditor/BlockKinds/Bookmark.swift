@@ -63,7 +63,8 @@ final class BookmarkBlockView: MediaBlockView {
         descriptionLabel.font = .systemFont(ofSize: Metrics.Media.bookmarkDescriptionFontSize)
         descriptionLabel.textColor = Palette.textSecondary
         descriptionLabel.maximumNumberOfLines = 2
-        descriptionLabel.lineBreakMode = .byTruncatingTail
+        descriptionLabel.lineBreakMode = .byWordWrapping
+        descriptionLabel.cell?.truncatesLastVisibleLine = true
         urlLabel.stringValue = address
         urlLabel.font = .systemFont(ofSize: Metrics.Media.bookmarkURLFontSize)
         urlLabel.textColor = Palette.textPrimary
