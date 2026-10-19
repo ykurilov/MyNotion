@@ -730,6 +730,8 @@ final class EditorPopupController {
     private(set) var isSubmenuFocused = false
     /// Строка, под которой стоит меню (координаты экрана).
     private var anchor: NSRect = .zero
+    /// Отложенная смена подменю по наведению мыши.
+    private var pendingHover: DispatchWorkItem?
     /// Приложение ушло в фон — меню закрывается.
     /// Подписка снимается в `deinit` — он не привязан к главному потоку.
     nonisolated(unsafe) private var deactivationObserver: NSObjectProtocol?
@@ -833,12 +835,34 @@ final class EditorPopupController {
     }
 
     /// Мышь на строке меню блока: строка с подменю открывает его без фокуса, другая — закрывает открытое.
+    /// Пока подменю открыто, смена — с задержкой, как у Notion: мышь по пути к подменю задевает соседние строки,
+    /// и если к концу задержки она уже в подменю, оно остаётся.
     private func hovered(_ item: PopupMenuItem) {
         guard blockId != nil else { return }
-        if item.opensSubmenu {
-            if submenu != Self.submenu(for: item) { openSubmenu(for: item, focus: false) }
-        } else if submenu != nil {
-            closeSubmenu()
+        pendingHover?.cancel()
+        guard submenu != nil else {
+            if item.opensSubmenu { openSubmenu(for: item, focus: false) }
+            return
+        }
+        guard Self.submenu(for: item) != submenu else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.session != nil, !self.isMouseInSubmenu else { return }
+            if item.opensSubmenu { self.openSubmenu(for: item, focus: false) } else { self.closeSubmenu() }
+        }
+        pendingHover = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.submenuHoverDelay, execute: work)
+    }
+
+    /// Сколько ждать, прежде чем сменить подменю по наведению на другую строку.
+    static let submenuHoverDelay: TimeInterval = 0.3
+
+    /// Мышь сейчас над открытым подменю (списком типов или окном цветов).
+    private var isMouseInSubmenu: Bool {
+        let mouse = NSEvent.mouseLocation
+        switch submenu {
+        case .turnInto: return kindWindow?.frame.contains(mouse) ?? false
+        case .color: return textView?.colorMenu.menuFrame?.insetBy(dx: -PopupMenuWindow.shadowMargin, dy: -PopupMenuWindow.shadowMargin).contains(mouse) ?? false
+        case nil: return false
         }
     }
 
@@ -874,6 +898,8 @@ final class EditorPopupController {
     }
 
     func closeSubmenu() {
+        pendingHover?.cancel()
+        pendingHover = nil
         if submenu == .color { textView?.colorMenu.close() }
         kindWindow?.hide()
         submenu = nil
