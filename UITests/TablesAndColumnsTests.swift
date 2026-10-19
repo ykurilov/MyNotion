@@ -48,8 +48,10 @@ final class TablesAndColumnsTests: XCTestCase {
         app.descendants(matching: .any)["table-add-row"].click()
 
         // Под таблицей — пустой абзац: два блока для колонок.
-        app.textViews["table-cell"].click()
-        for _ in 0..<4 { app.typeKey(.downArrow, modifierFlags: []) }
+        // Щелчок в первую ячейку (после Esc поля правки нет), вниз через 5 строк — в абзац под таблицей.
+        table.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: 20, dy: 15)).click()
+        XCTAssertTrue(app.textViews["table-cell"].waitForExistence(timeout: 5), "Щелчок в ячейку не открыл поле правки")
+        for _ in 0..<6 { app.typeKey(.downArrow, modifierFlags: []) }
         app.typeText("Левый")
         app.typeKey(.return, modifierFlags: [])
         app.typeText("Правый")

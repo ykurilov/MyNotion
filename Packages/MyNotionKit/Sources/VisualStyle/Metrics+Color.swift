@@ -35,6 +35,6 @@ extension Metrics {
         public static let currentRingWidth: CGFloat = 2
         public static let currentRingAlpha: CGFloat = 0.3
         /// Рамка образца цвета — тот же оттенок, что у цвета текста, но слабее.
-        public static let swatchToneBorderAlpha: CGFloat = 0.55
+        public static let swatchToneBorderAlpha: CGFloat = 0.4
     }
 }

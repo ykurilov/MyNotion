@@ -43,6 +43,13 @@ final class BlockAttachmentHostView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
 
+    /// Часть вида блока за краем рамки (кнопка «+» столбца у таблицы во всю ширину) тоже ловит щелчок.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        if let hit = super.hitTest(point) { return hit }
+        let local = convert(point, from: superview)
+        return subviews.lazy.compactMap { $0.hitTest(local) }.first
+    }
+
     override func mouseDown(with event: NSEvent) {
         guard let textView else { return super.mouseDown(with: event) }
         textView.window?.makeFirstResponder(textView)

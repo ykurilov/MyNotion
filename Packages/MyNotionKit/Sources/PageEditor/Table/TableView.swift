@@ -213,6 +213,7 @@ final class TableView: NSView {
         positionEditor()
         addRowButton.frame = addRowRect
         addColumnButton.frame = addColumnRect
+        updateTrackingAreas()
         needsDisplay = true
         host?.embeddedViewHeightDidChange(tableId, height: Self.height(of: tableLayout), width: bounds.width)
     }
@@ -521,7 +522,15 @@ final class TableView: NSView {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         trackingAreas.forEach(removeTrackingArea)
-        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self))
+        // Вместе с кнопкой «+» столбца: у таблицы во всю ширину она справа за краем вида, как у Notion.
+        addTrackingArea(NSTrackingArea(rect: bounds.union(addColumnRect), options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow],
+                                       owner: self))
+    }
+
+    /// Кнопка «+» столбца за краем вида тоже ловит щелчок.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        if let hit = super.hitTest(point) { return hit }
+        return addColumnButton.frame.contains(convert(point, from: superview)) ? addColumnButton : nil
     }
 
     override func mouseEntered(with event: NSEvent) { isPointerInside = true }

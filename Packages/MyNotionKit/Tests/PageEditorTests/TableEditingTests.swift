@@ -169,6 +169,18 @@ struct TableEditingTests {
         #expect(try texts(editor, table)[0][0] == "x")
     }
 
+    @Test("У таблицы во всю ширину «+» столбца — справа за краем вида, как у Notion, и ловит щелчок")
+    func addColumnButtonOutsideBounds() throws {
+        let (editor, table) = try tableFixture()
+        let tableView = try view(editor, table)
+        let grid = tableView.tableLayout.gridSize
+        #expect(grid.width + Metrics.Table.addButtonGap > tableView.bounds.width, "Кнопка за краем вида")
+        let local = NSPoint(x: grid.width + Metrics.Table.addButtonGap + Metrics.Table.addButtonThickness / 2, y: 10)
+        let page = try #require(editor.textView.superview)
+        let hit = editor.textView.hitTest(page.convert(tableView.convert(local, to: nil), from: nil))
+        #expect(hit?.accessibilityIdentifier() == "table-add-column", "Попал в \(String(describing: hit))")
+    }
+
     @Test("Строка и столбец заголовков — свойства таблицы; ширина столбца — протяжкой границы")
     func headersAndWidth() throws {
         let (editor, table) = try tableFixture()
