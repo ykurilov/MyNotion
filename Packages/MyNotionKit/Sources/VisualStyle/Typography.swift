@@ -28,6 +28,7 @@ public enum Typography {
         case .heading1: TextLineStyle(fontSize: 30, lineHeight: 39, weight: .semibold)
         case .heading2: TextLineStyle(fontSize: 24, lineHeight: 31.2, weight: .semibold)
         case .heading3: TextLineStyle(fontSize: 20, lineHeight: 26, weight: .semibold)
+        case .tableCell: TextLineStyle(fontSize: Metrics.Table.fontSize, lineHeight: Metrics.Table.lineHeight, weight: .regular)
         }
     }
 
@@ -43,6 +44,8 @@ public enum BlockTextStyle: Sendable, CaseIterable {
     case heading2
     case heading3
     case listItem
+    /// Текст ячейки простой таблицы.
+    case tableCell
 }
 
 public struct TextLineStyle: Sendable, Hashable {

@@ -286,8 +286,8 @@ public class PageTextView: NSTextView {
         // В режиме блоков набор букв блоки не заменяет, как в Notion.
         if isBlockSelection, replacementRange.location == NSNotFound, !hasMarkedText() { return }
         hideBlockHandles()
-        if typed == " ", replacementRange.location == NSNotFound, !hasMarkedText(), applyMarkdownShortcut() { return }
-        if typed == "-", replacementRange.location == NSNotFound, !hasMarkedText(), isCaretAfterTwoDashes {
+        if allowsBlockStructure, typed == " ", replacementRange.location == NSNotFound, !hasMarkedText(), applyMarkdownShortcut() { return }
+        if allowsBlockStructure, typed == "-", replacementRange.location == NSNotFound, !hasMarkedText(), isCaretAfterTwoDashes {
             super.insertText(string, replacementRange: replacementRange)
             convertDashesToDivider()
             return
@@ -298,7 +298,7 @@ public class PageTextView: NSTextView {
             return
         }
         super.insertText(string, replacementRange: replacementRange)
-        if typed == "/" { openSlashMenuAfterTypedSlash() }
+        if allowsBlockStructure, typed == "/" { openSlashMenuAfterTypedSlash() }
         openMentionPicker(afterTyping: typed)
     }
 
@@ -804,6 +804,10 @@ public class PageTextView: NSTextView {
 
     /// Над текстом — шапка с иконкой и названием; у редакторов колонок и ячеек её нет.
     var showsPageHeader: Bool { true }
+    /// Блоки можно делать и менять: меню «/», быстрые символы, «---». В ячейке таблицы — нельзя.
+    var allowsBlockStructure: Bool { true }
+    /// У блоков под мышью — ручки «+ ⋮⋮». В ячейке таблицы их нет.
+    var showsBlockHandles: Bool { true }
 
     func layoutColumn() {
         let (left, columnWidth) = column

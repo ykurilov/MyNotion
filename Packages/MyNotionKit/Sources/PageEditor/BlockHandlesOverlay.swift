@@ -327,6 +327,7 @@ extension PageTextView {
 
     /// Ручки у блока под мышью. Над колонками ручки — у блока колонки под мышью, а не у всего блока колонок.
     func updateBlockHandles(atWindowPoint windowPoint: NSPoint) {
+        guard showsBlockHandles else { return }
         let point = convert(windowPoint, from: nil)
         let origin = textContainerOrigin
         let left = origin.x - Metrics.BlockHandles.addButtonLeadingOffset

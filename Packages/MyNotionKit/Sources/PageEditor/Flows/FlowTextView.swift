@@ -70,6 +70,8 @@ final class EmbeddedBlockViews {
     var isLayingOut = false
     /// Пока ставили виды, высота одного из них поменялась.
     var needsAnotherPass = false
+    /// Поля правки ячеек таблиц страницы: живут, пока открыта страница, — их шаги ⌘Z остаются верны.
+    var cellEditors: [CellKey: TableCellEditor] = [:]
     /// Высота вида по id блока при ширине, для которой она посчитана.
     private var heights: [UUID: (width: CGFloat, height: CGFloat)] = [:]
     private let views = NSMapTable<NSUUID, NSView>.strongToStrongObjects()

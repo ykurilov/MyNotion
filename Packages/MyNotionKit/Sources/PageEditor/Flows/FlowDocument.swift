@@ -106,11 +106,9 @@ public final class FlowDocument {
 
     /// Блок ячейки: записанный или пустой с заранее данным id.
     var cellBlock: Block {
-        guard case .cell(let table, let row, let column, let cellId) = source else { preconditionFailure("не ячейка") }
-        if let grid = pageDocument.tableGrid(table), let (rowIndex, columnIndex) = cellPosition(in: grid),
-           let cell = grid.cell(row: rowIndex, column: columnIndex) {
-            return cell
-        }
+        guard case .cell(_, let row, let column, let cellId) = source else { preconditionFailure("не ячейка") }
+        // Та же ячейка, что показывает таблица (`TableGrid`): первая в строке с id этого столбца.
+        if let cell = pageDocument.flow(row).first(where: { $0.kind == .tableCell && $0.props.columnId == column }) { return cell }
         var props = BlockProps()
         props.columnId = column
         return Block(id: cellId, pageId: pageDocument.pageId, kind: .tableCell, sortKey: .between(nil, nil), containerId: row, props: props)

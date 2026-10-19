@@ -240,7 +240,7 @@ description: "Задачи: новые блоки и оформление тек
 ### Тесты
 
 - [x] T099 [P] [US6] `PK/Tests/NotesCoreTests/TableModelTests.swift`: таблица = `table` + `tableColumn` + `tableRow` + `tableCell`; «отсутствующая ячейка — пустая, создаётся при первом вводе»; ячейка удалённого столбца не показывается; «удаление последнего удаляет таблицу»
-- [ ] T100 [P] [US6] `PK/Tests/PageEditorTests/TableEditingTests.swift`: «/» → 3 × 2, Tab / ⇧Tab, Tab в последней — строка, стрелки на краю ячейки, Enter, Esc; «+» строка и столбец; вставить выше/ниже/слева/справа; строка и столбец заголовков; ширина столбца; ⌘C — табуляции, ⌘V в ячейки; оформление в ячейке; ⌘Z каждого шага
+- [x] T100 [P] [US6] `PK/Tests/PageEditorTests/TableEditingTests.swift`: «/» → 3 × 2, Tab / ⇧Tab, Tab в последней — строка, стрелки на краю ячейки, Enter, Esc; «+» строка и столбец; вставить выше/ниже/слева/справа; строка и столбец заголовков; ширина столбца; ⌘C — табуляции, ⌘V в ячейки; оформление в ячейке; ⌘Z каждого шага
 - [x] T101 [P] [US6] `PK/Tests/PageEditorTests/ColumnsTests.swift`: «⋮⋮» к правому краю — две колонки (цель слева); до 5; граница 10–90 %; пустая колонка исчезает, одна — распадается; ↑ ↓ ← → между колонками и блоками над и под; всё одним шагом ⌘Z
 - [ ] T102 [P] [US6] `PK/Tests/PageEditorTests/PageFindTests.swift`: ⌘F находит в потоке страницы, колонке, ячейке и свёрнутом; переход по совпадениям; совпадение в свёрнутом раскрывает его
 - [x] T103 [P] [US6] `PK/Tests/SyncTests/TablesColumnsConvergenceTests.swift`: правки разных ячеек на двух Mac — без конфликта; одна ячейка — «Две версии»; перенос блока между колонками одной меткой `placement`; блок удалённой колонки виден за колонками
@@ -249,7 +249,7 @@ description: "Задачи: новые блоки и оформление тек
 
 ### Код
 
-- [ ] T106 [US6] Таблица `PK/Sources/PageEditor/Table/TableView.swift` (ячейки через CoreText), `TableCellEditor.swift` (одно поле правки на таблицу, мэппер одного блока), `TableMenus.swift`; `PK/Sources/PageEditor/BlockKinds/Table.swift`
+- [x] T106 [US6] Таблица `PK/Sources/PageEditor/Table/TableView.swift` (ячейки через CoreText), `TableCellEditor.swift` (одно поле правки на таблицу, мэппер одного блока), `TableMenus.swift`; `PK/Sources/PageEditor/BlockKinds/Table.swift`
 - [x] T107 [US6] Колонки `PK/Sources/PageEditor/Flows/FlowTextView.swift` (редактор потока без шапки, общий `UndoManager` окна), `ColumnsView.swift`, `PK/Sources/PageEditor/BlockKinds/Columns.swift`
 - [x] T108 [US6] `PK/Sources/PageEditor/Flows/FlowNavigator.swift`: переходы курсора между редакторами страницы
 - [x] T109 [US6] `PK/Sources/PageEditor/Flows/FlowDragCoordinator.swift` и правки `BlockHandlesOverlay.swift`: место сброса над любым редактором, сборка и распад колонок одной правкой

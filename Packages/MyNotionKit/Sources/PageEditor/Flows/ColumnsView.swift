@@ -247,6 +247,7 @@ enum BuiltInBlockViews {
         guard !isRegistered else { return }
         isRegistered = true
         BlockViewFactories.shared.register(ColumnsViewFactory(), for: .columnList)
+        BlockViewFactories.shared.register(TableViewFactory(), for: .table)
     }
 }
 

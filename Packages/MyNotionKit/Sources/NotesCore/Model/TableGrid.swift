@@ -154,6 +154,50 @@ public struct TableGrid: Sendable, Hashable {
         return BlockChanges(removals: [columnId] + cellIds)
     }
 
+    /// Текст из буфера (строки ячеек) — в ячейки начиная с `row`, `column`; таблица растёт под него строками и столбцами.
+    public func pasting(_ texts: [[InlineText]], at row: Int, column: Int) -> BlockChanges {
+        guard !texts.isEmpty else { return BlockChanges() }
+        var upserts: [Block] = []
+        var columnIds = columns.map(\.id)
+        var rowIds = rows.map(\.id)
+        var lastKey = (rows + columns).map(\.sortKey).max()
+        let neededColumns = column + (texts.map(\.count).max() ?? 0)
+        while columnIds.count < neededColumns {
+            lastKey = .between(lastKey, nil)
+            var newColumn = Block(pageId: table.pageId, kind: .tableColumn, sortKey: lastKey!, containerId: table.id,
+                                  props: .defaults(for: .tableColumn))
+            if let width = columns.last?.props.width { newColumn.props.width = width }
+            upserts.append(newColumn)
+            columnIds.append(newColumn.id)
+        }
+        while rowIds.count < row + texts.count {
+            lastKey = .between(lastKey, nil)
+            let newRow = Block(pageId: table.pageId, kind: .tableRow, sortKey: lastKey!, containerId: table.id)
+            upserts.append(newRow)
+            rowIds.append(newRow.id)
+        }
+        for (rowOffset, rowTexts) in texts.enumerated() {
+            let rowId = rowIds[row + rowOffset]
+            let existingKeys = rowId == rows[safe: row + rowOffset]?.id ? (cells[rowId] ?? [:]).values.map(\.sortKey) : []
+            var key = existingKeys.max()
+            for (columnOffset, text) in rowTexts.enumerated() {
+                let columnId = columnIds[column + columnOffset]
+                let text = text.normalized()
+                if var cell = cells[rowId]?[columnId] {
+                    guard cell.text != text else { continue }
+                    cell.text = text
+                    upserts.append(cell)
+                } else if !text.string.isEmpty {
+                    key = .between(key, nil)
+                    var props = BlockProps()
+                    props.columnId = columnId
+                    upserts.append(Block(pageId: table.pageId, kind: .tableCell, text: text, sortKey: key!, containerId: rowId, props: props))
+                }
+            }
+        }
+        return BlockChanges(upserts: upserts)
+    }
+
     public func settingHeaders(row: Bool, column: Bool) -> BlockChanges {
         guard row != hasHeaderRow || column != hasHeaderColumn else { return BlockChanges() }
         var table = table

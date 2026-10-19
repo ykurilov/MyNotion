@@ -12,7 +12,7 @@ enum FlowNavigator {
     static func move(_ direction: Direction, from editor: PageTextView) -> Bool {
         let selection = editor.selectedRange()
         guard selection.length == 0, !editor.hasMarkedText(), !editor.isBlockSelection, !editor.popups.isOpen else { return false }
-        if let column = editor as? FlowTextView, column.document.containerId != nil, moveOut(direction, from: column) { return true }
+        if let column = editor as? FlowTextView, case .container = column.document.source, moveOut(direction, from: column) { return true }
         return moveIn(direction, from: editor)
     }
 
