@@ -12,6 +12,8 @@ final class BlockAttachment: NSTextAttachment, @unchecked Sendable {
 
     /// Высота строки, пока у типа нет своего вида.
     static let placeholderHeight: CGFloat = 13
+    /// Ширина, с которой знак разложен в последний раз: по ней редактор ставит вид колонок и таблицы над абзацем.
+    private(set) var layoutWidth: CGFloat?
 
     init(block: Block) {
         self.block = block
@@ -27,17 +29,23 @@ final class BlockAttachment: NSTextAttachment, @unchecked Sendable {
         self.block = block
     }
 
-    func height(forWidth width: CGFloat) -> CGFloat {
+    /// `textView` — редактор, в чьём тексте знак: колонкам и таблице для высоты нужен документ.
+    func height(forWidth width: CGFloat, in textView: PageTextView? = nil) -> CGFloat {
         nonisolated(unsafe) let attachment = self
+        nonisolated(unsafe) let textView = textView
         return MainActor.assumeIsolated {
-            BlockViewFactories.shared.factory(for: attachment.block.kind)?.height(for: attachment.block, width: width) ?? Self.placeholderHeight
+            BlockViewFactories.shared.factory(for: attachment.block.kind)?
+                .height(for: attachment.block, width: width, context: BlockViewContext(textView: textView, width: width)) ?? Self.placeholderHeight
         }
     }
 
     override func attachmentBounds(for attributes: [NSAttributedString.Key: Any], location: any NSTextLocation,
                                    textContainer: NSTextContainer?, proposedLineFragment: CGRect, position: CGPoint) -> CGRect {
         let width = max(0, proposedLineFragment.width - position.x)
-        return CGRect(x: 0, y: 0, width: width, height: height(forWidth: width))
+        layoutWidth = width
+        nonisolated(unsafe) let container = textContainer
+        let textView = MainActor.assumeIsolated { container?.textView as? PageTextView }
+        return CGRect(x: 0, y: 0, width: width, height: height(forWidth: width, in: textView))
     }
 
     /// Без вида (снимок окна, печать) знак ничего не рисует: вид блока — во вложении или у рисователей типа,
@@ -52,6 +60,8 @@ final class BlockAttachment: NSTextAttachment, @unchecked Sendable {
     }
 
     override func viewProvider(for parentView: NSView?, location: any NSTextLocation, textContainer: NSTextContainer?) -> NSTextAttachmentViewProvider? {
+        // Колонки и таблицу ставит над абзацем сам редактор (`EmbeddedViewLayout`).
+        guard !block.kind.hostsEmbeddedEditors else { return nil }
         let provider = BlockAttachmentViewProvider(textAttachment: self, parentView: parentView,
                                                    textLayoutManager: textContainer?.textLayoutManager, location: location)
         provider.tracksTextAttachmentViewBounds = true

@@ -86,7 +86,8 @@ struct BlockDragTests {
             let start = try grip(ofBlock: 1, in: editor)
             try send(.leftMouseDown, at: start, in: editor)
             let last = area(ofBlocks: 3...3, in: editor)
-            try send(.leftMouseDragged, at: NSPoint(x: start.x + Metrics.Page.columnWidth, y: last.maxY - 2), in: editor)
+            // Середина строки: у правого края блока место сброса — колонкой справа (US6), там линия вертикальная.
+            try send(.leftMouseDragged, at: NSPoint(x: start.x + Metrics.Page.columnWidth / 2, y: last.maxY - 2), in: editor)
 
             let line = editor.textView.blockHandles.dropIndicator
             #expect(!line.isHidden && line.frame.height == 4, "\(appearance.rawValue): линия \(line.frame)")

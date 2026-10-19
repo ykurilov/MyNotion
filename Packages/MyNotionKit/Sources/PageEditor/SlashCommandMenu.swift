@@ -10,6 +10,9 @@ struct PopupMenuItem: Equatable {
         /// Окно цветов для блока.
         case color
         case delete
+        /// Только в меню «/»: колонки из N пустых колонок, таблица 3 × 2 (US6).
+        case insertColumns(Int)
+        case insertTable
     }
 
     /// Значок строки: короткая надпись, системный значок или квадрат чекбокса.
@@ -29,6 +32,8 @@ struct PopupMenuItem: Equatable {
         case .setKind(let kind): kind.rawValue
         case .color: "color"
         case .delete: "delete"
+        case .insertColumns(let count): "columns-\(count)"
+        case .insertTable: "table"
         }
     }
 
@@ -41,14 +46,17 @@ struct PopupMenuItem: Equatable {
     /// Типы блоков меню «/» и «Превратить в» — из описателей типов (`BlockKinds/`).
     static var blockKinds: [PopupMenuItem] { BlockKindRegistry.menuItems }
 
+    /// Меню «/»: типы блоков и то, что только вставляется (колонки, таблица).
+    static var slashItems: [PopupMenuItem] { blockKinds + BlockKindRegistry.insertMenuItems }
+
     static let color = PopupMenuItem(title: "Цвет", icon: .symbol("paintpalette"), keywords: [], action: .color)
     static let delete = PopupMenuItem(title: "Удалить", icon: .symbol("trash"), keywords: [], action: .delete)
 
     /// Меню «/»: поиск по названию и словам-подсказкам без учёта регистра.
     static func slashItems(matching query: String) -> [PopupMenuItem] {
         let query = query.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !query.isEmpty else { return blockKinds }
-        return blockKinds.filter { item in
+        guard !query.isEmpty else { return slashItems }
+        return slashItems.filter { item in
             item.title.lowercased().contains(query) || item.keywords.contains { $0.hasPrefix(query) }
         }
     }
@@ -556,7 +564,7 @@ extension PageTextView {
         guard startsWord else { return }
         // Меню — от левого края «/», а не от курсора за ним: иначе из-под меню торчит начало следующего абзаца.
         let slashOnScreen = firstRect(forCharacterRange: NSRange(location: slash, length: 1), actualRange: nil)
-        popups.open(.slash(blockId: block.id, slashLocation: slash), items: PopupMenuItem.blockKinds, below: slashOnScreen)
+        popups.open(.slash(blockId: block.id, slashLocation: slash), items: PopupMenuItem.slashItems, below: slashOnScreen)
     }
 
     /// Открыть меню «⋮⋮» у блока: сменить тип или удалить.
@@ -628,6 +636,12 @@ extension PageTextView {
         switch item.action {
         case .setKind(let kind): setKind(kind, ofBlocksAt: index..<index + 1)
         case .delete: removeBlocks(at: index..<index + 1)
+        case .insertColumns(let count):
+            insertColumns(count, at: index)
+            return
+        case .insertTable:
+            insertTable(at: index)
+            return
         case .color:
             openColorMenu(forBlock: blockId, replacing: menuFrame)
             return

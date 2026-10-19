@@ -46,6 +46,8 @@ public class PageTextView: NSTextView {
     /// ⌘-щелчок по ссылке: открыть адрес (по умолчанию — в браузере по умолчанию).
     public var openURL: @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) }
     let layoutDelegate = BlockLayoutDelegate()
+    /// Виды колонок и таблиц в тексте и их высоты (`Flows/`).
+    let embeddedViews = EmbeddedBlockViews()
     /// Абзацы детей свёрнутых переключателей: не раскладываются (research R1).
     let hiddenParagraphs = HiddenParagraphs()
     /// Свёрнутые переключатели этого Mac и отступы по поддеревьям (`Collapsing/`).
@@ -88,6 +90,7 @@ public class PageTextView: NSTextView {
         self.document = document
         header = PageHeaderView(page: document.page)
         pendingFocus = initialFocus
+        BuiltInBlockViews.register()
 
         let contentStorage = NSTextContentStorage()
         let layoutManager = NSTextLayoutManager()
@@ -767,7 +770,8 @@ public class PageTextView: NSTextView {
 
     /// Колонка 720 по центру всей прокрутки, в узком окне — поля не меньше `minimumSideInset`.
     /// Центр — по ширине вместе с полосой прокрутки: длинная страница с полосой не сдвигается (раунд 2, № 23).
-    private var column: (left: CGFloat, width: CGFloat) {
+    /// У редактора колонки (`FlowTextView`) — вся его ширина.
+    var column: (left: CGFloat, width: CGFloat) {
         let pageWidth = enclosingScrollView?.frame.width ?? bounds.width
         let left = max(Metrics.Page.minimumSideInset, (pageWidth - Metrics.Page.columnWidth) / 2)
         return (left, max(0, min(Metrics.Page.columnWidth, bounds.width - left - Metrics.Page.minimumSideInset)))
@@ -798,16 +802,20 @@ public class PageTextView: NSTextView {
         iconPicker.show(below: anchor, in: window) { [weak self] in self?.onSetIcon?($0) }
     }
 
-    private func layoutColumn() {
+    /// Над текстом — шапка с иконкой и названием; у редакторов колонок и ячеек её нет.
+    var showsPageHeader: Bool { true }
+
+    func layoutColumn() {
         let (left, columnWidth) = column
         if let container = textContainer, container.size.width != columnWidth {
             container.size = NSSize(width: columnWidth, height: container.size.height)
         }
-        let headerHeight = header.height(forWidth: columnWidth)
+        header.isHidden = !showsPageHeader
+        let headerHeight = showsPageHeader ? header.height(forWidth: columnWidth) : 0
         header.frame = NSRect(x: left, y: 0, width: columnWidth, height: headerHeight)
         // Отступ текста сверху — шапка, снизу — пустое место; NSTextView делит высоту поровну, а начало текста
         // задаёт `textContainerOrigin`.
-        let inset = NSSize(width: left, height: (headerHeight + Metrics.Page.bottomPadding) / 2)
+        let inset = NSSize(width: left, height: showsPageHeader ? (headerHeight + Metrics.Page.bottomPadding) / 2 : 0)
         if textContainerInset != inset {
             textContainerInset = inset
         }

@@ -33,6 +33,8 @@ struct BlockKindDescriptor: Sendable {
     var gallerySamples: [BlockGallerySample] = []
     /// Своя часть эталонной «богатой» страницы замеров (quickstart.md, `RichPageGenerator`).
     var richPageBlocks: [RichBlockSpec] = []
+    /// Строки только меню «/»: то, что вставляется, а не превращает блок (колонки, таблица).
+    var insertMenuItems: [PopupMenuItem] = []
 
     init(kind: BlockKind, menuItem: PopupMenuItem? = nil, markdownShortcuts: [String] = [], textStyle: BlockTextStyle = .paragraph,
          marker: BlockMarker = .none, leadingInset: CGFloat = 0, lineHeight: CGFloat? = nil, topSpacing: CGFloat? = nil,

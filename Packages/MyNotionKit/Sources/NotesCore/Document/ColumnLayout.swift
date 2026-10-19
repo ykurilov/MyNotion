@@ -96,7 +96,7 @@ extension PageDocument {
     }
 
     /// Контейнеры блока вверх до потока страницы.
-    func containerChain(of block: Block) -> [UUID] {
+    public func containerChain(of block: Block) -> [UUID] {
         var chain: [UUID] = []
         var current = block.containerId
         while let id = current, !chain.contains(id) {
