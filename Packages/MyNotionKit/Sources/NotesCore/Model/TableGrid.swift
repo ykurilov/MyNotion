@@ -9,6 +9,8 @@ public struct TableGrid: Sendable, Hashable {
     public let rows: [Block]
     /// Ячейки по строке и столбцу.
     private let cells: [UUID: [UUID: Block]]
+    /// Все ячейки столбца, вместе со вторыми в той же строке, которые не показываются.
+    private let cellIdsByColumn: [UUID: [UUID]]
 
     /// `flow` — блоки контейнера по порядку (`PageDocument.flow`).
     public init(table: Block, flow: (UUID) -> [Block]) {
@@ -18,16 +20,19 @@ public struct TableGrid: Sendable, Hashable {
         rows = members.filter { $0.kind == .tableRow }
         let columnIds = Set(columns.map(\.id))
         var cells: [UUID: [UUID: Block]] = [:]
+        var cellIdsByColumn: [UUID: [UUID]] = [:]
         for row in rows {
             var byColumn: [UUID: Block] = [:]
             for cell in flow(row.id) where cell.kind == .tableCell {
+                guard let columnId = cell.props.columnId, columnIds.contains(columnId) else { continue }
+                cellIdsByColumn[columnId, default: []].append(cell.id)
                 // Две ячейки одного столбца (правки двух Mac) — показывается первая по порядку.
-                guard let columnId = cell.props.columnId, columnIds.contains(columnId), byColumn[columnId] == nil else { continue }
-                byColumn[columnId] = cell
+                if byColumn[columnId] == nil { byColumn[columnId] = cell }
             }
             cells[row.id] = byColumn
         }
         self.cells = cells
+        self.cellIdsByColumn = cellIdsByColumn
     }
 
     public var columnCount: Int { columns.count }
@@ -157,13 +162,13 @@ public struct TableGrid: Sendable, Hashable {
         return BlockChanges(removals: [rows[index].id])
     }
 
-    /// Столбец с его ячейками; последний столбец — вся таблица.
+    /// Столбец со всеми его ячейками, в том числе непоказанными вторыми: живая ячейка удалённого столбца вернула бы
+    /// его при слиянии (`ChangeMerger`). Последний столбец — вся таблица.
     public func removingColumn(at index: Int) -> BlockChanges {
         guard columns.indices.contains(index) else { return BlockChanges() }
         guard columnCount > 1 else { return BlockChanges(removals: [table.id]) }
         let columnId = columns[index].id
-        let cellIds = rows.compactMap { cells[$0.id]?[columnId]?.id }
-        return BlockChanges(removals: [columnId] + cellIds)
+        return BlockChanges(removals: [columnId] + (cellIdsByColumn[columnId] ?? []))
     }
 
     /// Текст из буфера (строки ячеек) — в ячейки начиная с `row`, `column`; таблица растёт под него строками и столбцами.
