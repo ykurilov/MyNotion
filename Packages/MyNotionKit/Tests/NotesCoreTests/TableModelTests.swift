@@ -37,6 +37,13 @@ struct TableModelTests {
         autosave.stop()
     }
 
+    @Test("Новая таблица во всю ширину, как у Notion 7.39: первый столбец 240, второй — остаток; узко — пополам, не уже наименьшего")
+    func newTableWidths() {
+        #expect(TableGrid.columnWidths(ofNewTableFitting: 716) == [240, 476])
+        #expect(TableGrid.columnWidths(ofNewTableFitting: 300) == [150, 150])
+        #expect(TableGrid.columnWidths(ofNewTableFitting: 40) == [TableGrid.minimumColumnWidth, TableGrid.minimumColumnWidth])
+    }
+
     @Test("Таблица — table + tableColumn + tableRow + tableCell: столбцы и строки в потоке таблицы, ячейки — в потоке строки")
     func structure() throws {
         let document = try openDocument()

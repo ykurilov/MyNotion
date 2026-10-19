@@ -20,7 +20,7 @@ final class TableCellEditor: FlowTextView {
     /// В ячейке — только оформление текста.
     override func perform(_ command: EditorCommand) {
         switch command {
-        case .toggleInline, .applyColor, .repeatLastColor: super.perform(command)
+        case .toggleInline, .clearInlineFormatting, .applyColor, .repeatLastColor: super.perform(command)
         default: break
         }
     }

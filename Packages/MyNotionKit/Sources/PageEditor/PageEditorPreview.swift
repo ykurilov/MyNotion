@@ -5,6 +5,12 @@ import NotesCore
 /// Каждое действие идёт тем же путём, что и у пользователя: показ ручек, набор «/», щелчок по «⋮⋮».
 @MainActor
 public enum PageEditorPreview {
+    /// Заглушка «Копируется… N %» у файла образца: как будто он копируется прямо сейчас.
+    public static func showCopyProgress(_ fraction: Double, ofAttachment id: UUID) {
+        MediaBlocks.beginCopy(id)
+        MediaBlocks.setCopyProgress(fraction, of: id)
+    }
+
     /// Открыть окно сравнения «Двух версий» у блока, как по щелчку на метке.
     @discardableResult
     public static func openConflictComparison(forBlock blockId: UUID, in window: NSWindow) -> Bool {

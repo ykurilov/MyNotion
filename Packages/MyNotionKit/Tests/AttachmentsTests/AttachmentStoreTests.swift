@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import Synchronization
 import Testing
 @testable import Attachments
 @testable import NotesCore
@@ -65,6 +66,72 @@ import Testing
         let ref = try mac.attachments.importFile(at: file)
         #expect(ref.byteCount == AttachmentRef.maximumByteCount)
         #expect(ref.partCount == 13)
+    }
+
+    // MARK: Копирование с заглушкой
+
+    @Test func reservedImportKeepsIdReportsProgressAndEndsLocal() throws {
+        let mac = try AttachmentTestMac()
+        let bytes = sampleBytes(3 * 1_048_576 + 100)
+        let original = try mac.folder.file("видео.mov", bytes)
+
+        let reserved = try mac.attachments.reserveFileImport(at: original)
+        #expect(reserved.name == "видео.mov" && reserved.byteCount == bytes.count && reserved.contentType == "com.apple.quicktime-movie")
+        #expect(mac.attachments.fileURL(for: reserved.id) == nil, "Пока копируется — файла нет")
+        #expect(mac.attachments.availability(of: reserved.id) == .failed(AttachmentStore.copyingMessage))
+
+        let fractions = Mutex<[Double]>([])
+        let ref = try mac.attachments.importFile(at: original, into: reserved) { fraction in fractions.withLock { $0.append(fraction) } }
+        #expect(ref.id == reserved.id)
+        #expect(ref.sha256 == SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined())
+        let reported = fractions.withLock { $0 }
+        #expect(reported.count >= 4 && reported == reported.sorted() && reported.last == 1, "\(reported)")
+        #expect(try mac.record(ref.id)?.state == .local)
+        #expect(try Data(contentsOf: try #require(mac.attachments.fileURL(for: ref.id))) == bytes)
+    }
+
+    @Test func blockSavedDuringCopyDoesNotQueueDownload() throws {
+        let mac = try AttachmentTestMac()
+        let original = try mac.folder.file("отчёт.pdf", sampleBytes(1_000))
+        let reserved = try mac.attachments.reserveFileImport(at: original)
+
+        try mac.insertBlock(attachment: reserved)
+        #expect(try mac.record(reserved.id)?.state == .failed, "Не в очереди скачивания: файл копируется здесь")
+        #expect(try !mac.attachments.hasPendingTransfers())
+
+        _ = try mac.attachments.importFile(at: original, into: reserved) { _ in }
+        #expect(try mac.record(reserved.id)?.state == .local)
+        #expect(try mac.record(reserved.id)?.orphanedAt == nil, "Блок уже ссылается — не сирота")
+    }
+
+    @Test func reservingOver100MegabytesIsRefused() throws {
+        let mac = try AttachmentTestMac()
+        let huge = try mac.folder.sparseFile("фильм.mov", byteCount: AttachmentRef.maximumByteCount + 1)
+        #expect(throws: AttachmentError.tooLarge(name: "фильм.mov")) { try mac.attachments.reserveFileImport(at: huge) }
+        #expect(try mac.attachments.allRecords().isEmpty)
+    }
+
+    @Test func copyInterruptedByQuitIsReportedAfterRelaunch() throws {
+        let mac = try AttachmentTestMac()
+        let reserved = try mac.attachments.reserveFileImport(at: try mac.folder.file("а.txt", sampleBytes(10)))
+        try FileManager.default.createDirectory(at: mac.attachments.folder.appendingPathComponent(reserved.id.uuidString.lowercased()),
+                                                withIntermediateDirectories: true)
+
+        try mac.attachments.abandonInterruptedCopies()
+
+        #expect(mac.attachments.availability(of: reserved.id) == .failed(AttachmentStore.interruptedCopyMessage))
+        #expect(!FileManager.default.fileExists(atPath: mac.attachments.folder.appendingPathComponent(reserved.id.uuidString.lowercased()).path))
+    }
+
+    @Test func remoteRecordFollowsBlockWhenItsDescriptionChanges() throws {
+        let mac = try AttachmentTestMac()
+        var ref = AttachmentRef(name: "с другого.pdf", byteCount: 100, contentType: "com.adobe.pdf", sha256: "")
+        var block = try mac.insertBlock(attachment: ref)
+        // Другой Mac докопировал файл и прислал описание с SHA-256 — запись очереди скачивания обновляется.
+        ref.sha256 = String(repeating: "a", count: 64)
+        block.props.attachment = ref
+        try mac.store.write { _ = try $0.updateBlock(block) }
+        #expect(try mac.record(ref.id)?.ref.sha256 == ref.sha256)
     }
 
     @Test func referencesAreRecountedInTheSameTransaction() throws {

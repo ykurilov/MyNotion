@@ -59,20 +59,47 @@ extension PageTextView {
 
     // MARK: Файлы из Finder и буфера
 
-    /// Скопировать файлы и вставить блоки: картинка — картинка, видео — видео, прочее — файл. Пустой абзац под
-    /// курсором заменяется, иначе блоки встают под ним. Больше 100 МБ — сообщение, блок не создаётся.
+    /// Вставить блоки файлов сразу и скопировать файлы следом: картинка — картинка, видео — видео, прочее — файл.
+    /// Пока файл копируется, блок — заглушка «Копируется… N %», как «Загружается…». Пустой абзац под курсором
+    /// заменяется, иначе блоки встают под ним. Больше 100 МБ — сообщение, блок не создаётся.
     func insertFiles(_ urls: [URL], at index: Int, as forcedKind: BlockKind? = nil) async {
         guard let services = MediaBlocks.services else { return }
         var drafts: [BlockDraft] = []
+        var copies: [(file: URL, ref: AttachmentRef)] = []
         for url in urls {
             do {
-                let ref = try await services.importFile(at: url)
+                let ref = try services.reserveFileImport(at: url)
+                MediaBlocks.beginCopy(ref.id)
                 drafts.append(Self.mediaDraft(for: ref, file: url, forcedKind: forcedKind))
+                copies.append((url, ref))
             } catch {
                 showAttachmentError(error)
             }
         }
         insertMediaDrafts(drafts, at: index, actionName: "Вставить файл")
+        for copy in copies {
+            let id = copy.ref.id
+            do {
+                let ref = try await services.importFile(at: copy.file, into: copy.ref) { fraction in
+                    Task { @MainActor in MediaBlocks.setCopyProgress(fraction, of: id) }
+                }
+                MediaBlocks.endCopy(id)
+                completeCopy(ref)
+            } catch {
+                MediaBlocks.endCopy(id)
+                showAttachmentError(error)
+            }
+        }
+    }
+
+    /// Файл скопирован: в блоке — готовое описание с SHA-256, без шага ⌘Z (блок уже вставлен правкой Юрия).
+    private func completeCopy(_ ref: AttachmentRef) {
+        guard let index = document.blocks.firstIndex(where: { $0.props.attachment?.id == ref.id }) else { return }
+        var draft = BlockDraft(document.blocks[index])
+        var props = draft.props ?? BlockProps()
+        props.attachment = ref
+        draft.props = props
+        replaceBlockQuietly(at: index, with: draft)
     }
 
     /// ⌘V: файлы, скопированные в Finder, или картинка из буфера (PNG). `false` — в буфере ни того ни другого.
@@ -343,7 +370,7 @@ extension PageTextView {
         guard panel.runModal() == .OK, let url = panel.url, let services = MediaBlocks.services else { return }
         Task { [weak self] in
             do {
-                let ref = try await services.importFile(at: url)
+                let ref = try await services.importFile(at: url, into: services.reserveFileImport(at: url)) { _ in }
                 let replacement = Self.mediaDraft(for: ref, file: url, forcedKind: .image)
                 self?.editMediaBlock(id, actionName: "Заменить картинку") { draft in
                     draft.props?.attachment = ref

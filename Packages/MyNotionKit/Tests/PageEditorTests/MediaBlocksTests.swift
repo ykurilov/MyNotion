@@ -112,6 +112,36 @@ struct MediaBlocksTests {
         #expect(fixture.kinds == [.paragraph, .paragraph, .paragraph])
     }
 
+    @Test("Файл копируется — блок сразу, заглушка «Копируется… N %»; готово — файл и SHA-256 в блоке, без лишнего шага ⌘Z")
+    func copyPlaceholder() async throws {
+        let (fixture, services) = try fixture()
+        let pdf = try services.sampleFile("отчёт.pdf")
+        services.holdsCopies = true
+        let insertion = Task { await asyncStep(fixture) { await fixture.textView.insertFiles([pdf], at: 1) } }
+        try await until { !services.progressReporters.isEmpty }
+        let block = fixture.document.blocks[1]
+        #expect(block.kind == .file)
+        #expect(MediaBlocks.availability(of: block.props.attachment) == .copying(0))
+        #expect(FileBlockView(block: block, width: 700).sizeText.hasSuffix("Копируется… 0 %"))
+
+        services.progressReporters[0](0.4)
+        try await until { MediaBlocks.availability(of: block.props.attachment) == .copying(0.4) }
+        #expect(FileBlockView(block: block, width: 700).sizeText.hasSuffix("Копируется… 40 %"))
+
+        services.releaseCopies()
+        await insertion.value
+        #expect(fixture.document.blocks[1].props.attachment?.sha256 == "готово")
+        #expect(MediaBlocks.availability(of: fixture.document.blocks[1].props.attachment).fileURL == pdf)
+        fixture.undo()
+        #expect(fixture.kinds == [.paragraph, .paragraph, .paragraph])
+    }
+
+    /// Ждать условия, отдавая ход другим задачам главного потока.
+    private func until(_ condition: () -> Bool) async throws {
+        for _ in 0..<10_000 where !condition() { await Task.yield() }
+        try #require(condition())
+    }
+
     @Test("Больше 100 МБ — сообщение, блок не создаётся")
     func tooLarge() async throws {
         let (fixture, services) = try fixture()
@@ -243,6 +273,35 @@ final class FakeMediaServices: MediaBlockServices {
 
     func availability(of ref: AttachmentRef) -> MediaAvailability {
         copies[ref.id].map(MediaAvailability.ready) ?? availability
+    }
+
+    /// Копии ждут `releaseCopies()`: так видно заглушку копирования.
+    var holdsCopies = false
+    private(set) var progressReporters: [@Sendable (Double) -> Void] = []
+    private var heldCopies: [CheckedContinuation<Void, Never>] = []
+
+    func reserveFileImport(at url: URL) throws -> AttachmentRef {
+        if let importError { throw MediaImportError(message: importError) }
+        let size = (try? Data(contentsOf: url).count) ?? 0
+        return AttachmentRef(name: url.lastPathComponent, byteCount: size, contentType: Self.contentType(url), sha256: "")
+    }
+
+    func importFile(at url: URL, into reserved: AttachmentRef, progress: @escaping @Sendable (Double) -> Void) async throws -> AttachmentRef {
+        imported.append(url)
+        if holdsCopies {
+            progressReporters.append(progress)
+            await withCheckedContinuation { heldCopies.append($0) }
+        }
+        progress(1)
+        var ref = reserved
+        ref.sha256 = "готово"
+        copies[ref.id] = url
+        return ref
+    }
+
+    func releaseCopies() {
+        heldCopies.forEach { $0.resume() }
+        heldCopies = []
     }
 
     func importFile(at url: URL) async throws -> AttachmentRef {

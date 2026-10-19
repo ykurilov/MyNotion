@@ -22,13 +22,21 @@ final class TablesAndColumnsTests: XCTestCase {
         let cell = app.textViews["table-cell"]
         XCTAssertTrue(cell.waitForExistence(timeout: 5), "Нет поля правки ячейки")
 
-        // 3 × 2 → Tab в последней ячейке добавляет третью строку.
-        for (index, text) in ["Имя", "Роль", "Город", "Юрий", "Автор", "Бали", "Мишка"].enumerated() {
+        // 2 столбца × 3 строки, как у Notion 7.39 → Tab в последней ячейке добавляет четвёртую строку.
+        for (index, text) in ["Имя", "Роль", "Юрий", "Автор", "Мишка", "Тестер", "Оля"].enumerated() {
             if index > 0 { app.typeKey(.tab, modifierFlags: []) }
             app.typeText(text)
         }
         let table = app.descendants(matching: .any)["table"]
         XCTAssertTrue(table.exists)
+        // Esc, как у Notion 7.39: ячейка → строка (синяя рамка вокруг строки) → таблица как блок.
+        app.typeKey(.escape, modifierFlags: [])
+        app.typeKey(.escape, modifierFlags: [])
+        let rowSelected = XCTAttachment(screenshot: table.screenshot())
+        rowSelected.name = "table-row-selected"
+        rowSelected.lifetime = .keepAlways
+        add(rowSelected)
+        app.typeKey(.escape, modifierFlags: [])
         table.rightClick()
         let headerRow = app.menuItems["Строка заголовков"]
         XCTAssertTrue(headerRow.waitForExistence(timeout: 5), "Нет меню строки и столбца")
@@ -40,8 +48,10 @@ final class TablesAndColumnsTests: XCTestCase {
         app.descendants(matching: .any)["table-add-row"].click()
 
         // Под таблицей — пустой абзац: два блока для колонок.
-        app.textViews["table-cell"].click()
-        for _ in 0..<4 { app.typeKey(.downArrow, modifierFlags: []) }
+        // Щелчок в первую ячейку (после Esc поля правки нет), вниз через 5 строк — в абзац под таблицей.
+        table.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: 20, dy: 15)).click()
+        XCTAssertTrue(app.textViews["table-cell"].waitForExistence(timeout: 5), "Щелчок в ячейку не открыл поле правки")
+        for _ in 0..<6 { app.typeKey(.downArrow, modifierFlags: []) }
         app.typeText("Левый")
         app.typeKey(.return, modifierFlags: [])
         app.typeText("Правый")
@@ -77,9 +87,9 @@ final class TablesAndColumnsTests: XCTestCase {
 
         let saved = try savedTree(ofPage: "Таблицы и колонки")
         XCTAssertTrue(saved.contains("table header-row"), "\(saved)")
-        XCTAssertEqual(saved.filter { $0 == "tableColumn" }.count, 4, "\(saved)")
-        XCTAssertEqual(saved.filter { $0 == "tableRow" }.count, 4, "\(saved)")
-        for text in ["Имя", "Роль", "Город", "Юрий", "Автор", "Бали", "Мишка"] {
+        XCTAssertEqual(saved.filter { $0 == "tableColumn" }.count, 3, "\(saved)")
+        XCTAssertEqual(saved.filter { $0 == "tableRow" }.count, 5, "\(saved)")
+        for text in ["Имя", "Роль", "Юрий", "Автор", "Мишка", "Тестер", "Оля"] {
             XCTAssertTrue(saved.contains("tableCell \(text)"), "нет ячейки «\(text)»: \(saved)")
         }
         XCTAssertTrue(saved.contains("columnList") && saved.filter { $0 == "column" }.count == 2, "\(saved)")

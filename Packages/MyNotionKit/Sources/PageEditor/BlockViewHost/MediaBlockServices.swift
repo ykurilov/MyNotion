@@ -9,8 +9,11 @@ import VisualStyle
 public protocol MediaBlockServices: AnyObject {
     /// Есть ли файл на этом Mac, а если нет — что показать на заглушке.
     func availability(of ref: AttachmentRef) -> MediaAvailability
-    /// Скопировать файл (Finder, «Выбрать файл…»); больше 100 МБ — ошибка с понятным сообщением.
-    func importFile(at url: URL) async throws -> AttachmentRef
+    /// Занять место под файл (Finder, «Выбрать файл…») до копирования: блок с этим описанием появляется сразу;
+    /// больше 100 МБ — ошибка с понятным сообщением.
+    func reserveFileImport(at url: URL) throws -> AttachmentRef
+    /// Скопировать файл под занятым описанием; `progress` — доля скопированного. Готовое описание — с SHA-256.
+    func importFile(at url: URL, into reserved: AttachmentRef, progress: @escaping @Sendable (Double) -> Void) async throws -> AttachmentRef
     /// Записать содержимое буфера как файл (картинка — PNG).
     func importData(_ data: Data, name: String, contentType: String) async throws -> AttachmentRef
     /// Скачать файл по ссылке («Вставить ссылку» для картинки и файла).
@@ -32,6 +35,8 @@ public protocol MediaBlockServices: AnyObject {
 /// Что вид блока показывает вместо файла (contracts/blocks-and-keys.md, «Картинка»).
 public enum MediaAvailability: Sendable, Hashable {
     case ready(URL)
+    /// Файл копируется в MyNotion: доля скопированного, от 0 до 1.
+    case copying(Double)
     case downloading
     case waitingForOtherMac
     case failed(String)
@@ -44,6 +49,7 @@ public enum MediaAvailability: Sendable, Hashable {
     var statusText: String {
         switch self {
         case .ready: ""
+        case .copying(let fraction): "Копируется… \(Int((fraction * 100).rounded(.down))) %"
         case .downloading: "Загружается…"
         case .waitingForOtherMac: "Ждёт отправки с другого Mac"
         case .failed(let message): message
@@ -82,7 +88,30 @@ public enum MediaBlocks {
 
     static func availability(of ref: AttachmentRef?) -> MediaAvailability {
         guard let ref else { return .failed("Файл не выбран") }
+        if let fraction = copyProgress[ref.id] { return .copying(fraction) }
         return services?.availability(of: ref) ?? .downloading
+    }
+
+    /// Файлы, которые сейчас копируются, и доля скопированного.
+    private static var copyProgress: [UUID: Double] = [:]
+
+    /// Начать показ хода копирования файла `id`.
+    static func beginCopy(_ id: UUID) {
+        copyProgress[id] = 0
+        NotificationCenter.default.post(name: AttachmentRef.availabilityDidChange, object: id)
+    }
+
+    /// Новая доля скопированного; виды перерисовываются, когда меняется целый процент. Поздние доли после конца — мимо.
+    static func setCopyProgress(_ fraction: Double, of id: UUID) {
+        guard let old = copyProgress[id], Int(old * 100) != Int(fraction * 100) else { return }
+        copyProgress[id] = fraction
+        NotificationCenter.default.post(name: AttachmentRef.availabilityDidChange, object: id)
+    }
+
+    /// Копирование кончилось (или не вышло): дальше вид спрашивает службы.
+    static func endCopy(_ id: UUID) {
+        copyProgress[id] = nil
+        NotificationCenter.default.post(name: AttachmentRef.availabilityDidChange, object: id)
     }
 }
 

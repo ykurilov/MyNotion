@@ -30,6 +30,8 @@ public enum EditorCommand: Sendable, Hashable {
     /// ⌘⌥T: свернуть или раскрыть все переключатели страницы.
     case toggleAllCollapsed
     case toggleInline(InlineFormat)
+    /// «Tx» панели форматирования: снять с выделения оформление, ссылки и цвета.
+    case clearInlineFormatting
     case setKind(BlockKind)
     case applyColor(ColorChoice)
     case applyBlockColor(ColorChoice)

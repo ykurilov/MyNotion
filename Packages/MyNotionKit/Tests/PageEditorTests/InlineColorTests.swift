@@ -172,6 +172,13 @@ struct InlineColorTests {
         #expect(RecentColors(defaults: defaults).choices == [background(.blue), text(.red)])
     }
 
+    @Test("Цвета отрезка: цвет вне отрезка не учитывается и не роняет подсчёт")
+    func colorsOutsideRange() {
+        let text = InlineText("один два", runs: [run(0, 4, .textColor(.red))])
+        #expect(InlineColors.colors(text, of: .text, in: 5..<8) == [nil])
+        #expect(InlineColors.colors(text, of: .text, in: 0..<4) == [.red])
+    }
+
     @Test("⌘⇧H накладывает последний цвет на новое выделение, даже если на нём такой уже есть")
     func repeatLastColor() throws {
         let editor = try editor([.paragraph("один два три")])

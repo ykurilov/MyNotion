@@ -65,15 +65,27 @@ public struct TableGrid: Sendable, Hashable {
 
     // MARK: Новая таблица
 
-    /// Столбцы и строки новой таблицы, без ячеек.
-    public static func contents(ofNewTable table: Block, columns: Int, rows: Int) -> [Block] {
+    /// Первый столбец таблицы из «/» (Notion 7.39: 240).
+    public static let newTableFirstColumnWidth: Double = 240
+
+    /// Ширины двух столбцов таблицы из «/» во всю ширину `available`, как у Notion 7.39: первый 240, второй — остаток;
+    /// узко — пополам; не уже `minimumColumnWidth`.
+    public static func columnWidths(ofNewTableFitting available: Double) -> [Double] {
+        let first = max(minimumColumnWidth, min(newTableFirstColumnWidth, (available / 2).rounded(.down)))
+        return [first, max(minimumColumnWidth, available - first)]
+    }
+
+    /// Столбцы и строки новой таблицы, без ячеек; `widths` — ширины столбцов по порядку.
+    public static func contents(ofNewTable table: Block, columns: Int, rows: Int, widths: [Double] = []) -> [Block] {
         var key: FractionalSortKey?
         func nextKey() -> FractionalSortKey {
             key = .between(key, nil)
             return key!
         }
-        let columnBlocks = (0..<columns).map { _ in
-            Block(pageId: table.pageId, kind: .tableColumn, sortKey: nextKey(), containerId: table.id, props: .defaults(for: .tableColumn))
+        let columnBlocks = (0..<columns).map { index in
+            var props = BlockProps.defaults(for: .tableColumn)
+            if index < widths.count { props.width = widths[index] }
+            return Block(pageId: table.pageId, kind: .tableColumn, sortKey: nextKey(), containerId: table.id, props: props)
         }
         let rowBlocks = (0..<rows).map { _ in Block(pageId: table.pageId, kind: .tableRow, sortKey: nextKey(), containerId: table.id) }
         return columnBlocks + rowBlocks

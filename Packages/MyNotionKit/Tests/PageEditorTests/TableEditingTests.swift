@@ -2,6 +2,7 @@ import AppKit
 import Testing
 @testable import NotesCore
 @testable import PageEditor
+import VisualStyle
 
 /// Простая таблица в редакторе (contracts/blocks-and-keys.md, «Таблица»; research R3): ячейки рисует вид таблицы,
 /// правит одно поле на ячейку — тот же редактор, что текст страницы, с одним блоком ячейки.
@@ -52,11 +53,14 @@ struct TableEditingTests {
 
     // MARK: Вставка и набор
 
-    @Test("«/» → «Таблица» — 3 × 2, курсор в первой ячейке; таблица — один знак-вложение в тексте страницы")
+    @Test("«/» → «Таблица» — 2 столбца × 3 строки во всю ширину (240 и остаток), курсор в первой ячейке; таблица — один знак-вложение")
     func slashTable() throws {
         let (editor, table) = try tableFixture()
         let grid = try grid(editor, table)
-        #expect(grid.columnCount == 3 && grid.rowCount == 2)
+        #expect(grid.columnCount == 2 && grid.rowCount == 3)
+        // Как у Notion 7.39: первый столбец 240, второй — до края колонки текста.
+        let available = Double(Metrics.Page.columnWidth - 2 * Metrics.Page.blockHorizontalPadding)
+        #expect(grid.columns.map(\.props.width) == [240, available - 240])
         #expect(editor.textView.string == "до\n\u{FFFC}\nпосле\n")
         let cell = try cellEditor(editor)
         #expect(try view(editor, table).activeCell == TableCellPosition(row: 0, column: 0))
@@ -71,7 +75,7 @@ struct TableEditingTests {
         try type("ab", in: editor)
         try press(#selector(NSResponder.insertLineBreak(_:)), in: editor)
         try type("c", in: editor)
-        #expect(try texts(editor, table)[0] == ["ab\nc", "", ""])
+        #expect(try texts(editor, table)[0] == ["ab\nc", ""])
         #expect(try grid(editor, table).cell(row: 0, column: 0) != nil)
         editor.undo()
         #expect(try texts(editor, table)[0][0] == "ab\n")
@@ -89,12 +93,12 @@ struct TableEditingTests {
         try press(#selector(NSResponder.insertBacktab(_:)), in: editor)
         #expect(tableView.activeCell == TableCellPosition(row: 0, column: 0))
         for _ in 0..<5 { try press(#selector(NSResponder.insertTab(_:)), in: editor) }
-        #expect(tableView.activeCell == TableCellPosition(row: 1, column: 2))
+        #expect(tableView.activeCell == TableCellPosition(row: 2, column: 1))
         try press(#selector(NSResponder.insertTab(_:)), in: editor)
-        #expect(try grid(editor, table).rowCount == 3)
-        #expect(tableView.activeCell == TableCellPosition(row: 2, column: 0))
+        #expect(try grid(editor, table).rowCount == 4)
+        #expect(tableView.activeCell == TableCellPosition(row: 3, column: 0))
         editor.undo()
-        #expect(try grid(editor, table).rowCount == 2)
+        #expect(try grid(editor, table).rowCount == 3)
     }
 
     @Test("Стрелки на краю текста ячейки — в соседнюю ячейку; Enter — та же колонка строкой ниже")
@@ -122,12 +126,15 @@ struct TableEditingTests {
         #expect(editor.window.firstResponder === editor.textView, "↑ из первой строки — в блок над таблицей")
     }
 
-    @Test("Esc — выделение ячейки, ещё Esc — таблица выделена как блок")
+    @Test("Esc, как у Notion: ячейка выделена → её строка → таблица выделена как блок")
     func escape() throws {
         let (editor, table) = try tableFixture()
         let tableView = try view(editor, table)
         try press(#selector(NSResponder.cancelOperation(_:)), in: editor)
         #expect(tableView.selectedCells == TableCellRange(TableCellPosition(row: 0, column: 0)))
+        #expect(editor.window.firstResponder === tableView)
+        editor.step { tableView.doCommand(by: #selector(NSResponder.cancelOperation(_:))) }
+        #expect(tableView.selectedCells == TableCellRange(from: TableCellPosition(row: 0, column: 0), to: TableCellPosition(row: 0, column: 1)))
         #expect(editor.window.firstResponder === tableView)
         editor.step { tableView.doCommand(by: #selector(NSResponder.cancelOperation(_:))) }
         #expect(editor.window.firstResponder === editor.textView)
@@ -142,24 +149,36 @@ struct TableEditingTests {
         let tableView = try view(editor, table)
         try type("x", in: editor)
         editor.step { tableView.addRow() }
-        #expect(try grid(editor, table).rowCount == 3)
+        #expect(try grid(editor, table).rowCount == 4)
         editor.step { tableView.addColumn() }
-        #expect(try grid(editor, table).columnCount == 4)
+        #expect(try grid(editor, table).columnCount == 3)
         editor.step { tableView.perform(.insertRowAbove, at: TableCellPosition(row: 0, column: 0)) }
-        #expect(try texts(editor, table).map { $0[0] } == ["", "x", "", ""])
+        #expect(try texts(editor, table).map { $0[0] } == ["", "x", "", "", ""])
         editor.step { tableView.perform(.insertColumnLeft, at: TableCellPosition(row: 1, column: 0)) }
-        #expect(try texts(editor, table)[1] == ["", "x", "", "", ""])
+        #expect(try texts(editor, table)[1] == ["", "x", "", ""])
         editor.step { tableView.perform(.insertRowBelow, at: TableCellPosition(row: 1, column: 1)) }
         editor.step { tableView.perform(.insertColumnRight, at: TableCellPosition(row: 1, column: 1)) }
-        #expect(try texts(editor, table)[1] == ["", "x", "", "", "", ""])
-        #expect(try grid(editor, table).rowCount == 5)
+        #expect(try texts(editor, table)[1] == ["", "x", "", "", ""])
+        #expect(try grid(editor, table).rowCount == 6)
         editor.step { tableView.perform(.deleteRow, at: TableCellPosition(row: 1, column: 1)) }
         editor.step { tableView.perform(.deleteColumn, at: TableCellPosition(row: 0, column: 1)) }
-        #expect(try grid(editor, table).rowCount == 4 && grid(editor, table).columnCount == 5)
+        #expect(try grid(editor, table).rowCount == 5 && grid(editor, table).columnCount == 4)
         #expect(try !texts(editor, table).joined().contains("x"))
         for _ in 0..<8 { editor.undo() }
-        #expect(try grid(editor, table).rowCount == 2 && grid(editor, table).columnCount == 3)
+        #expect(try grid(editor, table).rowCount == 3 && grid(editor, table).columnCount == 2)
         #expect(try texts(editor, table)[0][0] == "x")
+    }
+
+    @Test("У таблицы во всю ширину «+» столбца — справа за краем вида, как у Notion, и ловит щелчок")
+    func addColumnButtonOutsideBounds() throws {
+        let (editor, table) = try tableFixture()
+        let tableView = try view(editor, table)
+        let grid = tableView.tableLayout.gridSize
+        #expect(grid.width + Metrics.Table.addButtonGap > tableView.bounds.width, "Кнопка за краем вида")
+        let local = NSPoint(x: grid.width + Metrics.Table.addButtonGap + Metrics.Table.addButtonThickness / 2, y: 10)
+        let page = try #require(editor.textView.superview)
+        let hit = editor.textView.hitTest(page.convert(tableView.convert(local, to: nil), from: nil))
+        #expect(hit?.accessibilityIdentifier() == "table-add-column", "Попал в \(String(describing: hit))")
     }
 
     @Test("Строка и столбец заголовков — свойства таблицы; ширина столбца — протяжкой границы")
@@ -169,10 +188,11 @@ struct TableEditingTests {
         editor.step { tableView.perform(.toggleHeaderRow, at: TableCellPosition(row: 0, column: 0)) }
         editor.step { tableView.perform(.toggleHeaderColumn, at: TableCellPosition(row: 0, column: 0)) }
         #expect(try grid(editor, table).hasHeaderRow && grid(editor, table).hasHeaderColumn)
+        let widths = try grid(editor, table).columns.map(\.props.width)
         editor.step { tableView.dragColumnBoundary(1, toWidth: 260) }
-        #expect(try grid(editor, table).columns.map(\.props.width) == [120, 260, 120])
+        #expect(try grid(editor, table).columns.map(\.props.width) == [widths[0], 260])
         editor.undo()
-        #expect(try grid(editor, table).columns.map(\.props.width) == [120, 120, 120])
+        #expect(try grid(editor, table).columns.map(\.props.width) == widths)
         editor.undo()
         #expect(try !grid(editor, table).hasHeaderColumn)
     }
@@ -198,7 +218,7 @@ struct TableEditingTests {
         // Таблица растёт под вставленное: столбцов и строк добавляется сколько нужно.
         #expect(try texts(editor, table) == [["a", "b", "", "", ""], ["", "1", "2", "3", "4"], ["", "5", "6", "", ""]])
         editor.undo()
-        #expect(try texts(editor, table) == [["a", "b", ""], ["", "", ""]])
+        #expect(try texts(editor, table) == [["a", "b"], ["", ""], ["", ""]])
     }
 
     @Test("Оформление в ячейке: ⌘B по выделению — жирный в тексте ячейки")

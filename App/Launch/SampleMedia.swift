@@ -5,10 +5,10 @@ import PageEditor
 
 /// Файлы для образцов картинок, файлов и видео (галерея `--ui-gallery`, «богатая» страница замеров): блоки образцов
 /// ссылаются на файлы, которых на Mac нет. Картинки рисуются градиентом нужного размера, прочее — короткий файл.
-/// Имена «загружается.png» и «ждёт-отправки.png» остаются без файла — для снимков заглушек.
+/// Имена «загружается.png», «ждёт-отправки.png» и «Запись эфира.mov» остаются без файла — для снимков заглушек.
 @MainActor
 enum SampleMedia {
-    static let placeholderNames: Set<String> = ["загружается.png", "ждёт-отправки.png"]
+    static let placeholderNames: Set<String> = ["загружается.png", "ждёт-отправки.png", "Запись эфира.mov"]
 
     /// `pageIds` — только эти страницы (замер на эталоне в 1 000 страниц не перебирает их все).
     static func materialize(in store: NotesStore, attachments: AttachmentStore, pageIds: [UUID]? = nil) {
@@ -26,6 +26,10 @@ enum SampleMedia {
         // Заглушка «Ждёт отправки с другого Mac» — как у файла, которого нет на сервере.
         for ref in refs where ref.name == "ждёт-отправки.png" {
             try? attachments.markWaitingForOtherMac(ref.id)
+        }
+        // Заглушка «Копируется… 37 %» — как у большого файла посреди копирования.
+        for ref in refs where ref.name == "Запись эфира.mov" {
+            PageEditorPreview.showCopyProgress(0.37, ofAttachment: ref.id)
         }
     }
 

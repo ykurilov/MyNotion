@@ -27,13 +27,19 @@ final class AppMediaServices: MediaBlockServices {
         }
     }
 
-    /// Копирование большого файла — в фоне: окно не замирает.
-    func importFile(at url: URL) async throws -> AttachmentRef {
+    func reserveFileImport(at url: URL) throws -> AttachmentRef {
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+        return try attachments.reserveFileImport(at: url)
+    }
+
+    /// Копирование большого файла — в фоне: окно не замирает, ход копирования — в `progress`.
+    func importFile(at url: URL, into reserved: AttachmentRef, progress: @escaping @Sendable (Double) -> Void) async throws -> AttachmentRef {
         let attachments = attachments
         return try await Task.detached(priority: .userInitiated) {
             let accessed = url.startAccessingSecurityScopedResource()
             defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-            return try attachments.importFile(at: url)
+            return try attachments.importFile(at: url, into: reserved, progress: progress)
         }.value
     }
 

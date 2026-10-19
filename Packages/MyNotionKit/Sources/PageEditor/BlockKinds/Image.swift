@@ -17,8 +17,11 @@ extension BlockKindDescriptor {
                                    .init(.image, props: MediaSamples.image(name: "схема.png", width: 0.5)),
                                    .init(.paragraph, "Абзац под картинкой"),
                                ]),
-            BlockGallerySample(id: "media-placeholders", summary: "Заглушки: «Загружается…» и «Ждёт отправки с другого Mac»",
+            BlockGallerySample(id: "media-placeholders",
+                               summary: "Заглушки: «Загружается…», «Ждёт отправки с другого Mac», файл, который копируется",
                                blocks: [
+                                   .init(.file, props: MediaSamples.file(name: MediaSamples.copyingName, byteCount: 84_000_000,
+                                                                         contentType: "com.apple.quicktime-movie")),
                                    .init(.image, props: MediaSamples.image(name: MediaSamples.downloadingName, width: nil)),
                                    .init(.image, props: MediaSamples.image(name: MediaSamples.waitingName, width: 0.6)),
                                ]),
@@ -249,6 +252,8 @@ enum MediaCaptionEditing {
 enum MediaSamples {
     static let downloadingName = "загружается.png"
     static let waitingName = "ждёт-отправки.png"
+    /// Файл образца, который «копируется»: галерея показывает его заглушку с ходом копирования.
+    static let copyingName = "Запись эфира.mov"
 
     static func image(name: String, width: Double?) -> BlockProps {
         var props = BlockProps()

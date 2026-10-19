@@ -47,6 +47,56 @@ public final class AttachmentStore: Sendable {
         }
     }
 
+    // MARK: Копирование с заглушкой
+
+    /// Надпись на заглушке, пока файл копируется (вид редактора показывает поверх неё ход копирования).
+    public static let copyingMessage = "Копируется…"
+    /// Копирование прервал выход из приложения.
+    public static let interruptedCopyMessage = "Копирование прервалось — вставьте файл ещё раз"
+
+    /// Занять место под файл до копирования, чтобы блок со ссылкой на него появился сразу: описание без SHA-256
+    /// и запись в состоянии `failed` с надписью `copyingMessage` — её не берут ни отправка, ни скачивание, а подсчёт
+    /// ссылок не ставит её в очередь. Больше 100 МБ — `tooLarge`, ничего не создаётся.
+    public func reserveFileImport(at source: URL) throws -> AttachmentRef {
+        let name = source.lastPathComponent
+        let byteCount: Int
+        do {
+            byteCount = try source.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        } catch {
+            throw AttachmentError.cannotRead(error.localizedDescription)
+        }
+        guard byteCount <= AttachmentRef.maximumByteCount else { throw AttachmentError.tooLarge(name: name) }
+        let contentType = UTType(filenameExtension: source.pathExtension)?.identifier ?? UTType.data.identifier
+        let ref = AttachmentRef(name: Self.safeFileName(name), byteCount: byteCount, contentType: contentType, sha256: "")
+        var record = AttachmentRecord(ref: ref, localPath: nil, state: .failed, orphanedAt: now())
+        record.lastError = Self.copyingMessage
+        try store.database.dbWriter.write { db in try record.save(in: db) }
+        return ref
+    }
+
+    /// Скопировать файл под занятым `reserved` id; `progress` — доля скопированного, от 0 до 1. Не вышло — запись
+    /// остаётся `failed` с причиной, копии нет.
+    public func importFile(at source: URL, into reserved: AttachmentRef, progress: @escaping @Sendable (Double) -> Void) throws -> AttachmentRef {
+        do {
+            return try importCopy(name: reserved.name, contentType: reserved.contentType, id: reserved.id) { destination in
+                try Self.copy(source, to: destination, expectedByteCount: reserved.byteCount, progress: progress)
+            }
+        } catch {
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            try? update(reserved.id) { $0.lastError = message }
+            throw error
+        }
+    }
+
+    /// После запуска: копирования, прерванные выходом из приложения, — с понятной надписью, недописанные копии стёрты.
+    public func abandonInterruptedCopies() throws {
+        let interrupted = try allRecords().filter { $0.state == .failed && $0.lastError == Self.copyingMessage }
+        for record in interrupted {
+            try? FileManager.default.removeItem(at: folder.appendingPathComponent(record.id.attachmentKey, isDirectory: true))
+            try update(record.id) { $0.lastError = Self.interruptedCopyMessage }
+        }
+    }
+
     /// Записать содержимое из буфера (картинка — PNG) как файл.
     public func importData(_ data: Data, name: String, contentType: String) throws -> AttachmentRef {
         guard data.count <= AttachmentRef.maximumByteCount else { throw AttachmentError.tooLarge(name: name) }
@@ -56,8 +106,8 @@ public final class AttachmentStore: Sendable {
         }
     }
 
-    private func importCopy(name: String, contentType: String, write: (URL) throws -> (byteCount: Int, sha256: String)) throws -> AttachmentRef {
-        let id = UUID.timeOrdered()
+    private func importCopy(name: String, contentType: String, id: UUID = .timeOrdered(),
+                            write: (URL) throws -> (byteCount: Int, sha256: String)) throws -> AttachmentRef {
         let directory = folder.appendingPathComponent(id.attachmentKey, isDirectory: true)
         let fileName = Self.safeFileName(name)
         do {
@@ -65,8 +115,14 @@ public final class AttachmentStore: Sendable {
             let (byteCount, sha256) = try write(directory.appendingPathComponent(fileName))
             guard byteCount <= AttachmentRef.maximumByteCount else { throw AttachmentError.tooLarge(name: name) }
             let ref = AttachmentRef(id: id, name: fileName, byteCount: byteCount, contentType: contentType, sha256: sha256)
-            let record = AttachmentRecord(ref: ref, localPath: "\(id.attachmentKey)/\(fileName)", state: .local, orphanedAt: now())
-            try store.database.dbWriter.write { db in try record.save(in: db) }
+            try store.database.dbWriter.write { db in
+                // Блок мог сослаться на занятый id, пока шло копирование: тогда файл уже не сирота.
+                let referenced = try Bool.fetchOne(db, sql: "SELECT orphanedAt IS NULL FROM attachment WHERE id = ?",
+                                                   arguments: [id.attachmentKey]) ?? false
+                let record = AttachmentRecord(ref: ref, localPath: "\(id.attachmentKey)/\(fileName)", state: .local,
+                                              orphanedAt: referenced ? nil : now())
+                try record.save(in: db)
+            }
             return ref
         } catch {
             try? FileManager.default.removeItem(at: directory)
@@ -76,7 +132,8 @@ public final class AttachmentStore: Sendable {
     }
 
     /// Копия кусками по 1 МБ с подсчётом SHA-256: 100 МБ не читаются в память целиком.
-    private static func copy(_ source: URL, to destination: URL) throws -> (Int, String) {
+    private static func copy(_ source: URL, to destination: URL, expectedByteCount: Int = 0,
+                             progress: (@Sendable (Double) -> Void)? = nil) throws -> (Int, String) {
         let input = try FileHandle(forReadingFrom: source)
         defer { try? input.close() }
         FileManager.default.createFile(atPath: destination.path, contents: nil)
@@ -89,7 +146,9 @@ public final class AttachmentStore: Sendable {
             guard byteCount <= AttachmentRef.maximumByteCount else { throw AttachmentError.tooLarge(name: source.lastPathComponent) }
             hasher.update(data: chunk)
             try output.write(contentsOf: chunk)
+            progress?(min(1, Double(byteCount) / Double(max(expectedByteCount, 1))))
         }
+        progress?(1)
         return (byteCount, hex(hasher.finalize()))
     }
 
