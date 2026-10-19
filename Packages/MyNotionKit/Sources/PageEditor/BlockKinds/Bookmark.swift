@@ -150,7 +150,7 @@ final class BookmarkBlockView: MediaBlockView {
     /// Щелчок открывает сайт, как у Notion; выделить блок — «⋮⋮».
     override func mouseUp(with event: NSEvent) {
         guard event.clickCount == 1, let url = block.props.url else { return }
-        MediaBlocks.services?.open(url)
+        MediaBlocks.openLink(url)
     }
 
     override func mouseDown(with event: NSEvent) {}
@@ -162,7 +162,7 @@ final class BookmarkBlockView: MediaBlockView {
                 guard let self else { return }
                 self.textView?.refreshBookmark(ofBlock: self.block.id)
             },
-            menuItem("Открыть") { MediaBlocks.services?.open(url) },
+            menuItem("Открыть") { MediaBlocks.openLink(url) },
         ]
     }
 }

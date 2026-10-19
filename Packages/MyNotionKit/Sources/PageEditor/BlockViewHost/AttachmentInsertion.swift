@@ -486,7 +486,8 @@ final class AttachmentInsertionController: NSViewController {
 
     @objc private func submitLink() {
         let text = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: text.contains("://") ? text : "https://" + text), url.host != nil else {
+        guard let url = URL(string: text.contains("://") ? text : "https://" + text), url.host != nil,
+              ["http", "https"].contains(url.scheme?.lowercased()) else {
             NSSound.beep()
             return
         }
