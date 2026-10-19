@@ -46,8 +46,11 @@ let package = Package(
         .target(name: "ServiceLaunch"),
         // Подсветка кода (research R5): свой разборщик, без зависимостей.
         .target(name: "CodeHighlighting"),
-        // Формулы (research R6): исходники SwiftMath (MIT); шрифт Latin Modern Math ресурсом добавляет этап US4.
-        .target(name: "MathRendering"),
+        // Формулы (research R6): исходники SwiftMath 1.7.3 (MIT, `SwiftMath/LICENSE`) с одним шрифтом Latin Modern Math.
+        // Код SwiftMath писан до Swift 6: режим языка 5, чтобы не переписывать чужие исходники.
+        .target(name: "MathRendering", dependencies: ["VisualStyle"], exclude: ["SwiftMath/LICENSE"],
+                resources: [.copy("SwiftMath/mathFonts.bundle")],
+                swiftSettings: [.swiftLanguageMode(.v5)]),
         // Копии файлов на Mac, шифрование частей, отправка и докачка (research R9–R10).
         .target(name: "Attachments", dependencies: ["NotesCore", "Sync", .product(name: "GRDB", package: "GRDB.swift")]),
         // Закладки и обложки YouTube и Vimeo: один запрос при вставке (research R15, R8).
