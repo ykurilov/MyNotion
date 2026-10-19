@@ -40,6 +40,7 @@ xcodebuild test -scheme MyNotionPerformance -configuration Release -destination 
 | `--database <путь>` | открыть базу из указанного файла вместо `~/Library/Application Support/MyNotion/MyNotion.sqlite` |
 | `--generate-reference-library <путь>` | создать эталонную базу (1 000 страниц, 100 000 блоков) и выйти |
 | `--generate-visual-sample` | добавить в открытую базу страницу «MyNotion — образец» для сверки с Notion и открыть её |
+| `--generate-rich-sample` | добавить в открытую базу «богатую» страницу на 1 000 блоков (замеры 002, quickstart.md) и открыть её; части блоков дают описатели типов |
 | `--launch-report <путь>` | записать в файл время запуска и память в покое (для замеров) |
 | `--window-snapshot <путь>` | когда страница готова, снять окно в PNG и выйти (работает и при заблокированном экране) |
 | `--ui-gallery <папка>` | на своей временной базе снять все состояния интерфейса (светлая и тёмная тема, 1440×900, ключевые ещё 900×700), положить рядом `index.html` и `manifest.json` и выйти |
@@ -55,7 +56,7 @@ xcodebuild test -scheme MyNotionPerformance -configuration Release -destination 
 | `--export-markdown <папка>` | выгрузить все записи в Markdown в `<папка>/MyNotion-выгрузка-<дата>/` без окна выбора папки, напечатать путь и выйти (код 0 — готово, 1 — ошибка, частичной папки не остаётся) |
 | `--import-notion <путь>` | импортировать выгрузку Notion (ZIP «Export → Markdown & CSV» или распакованную папку) в ветку «Импорт из Notion — <дата>» без окна выбора, напечатать отчёт и выйти (код 0 — готово, 1 — ошибка, ветка откачена, 2 — эта выгрузка уже импортирована, повтор не начат) |
 
-**Служебные режимы не берут фокус.** Галерея, снимки окна, замеры и эталонная база (`--ui-gallery`, `--ui-gallery-only`, `--window-snapshot`, `--hover-sidebar-row`, `--generate-reference-library`, `--launch-report`, `--typing-benchmark`, `--search-benchmark`, `--export-markdown`, `--import-notion`, а также `--generate-visual-sample` вместе с ними) идут, пока человек работает в других программах. Приложение не становится активным, не стоит в Dock, его окна лежат под всеми окнами. Нигде в этих режимах нет `activate`, `makeKeyAndOrderFront` и `orderFrontRegardless`. Новый служебный флаг обязан работать так же: он добавляется в `LaunchPresence.serviceFlags` (модуль `ServiceLaunch`) и в его тест. Запуск без служебных флагов — обычное приложение.
+**Служебные режимы не берут фокус.** Галерея, снимки окна, замеры и эталонная база (`--ui-gallery`, `--ui-gallery-only`, `--window-snapshot`, `--hover-sidebar-row`, `--generate-reference-library`, `--launch-report`, `--typing-benchmark`, `--search-benchmark`, `--export-markdown`, `--import-notion`, а также `--generate-visual-sample` и `--generate-rich-sample` вместе с ними) идут, пока человек работает в других программах. Приложение не становится активным, не стоит в Dock, его окна лежат под всеми окнами. Нигде в этих режимах нет `activate`, `makeKeyAndOrderFront` и `orderFrontRegardless`. Новый служебный флаг обязан работать так же: он добавляется в `LaunchPresence.serviceFlags` (модуль `ServiceLaunch`) и в его тест. Запуск без служебных флагов — обычное приложение.
 
 ## Сервер синхронизации (появится в этапе 7)
 

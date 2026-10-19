@@ -1,5 +1,6 @@
 import Foundation
 import NotesCore
+import PageEditor
 import UIGallery
 
 /// Страницы временной базы галереи (`--ui-gallery`): образец, страница на каждый тип блока, списки,
@@ -15,6 +16,8 @@ struct GalleryLibrary {
 
     let sample: PageContent
     let blockKindPages: [BlockKind: BlockKindPage]
+    /// Страницы образцов блоков 002 по id образца (`BlockKinds.gallerySamples`).
+    let kindSamplePages: [String: UUID]
     let nestedLists: UUID
     /// Блоки с переносами строк (Shift+Enter): абзац, пункты и чекбокс в несколько строк.
     let softBreaksPage: UUID
@@ -84,6 +87,22 @@ struct GalleryLibrary {
                 blockKindPages[kind] = BlockKindPage(pageId: pageId, emptyInMiddle: ids[1], paragraphAfterEmpty: ids[2], emptyAtEnd: ids[3])
             }
 
+            var kindSamplePages: [String: UUID] = [:]
+            for sample in BlockKinds.gallerySamples {
+                let pageId = try page(sample.summary, parent: kindsParent)
+                var sortKey: FractionalSortKey?
+                for spec in sample.blocks {
+                    sortKey = .between(sortKey, nil)
+                    let block = try transaction.insertBlock(Block(pageId: pageId, kind: spec.kind, text: spec.text, indent: spec.indent,
+                                                                  sortKey: sortKey!, color: spec.color, props: spec.props))
+                    if spec.isCollapsed {
+                        try transaction.execute(sql: "INSERT OR REPLACE INTO block_view_state (blockId, isCollapsed) VALUES (?, 1)",
+                                                arguments: [.text(block.id.uuidString.lowercased())])
+                    }
+                }
+                kindSamplePages[sample.id] = pageId
+            }
+
             let softBreaksPage = try page("Переносы строк", parent: kindsParent)
             let softBreaks = try blocks(softBreaksPage, [
                 (.paragraph, "Абзац в три строки:\nвторая строка после Shift+Enter\nи третья.", 0, false),
@@ -144,7 +163,7 @@ struct GalleryLibrary {
             _ = try page("Удалённая страница с очень длинным названием, которое обрезается в корзине", trashed: true)
             _ = try page("Цели на год", icon: "🎯", trashed: true)
 
-            return GalleryLibrary(sample: sample, blockKindPages: blockKindPages, nestedLists: nestedLists,
+            return GalleryLibrary(sample: sample, blockKindPages: blockKindPages, kindSamplePages: kindSamplePages, nestedLists: nestedLists,
                                   softBreaksPage: softBreaksPage, softBreaks: softBreaks,
                                   nestedListGroup: nestedListIds[1], emptyPage: emptyPage,
                                   untitledPage: untitledPage, projects: projects, projectBranch: [projects, work, report],

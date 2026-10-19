@@ -30,3 +30,16 @@ enum BlockKindRegistry {
 extension BlockKind {
     var descriptor: BlockKindDescriptor { BlockKindRegistry.descriptor(for: self) }
 }
+
+/// Что приложение и галерея берут из описателей типов.
+public enum BlockKinds {
+    /// Снимки галереи всех типов, по порядку типов.
+    public static var gallerySamples: [BlockGallerySample] { BlockKindRegistry.gallerySamples }
+
+    /// Части «богатой» страницы от типов, у которых они есть.
+    public static var richPageParts: [RichPagePart] {
+        BlockKindRegistry.all.compactMap { descriptor in
+            descriptor.richPageBlocks.isEmpty ? nil : RichPagePart(name: descriptor.kind.rawValue, blocks: descriptor.richPageBlocks)
+        }
+    }
+}

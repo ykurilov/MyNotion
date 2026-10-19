@@ -9,6 +9,8 @@ struct LaunchOptions {
     var referenceLibraryURL: URL?
     /// `--generate-visual-sample`: добавить в открытую базу страницу «MyNotion — образец».
     var generatesVisualSample = false
+    /// `--generate-rich-sample`: добавить в открытую базу «богатую» страницу на 1 000 блоков (quickstart.md) и открыть её.
+    var generatesRichSample = false
     /// `--launch-report <путь>`: записать время запуска и память в покое.
     var launchReportURL: URL?
     /// `--window-snapshot <путь>`: когда страница готова, снять окно в PNG и выйти (снимок не требует экрана).
@@ -51,6 +53,7 @@ struct LaunchOptions {
             case "--database": databaseURL = remaining.popFirst().map(Self.fileURL)
             case "--generate-reference-library": referenceLibraryURL = remaining.popFirst().map(Self.fileURL)
             case "--generate-visual-sample": generatesVisualSample = true
+            case "--generate-rich-sample": generatesRichSample = true
             case "--launch-report": launchReportURL = remaining.popFirst().map(Self.fileURL)
             case "--window-snapshot": windowSnapshotURL = remaining.popFirst().map(Self.fileURL)
             case "--typing-benchmark": typingBenchmarkURL = remaining.popFirst().map(Self.fileURL)

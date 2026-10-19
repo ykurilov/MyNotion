@@ -24,10 +24,12 @@ struct BlockKindDescriptor: Sendable {
     var painters: [any BlockPainter] = []
     /// Состояния галереи `--ui-gallery` для этого типа.
     var gallerySamples: [BlockGallerySample] = []
+    /// Своя часть эталонной «богатой» страницы замеров (quickstart.md, `RichPageGenerator`).
+    var richPageBlocks: [RichBlockSpec] = []
 
     init(kind: BlockKind, menuItem: PopupMenuItem? = nil, markdownShortcuts: [String] = [], textStyle: BlockTextStyle = .paragraph,
          marker: BlockMarker = .none, emptyHint: String? = nil, exitsOnEmptyEnter: Bool = false, continuesAfterSplit: Bool = false,
-         painters: [any BlockPainter] = [], gallerySamples: [BlockGallerySample] = []) {
+         painters: [any BlockPainter] = [], gallerySamples: [BlockGallerySample] = [], richPageBlocks: [RichBlockSpec] = []) {
         self.kind = kind
         self.menuItem = menuItem
         self.markdownShortcuts = markdownShortcuts
@@ -38,6 +40,7 @@ struct BlockKindDescriptor: Sendable {
         self.continuesAfterSplit = continuesAfterSplit
         self.painters = painters
         self.gallerySamples = gallerySamples
+        self.richPageBlocks = richPageBlocks
     }
 
     /// Тип, который этап ещё не наполнил: ведёт себя как абзац без меню и быстрых символов.

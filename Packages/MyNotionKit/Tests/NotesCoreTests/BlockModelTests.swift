@@ -21,7 +21,7 @@ struct BlockModelTests {
         #expect(Set(BlockKind.allCases.filter(\.canHaveChildren)) == [.bulletItem, .numberedItem, .checkbox, .toggle, .callout, .quote])
         #expect(Set(BlockKind.allCases.filter(\.isContainer)) == [.columnList, .column, .table, .tableRow])
         #expect(Set(BlockKind.allCases.filter(\.rendersAsAttachment))
-                == [.divider, .equation, .tableOfContents, .image, .file, .video, .bookmark, .table, .columnList])
+                == [.divider, .code, .equation, .tableOfContents, .image, .file, .video, .bookmark, .table, .columnList])
     }
 
     @Test("props по типам: значения по умолчанию")

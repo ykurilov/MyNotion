@@ -132,10 +132,11 @@ public enum BlockKind: String, Sendable, Hashable, CaseIterable, Codable {
         }
     }
 
-    /// Абзац на странице — один знак-вложение со своим видом (research R2).
+    /// Абзац на странице — один знак-вложение со своим видом (research R2). Код — тоже: у него свой встроенный редактор,
+    /// где строка кода — свой абзац (research R5, решение после пробы R16).
     public var rendersAsAttachment: Bool {
         switch self {
-        case .divider, .equation, .tableOfContents, .image, .file, .video, .bookmark, .table, .columnList: true
+        case .divider, .code, .equation, .tableOfContents, .image, .file, .video, .bookmark, .table, .columnList: true
         default: false
         }
     }

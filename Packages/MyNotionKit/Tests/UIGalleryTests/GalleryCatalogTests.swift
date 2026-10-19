@@ -1,5 +1,6 @@
 import NotesCore
 import Testing
+import PageEditor
 import UIGallery
 
 @Suite("Список состояний галереи интерфейса")
@@ -34,6 +35,14 @@ struct GalleryCatalogTests {
             .nestedLists, .longBreadcrumb, .saveErrorBanner,
         ]
         for scene in required { #expect(scenes.contains(scene), "\(scene)") }
+    }
+
+    @Test("Снимки блоков 002 собираются из описателей типов: по состоянию на каждый образец")
+    func kindSamplesFromDescriptors() {
+        let samples = BlockKinds.gallerySamples
+        let states = GalleryCatalog.states.filter { if case .kindSample = $0.scene { true } else { false } }
+        #expect(states.map(\.id) == samples.map { "kind-\($0.id)" })
+        #expect(states.map(\.scene) == samples.map { .kindSample($0) })
     }
 
     @Test("Каждый тип блока с текстом из 001: с текстом, пустой в середине и в конце, с курсором и без")

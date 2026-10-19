@@ -41,7 +41,8 @@ let package = Package(
         // Импорт из Notion (US6): записи и журнал импортов (`import_run`) пишет прямо через GRDB, как поиск свой индекс.
         .target(name: "NotionImport", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
         .target(name: "Sync", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
-        .target(name: "UIGallery", dependencies: ["NotesCore"]),
+        // Состояния галереи для блоков 002 — из описателей типов редактора (`BlockKinds.gallerySamples`).
+        .target(name: "UIGallery", dependencies: ["NotesCore", "PageEditor"]),
         .target(name: "ServiceLaunch"),
         // Подсветка кода (research R5): свой разборщик, без зависимостей.
         .target(name: "CodeHighlighting"),
@@ -66,7 +67,7 @@ let package = Package(
         .testTarget(name: "NotionImportTests", dependencies: ["NotionImport", "NotesCore", "MarkdownExport", .product(name: "GRDB", package: "GRDB.swift")],
                     resources: [.copy("Fixtures")]),
         .testTarget(name: "SyncTests", dependencies: ["Sync", "NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
-        .testTarget(name: "UIGalleryTests", dependencies: ["UIGallery", "NotesCore"]),
+        .testTarget(name: "UIGalleryTests", dependencies: ["UIGallery", "NotesCore", "PageEditor"]),
         .testTarget(name: "ServiceLaunchTests", dependencies: ["ServiceLaunch"]),
         .testTarget(name: "CodeHighlightingTests", dependencies: ["CodeHighlighting"]),
         .testTarget(name: "MathRenderingTests", dependencies: ["MathRendering"]),

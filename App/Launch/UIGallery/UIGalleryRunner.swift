@@ -154,6 +154,10 @@ final class UIGalleryRunner {
                 if let problem = GalleryTarget.selectionProblem("курсор", in: window) { return problem }
             }
 
+        case .kindSample(let sample):
+            guard let pageId = library.kindSamplePages[sample.id] else { return "нет страницы образца \(sample.id)" }
+            await open(pageId)
+
         case .emptyPage:
             await open(library.emptyPage, keepingCaret: true)
 
