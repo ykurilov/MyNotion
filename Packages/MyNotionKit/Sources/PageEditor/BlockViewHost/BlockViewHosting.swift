@@ -97,7 +97,12 @@ final class BlockViewHosting {
         views = [:]
     }
 
-    private var scrollObserver: NSObjectProtocol?
+    /// Подписка снимается в `deinit` — он не привязан к главному потоку.
+    nonisolated(unsafe) private var scrollObserver: NSObjectProtocol?
+
+    deinit {
+        if let scrollObserver { NotificationCenter.default.removeObserver(scrollObserver) }
+    }
 
     /// Прокрутка страницы: виды встают на новые видимые абзацы.
     func observeScrolling() {
@@ -105,7 +110,7 @@ final class BlockViewHosting {
         scrollObserver = nil
         guard let clip = textView?.enclosingScrollView?.contentView else { return }
         clip.postsBoundsChangedNotifications = true
-        scrollObserver = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: clip, queue: nil) {
+        scrollObserver = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: clip, queue: .main) {
             [weak self] _ in MainActor.assumeIsolated { self?.update() }
         }
     }

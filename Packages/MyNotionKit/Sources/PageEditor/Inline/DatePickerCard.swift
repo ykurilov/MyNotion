@@ -45,7 +45,12 @@ final class DatePickerPopoverController {
     private weak var textView: PageTextView?
     private(set) var dateId: UUID?
     private var mouseMonitor: Any?
-    private var deactivationObserver: NSObjectProtocol?
+    /// Подписка снимается в `deinit` — он не привязан к главному потоку.
+    nonisolated(unsafe) private var deactivationObserver: NSObjectProtocol?
+
+    deinit {
+        if let deactivationObserver { NotificationCenter.default.removeObserver(deactivationObserver) }
+    }
 
     var isOpen: Bool { window?.isVisible == true }
     var card: DatePickerCard? { window?.card }

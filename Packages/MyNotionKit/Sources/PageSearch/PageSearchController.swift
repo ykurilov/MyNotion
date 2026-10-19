@@ -12,7 +12,12 @@ public final class PageSearchController: NSObject, NSTextFieldDelegate {
     private let openPage: (UUID) -> Void
     weak var fieldView: SearchFieldView?
     private var panel: SearchResultsPanel?
-    private var deactivationObserver: NSObjectProtocol?
+    /// Подписка снимается в `deinit` — он не привязан к главному потоку.
+    nonisolated(unsafe) private var deactivationObserver: NSObjectProtocol?
+
+    deinit {
+        if let deactivationObserver { NotificationCenter.default.removeObserver(deactivationObserver) }
+    }
 
     /// Открыть найденное: страницу и блок со словами. Без него открывается только страница (`open`).
     public var openResult: ((PageSearchResult) -> Void)?

@@ -10,7 +10,12 @@ final class ConfirmationDialogWindow: NSWindow {
     var onAnswer: ((Bool) -> Void)?
     private var isAnswered = false
     /// Приложение в фоне — вопрос спрятан, вернулось — снова над окном.
-    private var activationObservers: [NSObjectProtocol] = []
+    /// Подписка снимается в `deinit` — он не привязан к главному потоку.
+    nonisolated(unsafe) private var activationObservers: [NSObjectProtocol] = []
+
+    deinit {
+        activationObservers.forEach(NotificationCenter.default.removeObserver)
+    }
 
     init(title: String, message: String, action: String) {
         dialog = ConfirmationDialogView(title: title, message: message, action: action)
