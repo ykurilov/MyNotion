@@ -49,6 +49,13 @@ public enum PageEditorPreview {
         return true
     }
 
+    /// Выделить весь текст блока: следующий набор заменит его.
+    @discardableResult
+    public static func selectAllText(ofBlock blockId: UUID, in window: NSWindow) -> Bool {
+        guard let textView = textView(in: window), let index = textView.document.index(ofBlock: blockId) else { return false }
+        return select(NSRange(location: 0, length: textView.document.blocks[index].pageTextLength), inBlock: blockId, in: window)
+    }
+
     /// Выделить `range` в тексте блока.
     @discardableResult
     public static func select(_ range: NSRange, inBlock blockId: UUID, in window: NSWindow) -> Bool {
@@ -143,6 +150,14 @@ public enum PageEditorPreview {
         let handleOnScreen = window.convertToScreen(dragHandle.convert(dragHandle.bounds, to: nil))
         textView.selectBlockAndOpenMenu(blockId, below: handleOnScreen)
         return true
+    }
+
+    /// В открытом меню блока — подменю «Преобразовать в», как стрелкой →; `false` — меню блока не открыто.
+    @discardableResult
+    public static func openBlockMenuTurnInto(in window: NSWindow) -> Bool {
+        guard let textView = textView(in: window), textView.popups.isOpen else { return false }
+        textView.popups.openSubmenu(for: .turnInto, focus: true)
+        return textView.popups.submenu == .turnInto
     }
 
     /// Взять блок за «⋮⋮» и сдвинуть мышь на `offset` (вниз — плюс), не отпуская кнопку: идёт перетаскивание.

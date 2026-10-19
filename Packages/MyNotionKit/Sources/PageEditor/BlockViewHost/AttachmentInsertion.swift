@@ -265,7 +265,7 @@ extension PageTextView {
         mediaInsertion.closePastedLinkMenu()
         mediaInsertion.pastedLink = .init(blockId: block.id, url: url, range: range)
         guard let parent = window else { return }
-        let menu = PopupMenuWindow(style: .block)
+        let menu = PopupMenuWindow(style: .list)
         menu.menuView.setItems(PastedLinkChoice.allCases.map(\.menuItem))
         menu.menuView.onChoose = { [weak self] item in
             guard let choice = PastedLinkChoice(item) else { return }

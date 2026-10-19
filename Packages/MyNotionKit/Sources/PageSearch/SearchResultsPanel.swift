@@ -58,7 +58,7 @@ private final class SearchResultsCard: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        PopupSurface.draw(card: card)
+        PopupSurface.draw(card: card, shadow: Palette.popupCardShadow)
     }
 
     override func viewDidChangeEffectiveAppearance() {

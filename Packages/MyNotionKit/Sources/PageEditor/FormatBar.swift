@@ -460,8 +460,11 @@ final class FormatBarController {
         let row = window.barView.kindRow
         let rowOnScreen = window.convertToScreen(row.convert(row.bounds, to: nil))
         guard let card = cardFrame else { return }
-        let frame = FormatBarPlacement.kindMenu(size: menu.menuView.fittingMenuSize, card: card, row: rowOnScreen,
-                                                visible: parent.screen.map { $0.visibleFrame.intersection(parent.frame) } ?? parent.frame)
+        // Список длиннее экрана — по высоте видимой области, с прокруткой; текущий тип виден сразу.
+        let visible = parent.screen.map { $0.visibleFrame.intersection(parent.frame) } ?? parent.frame
+        menu.menuView.maximumHeight = visible.height
+        if let current = state.kindItem { menu.menuView.select(current) }
+        let frame = FormatBarPlacement.kindMenu(size: menu.menuView.fittingMenuSize, card: card, row: rowOnScreen, visible: visible)
         menu.show(menuFrame: frame, parent: parent)
     }
 

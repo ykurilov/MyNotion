@@ -184,20 +184,21 @@ struct ColorMenuTests {
         #expect(withRecent.height == 278, "Как у Notion: с одним рядом «Последних» ≈ 278")
     }
 
-    @Test("Меню блока: пункт «Цвет» перед «Удалить»; выбор открывает окно цветов для блока и красит его целиком")
+    @Test("Меню блока: «Цвет» — второй пункт, подменю; выбор открывает окно цветов для блока и красит его целиком")
     func blockMenuColor() throws {
         let editor = try editor([.paragraph("один"), .heading(2, "два")])
         let id = editor.document.blocks[1].id
         editor.textView.openBlockMenu(forBlock: id, below: .zero)
         let items = editor.textView.popups.visibleItems
-        #expect(items.suffix(2).map(\.title) == ["Цвет", "Удалить"])
+        #expect(items.map(\.title).prefix(2) == ["Преобразовать в", "Цвет"])
 
         editor.step { editor.textView.popups.choose(.color) }
-        #expect(!editor.textView.popups.isOpen, "Меню блока заменено окном цветов")
+        #expect(editor.textView.popups.submenu == .color, "Окно цветов — подменю, меню блока остаётся")
         #expect(editor.textView.colorMenu.target == .block(id))
 
         editor.step { editor.textView.colorMenu.choose(choice(.background, .blue)) }
         #expect(!editor.textView.colorMenu.isOpen)
+        #expect(!editor.textView.popups.isOpen, "Выбор цвета закрывает и меню блока")
         #expect(editor.document.blocks.map(\.color) == [.none, BlockColor(background: .blue)])
         #expect(editor.textView.isBlockSelection, "Блок остаётся выделенным")
     }

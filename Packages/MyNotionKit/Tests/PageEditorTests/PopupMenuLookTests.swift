@@ -5,19 +5,20 @@ import VisualStyle
 
 /// Вид всплывающих меню по снимкам: меню отделено от страницы в обеих темах; меню «/» — плотный список как в Notion
 /// 7.38.1 (ui-review 15.10.2026, № 1): строка 33, маленький значок без рамки, название, справа серым быстрые символы,
-/// заголовок раздела «Основные блоки», внизу «Закрыть меню» с «esc»; меню блока — те же строки
-/// (contracts/visual-style.md, «Всплывающие меню»).
+/// заголовок раздела «Основные блоки», внизу «Закрыть меню» с «esc»; меню блока — как у Notion 7.39: строки 29,
+/// заголовок с типом блока, черта между группами (contracts/visual-style.md, «Всплывающие меню»).
 @MainActor
 @Suite("Вид меню «/» и меню блока")
 struct PopupMenuLookTests {
     nonisolated static let themes: [NSAppearance.Name] = [.aqua, .darkAqua]
 
     static func items(_ style: PopupMenuStyle) -> [PopupMenuItem] {
-        PopupMenuItem.blockKinds + (style == .block ? [.color, .delete] : [])
+        style == .blockMenu ? PopupMenuItem.blockMenuItems(for: .paragraph) : PopupMenuItem.blockKinds
     }
 
-    static func menu(_ style: PopupMenuStyle) -> PopupMenuView {
+    static func menu(_ style: PopupMenuStyle, title: String? = nil) -> PopupMenuView {
         let view = PopupMenuView(style: style)
+        if let title { view.sectionTitle = title }
         view.setItems(items(style))
         let margin = PopupMenuWindow.shadowMargin
         let size = view.fittingMenuSize
@@ -26,7 +27,7 @@ struct PopupMenuLookTests {
         return view
     }
 
-    @Test("Край меню виден на странице в обеих темах, в тёмной фон меню светлее страницы", arguments: [PopupMenuStyle.slash, .block])
+    @Test("Край меню виден на странице в обеих темах, в тёмной фон меню светлее страницы", arguments: [PopupMenuStyle.slash, .blockMenu])
     func menuStandsOutFromPage(style: PopupMenuStyle) throws {
         for theme in Self.themes {
             let view = Self.menu(style)
@@ -55,18 +56,18 @@ struct PopupMenuLookTests {
         let view = Self.menu(.slash)
         let top = PopupMenuWindow.shadowMargin
         // Видны первые строки, остальные — прокруткой выбора.
-        let rows = view.subviews.compactMap { $0 as? PopupMenuRowView }.filter { !$0.isHidden }
+        let rows = view.rowViews.filter { !$0.isHidden }.compactMap { view.rowFrame(of: $0.item) }
         try #require(rows.count == min(PopupMenuItem.blockKinds.count, Metrics.PopupMenu.maximumVisibleRows))
         #expect(view.sectionTitle == "Основные блоки")
         // У Notion: середина заголовка раздела ≈ 18,6 ниже верха меню, середина первой строки ≈ 49,8.
-        #expect(abs(rows[0].frame.midY - top - 49.8) <= 1.2, "Первая строка с \(rows[0].frame.minY - top) от верха меню")
+        #expect(abs(rows[0].midY - top - 49.8) <= 1.2, "Первая строка с \(rows[0].minY - top) от верха меню")
         for (index, row) in rows.enumerated() {
-            #expect(row.frame.height == 33, "\(row.item.title): строка \(row.frame.height)")
-            if index > 0 { #expect(row.frame.minY - rows[index - 1].frame.minY == 33) }
+            #expect(row.height == 33, "строка \(index): \(row.height)")
+            if index > 0 { #expect(row.minY - rows[index - 1].minY == 33) }
         }
         let footer = try #require(view.footer, "Нет строки «Закрыть меню»")
         #expect(footer.title == "Закрыть меню" && footer.key == "esc")
-        #expect(footer.frame.minY == rows[rows.count - 1].frame.maxY && footer.frame.height == 33)
+        #expect(footer.frame.minY == rows[rows.count - 1].maxY && footer.frame.height == 33)
         let bottom = top + view.fittingMenuSize.height
         #expect(abs(bottom - footer.frame.midY - 18.6) <= 1.2, "Под серединой «Закрыть меню» \(bottom - footer.frame.midY), у Notion 18,6")
     }
@@ -76,10 +77,10 @@ struct PopupMenuLookTests {
         let view = Self.menu(.slash)
         let pixels = try ViewPixels(view, appearance: theme)
         let top = PopupMenuWindow.shadowMargin
-        let rows = view.subviews.compactMap { $0 as? PopupMenuRowView }
+        let firstRow = try #require(view.rowFrame(of: PopupMenuItem.blockKinds[0]))
         // Без рамки и скруглённых углов меню.
         let corner = Metrics.PopupMenu.cornerRadius
-        let band = NSRect(x: top + corner, y: top + 2, width: Metrics.PopupMenu.slashMenuWidth - 2 * corner, height: rows[0].frame.minY - top - 2)
+        let band = NSRect(x: top + corner, y: top + 2, width: Metrics.PopupMenu.slashMenuWidth - 2 * corner, height: firstRow.minY - top - 2)
         let background = Palette.popupMenuBackground.resolved(in: theme)
         let ink = try #require(pixels.inkBounds(in: band, over: background), "Заголовка раздела не видно")
         #expect(abs(ink.minX - top - 12) <= 1.5, "Заголовок с \(ink.minX - top) от края меню, у Notion 12")
@@ -89,23 +90,26 @@ struct PopupMenuLookTests {
         #expect(colorDistance(color, Palette.textSecondary.resolved(in: theme)) <= 0.12, "Заголовок \(color) — не textSecondary")
     }
 
-    @Test("Меню блока — те же строки 33, без заголовка раздела и «Закрыть меню»")
+    @Test("Меню блока, как у Notion 7.39: ширина 265, заголовок — тип блока, строки 29, черта над «Дублировать» добавляет 8")
     func blockMenuLayout() throws {
-        let view = Self.menu(.block)
-        let rows = view.subviews.compactMap { $0 as? PopupMenuRowView }
-        try #require(rows.count == PopupMenuItem.blockKinds.count + 2, "Типы блоков, «Цвет» и «Удалить»")
-        #expect(view.sectionTitle == nil && view.footer == nil)
-        #expect(rows.allSatisfy { $0.frame.height == 33 })
-        #expect(rows[0].frame.minY == PopupMenuWindow.shadowMargin + Metrics.PopupMenu.verticalPadding)
+        let view = Self.menu(.blockMenu, title: "Текст")
+        let items = Self.items(.blockMenu)
+        let rows = try items.map { try #require(view.rowFrame(of: $0)) }
+        #expect(view.sectionTitle == "Текст" && view.footer == nil)
+        #expect(view.fittingMenuSize.width == 265)
+        #expect(rows.allSatisfy { $0.height == 29 })
+        let top = PopupMenuWindow.shadowMargin
+        #expect(rows[0].minY == top + Metrics.PopupMenu.verticalPadding + Metrics.PopupMenu.sectionHeaderHeight)
+        #expect(abs(rows[1].minY - rows[0].minY - 29) < 0.01)
+        #expect(abs(rows[2].minY - rows[1].minY - 37) < 0.01, "Черта между группами")
+        #expect(!view.isScrollable && view.rowViews.allSatisfy { !$0.isHidden })
+        #expect(view.fittingMenuSize.height == rows[3].maxY - top + Metrics.PopupMenu.verticalPadding)
     }
 
-    @Test("Меню блока без прокрутки: «Цвет» и «Удалить» видны, а меню «/» по-прежнему прокручивается")
-    func blockMenuShowsActionsWithoutScrolling() throws {
-        let view = Self.menu(.block)
-        let rows = view.subviews.compactMap { $0 as? PopupMenuRowView }
-        #expect(rows.allSatisfy { !$0.isHidden }, "Строки меню блока скрыты прокруткой")
-        #expect(view.fittingMenuSize.height == Metrics.PopupMenu.verticalPadding * 2 + CGFloat(rows.count) * Metrics.PopupMenu.rowHeight)
+    @Test("Меню «/» по-прежнему прокручивается после 8 строк")
+    func slashMenuScrolls() {
         #expect(PopupMenuStyle.slash.maximumVisibleRows == Metrics.PopupMenu.maximumVisibleRows)
+        #expect(Self.menu(.slash).isScrollable)
     }
 
     @Test("Быстрые символы типов — как в Notion")
@@ -116,7 +120,7 @@ struct PopupMenuLookTests {
     /// Строка без выделения отдельно, в обеих темах.
     static func row(_ item: PopupMenuItem, _ style: PopupMenuStyle, theme: NSAppearance.Name) throws -> (view: PopupMenuRowView, pixels: ViewPixels) {
         let row = PopupMenuRowView(item: item, style: style)
-        row.frame = NSRect(x: 0, y: 0, width: style.width - 2 * Metrics.PopupMenu.rowInset, height: Metrics.PopupMenu.rowHeight)
+        row.frame = NSRect(x: 0, y: 0, width: style.width - 2 * Metrics.PopupMenu.rowInset, height: style.rowHeight)
         return (row, try ViewPixels(row, appearance: theme))
     }
 
@@ -135,12 +139,21 @@ struct PopupMenuLookTests {
             let color = try #require(pixels.averageInkColor(in: ink))
             #expect(colorDistance(color, Palette.textSecondary.resolved(in: theme)) <= 0.15, "\(item.title): символы \(color) — не textSecondary")
         }
-        let (view, pixels) = try Self.row(PopupMenuItem.blockKinds[1], .block, theme: theme)
+        let (view, pixels) = try Self.row(PopupMenuItem.blockKinds[1], .kindPicker, theme: theme)
         #expect(pixels.inkBounds(in: NSRect(x: view.bounds.width - 40, y: 0, width: 40, height: view.bounds.height)) == nil,
-                "В меню блока быстрых символов нет")
+                "В списке «Преобразовать в» быстрых символов нет")
+        // В меню блока справа: стрелка подменю у «Преобразовать в» и «Цвет», серая подсказка «⌘D» у «Дублировать».
+        for item in [PopupMenuItem.turnInto, .color, .duplicate] {
+            let (view, pixels) = try Self.row(item, .blockMenu, theme: theme)
+            let right = NSRect(x: view.bounds.width - 40, y: 0, width: 40, height: view.bounds.height)
+            let ink = try #require(pixels.inkBounds(in: right), "\(item.title): справа ничего нет")
+            #expect(abs(view.bounds.width - ink.maxX - 8) <= 2, "\(item.title): справа кончается в \(view.bounds.width - ink.maxX)")
+            let color = try #require(pixels.averageInkColor(in: ink))
+            #expect(colorDistance(color, Palette.textSecondary.resolved(in: theme)) <= 0.15, "\(item.title): \(color) — не textSecondary")
+        }
     }
 
-    @Test("Без пояснений: одна строка названия 14 pt по середине строки, с 40 от края меню", arguments: [PopupMenuStyle.slash, .block])
+    @Test("Без пояснений: одна строка названия 14 pt по середине строки, с 40 от края меню", arguments: [PopupMenuStyle.slash, .blockMenu])
     func singleLineTitle(style: PopupMenuStyle) throws {
         for item in Self.items(style) {
             let (view, pixels) = try Self.row(item, style, theme: .aqua)
@@ -159,7 +172,7 @@ struct PopupMenuLookTests {
         try items(style).map { item in
             let (_, pixels) = try row(item, style, theme: theme)
             let size = Metrics.PopupMenu.iconSize
-            let box = NSRect(x: Metrics.PopupMenu.rowHorizontalPadding, y: (Metrics.PopupMenu.rowHeight - size) / 2, width: size, height: size)
+            let box = NSRect(x: Metrics.PopupMenu.rowHorizontalPadding, y: (style.rowHeight - size) / 2, width: size, height: size)
             // Сглаживание краёв добавляет до полточки с каждой стороны.
             let ink = try #require(pixels.inkBounds(in: box.insetBy(dx: -2, dy: -2)), "\(item.title): значок не нарисован")
             return (item, ink, box, pixels)
@@ -167,7 +180,7 @@ struct PopupMenuLookTests {
     }
 
     @Test("Значки — маленькие, без рамки-плитки, в колонке 20 по центру; надписи «T», «H₁»… одним шрифтом",
-          arguments: [PopupMenuStyle.slash, .block])
+          arguments: [PopupMenuStyle.slash, .blockMenu])
     func iconsShareColumn(style: PopupMenuStyle) throws {
         let icons = try Self.iconInk(style, theme: .aqua)
         let side = Metrics.PopupMenu.iconInkSize
@@ -186,7 +199,7 @@ struct PopupMenuLookTests {
 
     @Test("Значок «Удалить» того же красного, что и надпись", arguments: Self.themes)
     func deleteIconIsRed(theme: NSAppearance.Name) throws {
-        let delete = try #require(try Self.iconInk(.block, theme: theme).first { $0.item.action == .delete })
+        let delete = try #require(try Self.iconInk(.blockMenu, theme: theme).first { $0.item.action == .delete })
         let color = try #require(delete.pixels.averageInkColor(in: delete.ink))
         let red = Palette.destructiveText.resolved(in: theme)
         #expect(colorDistance(color, red) <= 0.12, "\(theme.rawValue): значок \(color), надпись \(red)")

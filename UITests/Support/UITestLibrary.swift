@@ -24,11 +24,18 @@ struct UITestLibrary {
         return UITestLibrary(databaseURL: folder.appendingPathComponent("MyNotion.sqlite"))
     }
 
+    /// Место и размер окна при запуске: 1200 × 800, как `defaultSize` приложения.
+    static let startWindowFrame = "156 76 1200 800 0 0 1512 952 "
+
     @MainActor
     func launchApp(appearance: String? = nil) -> XCUIApplication {
         let app = XCUIApplication()
         // «-MyNotion.recentColors ""» перекрывает сохранённые «Последние цвета» пустым значением: у каждого запуска свои, чистые.
-        app.launchArguments = ["--database", databaseURL.path, "-MyNotion.recentColors", ""] + (appearance.map { ["--appearance", $0] } ?? [])
+        // Окно — с одного места и размера, как у нового запуска: иначе тест начинает в окне, которое оставил прошлый запуск
+        // (галерея в окне 900×700 — и колонке страницы не хватает ширины).
+        app.launchArguments = ["--database", databaseURL.path, "-MyNotion.recentColors", "",
+                               "-NSWindow Frame pages-AppWindow-1", Self.startWindowFrame]
+            + (appearance.map { ["--appearance", $0] } ?? [])
         app.launch()
         return app
     }

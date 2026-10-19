@@ -41,14 +41,17 @@ final class FileBlockView: MediaBlockView {
     var nameText: String { nameLabel.stringValue }
     var sizeText: String { sizeLabel.stringValue }
     var iconImage: NSImage? { iconView.image }
+    var iconTint: NSColor? { iconView.contentTintColor }
 
     override init(block: Block, width: CGFloat) {
         availability = MediaBlocks.availability(of: block.props.attachment)
         super.init(block: block, width: width)
         setAccessibilityIdentifier("file-block")
         let ref = block.props.attachment
-        iconView.image = ref.flatMap { UTType($0.contentType) }.map { NSWorkspace.shared.icon(for: $0) }
-            ?? NSWorkspace.shared.icon(for: .data)
+        // Как у Notion: значок листа цветом вторичного текста, виден в обеих темах (значок Finder белый на белом).
+        iconView.image = NSImage(systemSymbolName: "doc", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: Metrics.Media.fileIconSize - 4, weight: .regular))
+        iconView.contentTintColor = Palette.textSecondary
         iconView.imageScaling = .scaleProportionallyUpOrDown
         nameLabel.stringValue = ref?.name ?? "Файл"
         nameLabel.font = .systemFont(ofSize: Metrics.Media.fileNameFontSize)

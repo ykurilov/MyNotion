@@ -162,10 +162,10 @@ final class UIGalleryRunner {
             guard let pageId = library.kindSamplePages["mentions-and-dates"],
                   let empty = try? model.store.pageContent(pageId)?.blocks.last?.id else { return "нет страницы упоминаний" }
             await open(pageId)
-            PageEditorPreview.placeCaret(atEndOf: empty, in: window)
+            // Прошлая сцена (та же страница в другой теме) оставила свой «@» в этом блоке: набор заменяет его.
+            PageEditorPreview.selectAllText(ofBlock: empty, in: window)
             GalleryTarget.scrollToSelection(in: window)
-            // Каждая сцена — с нового абзаца: прошлая оставила свой «@» в пустом блоке.
-            PageEditorPreview.type("\n@" + query, in: window)
+            PageEditorPreview.type("@" + query, in: window)
             if !InlineAtomGallery.isMentionPickerOpen(in: window) { return "окно «@» не открылось" }
             if let problem = GalleryTarget.popupsProblem("окно «@»", in: window) { return problem }
 
@@ -217,12 +217,13 @@ final class UIGalleryRunner {
                 return "перетаскивание не началось"
             }
 
-        case .blockMenu:
+        case .blockMenu(let turnInto):
             await open(library.sample.page.id)
             guard let block = library.sampleBlock(.heading1), GalleryTarget.scrollToBlock(block.id, in: window),
                   PageEditorPreview.openBlockMenu(forBlock: block.id, in: window) else {
                 return "меню блока не открылось"
             }
+            if turnInto, !PageEditorPreview.openBlockMenuTurnInto(in: window) { return "подменю «Преобразовать в» не открылось" }
             if let problem = GalleryTarget.handlesProblem("ручки блока", in: window) ?? GalleryTarget.popupsProblem("меню блока", in: window) {
                 return problem
             }

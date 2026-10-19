@@ -59,7 +59,7 @@ struct GalleryCatalogTests {
     func editingStatesPresent() {
         let required: [GalleryScene] = [
             .blockHover(.paragraph), .blockHover(.heading1), .blockHover(.bulletItem), .blockHover(.checkbox),
-            .slashMenu(filter: ""), .blockMenu, .formattedSelection, .selectionAcrossBlocks, .blockSelection, .softLineBreaks, .selectionAcrossSoftBreaks,
+            .slashMenu(filter: ""), .blockMenu(turnInto: false), .blockMenu(turnInto: true), .formattedSelection, .selectionAcrossBlocks, .blockSelection, .softLineBreaks, .selectionAcrossSoftBreaks,
             .formatBar(kindMenu: false), .formatBar(kindMenu: true),
         ]
         for scene in required { #expect(scenes.contains(scene), "\(scene)") }

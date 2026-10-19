@@ -124,6 +124,12 @@ struct ColorMenuLayout: Equatable {
         return next.lowerBound + min(targetRow * columns + column, next.count - 1)
     }
 
+    /// Образец стоит первым в своём ряду.
+    func isFirstInRow(_ index: Int) -> Bool {
+        guard let section = sections.first(where: { $0.contains(index) }) else { return true }
+        return (index - section.lowerBound) % Metrics.ColorMenu.columns == 0
+    }
+
     static func == (lhs: ColorMenuLayout, rhs: ColorMenuLayout) -> Bool {
         lhs.swatchFrames == rhs.swatchFrames && lhs.headers.map(\.title) == rhs.headers.map(\.title) && lhs.height == rhs.height
     }
@@ -415,6 +421,12 @@ final class ColorMenuController {
         window?.menuView.setCurrent(textView.currentColors(for: target))
     }
 
+    /// Выбранный образец — первый в своём ряду: ← из него в подменю меню блока возвращает в меню.
+    var isSelectionAtRowStart: Bool {
+        guard isOpen, let view = window?.menuView else { return false }
+        return view.gridLayout.isFirstInRow(view.selectedIndex)
+    }
+
     /// Стрелки, Enter и Esc, пока окно открыто.
     func handleCommand(_ selector: Selector) -> Bool {
         guard isOpen, let window else { return false }
@@ -439,6 +451,7 @@ extension PageTextView {
         case .selection:
             perform(.applyColor(choice))
         case .block(let id):
+            closePopups()
             guard let index = document.index(ofBlock: id) else { return }
             selectBlocks(index..<index + 1)
             perform(.applyBlockColor(choice))
@@ -446,14 +459,15 @@ extension PageTextView {
         updateFormatBar()
     }
 
-    /// Меню блока «⋮⋮» → «Цвет»: окно цветов встаёт на место меню блока `menuFrame` (верхний левый угол) и красит блок.
-    func openColorMenu(forBlock id: UUID, replacing menuFrame: NSRect?) {
+    /// Меню блока «⋮⋮» → «Цвет»: окно цветов — подменю справа от меню `menuFrame`, верх — вровень со строкой `row`,
+    /// как у Notion; справа места нет — слева от меню.
+    func openColorMenu(forBlock id: UUID, besideRow row: NSRect, of menuFrame: NSRect) {
         colorMenu.open(.block(id)) { size, visible in
-            let top = menuFrame?.maxY ?? visible.maxY
-            var origin = NSPoint(x: menuFrame?.minX ?? visible.minX, y: top - size.height)
-            origin.x = max(visible.minX, min(origin.x, visible.maxX - size.width))
-            origin.y = max(visible.minY, min(origin.y, visible.maxY - size.height))
-            return NSRect(origin: origin, size: size)
+            var x = menuFrame.maxX - Metrics.PopupMenu.submenuOverlap
+            if x + size.width > visible.maxX { x = menuFrame.minX - size.width + Metrics.PopupMenu.submenuOverlap }
+            let top = row.maxY + Metrics.PopupMenu.verticalPadding
+            let y = max(visible.minY, min(top - size.height, visible.maxY - size.height))
+            return NSRect(x: x, y: y, width: size.width, height: size.height)
         }
     }
 }

@@ -159,7 +159,7 @@ final class ConfirmationDialogView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         Palette.modalBackdrop.setFill()
         bounds.fill()
-        PopupSurface.draw(card: cardRect)
+        PopupSurface.draw(card: cardRect, shadow: Palette.popupCardShadow)
     }
 
     override func mouseDown(with event: NSEvent) {

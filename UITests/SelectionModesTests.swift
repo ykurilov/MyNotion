@@ -55,7 +55,18 @@ final class SelectionModesTests: XCTestCase {
         app.typeKey(.delete, modifierFlags: [])
         XCTAssertEqual(app.pageBody.value as? String, "пять", "Протяжка с поля не выделила блок")
 
+        // Меню блока как у Notion: → открывает подменю «Преобразовать в» с текущим типом, ↓ и Enter меняют тип.
+        XCTAssertTrue(app.hoverFirstBlock(), "Ручки блока не появились при наведении")
+        app.blockDragHandle.click()
+        XCTAssertTrue(app.popupItem("turn-into").waitForExistence(timeout: 5), "В меню блока нет «Преобразовать в»")
+        app.typeKey(.rightArrow, modifierFlags: [])
+        XCTAssertTrue(app.popupItem("heading1").waitForExistence(timeout: 5), "Подменю «Преобразовать в» не открылось")
+        app.typeKey(.downArrow, modifierFlags: [])
+        app.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(app.popupItem("turn-into").waitForNonExistence(timeout: 5), "Меню блока не закрылось после выбора типа")
+
         app.quit()
         XCTAssertEqual(try library.savedBlocks(ofPage: "Выделение").map(\.text), ["пять"])
+        XCTAssertEqual(try library.savedBlocks(ofPage: "Выделение").map(\.kind), ["heading1"], "Подменю не сменило тип блока")
     }
 }

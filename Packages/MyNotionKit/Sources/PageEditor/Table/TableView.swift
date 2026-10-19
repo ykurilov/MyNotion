@@ -81,9 +81,10 @@ struct TableLayout {
         NSRect(x: columnX[cell.column], y: rowY[cell.row], width: columnWidths[cell.column], height: rowHeights[cell.row])
     }
 
-    /// Где стоит текст ячейки: внутри полей ячейки.
+    /// Где стоит текст ячейки: внутри полей ячейки, чуть выше — буквы по середине ячейки, как у Notion.
     func textRect(_ cell: TableCellPosition) -> NSRect {
         cellRect(cell).insetBy(dx: Metrics.Table.cellHorizontalPadding, dy: Metrics.Table.cellVerticalPadding)
+            .offsetBy(dx: 0, dy: -Metrics.Table.textRaise)
     }
 
     func cell(at point: NSPoint) -> TableCellPosition? {
