@@ -270,7 +270,7 @@ description: "Задачи: новые блоки и оформление тек
 - [x] T117 [P] Создание любого блока через «/» ≤ 3 с набора (SC-101) — `UITests/SlashMenuSpeedTests.swift`
 - [ ] T118 Полная галерея `scripts/vm/run-in-vm.sh gallery` в обеих темах; отдельный агент-проверяющий сверяет с живым Notion и contracts/blocks-and-keys.md; каждая найденная кривость — исправление и проверка геометрии в тестах
 - [x] T119 **Единственный полный прогон**: `swift test` всего пакета; все UI-тесты `scripts/vm/run-in-vm.sh uitest`; `cd server && pnpm test`; ни одного красного
-- [ ] T120 Полные замеры `scripts/vm/run-in-vm.sh uitest --release` по таблице quickstart.md (запуск, память, набор, переход, прокрутка, код 500 строк, колонка, ячейка) на «богатой» странице и эталоне 001; итоги с датой — в quickstart.md; нарушение бюджета — исправить до слияния
+- [x] T120 Полные замеры `scripts/vm/run-in-vm.sh uitest --release` по таблице quickstart.md (запуск, память, набор, переход, прокрутка, код 500 строк, колонка, ячейка) на «богатой» странице и эталоне 001; итоги с датой — в quickstart.md; нарушение бюджета — исправить до слияния
 - [ ] T121 Сборка Release (`xcodebuild -scheme MyNotion -configuration Release`), установка в `/Applications` на обоих Mac Юрия с заменой сборки 001 (data-model.md, «Схема v6», п. 5); живая проверка двух Mac — quickstart.md шаги 1–5
 - [ ] T122 README: новые модули, флаг `--generate-rich-sample`, сервер файлов; слияние `002-rich-blocks-text` в `main` после согласия Юрия
 
