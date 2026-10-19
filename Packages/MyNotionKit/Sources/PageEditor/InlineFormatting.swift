@@ -252,6 +252,11 @@ extension PageTextView {
         commitEdits()
         let selection = selectedRange()
         if pasteInlineText(from: pasteboard, replacing: selection) { return }
+        // Файлы из Finder и картинка из буфера — блоками (US5).
+        if Self.pasteboardHasAttachments(pasteboard) {
+            Task { await pasteAttachments(from: pasteboard) }
+            return
+        }
         let plain = pasteboard.string(forType: .string)
         if selection.length > 0, let plain, let url = InlineFormatting.pastedLinkURL(from: plain) {
             setLink(url)
@@ -267,6 +272,8 @@ extension PageTextView {
         }
         guard let plain else { return }
         insertPasted(NSAttributedString(string: InlineFormatting.normalizedNewlines(plain)), replacing: selection)
+        // Адрес ролика в пустой строке — меню «Встроить видео / Закладка / Ссылка».
+        if selection.length == 0 { offerPastedVideoLink(InlineFormatting.normalizedNewlines(plain), at: selection.location) }
     }
 
     private static func richText(from pasteboard: NSPasteboard) -> NSAttributedString? {

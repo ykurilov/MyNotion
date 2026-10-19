@@ -1,9 +1,9 @@
 import NotesCore
 
-/// Виды блоков, которые редактор рисует сам — их модули он знает напрямую (код, формула, оглавление).
-/// Остальные (картинки, файлы, видео) регистрирует приложение (`BlockViewFactories`).
+/// Виды кода, формулы и оглавления: их модули редактор знает напрямую. Колонки и таблица — `BuiltInBlockViews`,
+/// картинки, файлы, видео регистрирует приложение (`BlockViewFactories`).
 @MainActor
-enum BuiltInBlockViews {
+enum CodeMathBlockViews {
     private static var isRegistered = false
 
     static func registerOnce() {

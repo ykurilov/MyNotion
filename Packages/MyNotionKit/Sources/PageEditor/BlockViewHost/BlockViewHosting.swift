@@ -35,8 +35,10 @@ final class BlockViewHosting {
                 let frame = fragment.layoutFragmentFrame.offsetBy(dx: origin.x, dy: origin.y)
                 guard frame.minY <= area.maxY else { return false }
                 let offset = storage.offset(from: storage.documentRange.location, to: fragment.rangeInElement.location)
+                // Колонки и таблицу ставит их раскладка (`Flows/EmbeddedViewLayout`): здесь их вид не ставится второй раз.
                 guard offset < textStorage.length,
                       let attachment = textStorage.attribute(.attachment, at: offset, effectiveRange: nil) as? BlockAttachment,
+                      !attachment.block.kind.hostsEmbeddedEditors,
                       let line = fragment.textLineFragments.first else { return true }
                 // Вид — по месту знака-вложения в строке: левее — отступ вложенности, сверху — отступ абзаца.
                 let lineBounds = line.typographicBounds

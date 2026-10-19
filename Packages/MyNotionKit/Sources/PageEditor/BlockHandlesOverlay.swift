@@ -48,12 +48,17 @@ final class BlockHandlesOverlay: NSView {
 
     override var isFlipped: Bool { true }
 
+    /// Где живут ручки, призрак и линия сброса: текст страницы. У колонки ручки стоят левее её края, а призрак
+    /// едет над всей страницей — поэтому они в редакторе страницы, а рамки переводятся из координат колонки.
+    private var chromeHost: PageTextView { textView.pageEditor }
+
     /// Показать ручки у блока `index`, строка которого — `line` (координаты контейнера).
     func show(forBlockAt index: Int, line: BlockLine) {
         guard !isDragging else { return }
-        if superview == nil { textView.addSubview(self) }
-        if dropIndicator.superview == nil { textView.addSubview(dropIndicator) }
-        if dragGhost.superview == nil { textView.addSubview(dragGhost) }
+        let host = chromeHost
+        if superview !== host { host.addSubview(self) }
+        if dropIndicator.superview !== host { host.addSubview(dropIndicator) }
+        if dragGhost.superview !== host { host.addSubview(dragGhost) }
         let block = textView.document.blocks[index]
         blockId = block.id
         let origin = textView.textContainerOrigin
@@ -63,7 +68,8 @@ final class BlockHandlesOverlay: NSView {
         // По середине строчных букв первой строки, как маркер списка: середина строки с отступом абзаца выше на 3–5.
         let font = Typography.line(for: PageTextStorageMapper.textStyle(of: block.kind)).font
         let centerY = origin.y + line.baseline - font.xHeight / 2
-        frame = NSRect(x: columnLeft - Metrics.BlockHandles.addButtonLeadingOffset, y: centerY - height / 2, width: width, height: height)
+        frame = host.convert(NSRect(x: columnLeft - Metrics.BlockHandles.addButtonLeadingOffset, y: centerY - height / 2, width: width, height: height),
+                             from: textView)
         isHidden = false
     }
 
@@ -86,9 +92,10 @@ final class BlockHandlesOverlay: NSView {
         guard let start = dragStart, !isCancelled else { return }
         let distance = hypot(event.locationInWindow.x - start.x, event.locationInWindow.y - start.y)
         if !isDragging, distance < Metrics.BlockHandles.dragThreshold { return }
-        if !isDragging { beginDrag(at: textView.convert(start, from: nil)) }
-        textView.autoscroll(with: event)
-        let point = textView.convert(event.locationInWindow, from: nil)
+        let host = chromeHost
+        if !isDragging { beginDrag(at: host.convert(start, from: nil)) }
+        host.autoscroll(with: event)
+        let point = host.convert(event.locationInWindow, from: nil)
         // Кадр за кадром без анимаций слоёв: призрак и линия не отстают от мыши и не мигают.
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -97,14 +104,33 @@ final class BlockHandlesOverlay: NSView {
             dragGhost.setFrameOrigin(NSPoint(x: ghostAnchor.origin.x + point.x - ghostAnchor.pointer.x,
                                              y: ghostAnchor.origin.y + point.y - ghostAnchor.pointer.y))
         }
-        guard let gap = textView.dropGap(atY: point.y) else {
+        guard let blockId, let frame = dropIndicatorFrame(forBlock: blockId, atWindowPoint: event.locationInWindow) else {
             dropIndicator.isHidden = true
             return
         }
-        let origin = textView.textContainerOrigin
-        let height = Metrics.BlockHandles.dropIndicatorHeight
-        dropIndicator.frame = NSRect(x: origin.x, y: gap.y - height / 2, width: Metrics.Page.columnWidth, height: height)
+        dropIndicator.frame = frame
         dropIndicator.isHidden = false
+    }
+
+    /// Линия места сброса (координаты страницы): между блоками — во всю ширину их потока, у правого края блока —
+    /// вертикальная полоса по его высоте (`FlowDragCoordinator`).
+    private func dropIndicatorFrame(forBlock blockId: UUID, atWindowPoint point: NSPoint) -> NSRect? {
+        let host = chromeHost
+        switch textView.dropTarget(forBlock: blockId, atWindowPoint: point) {
+        case .gap?:
+            let editor = FlowDragCoordinator.editor(atWindowPoint: point, in: host)
+            guard let gap = editor.dropGap(atY: editor.convert(point, from: nil).y) else { return nil }
+            let height = Metrics.BlockHandles.dropIndicatorHeight
+            let width = editor.textContainer?.size.width ?? Metrics.Page.columnWidth
+            return host.convert(NSRect(x: editor.textContainerOrigin.x, y: gap.y - height / 2, width: width, height: height), from: editor)
+        case .besideRight(let targetId)?:
+            guard let frame = host.frameInWindow(ofBlock: targetId) else { return nil }
+            let local = host.convert(frame, from: nil)
+            let width = Metrics.Columns.dropBarWidth
+            return NSRect(x: local.maxX - width / 2, y: local.minY, width: width, height: local.height)
+        case nil:
+            return nil
+        }
     }
 
     /// Мышь сдвинулась дальше порога: снять копию блока с вложенными и показать её на месте блока.
@@ -115,9 +141,9 @@ final class BlockHandlesOverlay: NSView {
         guard let blockId, let index = textView.document.index(ofBlock: blockId),
               let snapshot = textView.snapshot(ofBlocks: index..<BlockMoveController.subtreeEnd(textView.document.blocks, of: index)) else { return }
         dragGhost.image = snapshot.image
-        dragGhost.frame = snapshot.frame
-        ghostAnchor = (pointer, snapshot.frame.origin)
-        textView.addSubview(dragGhost, positioned: .above, relativeTo: nil)
+        dragGhost.frame = chromeHost.convert(snapshot.frame, from: textView)
+        ghostAnchor = (pointer, dragGhost.frame.origin)
+        chromeHost.addSubview(dragGhost, positioned: .above, relativeTo: nil)
         dragGhost.isHidden = false
     }
 
@@ -143,11 +169,7 @@ final class BlockHandlesOverlay: NSView {
         isCancelled = false
         guard let blockId, !wasCancelled else { return }
         if wasDragging {
-            let point = textView.convert(event.locationInWindow, from: nil)
-            if let gap = textView.dropGap(atY: point.y) {
-                textView.window?.makeFirstResponder(textView)
-                textView.moveBlock(blockId, toGap: gap.index)
-            }
+            textView.dropBlock(blockId, atWindowPoint: event.locationInWindow)
             return
         }
         guard let window else { return }
@@ -300,21 +322,35 @@ extension PageTextView {
 
     public override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
-        let point = convert(event.locationInWindow, from: nil)
+        updateBlockHandles(atWindowPoint: event.locationInWindow)
+    }
+
+    /// Ручки у блока под мышью. Над колонками ручки — у блока колонки под мышью, а не у всего блока колонок.
+    func updateBlockHandles(atWindowPoint windowPoint: NSPoint) {
+        guard showsBlockHandles else { return }
+        let point = convert(windowPoint, from: nil)
         let origin = textContainerOrigin
         let left = origin.x - Metrics.BlockHandles.addButtonLeadingOffset
-        guard point.x >= left, point.x <= origin.x + Metrics.Page.columnWidth,
+        let width = textContainer?.size.width ?? Metrics.Page.columnWidth
+        guard point.x >= left, point.x <= origin.x + width,
               let index = blockIndex(atY: point.y), let line = markerLine(ofBlockAt: index) else {
-            if !blockHandles.frame.contains(point) { hideBlockHandles() }
+            if !blockHandles.frame.contains(pageEditor.convert(windowPoint, from: nil)) { hideBlockHandles() }
             return
+        }
+        if document.blocks[index].kind == .columnList, let columns = columnsView(for: document.blocks[index].id) {
+            let local = columns.convert(windowPoint, from: nil)
+            if let editor = columns.editors.min(by: { abs($0.frame.midX - local.x) < abs($1.frame.midX - local.x) }) {
+                hideBlockHandles()
+                editor.updateBlockHandles(atWindowPoint: windowPoint)
+                return
+            }
         }
         blockHandles.show(forBlockAt: index, line: line)
     }
 
     public override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
-        let point = convert(event.locationInWindow, from: nil)
-        if !blockHandles.frame.contains(point) { hideBlockHandles() }
+        if !blockHandles.frame.contains(pageEditor.convert(event.locationInWindow, from: nil)) { hideBlockHandles() }
     }
 
     func hideBlockHandles() {
@@ -338,7 +374,7 @@ extension PageTextView {
     func snapshot(ofBlocks range: Range<Int>) -> (image: NSImage, frame: NSRect)? {
         let frames = visibleBlockFrames().filter { range.contains($0.index) }.map(\.frame)
         guard let top = frames.map(\.lowerBound).min(), let bottom = frames.map(\.upperBound).max() else { return nil }
-        let rect = NSRect(x: textContainerOrigin.x, y: top, width: Metrics.Page.columnWidth, height: bottom - top)
+        let rect = NSRect(x: textContainerOrigin.x, y: top, width: textContainer?.size.width ?? Metrics.Page.columnWidth, height: bottom - top)
         guard let bitmap = bitmapImageRepForCachingDisplay(in: rect) else { return nil }
         let chrome = ([blockHandles, emptyParagraphHint, slashQueryHighlight, caret.view] + insertionIndicators(in: self)).filter { !$0.isHidden }
         chrome.forEach { $0.isHidden = true }

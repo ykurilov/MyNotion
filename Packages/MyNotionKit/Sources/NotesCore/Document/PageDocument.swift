@@ -32,6 +32,9 @@ public final class PageDocument {
     @ObservationIgnored private var flowOrder: [UUID: [UUID]] = [:]
     /// Удалённые контейнеры и их контейнер — для места сирот.
     @ObservationIgnored private var removedContainers: [UUID: UUID?] = [:]
+    /// Содержимое контейнеров, удалённых правкой этого окна: ⌘Z удаления таблицы или колонок возвращает
+    /// строки, столбцы, ячейки и блоки колонок с прежними id.
+    @ObservationIgnored private var removedContents: [UUID: [Block]] = [:]
 
     /// Сообщает автосохранению о каждой правке.
     @ObservationIgnored var didEdit: (@MainActor () -> Void)?
@@ -156,9 +159,18 @@ public final class PageDocument {
 
         var lastKey = lowerKey
         var newBlocks: [Block] = []
+        /// Новый контейнер из черновика удалённого (⌘Z удаления) — содержимое прежнего, его прямые дети — в новом.
+        var restoredContents: [Block] = []
         for (position, draft) in drafts.enumerated() {
             let existing = assigned[position].flatMap { replacedById[$0] }
             var block = existing ?? Block(pageId: pageId, sortKey: .between(lastKey, upperKey), containerId: containerId)
+            if existing == nil, let oldId = draft.id, byId[oldId] == nil, let contents = removedContents.removeValue(forKey: oldId) {
+                restoredContents += contents.map { content in
+                    var content = content
+                    if content.containerId == oldId { content.containerId = block.id }
+                    return content
+                }
+            }
             if !floating.contains(position) {
                 block.containerId = containerId
                 if kept.contains(position), let key = existingKeys[position] {
@@ -173,6 +185,7 @@ public final class PageDocument {
         }
 
         let removed = replaced.filter { !used.contains($0.id) }.map(\.id)
+        rememberContents(of: removed)
         let removedWithContents = removed + removed.flatMap(contents(of:))
         let removedFlows = removedWithContents.filter { flowOrder[$0] != nil }
         for id in removedWithContents {
@@ -195,9 +208,17 @@ public final class PageDocument {
             blocks.replaceSubrange(start..<end, with: newBlocks)
             reindex()
         }
+        for content in restoredContents {
+            byId[content.id] = content
+            removedBlockIds.remove(content.id)
+            markEdited(content.id, current: content)
+        }
+        if !restoredContents.isEmpty { rebuildFlows() }
         if !newBlocks.isEmpty || !replaced.isEmpty { didEdit?() }
 
         var change = ExternalChange()
+        change.insertedBlockIds = Set(restoredContents.map(\.id))
+        change.changedFlowIds = Set(restoredContents.compactMap(\.containerId))
         change.removedBlockIds = Set(removedWithContents)
         for block in newBlocks {
             if let old = replacedById[block.id] {
@@ -206,7 +227,7 @@ public final class PageDocument {
                 change.insertedBlockIds.insert(block.id)
             }
         }
-        if let containerId, change.touchesBlocks { change.changedFlowIds.insert(containerId) }
+        if change.touchesBlocks { change.changedFlowIds.insert(containerId ?? pageId) }
         change.changedFlowIds.formUnion(removedFlows)
         postLocalEdits(change, origin: origin)
         return newBlocks.map(\.id)
@@ -216,6 +237,68 @@ public final class PageDocument {
     private func contents(of containerId: UUID) -> [UUID] {
         guard let order = flowOrder[containerId] else { return [] }
         return order + order.flatMap(contents(of:))
+    }
+
+    /// Запомнить содержимое удаляемых контейнеров до конца жизни окна: ⌘Z вернёт его.
+    private func rememberContents(of removed: [UUID]) {
+        for id in removed where flowOrder[id] != nil {
+            removedContents[id] = contents(of: id).compactMap { byId[$0] }
+        }
+    }
+
+    // MARK: Правка нескольких потоков сразу
+
+    /// Записать блоки как есть — новые или изменённые, с их местом (`containerId`, `sortKey`) — и удалить блоки
+    /// с содержимым одной правкой: таблицы, колонки, перенос между потоками. Возвращает обратную правку:
+    /// её `apply` возвращает документ как был, с теми же id (⌘Z).
+    @discardableResult
+    public func apply(_ changes: BlockChanges, origin: AnyObject? = nil) -> BlockChanges {
+        let upsertIds = Set(changes.upserts.map(\.id))
+        let removalRoots = changes.removals.filter { byId[$0] != nil && !upsertIds.contains($0) }
+        var removedIds: [UUID] = []
+        for id in removalRoots + removalRoots.flatMap(contents(of:)) where !removedIds.contains(id) && !upsertIds.contains(id) {
+            removedIds.append(id)
+        }
+        var inverse = BlockChanges()
+        inverse.upserts = changes.upserts.compactMap { byId[$0.id] } + removedIds.compactMap { byId[$0] }
+        inverse.removals = changes.upserts.filter { byId[$0.id] == nil }.map(\.id)
+        guard !changes.upserts.isEmpty || !removedIds.isEmpty else { return inverse }
+
+        var change = ExternalChange()
+        let oldPageOrder = blocks.map(\.id)
+        let oldFlowOrder = flowOrder
+        for id in removedIds {
+            if let containerId = byId[id]?.containerId { change.changedFlowIds.insert(containerId) }
+            if flowOrder[id] != nil { change.changedFlowIds.insert(id) }
+            byId[id] = nil
+            unsavedBlockIds.remove(id)
+            if savedBlocks[id] != nil { removedBlockIds.insert(id) }
+        }
+        change.removedBlockIds = Set(removedIds)
+        for block in changes.upserts {
+            if let old = byId[block.id] {
+                if old != block { change.changedBlockIds.insert(block.id) }
+                if old.containerId != block.containerId || old.sortKey != block.sortKey, let containerId = old.containerId {
+                    change.changedFlowIds.insert(containerId)
+                }
+            } else {
+                change.insertedBlockIds.insert(block.id)
+            }
+            if let containerId = block.containerId { change.changedFlowIds.insert(containerId) }
+            byId[block.id] = block
+            removedBlockIds.remove(block.id)
+            markEdited(block.id, current: block)
+        }
+        rebuildFlows()
+        // Блок, ушедший из потока страницы в колонку или вернувшийся, меняет абзацы страницы.
+        let pageMembers = Set(blocks.map(\.id))
+        for id in oldPageOrder where byId[id] != nil && !pageMembers.contains(id) { change.changedBlockIds.insert(id) }
+        for id in Set(oldFlowOrder.keys).union(flowOrder.keys) where oldFlowOrder[id] != flowOrder[id] { change.changedFlowIds.insert(id) }
+        let touched = change.changedBlockIds.union(change.insertedBlockIds).union(change.removedBlockIds)
+        if oldPageOrder != blocks.map(\.id) || touched.contains(where: pageMembers.contains) { change.changedFlowIds.insert(pageId) }
+        didEdit?()
+        postLocalEdits(change, origin: origin)
+        return inverse
     }
 
     /// Места черновиков, чьи ключи можно оставить: самая длинная возрастающая цепочка ключей.
@@ -258,7 +341,7 @@ public final class PageDocument {
         public var changedBlockIds: Set<UUID> = []
         public var insertedBlockIds: Set<UUID> = []
         public var removedBlockIds: Set<UUID> = []
-        /// Контейнеры, чей поток поменялся: блоки внутри, их порядок или состав.
+        /// Потоки, которые поменялись: блоки внутри, их порядок или состав. Контейнер — его id, поток страницы — id страницы.
         public var changedFlowIds: Set<UUID> = []
         public var titleChanged = false
         public var iconChanged = false
@@ -352,6 +435,9 @@ public final class PageDocument {
         let pageMembers = Set(pageOrder)
         for id in oldPageOrder where newIds.contains(id) && !pageMembers.contains(id) { change.changedBlockIds.insert(id) }
         let touched = change.changedBlockIds.union(change.insertedBlockIds).union(change.removedBlockIds)
+        if oldPageOrder != pageOrder || touched.contains(where: pageMembers.contains) || oldPageOrder.contains(where: touched.contains) {
+            change.changedFlowIds.insert(pageId)
+        }
         for containerId in Set(oldFlowOrder.keys).union(flowOrder.keys) {
             let old = oldFlowOrder[containerId] ?? []
             let new = flowOrder[containerId] ?? []
@@ -521,6 +607,27 @@ public final class PageDocument {
             }
         }
         return nil
+    }
+}
+
+/// Правка блоков нескольких потоков (`PageDocument.apply`): блоки, которые записать как есть, и id удаляемых.
+public struct BlockChanges: Sendable, Hashable {
+    public var upserts: [Block]
+    public var removals: [UUID]
+
+    public init(upserts: [Block] = [], removals: [UUID] = []) {
+        self.upserts = upserts
+        self.removals = removals
+    }
+
+    public var isEmpty: Bool { upserts.isEmpty && removals.isEmpty }
+
+    /// Обе правки подряд: блок, записанный обеими, — в версии второй.
+    public func followed(by other: BlockChanges) -> BlockChanges {
+        let later = Set(other.upserts.map(\.id))
+        let laterRemovals = Set(other.removals)
+        return BlockChanges(upserts: upserts.filter { !later.contains($0.id) && !laterRemovals.contains($0.id) } + other.upserts,
+                            removals: removals.filter { !later.contains($0) } + other.removals)
     }
 }
 

@@ -212,7 +212,7 @@ extension PageTextView {
 
     /// Перейти к блоку (поиск страниц, оглавление): свёрнутые предки раскрываются, курсор — в начало блока.
     public func revealBlock(_ id: UUID) {
-        guard let index = document.index(ofBlock: id) else { return }
+        guard let index = document.index(ofBlock: id) else { return revealNestedBlock(id) }
         commitEdits()
         expandAncestors(ofBlockAt: index)
         window?.makeFirstResponder(self)

@@ -24,7 +24,9 @@ public struct MarkdownBlockWriter: Sendable {
 
     /// `blocks` — блоки страницы всех потоков. Пишется поток страницы; колонки и таблицы пишут свои потоки сами
     /// (`BlockWriters/`). Блок, чьего контейнера нет, пишется в конце страницы.
-    public func markdown(for blocks: [Block], resolveLink: (UUID) -> PageLinkTarget?) -> String {
+    /// `resolveAttachment` — путь копии файла от файла страницы; `nil` — файла на этом Mac нет.
+    public func markdown(for blocks: [Block], resolveLink: (UUID) -> PageLinkTarget?,
+                         resolveAttachment: (AttachmentRef) -> String? = { _ in nil }) -> String {
         let ids = Set(blocks.map(\.id))
         var flows: [UUID: [Block]] = [:]
         var pageFlow: [Block] = []
@@ -34,10 +36,13 @@ public struct MarkdownBlockWriter: Sendable {
             if ids.contains(containerId) { flows[containerId, default: []].append(block) } else { orphans.append(block) }
         }
         return withoutActuallyEscaping(resolveLink) { resolveLink in
-            func render(_ flow: [Block]) -> String {
-                write(flow, context: MarkdownWriteContext(flow: { flows[$0] ?? [] }, render: render, resolveLink: resolveLink))
+            withoutActuallyEscaping(resolveAttachment) { resolveAttachment in
+                func render(_ flow: [Block]) -> String {
+                    write(flow, context: MarkdownWriteContext(flow: { flows[$0] ?? [] }, render: render, resolveLink: resolveLink,
+                                                              resolveAttachment: resolveAttachment))
+                }
+                return render(pageFlow + orphans)
             }
-            return render(pageFlow + orphans)
         }
     }
 

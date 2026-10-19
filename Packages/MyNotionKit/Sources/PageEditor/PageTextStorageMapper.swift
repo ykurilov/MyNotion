@@ -37,14 +37,19 @@ extension NSAttributedString.Key {
 /// и с атрибутами по умолчанию — курсор уезжает с места блока. Строку после последнего перевода курсор не занимает.
 @MainActor
 public final class PageTextStorageMapper: NSObject {
-    public let document: PageDocument
+    /// Поток, который показывает этот текст: страница, колонка или ячейка (`FlowDocument`).
+    public let document: FlowDocument
     public let textStorage: NSTextStorage
     /// Отрезок текста с правками, ещё не переданными документу.
     private var pendingRange: NSRange?
     /// Мэппер сам меняет текст или атрибуты — это не правки пользователя.
     private var isApplying = false
 
-    public init(document: PageDocument, textStorage: NSTextStorage) {
+    public convenience init(document: PageDocument, textStorage: NSTextStorage) {
+        self.init(flow: FlowDocument(document), textStorage: textStorage)
+    }
+
+    init(flow document: FlowDocument, textStorage: NSTextStorage) {
         self.document = document
         self.textStorage = textStorage
         super.init()

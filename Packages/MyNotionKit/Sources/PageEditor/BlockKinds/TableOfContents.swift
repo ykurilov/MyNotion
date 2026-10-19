@@ -105,7 +105,7 @@ final class TableOfContentsTracker {
 
     init(textView: PageTextView) {
         self.textView = textView
-        let document = textView.document
+        let document = textView.document.pageDocument
         TableOfContents.track(document)
         for name in [PageDocument.didApplyLocalEdits, PageDocument.didApplyExternalChanges] {
             observers.append(NotificationCenter.default.addObserver(forName: name, object: document, queue: nil) { [weak self] _ in
@@ -120,7 +120,7 @@ final class TableOfContentsTracker {
 
     private func documentDidChange() {
         guard let textView else { return }
-        let document = textView.document
+        let document = textView.document.pageDocument
         guard document.blocks.contains(where: { $0.kind == .tableOfContents }) || !(TableOfContents.entries(forPage: document.page.id).isEmpty) else {
             return
         }

@@ -10,6 +10,14 @@ public protocol BlockViewFactory: AnyObject {
     func makeView(for block: Block, context: BlockViewContext) -> NSView?
     /// Высота строки блока при ширине колонки `width`; `nil` — высота заглушки.
     func height(for block: Block, width: CGFloat) -> CGFloat?
+    /// То же, когда известен редактор: высота колонок и таблицы зависит от их блоков в документе.
+    func height(for block: Block, width: CGFloat, context: BlockViewContext) -> CGFloat?
+}
+
+extension BlockViewFactory {
+    public func height(for block: Block, width: CGFloat, context: BlockViewContext) -> CGFloat? {
+        height(for: block, width: width)
+    }
 }
 
 /// Где живёт вид: текст страницы (для правок блока, например подписи) и ширина колонки.

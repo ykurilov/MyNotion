@@ -31,6 +31,15 @@ public struct SyncTiming: Sendable {
                                                 snapshotEvery: 1_000, tombstoneCheckInterval: .milliseconds(200))
 }
 
+/// Файлы рядом с циклом пачек (research R10): модуль вложений отправляет и докачивает их сам.
+/// Цикл запускает работу, только когда её очередь не пуста, и не ждёт её: пачка с блоком уходит раньше файла.
+public protocol SyncFileWork: AnyObject, Sendable {
+    /// Есть ли что отправить или скачать сейчас; дёшево — спрашивается на каждом круге цикла.
+    func hasPendingWork() -> Bool
+    /// Работать, пока очередь не опустеет или не пропадёт связь.
+    func run() async
+}
+
 /// Цикл синхронизации (T078): отправить очередь, дождаться пачек других Mac, применить, подтвердить.
 /// Новая правка будит цикл сразу; без сети — повтор с паузой, правки ждут в очереди (FR-020).
 @MainActor
@@ -53,6 +62,9 @@ public final class SyncEngine {
     @ObservationIgnored private var wakeRequested = false
     @ObservationIgnored private var enqueueObserver: (any NSObjectProtocol)?
     @ObservationIgnored private var lastTombstoneCheck: ContinuousClock.Instant?
+    /// Отправка и докачка файлов; ставит приложение.
+    @ObservationIgnored public var fileWork: (any SyncFileWork)?
+    @ObservationIgnored private var fileTask: Task<Void, Never>?
     /// Версия формата отправляемых пачек; меняют только тесты.
     @ObservationIgnored var formatVersionForTests: Int?
 
@@ -79,6 +91,8 @@ public final class SyncEngine {
     public func stop() {
         loop?.cancel()
         loop = nil
+        fileTask?.cancel()
+        fileTask = nil
         cancelWaiting?()
         cancelWaiting = nil
         if let enqueueObserver { NotificationCenter.default.removeObserver(enqueueObserver) }
@@ -105,8 +119,10 @@ public final class SyncEngine {
                 try await sendQueue()
                 let isQueueEmpty = try outbox.isEmpty()
                 if isQueueEmpty, !status.isError || failures == 0 { markReady() }
+                startFileWorkIfNeeded()
                 let hasMore = try await receive(wait: isQueueEmpty ? timing.longPollSeconds : 0)
                 failures = 0
+                startFileWorkIfNeeded()
                 try await collectTombstonesIfDue()
                 try await uploadSnapshotIfDue()
                 if try outbox.isEmpty() { markReady() } else { status = .sending }
@@ -121,6 +137,15 @@ public final class SyncEngine {
                 let delays = timing.retryDelays
                 await pause(delays[min(failures, delays.count) - 1])
             }
+        }
+    }
+
+    /// Файлы — своей задачей рядом с циклом, одна за раз; пустая очередь ничего не запускает.
+    private func startFileWorkIfNeeded() {
+        guard fileTask == nil, let fileWork, fileWork.hasPendingWork() else { return }
+        fileTask = Task { [weak self] in
+            await fileWork.run()
+            self?.fileTask = nil
         }
     }
 

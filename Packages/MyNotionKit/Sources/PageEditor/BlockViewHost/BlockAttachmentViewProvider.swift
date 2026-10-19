@@ -18,7 +18,7 @@ final class BlockAttachmentViewProvider: NSTextAttachmentViewProvider {
     static func makeHostedView(for attachment: BlockAttachment, textView: PageTextView?) -> BlockAttachmentHostView {
         let width = textView?.textContainer?.size.width ?? 720
         let host = BlockAttachmentHostView(blockId: attachment.blockId, textView: textView)
-        host.frame = NSRect(x: 0, y: 0, width: width, height: attachment.height(forWidth: width))
+        host.frame = NSRect(x: 0, y: 0, width: width, height: attachment.height(forWidth: width, in: textView))
         let context = BlockViewContext(textView: textView, width: width)
         if let content = BlockViewFactories.shared.factory(for: attachment.block.kind)?.makeView(for: attachment.block, context: context) {
             content.frame = host.bounds

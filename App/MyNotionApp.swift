@@ -1,4 +1,5 @@
 import AppKit
+import Attachments
 import MarkdownExport
 import NotesCore
 import NotionImport
@@ -44,6 +45,7 @@ struct MyNotionApp: App {
             if options.uiGalleryURL != nil { galleryLibrary = try UIGalleryRunner.prepareLibrary(in: store) }
             // Служебные запуски (галерея, замеры, снимки) с сервером не связываются.
             let pages = PagesLibrary(store: store, startsSync: options.allowsSync, reminders: reminders)
+            if options.uiGalleryURL != nil || options.generatesRichSample { SampleMedia.materialize(in: store, attachments: pages.attachments) }
             if let automation = options.syncAutomation { SyncAutomation.start(automation, controller: pages.sync) }
             return pages
         }
@@ -57,10 +59,10 @@ struct MyNotionApp: App {
             Self.importNotionAndExit(from: library, source: importURL)
         }
         exportController = pages.map { pages in
-            MarkdownExportController(store: pages.store, saveOpenPages: { pages.saveAll() })
+            MarkdownExportController(store: pages.store, attachments: pages.attachments, saveOpenPages: { pages.saveAll() })
         }
         importController = pages.map { pages in
-            NotionImportController(store: pages.store, saveOpenPages: { pages.saveAll() },
+            NotionImportController(store: pages.store, attachments: pages.attachments, saveOpenPages: { pages.saveAll() },
                                    showBranch: { (pages.activeWindow ?? pages.firstWindow).showImportedBranch($0) })
         }
         AppDelegate.importController = importController
@@ -78,6 +80,7 @@ struct MyNotionApp: App {
             PageCommands(library: try? library.get())
             SidebarToggleCommands(library: try? library.get())
             FormatCommands()
+            PageFindCommands()
             ExportCommands(controller: exportController)
             NotionImportCommands(controller: importController)
         }
@@ -92,6 +95,8 @@ struct MyNotionApp: App {
         // Индекс поиска и очередь синхронизации пишутся в той же транзакции, что и записи (research R6, R4) —
         // до первой записи. Пока синхронизация не включена, очередь ничего не пишет.
         store.addWriteHook(SearchIndexer())
+        // Ссылки на файлы пересчитываются в той же транзакции, что блоки (data-model.md, «Attachment»).
+        store.addWriteHook(AttachmentReferenceCounter(onQueueChange: AttachmentQueueSignal.fire))
         Outbox.install(on: store)
         // Импорт из Notion, прерванный падением приложения, не оставляет недоделанной ветки (FR-027).
         // Не вышло (диск полон) — записи всё равно открываются, журнал остаётся running и откатится в следующий раз.
@@ -115,8 +120,11 @@ struct MyNotionApp: App {
     /// Служебная выгрузка без окна выбора папки: путь результата — в стандартный вывод, код выхода 0 или 1.
     private static func exportMarkdownAndExit(from library: Result<PagesLibrary, any Error>, into folder: URL) -> Never {
         do {
-            let result = try MarkdownExporter(store: library.get().store).export(into: folder)
+            let pages = try library.get()
+            let attachments = pages.attachments
+            let result = try MarkdownExporter(store: pages.store, attachmentFile: { attachments.fileURL(for: $0) }).export(into: folder)
             print("Выгрузка готова: \(result.folder.path) (страниц: \(result.pageCount), блоков: \(result.blockCount))")
+            if result.missingFileCount > 0 { print(MarkdownExportResult.missingFilesMessage(count: result.missingFileCount)) }
             exit(0)
         } catch {
             FileHandle.standardError.write(Data("Выгрузка не удалась: \(error.localizedDescription)\n".utf8))
@@ -128,10 +136,11 @@ struct MyNotionApp: App {
     /// 2 — эта выгрузка уже импортирована, повтор не начат.
     private static func importNotionAndExit(from library: Result<PagesLibrary, any Error>, source: URL) -> Never {
         do {
-            let store = try library.get().store
+            let pages = try library.get()
+            let store = pages.store
             let prepared = try NotionExportUnpacker().prepare(source)
             defer { prepared.discard() }
-            let importer = NotionImporter(store: store)
+            let importer = NotionImporter(store: store, attachments: pages.attachments)
             if let previous = try importer.previousImport(withFingerprint: prepared.fingerprint) {
                 FileHandle.standardError.write(Data("Эта выгрузка уже импортирована \(NotionImportRepeatView.dateText(previous.startedAt)) (страниц: \(previous.importedPages)), повтор не начат\n".utf8))
                 exit(2)

@@ -7,8 +7,9 @@ import VisualStyle
 /// Системное поведение текста — выделение, ⌘Z, проверка орфографии, ввод с IME, ⌘F — от `NSTextView`;
 /// правки уходят в `PageDocument` через `PageTextStorageMapper`. Над текстом — шапка с иконкой и названием.
 @MainActor
-public final class PageTextView: NSTextView {
-    public let document: PageDocument
+public class PageTextView: NSTextView {
+    /// Блоки, которые правит этот редактор: поток страницы, колонки или ячейка таблицы (`FlowDocument`).
+    public let document: FlowDocument
     public let header: PageHeaderView
     private(set) var mapper: PageTextStorageMapper!
     let emptyParagraphHint = NSTextField(labelWithString: "Введите «/» для выбора блока")
@@ -45,11 +46,17 @@ public final class PageTextView: NSTextView {
     /// ⌘-щелчок по ссылке: открыть адрес (по умолчанию — в браузере по умолчанию).
     public var openURL: @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) }
     let layoutDelegate = BlockLayoutDelegate()
+    /// Виды колонок и таблиц в тексте и их высоты (`Flows/`).
+    let embeddedViews = EmbeddedBlockViews()
+    /// ⌘F по всей странице; у редакторов колонок и ячеек — не используется, поиск у страницы (`PageFind/`).
+    private(set) lazy var pageFind = PageFind(root: self)
     /// Абзацы детей свёрнутых переключателей: не раскладываются (research R1).
     let hiddenParagraphs = HiddenParagraphs()
     /// Свёрнутые переключатели этого Mac и отступы по поддеревьям (`Collapsing/`).
     let collapsedParagraphs = CollapsedParagraphs()
     let popups = EditorPopupController()
+    /// Вставка картинок, файлов, видео и закладок: меню вставленной ссылки, окно «Выбрать файл…» (US5).
+    let mediaInsertion = MediaInsertionState()
     /// Упоминания, даты и окно «@» (US3).
     let inlineAtoms = InlineAtomsState()
     /// Виды блоков кода страницы и курсор между ними и текстом (US4).
@@ -88,10 +95,15 @@ public final class PageTextView: NSTextView {
     /// Протяжка мышью с поля: где нажали и сдвинулась ли мышь.
     var marginDrag: (start: NSPoint, moved: Bool)?
 
-    public init(document: PageDocument, initialFocus: InitialFocus) {
+    public convenience init(document: PageDocument, initialFocus: InitialFocus) {
+        self.init(flow: FlowDocument(document), initialFocus: initialFocus)
+    }
+
+    init(flow document: FlowDocument, initialFocus: InitialFocus) {
         self.document = document
         header = PageHeaderView(page: document.page)
         pendingFocus = initialFocus
+        BuiltInBlockViews.register()
 
         let contentStorage = NSTextContentStorage()
         let layoutManager = NSTextLayoutManager()
@@ -113,9 +125,9 @@ public final class PageTextView: NSTextView {
         equationEditor.textView = self
 
         configureTextBehaviour()
-        BuiltInBlockViews.registerOnce()
+        CodeMathBlockViews.registerOnce()
         tableOfContentsTracker = TableOfContentsTracker(textView: self)
-        mapper = PageTextStorageMapper(document: document, textStorage: textStorage!)
+        mapper = PageTextStorageMapper(flow: document, textStorage: textStorage!)
         // После загрузки текста система ставит выделение в конец, и место курсора там считалось бы раскладкой
         // всей страницы (на 10 000 блоках — секунды). Пока текст загружается, вид выделения не обновляется;
         // курсор — в начало, куда его потом и ставит открытие страницы.
@@ -129,9 +141,10 @@ public final class PageTextView: NSTextView {
             NotificationCenter.default.addObserver(self, selector: #selector(undoManagerDidRestore(_:)), name: name, object: nil)
         }
         NotificationCenter.default.addObserver(self, selector: #selector(documentDidApplyExternalChanges(_:)),
-                                               name: PageDocument.didApplyExternalChanges, object: document)
+                                               name: PageDocument.didApplyExternalChanges, object: document.pageDocument)
         NotificationCenter.default.addObserver(self, selector: #selector(documentDidApplyLocalEdits(_:)),
-                                               name: PageDocument.didApplyLocalEdits, object: document)
+                                               name: PageDocument.didApplyLocalEdits, object: document.pageDocument)
+        Self.liveEditors.add(self)
 
         addSubview(header)
         slashQueryHighlight.wantsLayer = true
@@ -162,8 +175,9 @@ public final class PageTextView: NSTextView {
         isRichText = true
         importsGraphics = false
         allowsUndo = true
-        usesFindBar = true
-        isIncrementalSearchingEnabled = true
+        // ⌘F — одна полоса поиска на всю страницу, с колонками и ячейками (`PageFind/`), а не поиск этого текста.
+        usesFindBar = false
+        isIncrementalSearchingEnabled = false
         isContinuousSpellCheckingEnabled = spellCheckingWanted
         isGrammarCheckingEnabled = false
         drawsBackground = true
@@ -198,19 +212,28 @@ public final class PageTextView: NSTextView {
     /// в своём блоке на том же месте. Прежние шаги ⌘Z относятся к старому тексту — их больше нет.
     @objc private func documentDidApplyExternalChanges(_ notification: Notification) {
         guard let change = notification.userInfo?[PageDocument.externalChangeKey] as? PageDocument.ExternalChange else { return }
-        render(change)
+        render(change, keepsUndo: false)
     }
 
     /// Ту же страницу правят в другом окне (FR-029): показать их правку так же, как пришедшую с другого Mac.
     /// Свою правку этот редактор уже показывает — её он не перерисовывает, и его ⌘Z цела.
     @objc private func documentDidApplyLocalEdits(_ notification: Notification) {
+        let origin = notification.userInfo?[PageDocument.editOriginKey] as? ObjectIdentifier
         guard let change = notification.userInfo?[PageDocument.externalChangeKey] as? PageDocument.ExternalChange,
-              let textStorage, notification.userInfo?[PageDocument.editOriginKey] as? ObjectIdentifier != ObjectIdentifier(textStorage)
+              let textStorage, origin != ObjectIdentifier(textStorage)
         else { return }
-        render(change)
+        render(change, keepsUndo: sharesUndo(withEditOrigin: origin))
     }
 
-    private func render(_ change: PageDocument.ExternalChange) {
+    /// `keepsUndo` — правку сделал редактор с той же отменой (колонка, ячейка, этот же редактор через документ):
+    /// её шаг лежит в общей отмене окна, и прежние шаги остаются верны.
+    private func render(_ change: PageDocument.ExternalChange, keepsUndo: Bool) {
+        // Правка чужого потока (колонки, ячейки) этот текст не трогает.
+        if change.touchesBlocks, !change.changedFlowIds.contains(document.flowKey),
+           !change.changedBlockIds.contains(where: { document.index(ofBlock: $0) != nil }) {
+            if change.conflictsChanged { conflictMarks.update() }
+            return
+        }
         if change.titleChanged, header.titleField.currentEditor() == nil {
             header.titleField.stringValue = document.page.title
             layoutColumn()
@@ -220,7 +243,7 @@ public final class PageTextView: NSTextView {
             let anchors = selectionAnchors()
             mapper.renderExternalChanges(change)
             refreshBlockStructure()
-            undoManager?.removeAllActions()
+            if !keepsUndo { undoManager?.removeAllActions() }
             restoreSelection(anchors, fallbackBlock: 0)
             redrawBlockDecorations()
             updateEmptyParagraphHint()
@@ -281,8 +304,8 @@ public final class PageTextView: NSTextView {
         // В режиме блоков набор букв блоки не заменяет, как в Notion.
         if isBlockSelection, replacementRange.location == NSNotFound, !hasMarkedText() { return }
         hideBlockHandles()
-        if typed == " ", replacementRange.location == NSNotFound, !hasMarkedText(), applyMarkdownShortcut() { return }
-        if typed == "-", replacementRange.location == NSNotFound, !hasMarkedText(), isCaretAfterTwoDashes {
+        if allowsBlockStructure, typed == " ", replacementRange.location == NSNotFound, !hasMarkedText(), applyMarkdownShortcut() { return }
+        if allowsBlockStructure, typed == "-", replacementRange.location == NSNotFound, !hasMarkedText(), isCaretAfterTwoDashes {
             super.insertText(string, replacementRange: replacementRange)
             convertDashesToDivider()
             return
@@ -298,7 +321,7 @@ public final class PageTextView: NSTextView {
             return
         }
         super.insertText(string, replacementRange: replacementRange)
-        if typed == "/" { openSlashMenuAfterTypedSlash() }
+        if allowsBlockStructure, typed == "/" { openSlashMenuAfterTypedSlash() }
         openMentionPicker(afterTyping: typed)
     }
 
@@ -472,6 +495,7 @@ public final class PageTextView: NSTextView {
             return insertEquation(at: range.lowerBound)
         }
         if kind == .tableOfContents, range.count == 1 { return insertTableOfContents(at: range.lowerBound) }
+        if BlockKind.withAttachments.contains(kind) { return beginAttachmentInsertion(kind, at: range.lowerBound) }
         let blocks = document.blocks
         let drafts = range.map { index in
             let block = blocks[index]
@@ -778,7 +802,8 @@ public final class PageTextView: NSTextView {
 
     /// Колонка 720 по центру всей прокрутки, в узком окне — поля не меньше `minimumSideInset`.
     /// Центр — по ширине вместе с полосой прокрутки: длинная страница с полосой не сдвигается (раунд 2, № 23).
-    private var column: (left: CGFloat, width: CGFloat) {
+    /// У редактора колонки (`FlowTextView`) — вся его ширина.
+    var column: (left: CGFloat, width: CGFloat) {
         let pageWidth = enclosingScrollView?.frame.width ?? bounds.width
         let left = max(Metrics.Page.minimumSideInset, (pageWidth - Metrics.Page.columnWidth) / 2)
         return (left, max(0, min(Metrics.Page.columnWidth, bounds.width - left - Metrics.Page.minimumSideInset)))
@@ -820,16 +845,24 @@ public final class PageTextView: NSTextView {
         iconPicker.show(below: anchor, in: window) { [weak self] in self?.onSetIcon?($0) }
     }
 
-    private func layoutColumn() {
+    /// Над текстом — шапка с иконкой и названием; у редакторов колонок и ячеек её нет.
+    var showsPageHeader: Bool { true }
+    /// Блоки можно делать и менять: меню «/», быстрые символы, «---». В ячейке таблицы — нельзя.
+    var allowsBlockStructure: Bool { true }
+    /// У блоков под мышью — ручки «+ ⋮⋮». В ячейке таблицы их нет.
+    var showsBlockHandles: Bool { true }
+
+    func layoutColumn() {
         let (left, columnWidth) = column
         if let container = textContainer, container.size.width != columnWidth {
             container.size = NSSize(width: columnWidth, height: container.size.height)
         }
-        let headerHeight = header.height(forWidth: columnWidth)
+        header.isHidden = !showsPageHeader
+        let headerHeight = showsPageHeader ? header.height(forWidth: columnWidth) : 0
         header.frame = NSRect(x: left, y: 0, width: columnWidth, height: headerHeight)
         // Отступ текста сверху — шапка, снизу — пустое место; NSTextView делит высоту поровну, а начало текста
         // задаёт `textContainerOrigin`.
-        let inset = NSSize(width: left, height: (headerHeight + Metrics.Page.bottomPadding) / 2)
+        let inset = NSSize(width: left, height: showsPageHeader ? (headerHeight + Metrics.Page.bottomPadding) / 2 : 0)
         if textContainerInset != inset {
             textContainerInset = inset
         }

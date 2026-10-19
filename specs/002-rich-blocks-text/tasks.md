@@ -83,7 +83,7 @@ description: "Задачи: новые блоки и оформление тек
 - [x] T025 [P] [US5] Тесты в `server/test/backup.test.ts`: копия `backups/files-<дата>` жёсткими ссылками, 14 копий; уборка: корзина старше 30 дней и несобранные без новых частей 7 дней стираются
 - [x] T026 [US5] `server/src/files.ts` и таблица `files (id, part_count, bytes, complete_at, deleted_at, created_at)` в `server/src/db.ts`; части в `/data/files/<2 знака id>/<id>/<index>.part` через временный файл и переименование; квота `FILES_LIMIT_GB` (по умолчанию 50) в `server/src/config.ts`
 - [x] T027 [US5] Маршруты в `server/src/app.ts` (тело `application/octet-stream`, свой предел), суточная уборка в `server/src/main.ts`, копия файлов в `server/src/backup.ts`; `pnpm test` и `pnpm typecheck` зелёные; коммит
-- [ ] T028 [US5] Развёртывание на `mynotion.kurilov.cloud` по скиллу server-deploy: `client_max_body_size` ≥ 9 МБ, тайм-аут чтения тела 120 с, том `./data/files`; проверка `/health` и `GET /files/usage`; ссылка и итог — в quickstart.md
+- [x] T028 [US5] Развёртывание на `mynotion.kurilov.cloud` по скиллу server-deploy: `client_max_body_size` ≥ 9 МБ, тайм-аут чтения тела 120 с, том `./data/files`; проверка `/health` и `GET /files/usage`; ссылка и итог — в quickstart.md
 
 **Checkpoint**: сервер принимает файлы; приложение подключится в US5.
 
@@ -208,25 +208,25 @@ description: "Задачи: новые блоки и оформление тек
 
 ### Тесты
 
-- [ ] T082 [P] [US5] `PK/Tests/AttachmentsTests/AttachmentStoreTests.swift`: копия в `Attachments/<id>/<имя>`, оригинал не тронут; удаление оригинала в Finder — копия открывается; больше 100 МБ — ошибка, блок не создаётся; ссылки пересчитываются в транзакции, сирота получает `orphanedAt`, возврат ссылки его снимает; стирание — только сирота старше 30 дней, когда все устройства знают удаление
-- [ ] T083 [P] [US5] `PK/Tests/AttachmentsTests/FileCipherTests.swift`: ключ HKDF-SHA256 (соль — id файла, `mynotion-file-v1`); части по 8 388 608 байт; подмена, перестановка и обрезка части не расшифровываются; сверка SHA-256
-- [ ] T084 [P] [US5] `PK/Tests/AttachmentsTests/AttachmentTransferTests.swift` с файлами в `PK/Tests/SyncTests/Support/FakeSyncServer.swift`: отправка по частям и докачка с первой отсутствующей; пачка с блоком не ждёт файла; скачивание по одному, файлы открытой страницы первыми; `409 file_incomplete` и `404` — повтор 1, 2, 4 … 60 мин; `507` — сообщение, файл цел; выключение синхронизации файлы не трогает
-- [ ] T085 [P] [US5] `PK/Tests/LinkPreviewTests/LinkPreviewTests.swift`: `og:title|description|image`, `<title>`, `<link rel="icon">` на образцах; предел 512 КБ и 10 с; oEmbed YouTube и Vimeo; без сети — только адрес
-- [ ] T086 [P] [US5] `PK/Tests/PageEditorTests/MediaBlocksTests.swift`: картинка по ширине колонки, ширина 10–100 %, подпись в `text`; заглушки «Загружается…» и «Ждёт отправки с другого Mac»; блок-файл — значок, имя, размер; меню вставки ссылки YouTube «Встроить видео / Закладка / Ссылка»
-- [ ] T087 [P] [US5] Выгрузка и импорт: `PK/Tests/MarkdownExportTests/AttachmentsExportTests.swift` (копии в папке страницы, « (2)» при совпадении, `[файл не скачан: …]` и итог), `PK/Tests/NotionImportTests/AttachmentsImportTests.swift` (картинки и файлы из выгрузки — вложения; больше 100 МБ или нет файла — «[файл: имя]»; ссылки YouTube/Vimeo — видео; одиночная ссылка — закладка)
-- [ ] T088 [P] [US5] `UITests/MediaBlocksTests.swift`: сценарий Independent Test, удаление оригинала, сообщение о 100 МБ
+- [x] T082 [P] [US5] `PK/Tests/AttachmentsTests/AttachmentStoreTests.swift`: копия в `Attachments/<id>/<имя>`, оригинал не тронут; удаление оригинала в Finder — копия открывается; больше 100 МБ — ошибка, блок не создаётся; ссылки пересчитываются в транзакции, сирота получает `orphanedAt`, возврат ссылки его снимает; стирание — только сирота старше 30 дней, когда все устройства знают удаление
+- [x] T083 [P] [US5] `PK/Tests/AttachmentsTests/FileCipherTests.swift`: ключ HKDF-SHA256 (соль — id файла, `mynotion-file-v1`); части по 8 388 608 байт; подмена, перестановка и обрезка части не расшифровываются; сверка SHA-256
+- [x] T084 [P] [US5] `PK/Tests/AttachmentsTests/AttachmentTransferTests.swift` с файлами в `PK/Tests/SyncTests/Support/FakeSyncServer.swift`: отправка по частям и докачка с первой отсутствующей; пачка с блоком не ждёт файла; скачивание по одному, файлы открытой страницы первыми; `409 file_incomplete` и `404` — повтор 1, 2, 4 … 60 мин; `507` — сообщение, файл цел; выключение синхронизации файлы не трогает
+- [x] T085 [P] [US5] `PK/Tests/LinkPreviewTests/LinkPreviewTests.swift`: `og:title|description|image`, `<title>`, `<link rel="icon">` на образцах; предел 512 КБ и 10 с; oEmbed YouTube и Vimeo; без сети — только адрес
+- [x] T086 [P] [US5] `PK/Tests/PageEditorTests/MediaBlocksTests.swift`: картинка по ширине колонки, ширина 10–100 %, подпись в `text`; заглушки «Загружается…» и «Ждёт отправки с другого Mac»; блок-файл — значок, имя, размер; меню вставки ссылки YouTube «Встроить видео / Закладка / Ссылка»
+- [x] T087 [P] [US5] Выгрузка и импорт: `PK/Tests/MarkdownExportTests/AttachmentsExportTests.swift` (копии в папке страницы, « (2)» при совпадении, `[файл не скачан: …]` и итог), `PK/Tests/NotionImportTests/AttachmentsImportTests.swift` (картинки и файлы из выгрузки — вложения; больше 100 МБ или нет файла — «[файл: имя]»; ссылки YouTube/Vimeo — видео; одиночная ссылка — закладка)
+- [x] T088 [P] [US5] `UITests/MediaBlocksTests.swift`: сценарий Independent Test, удаление оригинала, сообщение о 100 МБ
 
 ### Код
 
-- [ ] T089 [US5] Модуль `PK/Sources/Attachments/`: `AttachmentStore.swift`, `AttachmentReferenceCounter.swift` (хук транзакции), `FileCipher.swift`, `AttachmentCollector.swift` (30 дней, `DELETE /files/{id}`)
-- [ ] T090 [US5] Передача `PK/Sources/Attachments/AttachmentTransfer.swift` и эндпоинты файлов в `PK/Sources/Sync/SyncClient.swift`; запуск очереди из `SyncEngine.swift` только при непустой очереди
-- [ ] T091 [US5] `PK/Sources/PageEditor/BlockKinds/Image.swift`, `ImageThumbnailCache.swift` (ImageIO, до 48 МБ, вытесняемый), ширина и подпись
-- [ ] T092 [US5] `PK/Sources/PageEditor/BlockKinds/File.swift`: двойной щелчок — программа по умолчанию, «Показать в Finder», «Скачать копию…», «Переименовать»
-- [ ] T093 [US5] Модуль `PK/Sources/EmbeddedMedia/`: `VideoFilePlayerView.swift` (`AVPlayerView` по нажатию, первый кадр), `WebVideoPlayerView.swift` (`WKWebView` по нажатию, один на окно, закрытие вне экрана); `PK/Sources/PageEditor/BlockKinds/Video.swift`
-- [ ] T094 [US5] Модуль `PK/Sources/LinkPreview/` и `PK/Sources/PageEditor/BlockKinds/Bookmark.swift` (картинка и значок — вложениями, «Обновить»)
-- [ ] T095 [US5] Вставка: перетаскивание из Finder, ⌘V картинки, окно «Выбрать файл… / Вставить ссылку» — `PK/Sources/PageEditor/BlockViewHost/AttachmentInsertion.swift`; фабрики видов — в `App/MainWindow/`
-- [ ] T096 [US5] Место файлов и квота сервера в `App/Settings/SyncSettingsView.swift` (`GET /files/usage`)
-- [ ] T097 [P] [US5] Выгрузка и импорт: `PK/Sources/MarkdownExport/BlockWriters/AttachmentWriters.swift`, `PK/Sources/NotionImport/BlockReaders/AttachmentReaders.swift`
+- [x] T089 [US5] Модуль `PK/Sources/Attachments/`: `AttachmentStore.swift`, `AttachmentReferenceCounter.swift` (хук транзакции), `FileCipher.swift`, `AttachmentCollector.swift` (30 дней, `DELETE /files/{id}`)
+- [x] T090 [US5] Передача `PK/Sources/Attachments/AttachmentTransfer.swift` и эндпоинты файлов в `PK/Sources/Sync/SyncClient.swift`; запуск очереди из `SyncEngine.swift` только при непустой очереди
+- [x] T091 [US5] `PK/Sources/PageEditor/BlockKinds/Image.swift`, `ImageThumbnailCache.swift` (ImageIO, до 48 МБ, вытесняемый), ширина и подпись
+- [x] T092 [US5] `PK/Sources/PageEditor/BlockKinds/File.swift`: двойной щелчок — программа по умолчанию, «Показать в Finder», «Скачать копию…», «Переименовать»
+- [x] T093 [US5] Модуль `PK/Sources/EmbeddedMedia/`: `VideoFilePlayerView.swift` (`AVPlayerView` по нажатию, первый кадр), `WebVideoPlayerView.swift` (`WKWebView` по нажатию, один на окно, закрытие вне экрана); `PK/Sources/PageEditor/BlockKinds/Video.swift`
+- [x] T094 [US5] Модуль `PK/Sources/LinkPreview/` и `PK/Sources/PageEditor/BlockKinds/Bookmark.swift` (картинка и значок — вложениями, «Обновить»)
+- [x] T095 [US5] Вставка: перетаскивание из Finder, ⌘V картинки, окно «Выбрать файл… / Вставить ссылку» — `PK/Sources/PageEditor/BlockViewHost/AttachmentInsertion.swift`; фабрики видов — в `App/MainWindow/`
+- [x] T096 [US5] Место файлов и квота сервера в `App/Settings/SyncSettingsView.swift` (`GET /files/usage`)
+- [x] T097 [P] [US5] Выгрузка и импорт: `PK/Sources/MarkdownExport/BlockWriters/AttachmentWriters.swift`, `PK/Sources/NotionImport/BlockReaders/AttachmentReaders.swift`
 - [ ] T098 [US5] Галерея; память в покое после просмотра и закрытия YouTube — исходная ± 10 МБ, память во время игры — записать для Юрия; прокрутка «богатой» страницы p95 ≤ 50 мс; живая проверка двух Mac, quickstart.md шаги 1–3 и 5; затронутые тесты зелёные; коммит
 
 ---
@@ -239,23 +239,23 @@ description: "Задачи: новые блоки и оформление тек
 
 ### Тесты
 
-- [ ] T099 [P] [US6] `PK/Tests/NotesCoreTests/TableModelTests.swift`: таблица = `table` + `tableColumn` + `tableRow` + `tableCell`; «отсутствующая ячейка — пустая, создаётся при первом вводе»; ячейка удалённого столбца не показывается; «удаление последнего удаляет таблицу»
-- [ ] T100 [P] [US6] `PK/Tests/PageEditorTests/TableEditingTests.swift`: «/» → 3 × 2, Tab / ⇧Tab, Tab в последней — строка, стрелки на краю ячейки, Enter, Esc; «+» строка и столбец; вставить выше/ниже/слева/справа; строка и столбец заголовков; ширина столбца; ⌘C — табуляции, ⌘V в ячейки; оформление в ячейке; ⌘Z каждого шага
-- [ ] T101 [P] [US6] `PK/Tests/PageEditorTests/ColumnsTests.swift`: «⋮⋮» к правому краю — две колонки (цель слева); до 5; граница 10–90 %; пустая колонка исчезает, одна — распадается; ↑ ↓ ← → между колонками и блоками над и под; всё одним шагом ⌘Z
-- [ ] T102 [P] [US6] `PK/Tests/PageEditorTests/PageFindTests.swift`: ⌘F находит в потоке страницы, колонке, ячейке и свёрнутом; переход по совпадениям; совпадение в свёрнутом раскрывает его
-- [ ] T103 [P] [US6] `PK/Tests/SyncTests/TablesColumnsConvergenceTests.swift`: правки разных ячеек на двух Mac — без конфликта; одна ячейка — «Две версии»; перенос блока между колонками одной меткой `placement`; блок удалённой колонки виден за колонками
-- [ ] T104 [P] [US6] Выгрузка и импорт: `PK/Tests/MarkdownExportTests/TablesColumnsExportTests.swift` (GFM, `<!-- mynotion:table … -->`, `|` и `<br>` в ячейке; `<div data-columns>`), `PK/Tests/NotionImportTests/TablesImportTests.swift` (таблица Markdown Notion — таблица, первая строка — заголовки)
-- [ ] T105 [P] [US6] `UITests/TablesAndColumnsTests.swift`: сценарий Independent Test + ⌘F в колонке
+- [x] T099 [P] [US6] `PK/Tests/NotesCoreTests/TableModelTests.swift`: таблица = `table` + `tableColumn` + `tableRow` + `tableCell`; «отсутствующая ячейка — пустая, создаётся при первом вводе»; ячейка удалённого столбца не показывается; «удаление последнего удаляет таблицу»
+- [x] T100 [P] [US6] `PK/Tests/PageEditorTests/TableEditingTests.swift`: «/» → 3 × 2, Tab / ⇧Tab, Tab в последней — строка, стрелки на краю ячейки, Enter, Esc; «+» строка и столбец; вставить выше/ниже/слева/справа; строка и столбец заголовков; ширина столбца; ⌘C — табуляции, ⌘V в ячейки; оформление в ячейке; ⌘Z каждого шага
+- [x] T101 [P] [US6] `PK/Tests/PageEditorTests/ColumnsTests.swift`: «⋮⋮» к правому краю — две колонки (цель слева); до 5; граница 10–90 %; пустая колонка исчезает, одна — распадается; ↑ ↓ ← → между колонками и блоками над и под; всё одним шагом ⌘Z
+- [x] T102 [P] [US6] `PK/Tests/PageEditorTests/PageFindTests.swift`: ⌘F находит в потоке страницы, колонке, ячейке и свёрнутом; переход по совпадениям; совпадение в свёрнутом раскрывает его
+- [x] T103 [P] [US6] `PK/Tests/SyncTests/TablesColumnsConvergenceTests.swift`: правки разных ячеек на двух Mac — без конфликта; одна ячейка — «Две версии»; перенос блока между колонками одной меткой `placement`; блок удалённой колонки виден за колонками
+- [x] T104 [P] [US6] Выгрузка и импорт: `PK/Tests/MarkdownExportTests/TablesColumnsExportTests.swift` (GFM, `<!-- mynotion:table … -->`, `|` и `<br>` в ячейке; `<div data-columns>`), `PK/Tests/NotionImportTests/TablesImportTests.swift` (таблица Markdown Notion — таблица, первая строка — заголовки)
+- [x] T105 [P] [US6] `UITests/TablesAndColumnsTests.swift`: сценарий Independent Test + ⌘F в колонке
 
 ### Код
 
-- [ ] T106 [US6] Таблица `PK/Sources/PageEditor/Table/TableView.swift` (ячейки через CoreText), `TableCellEditor.swift` (одно поле правки на таблицу, мэппер одного блока), `TableMenus.swift`; `PK/Sources/PageEditor/BlockKinds/Table.swift`
-- [ ] T107 [US6] Колонки `PK/Sources/PageEditor/Flows/FlowTextView.swift` (редактор потока без шапки, общий `UndoManager` окна), `ColumnsView.swift`, `PK/Sources/PageEditor/BlockKinds/Columns.swift`
-- [ ] T108 [US6] `PK/Sources/PageEditor/Flows/FlowNavigator.swift`: переходы курсора между редакторами страницы
-- [ ] T109 [US6] `PK/Sources/PageEditor/Flows/FlowDragCoordinator.swift` и правки `BlockHandlesOverlay.swift`: место сброса над любым редактором, сборка и распад колонок одной правкой
-- [ ] T110 [US6] `PK/Sources/PageEditor/PageFind/PageFindClient.swift` (`NSTextFinderClient` по всем потокам и ячейкам) вместо системного поиска одного `NSTextView`
-- [ ] T111 [US6] Переход к найденному из поиска страниц в колонку или ячейку: `App/MainWindow/MainWindowModel.swift`
-- [ ] T112 [P] [US6] Выгрузка и импорт: `PK/Sources/MarkdownExport/BlockWriters/TableColumnsWriters.swift`, `PK/Sources/NotionImport/BlockReaders/TableReaders.swift`
+- [x] T106 [US6] Таблица `PK/Sources/PageEditor/Table/TableView.swift` (ячейки через CoreText), `TableCellEditor.swift` (одно поле правки на таблицу, мэппер одного блока), `TableMenus.swift`; `PK/Sources/PageEditor/BlockKinds/Table.swift`
+- [x] T107 [US6] Колонки `PK/Sources/PageEditor/Flows/FlowTextView.swift` (редактор потока без шапки, общий `UndoManager` окна), `ColumnsView.swift`, `PK/Sources/PageEditor/BlockKinds/Columns.swift`
+- [x] T108 [US6] `PK/Sources/PageEditor/Flows/FlowNavigator.swift`: переходы курсора между редакторами страницы
+- [x] T109 [US6] `PK/Sources/PageEditor/Flows/FlowDragCoordinator.swift` и правки `BlockHandlesOverlay.swift`: место сброса над любым редактором, сборка и распад колонок одной правкой
+- [x] T110 [US6] `PK/Sources/PageEditor/PageFind/PageFindClient.swift` (`NSTextFinderClient` по всем потокам и ячейкам) вместо системного поиска одного `NSTextView`
+- [x] T111 [US6] Переход к найденному из поиска страниц в колонку или ячейку: `App/MainWindow/MainWindowModel.swift`
+- [x] T112 [P] [US6] Выгрузка и импорт: `PK/Sources/MarkdownExport/BlockWriters/TableColumnsWriters.swift`, `PK/Sources/NotionImport/BlockReaders/TableReaders.swift`
 - [ ] T113 [US6] Галерея, сверка с Notion; набор в колонке и в ячейке p95 ≤ 50 мс; затронутые тесты зелёные; коммит
 
 ---

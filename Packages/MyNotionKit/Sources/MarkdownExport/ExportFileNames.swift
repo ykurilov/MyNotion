@@ -42,7 +42,23 @@ struct ExportFileNames {
         }
     }
 
-    private static func key(_ name: String) -> String {
+    /// Имя копии файла в папке страницы: то же, что у файла, но без недопустимых знаков; занятое (подстраницей
+    /// или другим файлом) получает « (2)» перед расширением. `taken` — ключи занятых имён, пополняется.
+    static func uniqueFileName(_ name: String, taken: inout Set<String>) -> String {
+        let ext = (name as NSString).pathExtension
+        let stem = baseName(forTitle: ext.isEmpty ? name : (name as NSString).deletingPathExtension)
+        let suffix = ext.isEmpty ? "" : "." + ext
+        var candidate = stem + suffix
+        var number = 2
+        while taken.contains(key(candidate)) {
+            candidate = "\(stem) (\(number))\(suffix)"
+            number += 1
+        }
+        taken.insert(key(candidate))
+        return candidate
+    }
+
+    static func key(_ name: String) -> String {
         name.precomposedStringWithCanonicalMapping.lowercased()
     }
 }

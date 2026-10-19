@@ -196,12 +196,11 @@ extension PageTextView {
 
     /// Записать код в документ; вложение блока на странице узнаёт новый текст, а при смене числа строк — и высоту.
     private func writeCode(_ text: String, ofBlock id: UUID) {
-        guard let block = document.block(id) else { return }
-        let flow = block.containerId.map(document.flow) ?? document.blocks
-        guard let position = flow.firstIndex(where: { $0.id == id }) else { return }
+        guard let block = document.block(id), let position = document.index(ofBlock: id) else { return }
+        let flow = document.blocks
         var draft = BlockDraft(block)
         draft.text = InlineText(text)
-        document.replaceBlocks(in: block.containerId, after: position > 0 ? flow[position - 1].id : nil,
+        document.replaceBlocks(after: position > 0 ? flow[position - 1].id : nil,
                                before: position + 1 < flow.count ? flow[position + 1].id : nil, with: [draft], origin: textStorage)
         guard let updated = document.block(id), let attachment = blockAttachment(ofBlock: id) else { return }
         let heightChanged = CodeBlockStyle.height(of: attachment.block.text.string) != CodeBlockStyle.height(of: text)

@@ -97,16 +97,22 @@ struct GalleryLibrary {
             var kindSamplePages: [String: UUID] = [:]
             for sample in BlockKinds.gallerySamples {
                 let pageId = try page(sample.summary, parent: kindsParent)
-                var sortKey: FractionalSortKey?
-                for spec in sample.blocks {
-                    sortKey = .between(sortKey, nil)
-                    let block = try transaction.insertBlock(Block(pageId: pageId, kind: spec.kind, text: spec.text, indent: spec.indent,
-                                                                  sortKey: sortKey!, color: spec.color, props: spec.props))
-                    if spec.isCollapsed {
-                        try transaction.execute(sql: "INSERT OR REPLACE INTO block_view_state (blockId, isCollapsed) VALUES (?, 1)",
-                                                arguments: [.text(block.id.uuidString.lowercased())])
+                // Блоки образца и блоки внутри них (колонки, таблица) — в своих потоках.
+                func insert(_ specs: [BlockGallerySample.SampleBlock], containerId: UUID?) throws {
+                    var sortKey: FractionalSortKey?
+                    for spec in specs {
+                        sortKey = .between(sortKey, nil)
+                        let block = try transaction.insertBlock(Block(id: spec.id, pageId: pageId, kind: spec.kind, text: spec.text,
+                                                                      indent: spec.indent, sortKey: sortKey!, containerId: containerId,
+                                                                      color: spec.color, props: spec.props))
+                        if spec.isCollapsed {
+                            try transaction.execute(sql: "INSERT OR REPLACE INTO block_view_state (blockId, isCollapsed) VALUES (?, 1)",
+                                                    arguments: [.text(block.id.uuidString.lowercased())])
+                        }
+                        try insert(spec.contained, containerId: block.id)
                     }
                 }
+                try insert(sample.blocks, containerId: nil)
                 kindSamplePages[sample.id] = pageId
             }
 
