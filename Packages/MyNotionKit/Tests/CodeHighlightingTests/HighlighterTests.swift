@@ -175,13 +175,16 @@ struct HighlighterTests {
             default: "}"
             }
         }.joined(separator: "\n")
+        // Лучший из пяти замеров: тесты идут параллельно, и вытеснение другим потоком только добавляет время к работе.
         let clock = ContinuousClock()
         var highlighter: IncrementalHighlighter?
-        let full = clock.measure { highlighter = IncrementalHighlighter(language: .swift, text: text) }
-        var editable = highlighter!
+        let full = (0..<5).map { _ in clock.measure { highlighter = IncrementalHighlighter(language: .swift, text: text) } }.min()!
         let at = (text as NSString).range(of: "строка 251").upperBound
         let edited = (text as NSString).replacingCharacters(in: NSRange(location: at, length: 0), with: "x")
-        let line = clock.measure { editable.apply(text: edited, editedRange: NSRange(location: at, length: 1), changeInLength: 1) }
+        let line = (0..<5).map { _ in
+            var editable = highlighter!
+            return clock.measure { editable.apply(text: edited, editedRange: NSRange(location: at, length: 1), changeInLength: 1) }
+        }.min()!
         print("Подсветка: полный разбор 500 строк — \(full), правка строки — \(line)")
         #expect(highlighter?.lines.count == 500)
         #expect(full < .milliseconds(50))
