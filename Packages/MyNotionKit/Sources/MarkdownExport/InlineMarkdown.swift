@@ -29,6 +29,8 @@ enum InlineMarkdown {
         var range: Range<Int>
         var marks: Marks
         var link: URL?
+        var textColor: NotionColor?
+        var backgroundColor: NotionColor?
     }
 
     /// Текст, разрезанный по всем границам оформления; соседние куски с одним видом слиты.
@@ -41,7 +43,7 @@ enum InlineMarkdown {
         let sorted = boundaries.sorted()
         var result: [Segment] = []
         for (lower, upper) in zip(sorted, sorted.dropFirst()) {
-            var segment = Segment(range: lower..<upper, marks: [], link: nil)
+            var segment = Segment(range: lower..<upper, marks: [], link: nil, textColor: nil, backgroundColor: nil)
             for run in text.runs where run.start <= lower && run.start + run.length >= upper {
                 switch run.style {
                 case .bold: segment.marks.insert(.bold)
@@ -50,11 +52,14 @@ enum InlineMarkdown {
                 case .underline: segment.marks.insert(.underline)
                 case .code: segment.marks.insert(.code)
                 case .link(let url): segment.link = url
-                // Цвета, упоминания, даты и формулы в Markdown пишут свои этапы (contracts/markdown-and-notion.md).
-                case .textColor, .backgroundColor, .mention, .date, .equation: break
+                case .textColor(let color): segment.textColor = color
+                case .backgroundColor(let color): segment.backgroundColor = color
+                // Упоминания, даты и формулы в Markdown пишут свои этапы (contracts/markdown-and-notion.md).
+                case .mention, .date, .equation: break
                 }
             }
-            if var last = result.last, last.marks == segment.marks, last.link == segment.link {
+            if var last = result.last, last.marks == segment.marks, last.link == segment.link,
+               last.textColor == segment.textColor, last.backgroundColor == segment.backgroundColor {
                 last.range = last.range.lowerBound..<upper
                 result[result.count - 1] = last
             } else {
@@ -69,10 +74,13 @@ enum InlineMarkdown {
     private enum Delimiter: Equatable {
         case link(URL)
         case bold, italic, strikethrough, underline
+        case textColor(NotionColor), backgroundColor(NotionColor)
 
         func contains(in segment: Segment) -> Bool {
             switch self {
             case .link(let url): segment.link == url
+            case .textColor(let color): segment.textColor == color
+            case .backgroundColor(let color): segment.backgroundColor == color
             case .bold: segment.marks.contains(.bold)
             case .italic: segment.marks.contains(.italic)
             case .strikethrough: segment.marks.contains(.strikethrough)
@@ -94,6 +102,8 @@ enum InlineMarkdown {
             case .italic: usesTag ? "<em>" : "*"
             case .strikethrough: usesTag ? "<del>" : "~~"
             case .underline: "<u>"
+            case .textColor(let color): "<span data-color=\"\(color.rawValue)\">"
+            case .backgroundColor(let color): "<mark data-color=\"\(color.rawValue)\">"
             }
         }
 
@@ -104,6 +114,8 @@ enum InlineMarkdown {
             case .italic: usesTag ? "</em>" : "*"
             case .strikethrough: usesTag ? "</del>" : "~~"
             case .underline: "</u>"
+            case .textColor: "</span>"
+            case .backgroundColor: "</mark>"
             }
         }
 
@@ -113,7 +125,7 @@ enum InlineMarkdown {
             switch delimiter {
             case .bold, .italic: return "*"
             case .strikethrough: return "~"
-            case .link, .underline: return nil
+            case .link, .underline, .textColor, .backgroundColor: return nil
             }
         }
     }
@@ -159,6 +171,9 @@ enum InlineMarkdown {
             let segment = segments[index]
             var candidates: [Delimiter] = []
             if let link = segment.link { candidates.append(.link(link)) }
+            // Фон снаружи, текст внутри (contracts/markdown-and-notion.md).
+            if let color = segment.backgroundColor { candidates.append(.backgroundColor(color)) }
+            if let color = segment.textColor { candidates.append(.textColor(color)) }
             for (delimiter, isMarked) in [(Delimiter.bold, Marks.bold), (.italic, .italic), (.strikethrough, .strikethrough),
                                           (.underline, .underline)] where segment.marks.contains(isMarked) {
                 candidates.append(delimiter)

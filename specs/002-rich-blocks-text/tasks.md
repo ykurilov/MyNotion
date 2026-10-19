@@ -129,7 +129,7 @@ description: "Задачи: новые блоки и оформление тек
 - [ ] T042 [P] [US2] `PK/Tests/PageEditorTests/InlineColorTests.swift`: цвет текста и фона на выделении, через блоки; повтор того же цвета снимает; ⌘⇧H — последний цвет; ⌘Z; вид — динамический цвет палитры
 - [ ] T043 [P] [US2] `PK/Tests/PageEditorTests/BlockColorTests.swift`: «⋮⋮» → «Цвет» для всех типов, включая списки и заголовки; подложка во всю ширину блока; цвет в строке главнее цвета блока
 - [x] T044 [P] [US2] `PK/Tests/VisualStyleTests/NotionPaletteTests.swift`: 10 цветов × текст/фон × светлая/тёмная — значения из contracts/blocks-and-keys.md (после сверки с Notion)
-- [ ] T045 [P] [US2] `PK/Tests/MarkdownExportTests/ColorExportTests.swift` и импорт своей выгрузки: `<span data-color>`, `<mark data-color>`, вложенные, `<!-- mynotion:color … -->` перед блоком
+- [x] T045 [P] [US2] `PK/Tests/MarkdownExportTests/ColorExportTests.swift` и импорт своей выгрузки: `<span data-color>`, `<mark data-color>`, вложенные, `<!-- mynotion:color … -->` перед блоком
 - [ ] T046 [P] [US2] `UITests/ColorTests.swift`: сценарий Independent Test; снимки в обеих темах
 
 ### Код
@@ -138,7 +138,7 @@ description: "Задачи: новые блоки и оформление тек
 - [ ] T048 [US2] Цвета в строке `PK/Sources/PageEditor/Inline/InlineColors.swift` + отображение в `PageTextStorageMapper.swift` (`inlineRendering`)
 - [ ] T049 [US2] Окно цветов `PK/Sources/PageEditor/Inline/ColorMenu.swift` («Последние», «Цвет текста», «Цвет фона»), кнопка «A» в `PK/Sources/PageEditor/FormatBar.swift`, ⌘⇧H в `App/Commands/FormatCommands.swift`
 - [ ] T050 [US2] «Цвет» в меню блока (`PK/Sources/PageEditor/BlockHandlesOverlay.swift`) и рисователь `PK/Sources/PageEditor/BlockPainters/BlockBackgroundPainter.swift`
-- [ ] T051 [P] [US2] Выгрузка и импорт `PK/Sources/MarkdownExport/InlineMarkdown.swift`, `BlockWriters/ColorWriter.swift`, `PK/Sources/NotionImport/NotionInlineParser.swift`
+- [x] T051 [P] [US2] Выгрузка и импорт `PK/Sources/MarkdownExport/InlineMarkdown.swift`, `BlockWriters/ColorWriter.swift`, `PK/Sources/NotionImport/NotionInlineParser.swift`
 - [ ] T052 [US2] Галерея в обеих темах, сверка с Notion; затронутые тесты зелёные; коммит
 
 ---

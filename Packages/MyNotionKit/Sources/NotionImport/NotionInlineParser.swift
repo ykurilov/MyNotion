@@ -58,6 +58,9 @@ struct NotionInlineParser {
             case bracket(isImage: Bool)
             case linkOpen(NotionLinkTarget)
             case linkClose
+            /// `<span data-color>` (текст) или `<mark data-color>` (фон); без распознанного цвета тег только держит пару для закрывающего.
+            case openColor(isBackground: Bool, NotionColor?)
+            case closeColor(isBackground: Bool)
         }
 
         var kind: Kind
@@ -325,6 +328,15 @@ struct NotionInlineParser {
             position += tag.count
             if name == "br" {
                 pendingText.append("\n")
+            } else if name == "span" || name == "mark" {
+                let isBackground = name == "mark"
+                if isClosing {
+                    append(Node(.closeColor(isBackground: isBackground)))
+                } else if !tag.hasSuffix("/>") {
+                    let color = tag.range(of: #"data-color\s*=\s*["']([a-z]+)["']"#, options: .regularExpression)
+                        .flatMap { NotionColor(rawValue: String(tag[$0].split(whereSeparator: { $0 == "\"" || $0 == "'" })[1])) }
+                    append(Node(.openColor(isBackground: isBackground, color)))
+                }
             } else if let style = Self.tagStyles[name] {
                 append(Node(isClosing ? .close(style) : .open(style)))
             }
@@ -433,6 +445,23 @@ struct NotionInlineParser {
         var starts: [Style: Int] = [:]
         var links: [(NotionLinkTarget, Int)] = []
         var runs: [StyledRun] = []
+        // Цвета: стопка открытых тегов; на участке действует ближайший распознанный. Внутренний перекрывает внешний.
+        var colorStacks: [Bool: [NotionColor?]] = [false: [], true: []]
+        var colorRuns: [Bool: (color: NotionColor, start: Int)] = [:]
+
+        func currentColor(_ isBackground: Bool) -> NotionColor? { colorStacks[isBackground]?.reversed().compactMap { $0 }.first }
+        func flushColor(_ isBackground: Bool) {
+            guard let (color, start) = colorRuns[isBackground] else { return }
+            colorRuns[isBackground] = nil
+            guard units.count > start else { return }
+            runs.append(StyledRun(start: start, length: units.count - start, style: isBackground ? .backgroundColor(color) : .textColor(color)))
+        }
+        func refreshColor(_ isBackground: Bool) {
+            let color = currentColor(isBackground)
+            if colorRuns[isBackground]?.color == color { return }
+            flushColor(isBackground)
+            if let color { colorRuns[isBackground] = (color, units.count) }
+        }
 
         func open(_ style: Style) {
             depth[style, default: 0] += 1
@@ -458,6 +487,13 @@ struct NotionInlineParser {
             case .close(let style): close(style)
             case .bracket(let isImage): units += (isImage ? "![" : "[").utf16
             case .linkOpen(let target): links.append((target, units.count))
+            case .openColor(let isBackground, let color):
+                colorStacks[isBackground, default: []].append(color)
+                refreshColor(isBackground)
+            case .closeColor(let isBackground):
+                guard colorStacks[isBackground]?.isEmpty == false else { continue }
+                colorStacks[isBackground]?.removeLast()
+                refreshColor(isBackground)
             case .linkClose:
                 guard let (target, start) = links.popLast() else { continue }
                 if case .url(let url) = target, units.count > start {
@@ -465,6 +501,8 @@ struct NotionInlineParser {
                 }
             }
         }
+        flushColor(false)
+        flushColor(true)
         for style in Style.allCases where depth[style, default: 0] > 0 {
             depth[style] = 1
             close(style)

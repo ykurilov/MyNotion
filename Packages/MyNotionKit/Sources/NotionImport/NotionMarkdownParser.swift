@@ -133,6 +133,8 @@ private struct PageBuilder {
     }
 
     private var open: OpenBlock?
+    /// Цвет из комментария нашей выгрузки: достаётся следующему блоку.
+    private var pendingColor: NotionColorComment?
     /// Пустые строки после последнего блока: лишняя — пустой абзац.
     private var blankLines = 0
     /// Колонки текста открытых пунктов списка: по ним считается вложенность.
@@ -147,6 +149,11 @@ private struct PageBuilder {
             if NotionMarkdownParser.isBlank(line) {
                 closeOpenBlock()
                 blankLines += 1
+                continue
+            }
+            if let comment = NotionColorComment.parse(trimmed) {
+                closeOpenBlock()
+                pendingColor = comment
                 continue
             }
             if let reading = NotionBlockReaders.all.lazy.compactMap({ $0.read(lines, at: index - 1) }).first {
@@ -268,6 +275,11 @@ private struct PageBuilder {
     // MARK: Блоки
 
     private mutating func emit(_ block: ParsedBlock, simplified: NotionSimplification? = nil) {
+        var block = block
+        if let comment = pendingColor {
+            block.color = comment.resolved(for: block.kind)
+            pendingColor = nil
+        }
         if !blocks.isEmpty, blankLines > 1 {
             blocks += Array(repeating: ParsedBlock(kind: .paragraph), count: blankLines - 1)
         }
