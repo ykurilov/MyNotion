@@ -34,13 +34,6 @@ final class CodeBlockTypingTests: XCTestCase {
         probe.window.displayIfNeeded()
         try await probe.settle()
 
-        func tree(_ view: NSView, _ depth: Int) -> [String] {
-            guard depth < 6 else { return [] }
-            return ["Проба \(String(repeating: "  ", count: depth))\(type(of: view)) \(view.accessibilityIdentifier()) \(view.frame)"]
-                + view.subviews.flatMap { tree($0, depth + 1) }
-        }
-        print(tree(textView, 0).prefix(60).joined(separator: "\n"))
-        print("Проба видимая область: \(textView.visibleRect), высота текста \(textView.frame.height)")
         let editors = Self.codeEditors(in: textView)
         XCTAssertEqual(editors.count, 1, "вид блока кода создан для видимой строки")
         let editor = try XCTUnwrap(editors.first)

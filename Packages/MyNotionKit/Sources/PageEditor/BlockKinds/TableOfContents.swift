@@ -281,12 +281,15 @@ extension PageTextView {
 }
 
 extension PageTextView {
-    /// «/» → «Оглавление»: пустой блок сам становится оглавлением, у блока с текстом оглавление встаёт ниже.
+    /// «/» → «Оглавление»: пустой блок сам становится оглавлением, у блока с текстом оглавление встаёт ниже;
+    /// под оглавлением — новый абзац с курсором, как у разделителя. Одно действие для ⌘Z.
     func insertTableOfContents(at index: Int) {
         commitEdits()
         let block = document.blocks[index]
         let toc = BlockDraft(id: block.text.string.isEmpty ? block.id : nil, kind: .tableOfContents, indent: block.indent)
-        let drafts = block.text.string.isEmpty ? [toc] : [BlockDraft(block), toc]
+        let paragraph = BlockDraft(id: nil, kind: .paragraph, indent: block.indent)
+        let drafts = block.text.string.isEmpty ? [toc, paragraph] : [BlockDraft(block), toc, paragraph]
         changeBlocks(index..<index + 1, to: drafts, actionName: "Оглавление")
+        setSelectedRange(NSRange(location: mapper.paragraphStart(ofBlockAt: index + drafts.count - 1), length: 0))
     }
 }

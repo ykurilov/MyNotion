@@ -38,6 +38,11 @@ public enum InlineAtomGallery {
             block(atom("Созвон ", [.date(future)])),
             block(atom("Просрочено ", [.date(past)])),
             BlockGallerySample.SampleBlock(.paragraph),
+        ], narrowToo: false),
+        BlockGallerySample(id: "equation-inline", summary: "Формулы в строке: дробь, корень, пустая и неверная", blocks: [
+            block(atom("Площадь круга ", [.equation("\\pi r^2")], separator: "")),
+            block(atom("Корни: ", [.equation("x_{1,2} = \\frac{-b \\pm \\sqrt{D}}{2a}"), .equation("\\sqrt[3]{8} = 2")])),
+            block(atom("Пустая и неверная: ", [.equation(""), .equation("\\frac{1}{")])),
         ], narrowToo: false)]
     }()
 
