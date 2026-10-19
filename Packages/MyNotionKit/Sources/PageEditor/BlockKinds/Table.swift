@@ -19,6 +19,13 @@ extension BlockKindDescriptor {
                                                           ["Мишка", "Тестировщик\nпо выходным", ""]], headerRow: true),
                                        .init(.paragraph, "Абзац под таблицей"),
                                    ], narrowToo: true),
+                BlockGallerySample(id: "table-new", summary: "Таблица из «/», как у Notion 7.39: 2 столбца × 3 строки во всю ширину",
+                                   blocks: [
+                                       .init(.paragraph, "Абзац над таблицей"),
+                                       TableSample.block([["Задача", "Заметка"], ["Сверить с Notion", "Таблица во всю ширину страницы"], ["", ""]],
+                                                         widths: TableGrid.columnWidths(ofNewTableFitting: 716)),
+                                       .init(.paragraph, "Абзац под таблицей"),
+                                   ]),
                 BlockGallerySample(id: "table-header-column", summary: "Таблица со строкой и столбцом заголовков, широкий столбец",
                                    blocks: [
                                        TableSample.block([["", "Пн", "Вт"], ["Утро", "Йога", "Бег"], ["Вечер", "Чтение", ""]],

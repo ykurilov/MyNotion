@@ -29,6 +29,14 @@ final class TablesAndColumnsTests: XCTestCase {
         }
         let table = app.descendants(matching: .any)["table"]
         XCTAssertTrue(table.exists)
+        // Esc, как у Notion 7.39: ячейка → строка (синяя рамка вокруг строки) → таблица как блок.
+        app.typeKey(.escape, modifierFlags: [])
+        app.typeKey(.escape, modifierFlags: [])
+        let rowSelected = XCTAttachment(screenshot: table.screenshot())
+        rowSelected.name = "table-row-selected"
+        rowSelected.lifetime = .keepAlways
+        add(rowSelected)
+        app.typeKey(.escape, modifierFlags: [])
         table.rightClick()
         let headerRow = app.menuItems["Строка заголовков"]
         XCTAssertTrue(headerRow.waitForExistence(timeout: 5), "Нет меню строки и столбца")

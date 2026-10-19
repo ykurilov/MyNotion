@@ -20,10 +20,10 @@ extension BlockKindDescriptor {
             BlockGallerySample(id: "media-placeholders",
                                summary: "Заглушки: «Загружается…», «Ждёт отправки с другого Mac», файл, который копируется",
                                blocks: [
-                                   .init(.image, props: MediaSamples.image(name: MediaSamples.downloadingName, width: nil)),
-                                   .init(.image, props: MediaSamples.image(name: MediaSamples.waitingName, width: 0.6)),
                                    .init(.file, props: MediaSamples.file(name: MediaSamples.copyingName, byteCount: 84_000_000,
                                                                          contentType: "com.apple.quicktime-movie")),
+                                   .init(.image, props: MediaSamples.image(name: MediaSamples.downloadingName, width: nil)),
+                                   .init(.image, props: MediaSamples.image(name: MediaSamples.waitingName, width: 0.6)),
                                ]),
         ],
         // Богатая страница (quickstart.md): 20 картинок.
