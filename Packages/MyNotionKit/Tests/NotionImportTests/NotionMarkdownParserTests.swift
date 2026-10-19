@@ -169,7 +169,7 @@ struct NotionMarkdownParserTests {
         #expect(page.simplifications == [.file: 1])
     }
 
-    @Test("Код, формула, встраивание — абзацы с исходным текстом; цитата, выноска, переключатель, разделитель — блоками (US1)")
+    @Test("Встраивание — абзац с исходным текстом; цитата, выноска, переключатель, разделитель (US1), код и формула (US4) — блоками")
     func simplifiedBlocks() {
         let markdown = """
             # С
@@ -206,18 +206,20 @@ struct NotionMarkdownParserTests {
         let page = parser.parse(markdown)
         var callout = ParsedBlock(kind: .callout, text: InlineText("Выноска"), color: .defaults(for: .callout), props: .defaults(for: .callout))
         callout.props.icon = "💡"
+        var code = ParsedBlock(kind: .code, text: InlineText("let a = **1**\n  print(a)"), props: .defaults(for: .code))
+        code.props.language = "swift"
         #expect(page.blocks == [
             block(.quote, "Цитата\nв две строки"),
             callout,
-            block(.paragraph, "let a = **1**\n  print(a)"),
+            code,
             block(.toggle, "Переключатель"),
             block(.paragraph, "Внутри", indent: 1),
             block(.divider, ""),
-            block(.paragraph, "E = mc^2"),
+            block(.equation, "E = mc^2"),
             block(.paragraph, "https://www.youtube.com/embed/xyz"),
             block(.paragraph, "Подпись"),
         ])
-        #expect(page.simplifications == [.code: 1, .equation: 1, .embed: 2])
+        #expect(page.simplifications == [.embed: 2])
     }
 
     @Test("Таблица Markdown — блок-таблица (002, US6), а не абзацы; подробности — TablesImportTests")

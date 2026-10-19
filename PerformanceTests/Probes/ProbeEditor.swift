@@ -11,6 +11,7 @@ final class ProbeEditor {
         var kind: BlockKind = .paragraph
         var text: String
         var indent = 0
+        var props: BlockProps = .empty
     }
 
     let folder: URL
@@ -29,7 +30,8 @@ final class ProbeEditor {
             var key: FractionalSortKey?
             for spec in specs {
                 key = .between(key, nil)
-                try tx.insertBlock(Block(pageId: page.id, kind: spec.kind, text: InlineText(spec.text), indent: spec.indent, sortKey: key!))
+                try tx.insertBlock(Block(pageId: page.id, kind: spec.kind, text: InlineText(spec.text), indent: spec.indent, sortKey: key!,
+                                         props: spec.props))
             }
             return page.id
         }

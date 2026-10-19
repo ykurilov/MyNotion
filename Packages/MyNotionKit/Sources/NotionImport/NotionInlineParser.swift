@@ -119,6 +119,7 @@ struct NotionInlineParser {
                 position += 1
             case "]": scanClosingBracket()
             case "<": scanAngleBracket()
+            case "$": scanDollar()
             case "&": scanEntity()
             default:
                 pendingText.append(character)
@@ -338,6 +339,14 @@ struct NotionInlineParser {
             position += rest[match].count
             return
         }
+        if let match = rest.range(of: #"^<span\s+data-equation(?:\s[^<>]*)?>[^<]*</span>"#, options: .regularExpression) {
+            // Формула в строке, которую нельзя записать `$…$` (рядом цифра, `$` в записи).
+            let tag = String(rest[match])
+            let inner = tag.drop { $0 != ">" }.dropFirst().dropLast("</span>".count)
+            append(Node(.atom(.equation(Self.unescapedHTML(String(inner))))))
+            position += tag.count
+            return
+        }
         if let match = rest.range(of: #"^</?([A-Za-z][A-Za-z0-9\-]*)(?:\s[^<>]*)?/?>"#, options: .regularExpression) {
             let tag = String(rest[match])
             let isClosing = tag.hasPrefix("</")
@@ -361,6 +370,40 @@ struct NotionInlineParser {
         }
         pendingText.append("<")
         position += 1
+    }
+
+    /// `$запись$` — формула в строке, как у Notion и pandoc: после открывающего `$` не пробел, перед закрывающим не пробел,
+    /// за ним не цифра. Иначе `$` — просто знак: «от $5 до $10» остаётся текстом.
+    private mutating func scanDollar() {
+        guard let next = peek(1), next != "$", !next.isWhitespace else {
+            pendingText.append("$")
+            position += 1
+            return
+        }
+        var index = position + 1
+        while index < characters.count {
+            let character = characters[index]
+            if character == "\\" {
+                index += 2
+                continue
+            }
+            if character == "$" {
+                let after = index + 1 < characters.count ? characters[index + 1] : nil
+                if !characters[index - 1].isWhitespace, !(after?.isNumber ?? false) {
+                    append(Node(.atom(.equation(String(characters[(position + 1)..<index])))))
+                    position = index + 1
+                    return
+                }
+            }
+            index += 1
+        }
+        pendingText.append("$")
+        position += 1
+    }
+
+    private static func unescapedHTML(_ text: String) -> String {
+        text.replacingOccurrences(of: "&lt;", with: "<").replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&quot;", with: "\"").replacingOccurrences(of: "&amp;", with: "&")
     }
 
     private static let tagStyles: [String: Style] = [

@@ -9,6 +9,8 @@ public enum FormatBarButton: String, CaseIterable, Sendable {
     case underline
     case strikethrough
     case code
+    /// «√x» — формула в строке (US4).
+    case equation
     case link
     case color
 
@@ -19,6 +21,7 @@ public enum FormatBarButton: String, CaseIterable, Sendable {
         case .underline: "Подчёркнутый"
         case .strikethrough: "Зачёркнутый"
         case .code: "Код"
+        case .equation: "Формула"
         case .link: "Ссылка"
         case .color: "Цвет"
         }
@@ -31,6 +34,7 @@ public enum FormatBarButton: String, CaseIterable, Sendable {
         case .underline: "underline"
         case .strikethrough: "strikethrough"
         case .code: "chevron.left.forwardslash.chevron.right"
+        case .equation: "x.squareroot"
         case .link: "link"
         case .color: "textformat"
         }
@@ -44,7 +48,7 @@ public enum FormatBarButton: String, CaseIterable, Sendable {
         case .underline: .underline
         case .strikethrough: .strikethrough
         case .code: .code
-        case .link, .color: nil
+        case .equation, .link, .color: nil
         }
     }
 }
@@ -375,6 +379,11 @@ final class FormatBarController {
         }
         closeKindMenu()
         textView.colorMenu.close()
+        if button == .equation {
+            hide()
+            textView.perform(.insertInlineEquation)
+            return
+        }
         guard let format = button.format else {
             hide()
             textView.editLink(nil)
@@ -554,7 +563,7 @@ extension PageTextView {
             for button in FormatBarButton.allCases {
                 let covered = pieces.allSatisfy { index, range in
                     let text = document.blocks[index].text
-                    if button == .color { return false }
+                    if button == .color || button == .equation { return false }
                     guard let format = button.format else { return InlineFormatting.coversLink(text, in: range) }
                     return InlineFormatting.covers(text, with: format, in: range)
                 }

@@ -15,10 +15,13 @@ struct NotionBlockReading {
     var nextIndex: Int
     /// Что упрощено внутри прочитанного (например, таблица в переключателе).
     var simplifications: [NotionSimplification: Int] = [:]
+    /// Имена языков кода, которых MyNotion не знает: такой код стал «Простым текстом».
+    var unknownCodeLanguages: [String] = []
 }
 
 enum NotionBlockReaders {
     static let all: [any NotionBlockReader] = [ToggleReader(), CalloutReader(), QuoteReader(), DividerReader(),
-                                               MediaLinkReader(), ImageTagReader(), VideoTagReader(), EmbeddedVideoReader(),
-                                               BookmarkTagReader(), BareAddressReader(), TableReader(), ColumnsReader()]
+                                                CodeReader(), EquationReader(), TableOfContentsReader(),
+                                                MediaLinkReader(), ImageTagReader(), VideoTagReader(), EmbeddedVideoReader(),
+                                                BookmarkTagReader(), BareAddressReader(), TableReader(), ColumnsReader()]
 }

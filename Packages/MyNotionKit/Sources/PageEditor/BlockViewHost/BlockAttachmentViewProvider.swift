@@ -15,7 +15,7 @@ final class BlockAttachmentViewProvider: NSTextAttachmentViewProvider {
 
     /// Вид блока внутри рамки, которая ловит щелчок: щелчок по виду выделяет блок целиком (режим блоков 001).
     @MainActor
-    static func makeHostedView(for attachment: BlockAttachment, textView: PageTextView?) -> NSView {
+    static func makeHostedView(for attachment: BlockAttachment, textView: PageTextView?) -> BlockAttachmentHostView {
         let width = textView?.textContainer?.size.width ?? 720
         let host = BlockAttachmentHostView(blockId: attachment.blockId, textView: textView)
         host.frame = NSRect(x: 0, y: 0, width: width, height: attachment.height(forWidth: width, in: textView))

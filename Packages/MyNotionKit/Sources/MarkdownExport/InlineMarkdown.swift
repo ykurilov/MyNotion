@@ -59,11 +59,9 @@ enum InlineMarkdown {
                 case .link(let url): segment.link = url
                 case .textColor(let color): segment.textColor = color
                 case .backgroundColor(let color): segment.backgroundColor = color
-                case .mention, .date:
+                case .mention, .date, .equation:
                     if upper - lower == 1, text.string.utf16[text.string.utf16.index(text.string.utf16.startIndex, offsetBy: lower)]
                         == InlineText.objectReplacementCharacter { segment.atom = run.style }
-                // Формулы в Markdown пишет свой этап (contracts/markdown-and-notion.md).
-                case .equation: break
                 }
             }
             if var last = result.last, last.marks == segment.marks, last.link == segment.link,
@@ -171,7 +169,11 @@ enum InlineMarkdown {
             guard start < end else { return }
 
             transition(to: desiredDelimiters(at: index, in: segments))
-            if let atom = segment.atom {
+            if case .equation(let latex)? = segment.atom {
+                // Запись формулы зависит от соседних знаков (`EquationMarkdown`).
+                items.append(.text(EquationMarkdown.inline(latex, before: start > 0 ? units[start - 1] : nil,
+                                                           after: end < units.count ? units[end] : nil)))
+            } else if let atom = segment.atom {
                 items.append(.text(atomMarkdown(atom)))
             } else if segment.marks.contains(.code) {
                 items.append(.text(InlineMarkdown.codeSpan(String(decoding: units[start..<end], as: UTF16.self))))
@@ -392,7 +394,7 @@ enum InlineMarkdown {
     /// Знаки, перед которыми `needsEscape` может поставить обратную косую черту.
     private static func isMarkdownSignificant(_ unit: UInt16) -> Bool {
         switch unit {
-        case 0x5C, 0x60, 0x2A, 0x5B, 0x5D, 0x3C, 0x7E, 0x5F, 0x26, 0x23, 0x3E, 0x2D, 0x2B, 0x3D, 0x2E, 0x29: true
+        case 0x5C, 0x60, 0x2A, 0x5B, 0x5D, 0x3C, 0x7E, 0x5F, 0x26, 0x23, 0x3E, 0x2D, 0x2B, 0x3D, 0x2E, 0x29, 0x24: true
         default: false
         }
     }
@@ -415,6 +417,8 @@ enum InlineMarkdown {
             return startsLine
         case 0x2D, 0x2B, 0x3D: // - + =
             return startsLine && (nextEndsToken || next == unit)
+        case 0x24: // $ : два и больше в тексте — их можно принять за формулу `$…$`
+            return units.lazy.filter { $0 == 0x24 }.count >= 2
         case 0x2E, 0x29: // . ) после номера в начале строки
             guard nextEndsToken else { return false }
             var cursor = index - 1

@@ -29,6 +29,7 @@ struct MarkdownWriteContext {
 enum MarkdownBlockWriters {
     /// Писатели типов 002; у кого писателя нет, тот пишется текстом абзаца — текст не теряется.
     static let all: [any MarkdownBlockKindWriter] = [ToggleWriter(), QuoteWriter(), CalloutWriter(), DividerWriter(),
+                                                     CodeWriter(), EquationWriter(), TableOfContentsWriter(),
                                                      ImageWriter(), FileWriter(), VideoWriter(), BookmarkWriter(),
                                                      TableWriter(), ColumnsWriter()]
 

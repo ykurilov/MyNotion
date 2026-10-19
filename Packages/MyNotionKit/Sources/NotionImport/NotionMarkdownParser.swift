@@ -67,6 +67,8 @@ public struct ParsedNotionPage: Sendable, Hashable {
     public var icon: String?
     public var blocks: [ParsedBlock]
     public var simplifications: [NotionSimplification: Int]
+    /// Языки кода, которых MyNotion не знает (код стал «Простым текстом»), — для отчёта.
+    public var unknownCodeLanguages: [String] = []
 }
 
 /// Разбор подмножества Markdown, которое пишет Notion (и наша выгрузка), в блоки MyNotion по таблице
@@ -90,7 +92,8 @@ public struct NotionMarkdownParser: Sendable {
         }
         var builder = PageBuilder()
         builder.consume(lines[index...])
-        return ParsedNotionPage(title: title, icon: icon, blocks: builder.blocks, simplifications: builder.simplifications)
+        return ParsedNotionPage(title: title, icon: icon, blocks: builder.blocks, simplifications: builder.simplifications,
+                                unknownCodeLanguages: builder.unknownCodeLanguages)
     }
 
     /// Блоки куска Markdown без строки названия — то, что внутри переключателя, выноски, цитаты.
@@ -137,6 +140,7 @@ public struct NotionMarkdownParser: Sendable {
 struct PageBuilder {
     private(set) var blocks: [ParsedBlock] = []
     private(set) var simplifications: [NotionSimplification: Int] = [:]
+    private(set) var unknownCodeLanguages: [String] = []
 
     /// Абзац или пункт списка, строки которого ещё собираются.
     private struct OpenBlock {
@@ -175,42 +179,8 @@ struct PageBuilder {
                 listColumns = []
                 for block in reading.blocks { emit(block) }
                 simplifications.merge(reading.simplifications, uniquingKeysWith: +)
+                unknownCodeLanguages += reading.unknownCodeLanguages
                 index = max(reading.nextIndex, index)
-                continue
-            }
-            if let fence = Self.fence(trimmed) {
-                closeOpenBlock()
-                let indentation = NotionMarkdownParser.leadingSpaces(line)
-                var code: [String] = []
-                while index < lines.endIndex {
-                    let candidate = lines[index]
-                    index += 1
-                    if candidate.trimmingCharacters(in: .whitespaces).hasPrefix(fence) { break }
-                    code.append(String(candidate.dropFirst(min(indentation, NotionMarkdownParser.leadingSpaces(candidate)))))
-                }
-                emit(ParsedBlock(kind: .paragraph, text: InlineText(code.joined(separator: "\n"))), simplified: .code)
-                continue
-            }
-            if trimmed.hasPrefix("$$") {
-                closeOpenBlock()
-                var formula: [String] = []
-                if trimmed.count > 4, trimmed.hasSuffix("$$") {
-                    formula = [String(trimmed.dropFirst(2).dropLast(2)).trimmingCharacters(in: .whitespaces)]
-                } else {
-                    let first = trimmed.dropFirst(2).trimmingCharacters(in: .whitespaces)
-                    if !first.isEmpty { formula.append(first) }
-                    while index < lines.endIndex {
-                        let candidate = lines[index].trimmingCharacters(in: .whitespaces)
-                        index += 1
-                        if candidate.hasSuffix("$$") {
-                            let last = candidate.dropLast(2).trimmingCharacters(in: .whitespaces)
-                            if !last.isEmpty { formula.append(last) }
-                            break
-                        }
-                        formula.append(candidate)
-                    }
-                }
-                emit(ParsedBlock(kind: .paragraph, text: InlineText(formula.joined(separator: "\n"))), simplified: .equation)
                 continue
             }
             if let html = Self.htmlBlock(trimmed) {
@@ -377,17 +347,6 @@ struct PageBuilder {
             text = text.dropFirst(3).drop { $0 == " " || $0 == "\t" }
         }
         return ListItem(kind: kind, isChecked: isChecked, start: start, contentColumn: start + markerLength + 1, text: String(text))
-    }
-
-    private static func fence(_ trimmed: String) -> String? {
-        for marker in ["```", "~~~"] where trimmed.hasPrefix(marker) {
-            let length = trimmed.prefix { $0 == marker.first }.count
-            let fence = String(repeating: marker.first!, count: length)
-            // У «```» в строке открытия не бывает обратных кавычек дальше: иначе это код в строке.
-            if marker == "```", trimmed.dropFirst(length).contains("`") { return nil }
-            return fence
-        }
-        return nil
     }
 
     static func isThematicBreak(_ trimmed: String) -> Bool {

@@ -383,10 +383,11 @@ public struct NotionImporter: Sendable {
         func visit(_ indices: [Int]) {
             for index in indices {
                 let page = plan.pages[index]
-                let items = NotionSimplification.allCases.compactMap { kind -> String? in
+                var items = NotionSimplification.allCases.compactMap { kind -> String? in
                     guard let count = page.simplifications[kind], count > 0 else { return nil }
                     return kind.title(count: count)
                 }
+                if !page.unknownCodeLanguages.isEmpty { items.append(NotionSimplification.unknownCodeLanguagesTitle(page.unknownCodeLanguages)) }
                 if !items.isEmpty { result.append(SimplifiedPage(pageTitle: page.title.isEmpty ? Page.untitledTitle : page.title, items: items)) }
                 visit(page.children)
             }
