@@ -67,4 +67,15 @@ final class CodeMathTocTests: XCTestCase {
         ])
         XCTAssertTrue(try library.savedTextStyles(ofPage: "Код и формулы")[1].contains("\"equation\""), "Нет формулы в строке")
     }
+
+    /// Ждать условия до 5 с, не держа паузу дольше нужного.
+    @MainActor
+    private func waitUntil(_ condition: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline {
+            if condition() { return true }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        return condition()
+    }
 }

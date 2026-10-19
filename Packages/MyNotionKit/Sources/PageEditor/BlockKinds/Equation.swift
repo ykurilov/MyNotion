@@ -66,6 +66,9 @@ final class EquationBlockView: NSView, BlockFieldsView {
         self.page = page
         super.init(frame: NSRect(x: 0, y: 0, width: 720, height: 40))
         setAccessibilityIdentifier("equation-block")
+        setAccessibilityElement(true)
+        setAccessibilityRole(.staticText)
+        setAccessibilityLabel("Формула")
         render()
     }
 

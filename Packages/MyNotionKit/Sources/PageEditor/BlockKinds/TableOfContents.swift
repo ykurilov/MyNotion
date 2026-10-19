@@ -190,6 +190,9 @@ final class TableOfContentsView: NSView, BlockFieldsView {
         self.page = page
         super.init(frame: NSRect(x: 0, y: 0, width: 720, height: TableOfContents.height(rows: 1)))
         setAccessibilityIdentifier("table-of-contents")
+        setAccessibilityElement(true)
+        setAccessibilityRole(.group)
+        setAccessibilityLabel("Оглавление")
         reload()
     }
 

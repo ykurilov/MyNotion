@@ -103,6 +103,7 @@ struct CodeBlockEditingTests {
             view.textView.insertText("b", replacementRange: NSRange(location: NSNotFound, length: 0))
         }
         #expect(fixture.document.blocks[1].text.string == "let a\nb")
+        #expect(fixture.textView.codeBlocks.typing?.kind == .typing, "Enter не прерывает набор: один шаг отмены")
         #expect(fixture.textView.string == "До\n\u{FFFC}\nПосле\n", "текст страницы не меняется")
         #expect(try fixture.savedBlocks()[1].text.string == "let a\nb")
         fixture.undo()

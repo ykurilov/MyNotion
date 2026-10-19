@@ -645,18 +645,19 @@ final class CodeTextView: NSTextView {
         editKind = .other
         guard shouldChangeText(in: lines, replacementString: changed) else { return }
         textStorage?.replaceCharacters(in: lines, with: changed)
-        didChangeText()
         let length = (changed as NSString).length - (endsWithNewline ? 1 : 0)
         setSelectedRange(selection.length > 0 ? NSRange(location: lines.location, length: length)
                                               : NSRange(location: min(lines.location + length, nsString.length), length: 0))
+        didChangeText()
     }
 
     private func insertTextReplacingSelection(_ text: String) {
         let selection = selectedRange()
         guard shouldChangeText(in: selection, replacementString: text) else { return }
         textStorage?.replaceCharacters(in: selection, with: text)
-        didChangeText()
+        // Курсор — до конца правки: иначе его сдвиг прервал бы склейку набора в один шаг отмены.
         setSelectedRange(NSRange(location: selection.location + (text as NSString).length, length: 0))
+        didChangeText()
     }
 
     override func deleteBackward(_ sender: Any?) {
