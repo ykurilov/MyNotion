@@ -33,6 +33,8 @@ final class TypingAndNavigationTests: XCTestCase {
             Открытие страницы на 10 000 блоков: \(Self.format(report.hugePageOpenMs)) мс
             Набор в странице на 10 000 блоков: p95 \(Self.format(report.hugePageTypingP95Ms)) мс
             Прокрутка страницы на 10 000 блоков: p95 \(Self.format(report.hugePageScrollP95Ms)) мс
+            Открытие «богатой» страницы: \(Self.format(report.richPageOpenMs)) мс
+            Набор на «богатой» странице: p95 \(Self.format(report.richPageTypingP95Ms)) мс, \(report.richPageTypingMs.count) нажатий
             """
         print(summary)
         add(XCTAttachment(string: summary))
@@ -44,6 +46,8 @@ final class TypingAndNavigationTests: XCTestCase {
                                  "Набор на 10 000 блоках: p95 больше 50 мс")
         XCTAssertLessThanOrEqual(try XCTUnwrap(report.hugePageScrollP95Ms), Self.budgetMilliseconds,
                                  "Прокрутка 10 000 блоков: p95 больше 50 мс")
+        XCTAssertLessThanOrEqual(try XCTUnwrap(report.richPageTypingP95Ms), Self.budgetMilliseconds,
+                                 "Набор на «богатой» странице: p95 больше 50 мс (SC-102)")
     }
 
     // MARK: Вспомогательное
@@ -78,6 +82,9 @@ final class TypingAndNavigationTests: XCTestCase {
         let pageSwitchP95Ms: Double?
         let hugePageTypingP95Ms: Double?
         let hugePageScrollP95Ms: Double?
+        let richPageOpenMs: Double?
+        let richPageTypingMs: [Double]
+        let richPageTypingP95Ms: Double?
         let error: String?
     }
 

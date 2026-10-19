@@ -24,6 +24,9 @@ final class MainWindowModel {
     /// Куда поставить курсор в только что открытой странице.
     private(set) var initialFocus: PageTextView.InitialFocus = .body
     private(set) var loadError: String?
+    /// Перейти к блоку открытой страницы (найденное поиском страниц): редактор раскрывает свёрнутых предков.
+    /// Новый запрос — новый `token`, даже к тому же блоку.
+    private(set) var blockReveal: BlockReveal?
     /// Поле поиска вверху боковой панели и его выдача (FR-018).
     @ObservationIgnored private(set) var search: PageSearchController!
 
@@ -42,6 +45,7 @@ final class MainWindowModel {
         }
         search = PageSearchController(store: library.store, tree: { [weak library] in library?.tree ?? PageTreeSnapshot(allPages: []) },
                                       open: { [weak self] in self?.select($0) })
+        search.openResult = { [weak self] result in self?.select(result.pageId, revealing: result.blockId) }
         library.register(self)
         let tree = library.tree
         let lastOpen = (pageId ?? windowState?.openPageId).flatMap { tree.page($0)?.id }
@@ -89,6 +93,16 @@ final class MainWindowModel {
         guard let pageId, pageId != openPageId else { return }
         open(pageId, focus: focus, remember: true)
     }
+
+    /// Открыть страницу и перейти к блоку (поиск страниц, US1): свёрнутые предки блока раскрываются.
+    func select(_ pageId: UUID, revealing blockId: UUID?) {
+        select(pageId)
+        guard let blockId, openPageId == pageId else { return }
+        blockReveal = BlockReveal(blockId: blockId, token: (blockReveal?.token ?? 0) + 1)
+    }
+
+    /// Вид блоков этого Mac — свёрнутые переключатели.
+    var blockViewState: BlockViewStateStore { BlockViewStateStore(database: store.database) }
 
     /// ⌘N: новая страница рядом с текущей, курсор в названии (contracts/editor-interactions.md).
     func createPage() {
@@ -246,6 +260,7 @@ final class MainWindowModel {
             let document = try openDocuments.open(pageId)
             if let previous = openDocument { openDocuments.release(previous.pageId) }
             initialFocus = focus
+            blockReveal = nil
             openDocument = document
             loadError = nil
             if remember { saveWindowState { $0.openPageId = pageId } }

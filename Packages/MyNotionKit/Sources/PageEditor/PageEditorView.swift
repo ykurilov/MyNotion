@@ -17,12 +17,17 @@ public struct PageEditorView: View {
     let onSetIcon: @MainActor (String?) -> Void
     /// Выбрана версия в «Двух версиях»: снять конфликт в базе.
     let onResolveConflict: @MainActor (Conflict) -> Void
+    /// Свёрнутые переключатели этого Mac.
+    let blockViewState: BlockViewStateStore?
+    /// Перейти к блоку (поиск страниц): свёрнутые предки раскрываются.
+    let blockReveal: BlockReveal?
     let onReady: @MainActor () -> Void
 
     public init(document: PageDocument, ancestorTitles: [String] = [], initialFocus: PageTextView.InitialFocus,
                 linkedPages: [UUID: LinkedPage] = [:], onOpenPage: @escaping @MainActor (UUID) -> Void = { _ in },
                 onSetIcon: @escaping @MainActor (String?) -> Void = { _ in },
                 onResolveConflict: @escaping @MainActor (Conflict) -> Void = { _ in },
+                blockViewState: BlockViewStateStore? = nil, blockReveal: BlockReveal? = nil,
                 onReady: @escaping @MainActor () -> Void = {}) {
         self.document = document
         self.ancestorTitles = ancestorTitles
@@ -31,6 +36,8 @@ public struct PageEditorView: View {
         self.onOpenPage = onOpenPage
         self.onSetIcon = onSetIcon
         self.onResolveConflict = onResolveConflict
+        self.blockViewState = blockViewState
+        self.blockReveal = blockReveal
         self.onReady = onReady
     }
 
@@ -41,7 +48,8 @@ public struct PageEditorView: View {
                 SaveStatusBanner(reason: reason)
             }
             PageTextEditor(document: document, icon: document.page.icon, initialFocus: initialFocus, linkedPages: linkedPages,
-                           onOpenPage: onOpenPage, onSetIcon: onSetIcon, onResolveConflict: onResolveConflict, onReady: onReady)
+                           onOpenPage: onOpenPage, onSetIcon: onSetIcon, onResolveConflict: onResolveConflict,
+                           blockViewState: blockViewState, blockReveal: blockReveal, onReady: onReady)
                 .overlay(alignment: .top) { scrollEdgeFade }
         }
         .background(Color(nsColor: Palette.pageBackground))
@@ -84,11 +92,26 @@ struct PageTextEditor: NSViewRepresentable {
     let onOpenPage: @MainActor (UUID) -> Void
     let onSetIcon: @MainActor (String?) -> Void
     let onResolveConflict: @MainActor (Conflict) -> Void
+    let blockViewState: BlockViewStateStore?
+    let blockReveal: BlockReveal?
     let onReady: @MainActor () -> Void
+
+    /// Какой запрос перехода к блоку редактор уже выполнил.
+    final class Coordinator {
+        var revealToken: Int?
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> NSScrollView {
         let textView = PageTextView(document: document, initialFocus: initialFocus)
-        textView.onReady = onReady
+        textView.blockViewState = blockViewState
+        let reveal = blockReveal
+        context.coordinator.revealToken = reveal?.token
+        textView.onReady = { [weak textView, onReady] in
+            onReady()
+            if let reveal { textView?.revealBlock(reveal.blockId) }
+        }
         textView.linkedPages = linkedPages
         textView.onOpenPage = onOpenPage
         textView.onSetIcon = onSetIcon
@@ -115,9 +138,24 @@ struct PageTextEditor: NSViewRepresentable {
         textView.onSetIcon = onSetIcon
         textView.onResolveConflict = onResolveConflict
         textView.showIcon(icon)
+        if let blockReveal, blockReveal.token != context.coordinator.revealToken {
+            context.coordinator.revealToken = blockReveal.token
+            textView.revealBlock(blockReveal.blockId)
+        }
     }
 
-    static func dismantleNSView(_ scrollView: NSScrollView, coordinator: ()) {
+    static func dismantleNSView(_ scrollView: NSScrollView, coordinator: Coordinator) {
         (scrollView.documentView as? PageTextView)?.commitEdits()
+    }
+}
+
+/// Запрос перейти к блоку страницы; новый запрос — новый `token`, даже к тому же блоку.
+public struct BlockReveal: Equatable, Sendable {
+    public let blockId: UUID
+    public let token: Int
+
+    public init(blockId: UUID, token: Int) {
+        self.blockId = blockId
+        self.token = token
     }
 }

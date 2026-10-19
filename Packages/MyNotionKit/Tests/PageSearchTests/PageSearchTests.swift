@@ -62,6 +62,17 @@ struct PageSearchTests {
         #expect(results[1].snippet != nil)
     }
 
+    @Test("Найденное в тексте знает свой блок: переход к нему раскрывает свёрнутых предков (US1); в названии — без блока")
+    func resultKnowsMatchedBlock() throws {
+        let inText = try library.page("Дневник", blocks: ["Первый абзац", "Сегодня кот спал"])
+        let inTitle = try library.page("Кот Барсик")
+
+        let results = try library.search("кот")
+        #expect(results.first { $0.pageId == inTitle.id }?.blockId == nil)
+        let blocks = try #require(try library.store.pageContent(inText.id)).blocks
+        #expect(results.first { $0.pageId == inText.id }?.blockId == blocks.first { $0.text.string == "Сегодня кот спал" }?.id)
+    }
+
     @Test("Страница с совпадением и в названии, и в тексте — одна строка выдачи")
     func onePageOneResult() throws {
         let page = try library.page("Кот", blocks: ["Кот спит", "Кот ест"])
