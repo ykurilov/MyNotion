@@ -7,8 +7,8 @@ import VisualStyle
 struct QuoteBarPainter: BlockPainter {
     var layer: BlockPaintLayer { .background }
 
-    /// Черта — у самой цитаты и у вложенных блоков (они могут быть её детьми).
-    func applies(to block: Block) -> Bool { block.kind == .quote || block.indent > 0 }
+    /// Черта — у цитат и блоков внутри цитат и выносок.
+    @MainActor func applies(to block: Block, in textView: PageTextView) -> Bool { textView.isInsideSubtreePainting(block.id) }
 
     @MainActor
     func paint(_ block: Block, in context: BlockPaintContext) {
@@ -23,8 +23,7 @@ struct QuoteBarPainter: BlockPainter {
             let top = quote == index ? context.firstLine?.top ?? rect.minY : rect.minY
             let isLast = textView.lastVisibleIndex(inSubtreeOf: quote) == index
             let bottom = isLast ? context.lastLine.map { $0.top + $0.height } ?? rect.maxY : rect.maxY
-            let x = rect.minX + Metrics.Page.blockHorizontalPadding
-                + PageTextView.blockLeft(atIndent: textView.document.blocks[quote].indent)
+            let x = rect.minX + Metrics.Page.blockHorizontalPadding + textView.blockLeft(ofBlockAt: quote)
             NSRect(x: x, y: top, width: Metrics.Quote.barWidth, height: max(0, bottom - top)).fill()
         }
     }

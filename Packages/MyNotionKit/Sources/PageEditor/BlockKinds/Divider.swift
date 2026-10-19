@@ -71,6 +71,7 @@ struct DividerLinePainter: BlockPainter {
         guard let line = context.firstLine else { return }
         let rect = context.paragraphRect
         let left = rect.minX + Metrics.Page.blockHorizontalPadding + PageTextView.blockLeft(atIndent: block.indent)
+            + context.textView.layoutShift(ofBlock: block.id)
         let lineWidth = Metrics.Divider.lineWidth
         Palette.border.setFill()
         NSRect(x: left, y: (line.top + (line.height - lineWidth) / 2).rounded(.down), width: rect.maxX - left, height: lineWidth).fill()

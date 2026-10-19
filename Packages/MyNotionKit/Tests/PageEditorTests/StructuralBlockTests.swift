@@ -2,6 +2,7 @@ import AppKit
 import Testing
 @testable import NotesCore
 @testable import PageEditor
+import VisualStyle
 
 /// Переключатель, цитата, выноска, разделитель (US1; contracts/blocks-and-keys.md, «Быстрые символы», «Вложенность»).
 @MainActor
@@ -237,6 +238,56 @@ struct StructuralBlockTests {
         #expect(saved.map(\.kind) == [.toggle, .paragraph])
         #expect(saved.map(\.indent) == [0, 1])
         #expect(saved.map(\.text.string) == ["Р", "внутри"])
+    }
+
+    // MARK: Вид вложенных (сверено с Notion 19.10.2026)
+
+    /// Начало текста блока на странице.
+    private static func textStart(_ editor: EditorFixture, _ index: Int) throws -> CGFloat {
+        try #require(editor.textView.markerLine(ofBlockAt: index)).caretX
+    }
+
+    @Test("Дети цитаты и выноски — вровень с текстом родителя, как у Notion; маркер пункта — там же")
+    func childrenAlignWithParentText() throws {
+        let editor = try EditorFixture([Self.quote("Цитата"), Self.child("в цитате"), Self.callout("Выноска"), Self.child("в выноске"),
+                                        .bullet("пункт в выноске", indent: 1), Self.toggle("Переключатель"), Self.child("в переключателе")])
+        #expect(abs(try Self.textStart(editor, 1) - Self.textStart(editor, 0)) < 0.5)
+        #expect(abs(try Self.textStart(editor, 3) - Self.textStart(editor, 2)) < 0.5)
+        let bullet = try #require(editor.textView.markerLine(ofBlockAt: 4))
+        #expect(abs(bullet.markerColumn.minX - (try Self.textStart(editor, 2))) < 0.5,
+                "колонка маркера пункта начинается у текста выноски")
+        // У переключателя дети — на шаге вложенности, как пункты списка 001.
+        #expect(try Self.textStart(editor, 6) > Self.textStart(editor, 5))
+        #expect(editor.indents == [0, 1, 0, 1, 1, 0, 1], "записанная вложенность не меняется")
+    }
+
+    @Test("Нижнее поле выноски — у её последнего видимого ребёнка, у самой выноски с детьми — обычный отступ")
+    func calloutBottomPaddingAfterLastChild() throws {
+        let editor = try EditorFixture([Self.callout("Выноска"), Self.child("первый"), Self.child("последний"), .paragraph("после")])
+        func spacingAfter(_ index: Int) -> CGFloat {
+            let location = editor.textLocation(ofBlock: index)
+            return (editor.textView.textStorage?.attribute(.paragraphStyle, at: location, effectiveRange: nil) as? NSParagraphStyle)?
+                .paragraphSpacing ?? -1
+        }
+        let base = spacingAfter(3)
+        #expect(spacingAfter(0) == base)
+        #expect(spacingAfter(1) == base)
+        #expect(spacingAfter(2) == base + Metrics.Callout.verticalPadding)
+        // Набор в последнем ребёнке не теряет поле.
+        editor.placeCaret(inBlock: 2, at: nil)
+        editor.type("!")
+        #expect(spacingAfter(2) == base + Metrics.Callout.verticalPadding)
+    }
+
+    @Test("Слишком глубокий блок (после слияния) показывается на допустимой глубине, запись не меняется")
+    func overDeepBlockIsClampedOnScreen() throws {
+        let reopened = try EditorFixture([.paragraph("А"), Spec(kind: .paragraph, text: "слишком глубоко", indent: 2), .bullet("пункт"),
+                                          Spec(kind: .heading2, text: "Заголовок", indent: 1), .bullet("под пунктом", indent: 1)])
+        #expect(abs(try Self.textStart(reopened, 1) - Self.textStart(reopened, 0)) < 0.5, "абзац под абзацем — на его глубине")
+        #expect(abs(try Self.textStart(reopened, 3) - Self.textStart(reopened, 0)) < 0.5, "заголовок под пунктом — на глубине 0")
+        #expect(try Self.textStart(reopened, 4) > Self.textStart(reopened, 3))
+        #expect(reopened.indents == [0, 2, 0, 1, 1])
+        #expect(try reopened.savedBlocks().map(\.indent) == [0, 2, 0, 1, 1])
     }
 
     // MARK: Разделитель

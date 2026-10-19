@@ -20,6 +20,7 @@ struct TogglePainter: BlockPainter {
             let font = Typography.line(for: .paragraph).font
             let hintLine = BlockDecorationPainter.textLine(Self.emptyHint, font: font)
             let x = context.paragraphRect.minX + Metrics.Page.blockHorizontalPadding + PageTextView.blockLeft(atIndent: block.indent + 1)
+                + line.shift
             BlockDecorationPainter.drawLine(hintLine, color: Palette.textSecondary,
                                             baselineOrigin: CGPoint(x: x, y: line.baseline + Metrics.block(.paragraph).height))
         }

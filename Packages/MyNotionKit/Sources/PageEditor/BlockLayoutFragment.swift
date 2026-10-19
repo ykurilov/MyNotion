@@ -17,6 +17,8 @@ enum BlockDecoration: Equatable {
 /// Строка блока на странице в координатах текстового контейнера.
 struct BlockLine {
     var indent: Int
+    /// Сдвиг блока вбок от его глубины (`PageTextView.layoutShift`).
+    var shift: CGFloat = 0
     var top: CGFloat
     var height: CGFloat
     var baseline: CGFloat
@@ -25,7 +27,7 @@ struct BlockLine {
 
     /// Колонка маркера: от края вложенности на ширину `Metrics.BlockMarker.columnWidth`.
     var markerColumn: CGRect {
-        let x = Metrics.Page.blockHorizontalPadding + CGFloat(indent) * Metrics.Page.indentPerLevel
+        let x = Metrics.Page.blockHorizontalPadding + CGFloat(indent) * Metrics.Page.indentPerLevel + shift
         return CGRect(x: x, y: top, width: Metrics.BlockMarker.columnWidth, height: height)
     }
 
@@ -86,15 +88,15 @@ final class BlockLayoutFragment: NSTextLayoutFragment, @unchecked Sendable {
         guard let textView, let paragraph = textElement as? NSTextParagraph, paragraph.attributedString.length > 0,
               let id = paragraph.attributedString.attribute(.blockID, at: 0, effectiveRange: nil) as? UUID,
               let block = textView.document.block(id) else { return }
-        let painters = BlockPainters.painters(for: block.kind).filter { $0.layer == layer && $0.applies(to: block) }
+        let painters = BlockPainters.painters(for: block.kind).filter { $0.layer == layer && $0.applies(to: block, in: textView) }
         guard !painters.isEmpty else { return }
         let offset = CGPoint(x: point.x - layoutFragmentFrame.minX, y: point.y - layoutFragmentFrame.minY)
         let width = textLayoutManager?.textContainer?.size.width ?? Metrics.Page.columnWidth
         let rect = CGRect(x: offset.x, y: point.y, width: width, height: layoutFragmentFrame.height)
         func blockLine(_ line: NSTextLineFragment) -> BlockLine {
             let top = layoutFragmentFrame.minY + line.typographicBounds.minY + offset.y
-            return BlockLine(indent: block.indent, top: top, height: line.typographicBounds.height,
-                             baseline: top + line.glyphOrigin.y)
+            return BlockLine(indent: block.indent, shift: textView.layoutShift(ofBlock: block.id), top: top,
+                             height: line.typographicBounds.height, baseline: top + line.glyphOrigin.y)
         }
         let lines = textLineFragments.filter { $0.characterRange.length > 0 }
         NSGraphicsContext.saveGraphicsState()
@@ -236,7 +238,7 @@ extension PageTextView {
         guard let paragraph = fragment.textElement as? NSTextParagraph, paragraph.attributedString.length > 0,
               let id = paragraph.attributedString.attribute(.blockID, at: 0, effectiveRange: nil) as? UUID,
               let block = document.block(id), let first = fragment.textLineFragments.first else { return [] }
-        let line = blockLine(first, in: fragment, indent: block.indent)
+        let line = blockLine(first, in: fragment, block: block)
         var lines: [(BlockDecoration, BlockLine)] = []
         if let decoration = decoration(for: block) { lines.append((decoration, line)) }
         let isEmpty = paragraph.attributedString.string.trimmingCharacters(in: .newlines).isEmpty
@@ -251,11 +253,12 @@ extension PageTextView {
         kind == .paragraph ? nil : emptyBlockHint(for: kind)
     }
 
-    private func blockLine(_ line: NSTextLineFragment, in fragment: NSTextLayoutFragment, indent: Int) -> BlockLine {
+    private func blockLine(_ line: NSTextLineFragment, in fragment: NSTextLayoutFragment, block: Block) -> BlockLine {
         let frame = fragment.layoutFragmentFrame
         let top = frame.minY + line.typographicBounds.minY
         let caretX = frame.minX + line.typographicBounds.minX + line.locationForCharacter(at: 0).x
-        return BlockLine(indent: indent, top: top, height: line.typographicBounds.height, baseline: top + line.glyphOrigin.y, caretX: caretX)
+        return BlockLine(indent: block.indent, shift: layoutShift(ofBlock: block.id), top: top, height: line.typographicBounds.height,
+                         baseline: top + line.glyphOrigin.y, caretX: caretX)
     }
 
     /// Маркер в колонке слева — по описателю типа (`BlockKinds/`).
@@ -290,7 +293,7 @@ extension PageTextView {
         else { return nil }
         textLayoutManager.ensureLayout(for: NSTextRange(location: location))
         guard let fragment = textLayoutManager.textLayoutFragment(for: location), let line = fragment.textLineFragments.first else { return nil }
-        return blockLine(line, in: fragment, indent: document.blocks[index].indent)
+        return blockLine(line, in: fragment, block: document.blocks[index])
     }
 
     /// Квадрат чекбокса в координатах окна текста.

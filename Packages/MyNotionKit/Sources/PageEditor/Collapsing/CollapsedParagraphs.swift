@@ -11,8 +11,6 @@ final class CollapsedParagraphs {
     /// Где хранится свёрнутость; без него она живёт, пока открыта страница.
     var store: BlockViewStateStore?
     private(set) var collapsedIds: Set<UUID> = []
-    /// Добавочный отступ под абзацем, который поставлен в тексте: поля выноски снизу, место подсказки пустого переключателя.
-    private var extraSpacing: [UUID: CGFloat] = [:]
 
     func load(pageId: UUID) {
         collapsedIds = (try? store?.collapsedBlockIds(ofPage: pageId)) ?? []
@@ -42,52 +40,104 @@ final class CollapsedParagraphs {
         return hidden
     }
 
-    // MARK: Отступы по поддереву
+    // MARK: Вид абзацев по поддереву
 
-    /// Добавочный отступ под блоками: последний видимый блок выноски — её поля снизу (у вложенных выносок — по полю
-    /// на каждую), раскрытый переключатель без детей — строка подсказки.
-    func extraSpacing(in blocks: [Block], isHidden: (UUID) -> Bool) -> [UUID: CGFloat] {
-        var result: [UUID: CGFloat] = [:]
+    /// Поправки вида абзаца, которые зависят от соседей, а не только от самого блока (их не знает мэппер).
+    struct Adjustment: Equatable {
+        /// Добавочный отступ под абзацем: поля выноски снизу у её последнего видимого блока (у вложенных выносок —
+        /// по полю на каждую), строка подсказки под раскрытым пустым переключателем.
+        var spacingAfter: CGFloat = 0
+        /// Сдвиг абзаца вбок: дети цитаты и выноски — вровень с текстом родителя, как у Notion; слишком глубокий блок
+        /// (после слияния правок двух Mac) — на допустимую глубину (`BlockNesting`).
+        var shift: CGFloat = 0
+    }
+
+    /// Поправки, поставленные в текст.
+    private(set) var adjustments: [UUID: Adjustment] = [:]
+    /// Цитаты, выноски и блоки внутри них: только у них что-то рисуют общие рисователи по поддереву.
+    private(set) var subtreePainted: Set<UUID> = []
+
+    /// Поправки всех блоков страницы; блоки без поправок в словарь не входят.
+    func adjustments(in blocks: [Block], isHidden: (UUID) -> Bool) -> [UUID: Adjustment] {
+        var result: [UUID: Adjustment] = [:]
+        subtreePainted = []
+        // Страница без вложенности и без выносок и переключателей — без поправок; проход по месту, без копий блоков.
+        guard blocks.indices.contains(where: { blocks[$0].indent > 0 || blocks[$0].kind == .callout || blocks[$0].kind == .toggle
+            || blocks[$0].kind == .quote }) else { return result }
+
+        let displayIndents = BlockNesting.displayIndents(blocks)
+        let step = Metrics.Page.indentPerLevel
+        // Предки текущего блока: глубина при показе, тип, сдвиг, лежит ли в цитате или выноске.
+        var ancestors: [(indent: Int, kind: BlockKind, shift: CGFloat, painted: Bool)] = []
+        for index in blocks.indices {
+            let indent = displayIndents[index]
+            while let last = ancestors.last, last.indent >= indent { ancestors.removeLast() }
+            let parent = ancestors.last.flatMap { $0.indent == indent - 1 ? $0 : nil }
+            var shift = CGFloat(indent - blocks[index].indent) * step
+            if let parent { shift += parent.shift + Self.childShift(under: parent.kind) }
+            let kind = blocks[index].kind
+            let painted = kind == .quote || kind == .callout || (parent?.painted ?? false)
+            if painted { subtreePainted.insert(blocks[index].id) }
+            if shift != 0 { result[blocks[index].id, default: Adjustment()].shift = shift }
+            ancestors.append((indent, kind, shift, painted))
+        }
+
         for index in blocks.indices where blocks[index].kind == .callout || blocks[index].kind == .toggle {
             let block = blocks[index]
             guard !isHidden(block.id) else { continue }
             let end = BlockMoveController.subtreeEnd(blocks, of: index)
             if block.kind == .toggle {
-                if end == index + 1, !collapsedIds.contains(block.id) { result[block.id, default: 0] += Metrics.block(.paragraph).height }
+                if end == index + 1, !collapsedIds.contains(block.id) {
+                    result[block.id, default: Adjustment()].spacingAfter += Metrics.block(.paragraph).height
+                }
                 continue
             }
             var last = end - 1
             while last > index, isHidden(blocks[last].id) { last -= 1 }
-            result[blocks[last].id, default: 0] += Metrics.Callout.verticalPadding
+            result[blocks[last].id, default: Adjustment()].spacingAfter += Metrics.Callout.verticalPadding
         }
         return result
     }
 
-    /// Поставить добавочные отступы в текст: только у абзацев, где они появились, пропали или стёрлись перерисовкой.
-    func applyExtraSpacing(_ wanted: [UUID: CGFloat], in textView: PageTextView) {
-        let touched = Set(wanted.keys).union(extraSpacing.keys)
-        extraSpacing = wanted
+    /// Насколько ребёнок сдвинут от шага вложенности: у цитаты и выноски он начинается там же, где текст родителя.
+    static func childShift(under kind: BlockKind) -> CGFloat {
+        switch kind {
+        case .quote: Metrics.Quote.textInset - Metrics.Page.indentPerLevel
+        case .callout: Metrics.Callout.textInset - Metrics.Page.indentPerLevel
+        default: 0
+        }
+    }
+
+    /// Поставить поправки в текст: у абзацев, где они появились, пропали или стёрлись перерисовкой блока (`only` —
+    /// проверить только эти блоки).
+    func apply(_ wanted: [UUID: Adjustment], in textView: PageTextView, only: Set<UUID>? = nil) {
+        let touched = only ?? Set(wanted.keys).union(adjustments.keys)
+        adjustments = wanted
         guard let textStorage = textView.textStorage, !touched.isEmpty else { return }
-        var changed: [NSRange] = []
+        var changed = false
         for id in touched {
             guard let index = textView.document.index(ofBlock: id) else { continue }
             let block = textView.document.blocks[index]
             let range = textView.mapper.characterRange(ofBlocksAt: index..<index + 1)
             guard range.length > 0 else { continue }
+            let adjustment = wanted[id] ?? Adjustment()
             let base = PageTextStorageMapper.baseAttributes(for: block)[.paragraphStyle] as? NSParagraphStyle
-            let spacing = (base?.paragraphSpacing ?? 0) + (wanted[id] ?? 0)
+            let spacing = (base?.paragraphSpacing ?? 0) + adjustment.spacingAfter
+            let head = (base?.headIndent ?? 0) + adjustment.shift
             let current = textStorage.attribute(.paragraphStyle, at: range.location, effectiveRange: nil) as? NSParagraphStyle
-            guard current?.paragraphSpacing != spacing else { continue }
-            changed.append(range)
+            guard current?.paragraphSpacing != spacing || current?.headIndent != head || current?.firstLineHeadIndent != head else { continue }
+            changed = true
             textStorage.beginEditing()
             textStorage.enumerateAttribute(.paragraphStyle, in: range) { value, run, _ in
                 guard let style = (value as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle else { return }
                 style.paragraphSpacing = spacing
+                style.headIndent = head
+                style.firstLineHeadIndent = head
                 textStorage.addAttribute(.paragraphStyle, value: style, range: run)
             }
             textStorage.endEditing()
         }
-        if !changed.isEmpty { textView.needsDisplay = true }
+        if changed { textView.needsDisplay = true }
     }
 }
 
@@ -99,8 +149,10 @@ extension PageTextView {
         get { collapsedParagraphs.store }
         set {
             collapsedParagraphs.store = newValue
+            // Без переключателей на странице свёрнутости нет — база не читается (путь открытия страницы).
+            guard document.blocks.contains(where: { $0.kind == .toggle }) else { return }
             collapsedParagraphs.load(pageId: document.pageId)
-            refreshBlockStructure()
+            if !collapsedBlockIds.isEmpty { refreshBlockStructure() }
         }
     }
 
@@ -175,7 +227,32 @@ extension PageTextView {
         let blocks = document.blocks
         hiddenParagraphs.setHiddenBlocks(collapsedParagraphs.hiddenBlockIds(in: blocks))
         let hidden = hiddenParagraphs
-        collapsedParagraphs.applyExtraSpacing(collapsedParagraphs.extraSpacing(in: blocks, isHidden: hidden.isHidden), in: self)
+        collapsedParagraphs.apply(collapsedParagraphs.adjustments(in: blocks, isHidden: hidden.isHidden), in: self)
+    }
+
+    /// Набор в блоке без смены блоков: мэппер переписал вид абзаца под курсором и соседей — вернуть им поправки.
+    func reapplyAdjustments(aroundBlockAt index: Int) {
+        let adjustments = collapsedParagraphs.adjustments
+        guard !adjustments.isEmpty else { return }
+        let blocks = document.blocks
+        let nearby = Set(blocks[max(0, index - 1)..<min(blocks.count, index + 2)].map(\.id))
+        collapsedParagraphs.apply(adjustments, in: self, only: nearby)
+    }
+
+    /// Сдвиг блока вбок от его глубины (дети цитаты и выноски, урезанная глубина).
+    func layoutShift(ofBlock id: UUID) -> CGFloat {
+        collapsedParagraphs.adjustments[id]?.shift ?? 0
+    }
+
+    /// Цитата, выноска или блок внутри них: только у них рисуют черта цитаты и подложка выноски.
+    func isInsideSubtreePainting(_ id: UUID) -> Bool {
+        collapsedParagraphs.subtreePainted.contains(id)
+    }
+
+    /// Левый край блока в координатах контейнера: глубина и сдвиг.
+    func blockLeft(ofBlockAt index: Int) -> CGFloat {
+        let block = document.blocks[index]
+        return Self.blockLeft(atIndent: block.indent) + layoutShift(ofBlock: block.id)
     }
 
     /// Раскрытый переключатель без детей показывает под строкой подсказку.

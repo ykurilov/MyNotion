@@ -8,8 +8,8 @@ import VisualStyle
 struct CalloutBoxPainter: BlockPainter {
     var layer: BlockPaintLayer { .background }
 
-    /// Подложка — у самой выноски и у вложенных блоков (они могут быть её детьми).
-    func applies(to block: Block) -> Bool { block.kind == .callout || block.indent > 0 }
+    /// Подложка — у выносок и блоков внутри цитат и выносок.
+    @MainActor func applies(to block: Block, in textView: PageTextView) -> Bool { textView.isInsideSubtreePainting(block.id) }
 
     @MainActor
     func paint(_ block: Block, in context: BlockPaintContext) {
@@ -24,7 +24,8 @@ struct CalloutBoxPainter: BlockPainter {
         let padding = Metrics.Callout.verticalPadding
         let endingHere = callouts.filter { textView.lastVisibleIndex(inSubtreeOf: $0) == index }
         for callout in callouts {
-            let left = rect.minX + PageTextView.blockLeft(atIndent: blocks[callout].indent)
+            // Край подложки — по краю текста блоков страницы, как у Notion.
+            let left = rect.minX + Metrics.Page.blockHorizontalPadding + textView.blockLeft(ofBlockAt: callout)
             let top = callout == index ? (context.firstLine?.top ?? rect.minY) - padding : rect.minY
             let isLast = endingHere.contains(callout)
             // Выноски, которые кончаются на этом блоке и лежат внутри этой, добавляют каждая свои поля снизу.
@@ -39,7 +40,7 @@ struct CalloutBoxPainter: BlockPainter {
                 Self.strokeBorder(piece, roundsTop: callout == index, roundsBottom: isLast)
             }
         }
-        if block.kind == .callout { Self.drawIcon(block, in: context) }
+        if block.kind == .callout { Self.drawIcon(block, shift: textView.layoutShift(ofBlock: block.id), in: context) }
     }
 
     /// Выноска без цвета фона — тонкая рамка цвета border, как у Notion.
@@ -60,9 +61,9 @@ struct CalloutBoxPainter: BlockPainter {
 
     /// Иконка-эмодзи в квадрате слева от первой строки текста.
     @MainActor
-    static func drawIcon(_ block: Block, in context: BlockPaintContext) {
+    static func drawIcon(_ block: Block, shift: CGFloat, in context: BlockPaintContext) {
         guard let line = context.firstLine else { return }
-        let iconRect = iconRect(indent: block.indent, line: line, originX: context.paragraphRect.minX)
+        let iconRect = iconRect(indent: block.indent, line: line, originX: context.paragraphRect.minX + shift)
         let icon = block.props.icon ?? BlockProps.defaults(for: .callout).icon ?? "💡"
         let font = NSFont.systemFont(ofSize: Metrics.Callout.iconFontSize)
         let glyphs = CTLineCreateWithAttributedString(NSAttributedString(string: icon, attributes: [.font: font]))

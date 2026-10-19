@@ -216,8 +216,13 @@ public final class PageTextView: NSTextView {
         guard !hasMarkedText() else { return }
         let blockCount = document.blocks.count
         mapper.commitPendingEdits()
-        refreshBlockStructure()
-        if document.blocks.count != blockCount { redrawBlockDecorations() }
+        if document.blocks.count != blockCount {
+            refreshBlockStructure()
+            redrawBlockDecorations()
+        } else if let position = mapper.blockPosition(at: selectedRange().location) {
+            // Набор внутри блока: поддеревья те же, поправки нужны только перерисованным абзацам.
+            reapplyAdjustments(aroundBlockAt: position.index)
+        }
         updateEmptyParagraphHint()
         textDidChangeForPopups()
         updateSelectionLook()
@@ -842,7 +847,7 @@ public final class PageTextView: NSTextView {
             guard let first = lines.first, let last = lines.last else { continue }
             let top = lineBox(first, in: fragment, startingAt: fragmentStart).minY - Metrics.BlockSelection.verticalOutset
             let bottom = lineBox(last, in: fragment, startingAt: fragmentStart).maxY + Metrics.BlockSelection.verticalOutset
-            let left = origin.x + CGFloat(document.blocks[index].indent) * Metrics.Page.indentPerLevel - outset
+            let left = origin.x + blockLeft(ofBlockAt: index) - outset
             let right = origin.x + container.size.width + outset
             rects.append(NSRect(x: left, y: top, width: right - left, height: bottom - top))
         }

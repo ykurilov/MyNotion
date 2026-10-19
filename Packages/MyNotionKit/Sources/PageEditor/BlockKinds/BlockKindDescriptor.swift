@@ -82,12 +82,12 @@ enum BlockPaintLayer: Sendable {
 protocol BlockPainter: Sendable {
     var layer: BlockPaintLayer { get }
     /// Рисует ли что-то у этого блока: общие рисователи проверяют дёшево, до подготовки рисования.
-    func applies(to block: Block) -> Bool
+    @MainActor func applies(to block: Block, in textView: PageTextView) -> Bool
     @MainActor func paint(_ block: Block, in context: BlockPaintContext)
 }
 
 extension BlockPainter {
-    func applies(to block: Block) -> Bool { true }
+    @MainActor func applies(to block: Block, in textView: PageTextView) -> Bool { true }
 }
 
 /// Где рисовать: абзац блока в координатах рисования фрагмента.

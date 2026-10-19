@@ -24,7 +24,8 @@ extension PageTextView {
         guard let index = document.index(ofBlock: id), document.blocks[index].kind == .callout,
               let line = markerLine(ofBlockAt: index) else { return nil }
         let origin = textContainerOrigin
-        return CalloutBoxPainter.iconRect(indent: document.blocks[index].indent, line: line, originX: 0).offsetBy(dx: origin.x, dy: origin.y)
+        return CalloutBoxPainter.iconRect(indent: document.blocks[index].indent, line: line, originX: line.shift)
+            .offsetBy(dx: origin.x, dy: origin.y)
     }
 
     /// Выноска, чья иконка под точкой.
