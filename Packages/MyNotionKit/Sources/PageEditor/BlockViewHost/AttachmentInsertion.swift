@@ -215,6 +215,7 @@ extension PageTextView {
                                    with: [draft], movedBlockIds: [], origin: textStorage)
         mapper.renderBlocks(index..<index + 1, replacing: characters)
         selectedRanges = selection
+        blockViews.update()
     }
 
     /// «Обновить» в меню закладки.
@@ -363,12 +364,13 @@ extension PageTextView {
         changeBlocks(index..<index + 1, to: [draft], actionName: actionName)
     }
 
-    /// Переложить строку блока и создать его вид заново: файл пришёл, подпись начали править. Не правка — без ⌘Z.
+    /// Переложить строку блока: пустую подпись начали или кончили править, высота строки другая. Не правка — без ⌘Z.
     func relayoutBlockView(_ id: UUID) {
         guard let index = document.index(ofBlock: id) else { return }
         let selection = selectedRanges
         mapper.renderBlocks(index..<index + 1, replacing: mapper.characterRange(ofBlocksAt: index..<index + 1))
         selectedRanges = selection
+        blockViews.update()
     }
 
     /// ⌘V доступна, и когда в буфере только картинка или файлы Finder: «Вставить» не выключается.

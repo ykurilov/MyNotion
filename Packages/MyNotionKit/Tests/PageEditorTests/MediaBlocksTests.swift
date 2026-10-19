@@ -334,8 +334,14 @@ extension MediaBlocksTests {
         _ = await ImageThumbnailCache.shared.thumbnail(png, maxPixelSize: Int(600 * (NSScreen.main?.backingScaleFactor ?? 2)))
         let image = try #require(factory.makeView(for: block, context: BlockViewContext(textView: nil, width: 600)))
         image.frame = NSRect(x: 0, y: 0, width: 600, height: height)
-        let pixels = try ViewPixels(image, appearance: .aqua)
-        #expect(pixels.inkBounds(in: image.bounds)?.width ?? 0 >= 590, "картинка во всю ширину не нарисовалась")
+        // Уменьшенная картинка может прийти из фона чуть позже (кэш вытеснен соседними тестами) — ждём до 2 с.
+        var inkWidth: CGFloat = 0
+        for _ in 0..<40 {
+            inkWidth = try ViewPixels(image, appearance: .aqua).inkBounds(in: image.bounds)?.width ?? 0
+            if inkWidth >= 590 { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(inkWidth >= 590, "картинка во всю ширину не нарисовалась")
 
         services.availability = .downloading
         var waiting = props
@@ -423,5 +429,29 @@ extension MediaBlocksTests {
                     .write(to: folder.appendingPathComponent("\(name)-\(appearance == .aqua ? "light" : "dark").png"))
             }
         }
+    }
+}
+
+extension MediaBlocksTests {
+    @Test("Вид картинки стоит на странице; новая ширина и пришедший файл — вид заново на том же месте")
+    func viewOnPageFollowsBlock() async throws {
+        let (fixture, services) = try fixture()
+        let png = try services.sampleFile("снимок.png", pngWidth: 400, height: 200)
+        await asyncStep(fixture) { await fixture.textView.insertFiles([png], at: 1) }
+        fixture.textView.layoutSubtreeIfNeeded()
+        fixture.textView.blockViews.update()
+        func mediaViews() -> [MediaBlockView] {
+            func all(_ view: NSView) -> [MediaBlockView] { ((view as? MediaBlockView).map { [$0] } ?? []) + view.subviews.flatMap(all) }
+            return all(fixture.textView)
+        }
+        let id = fixture.document.blocks[1].id
+        #expect(mediaViews().map(\.block.id) == [id])
+        fixture.step { fixture.textView.setMediaWidth(0.5, ofBlock: id) }
+        #expect(mediaViews().first?.block.props.width == 0.5)
+        let before = try #require(mediaViews().first)
+        NotificationCenter.default.post(name: AttachmentRef.availabilityDidChange, object: try #require(before.block.props.attachment?.id))
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(mediaViews().count == 1)
+        #expect(mediaViews().first !== before)
     }
 }

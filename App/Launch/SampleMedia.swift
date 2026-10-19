@@ -10,9 +10,11 @@ import PageEditor
 enum SampleMedia {
     static let placeholderNames: Set<String> = ["загружается.png", "ждёт-отправки.png"]
 
-    static func materialize(in store: NotesStore, attachments: AttachmentStore) {
-        let refs = (try? store.pageOutline().flatMap { page in
-            (try? store.pageContent(page.id)?.blocks) ?? []
+    /// `pageIds` — только эти страницы (замер на эталоне в 1 000 страниц не перебирает их все).
+    static func materialize(in store: NotesStore, attachments: AttachmentStore, pageIds: [UUID]? = nil) {
+        let ids = pageIds ?? ((try? store.pageOutline().map(\.id)) ?? [])
+        let refs = Optional(ids.flatMap { id in
+            (try? store.pageContent(id)?.blocks) ?? []
         })?.filter { BlockKind.withAttachments.contains($0.kind) }.flatMap(\.props.attachmentRefs) ?? []
         var done: Set<UUID> = []
         for ref in refs where done.insert(ref.id).inserted && attachments.fileURL(for: ref.id) == nil {

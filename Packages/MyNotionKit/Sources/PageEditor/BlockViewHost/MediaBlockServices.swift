@@ -209,6 +209,26 @@ class MediaBlockView: NSView {
     }
 }
 
+/// Страница переиспользует вид блока, пока он на экране (`BlockViewHosting`): новые поля блока или пришедший файл —
+/// вид создаётся заново на том же месте (медиа-вид берёт поля один раз, при создании).
+extension MediaBlockView: BlockFieldsView {
+    func update(_ block: Block) {
+        guard block != self.block else { return }
+        rebuild(with: block)
+    }
+
+    /// Вид заново с теми же размерами внутри той же рамки.
+    func rebuild(with block: Block? = nil) {
+        guard let host = superview else { return }
+        let block = block ?? self.block
+        let fresh = MediaBlockViewFactory(kind: block.kind).makeView(for: block, context: BlockViewContext(textView: textView, width: host.bounds.width))
+        guard let fresh else { return }
+        fresh.frame = frame
+        fresh.autoresizingMask = autoresizingMask
+        host.replaceSubview(self, with: fresh)
+    }
+}
+
 @MainActor
 final class MenuAction: NSObject {
     let action: @MainActor () -> Void
