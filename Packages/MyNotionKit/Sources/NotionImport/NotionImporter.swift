@@ -248,7 +248,12 @@ public struct NotionImporter: Sendable {
             }
             appendContained(parsed.contained, in: block.id)
         }
-        for block in page.blocks {
+        for var block in page.blocks {
+            if !block.mentions.isEmpty {
+                block.text = resolvingMentions(in: block.text, mentions: block.mentions) { path in
+                    plan.page(atPath: path, from: index).map { ids[$0] }
+                }
+            }
             if let target = NotionExportReader.linkedPage(block, from: index, in: plan) {
                 if page.children.contains(target) { linkedChildren.insert(target) }
                 append(.pageLink, link: ids[target])
@@ -265,6 +270,32 @@ public struct NotionImporter: Sendable {
         }
         if result.isEmpty { append(.paragraph) }
         return result
+    }
+
+    /// Упоминания с временным id — на страницы выгрузки; страницы нет — название ссылки простым текстом.
+    static func resolvingMentions(in text: InlineText, mentions: [NotionPageMention], pageId: (String) -> UUID?) -> InlineText {
+        let byPlaceholder = Dictionary(mentions.map { ($0.placeholder, $0) }) { first, _ in first }
+        var units = Array(text.string.utf16)
+        var runs = text.runs
+        for run in text.runs.sorted(by: { $0.start > $1.start }) {
+            guard case .mention(let placeholder) = run.style, let mention = byPlaceholder[placeholder],
+                  let position = runs.firstIndex(of: run) else { continue }
+            if let target = pageId(mention.path) {
+                runs[position].style = .mention(target)
+                continue
+            }
+            // Название вместо знака: оформление правее сдвигается на разницу длин.
+            runs.remove(at: position)
+            let title = Array(mention.title.utf16)
+            units.replaceSubrange(run.start..<run.start + 1, with: title)
+            let shift = title.count - 1
+            runs = runs.map { other in
+                var other = other
+                if other.start > run.start { other.start += shift } else if other.start + other.length > run.start { other.length += shift }
+                return other
+            }
+        }
+        return InlineText(String(decoding: units, as: UTF16.self), runs: runs).normalized()
     }
 
     /// Стереть ветку импорта: корень и все страницы под ним, включая убранные в корзину.

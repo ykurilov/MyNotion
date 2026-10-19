@@ -144,9 +144,13 @@ struct NotionMarkdownParserTests {
         ])
     }
 
-    @Test("Ссылка на страницу внутри текста — просто текст; строка из одной ссылки на адрес — абзац с пометкой адреса")
-    func pageLinksInText() {
-        #expect(blocks("См. [Дневник](%D0%94%D0%BD%D0%B5%D0%B2%D0%BD%D0%B8%D0%BA.md) тут\n") == [block(.paragraph, "См. Дневник тут")])
+    @Test("Ссылка на страницу внутри текста — упоминание (002); строка из одной ссылки на адрес — абзац с пометкой адреса")
+    func pageLinksInText() throws {
+        let mentioned = try #require(blocks("См. [Дневник](%D0%94%D0%BD%D0%B5%D0%B2%D0%BD%D0%B8%D0%BA.md) тут\n").first)
+        let mention = try #require(mentioned.mentions.first)
+        #expect(mentioned.kind == .paragraph)
+        #expect(mentioned.text == InlineText("См. \u{FFFC} тут", runs: [StyledRun(start: 4, length: 1, style: .mention(mention.placeholder))]))
+        #expect(mention.path == "Дневник.md" && mention.title == "Дневник")
         let url = URL(string: "https://www.notion.so/MyNotion-2a3b4c5d6e7f8091a2b3c4d5e6f70812?pvs=21")!
         #expect(blocks("[MyNotion](https://www.notion.so/MyNotion-2a3b4c5d6e7f8091a2b3c4d5e6f70812?pvs=21)\n") == [
             ParsedBlock(kind: .paragraph, text: styled("MyNotion", [(0, 8, .link(url))]), standaloneURL: url),

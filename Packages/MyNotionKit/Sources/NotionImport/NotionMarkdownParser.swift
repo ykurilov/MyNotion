@@ -38,6 +38,8 @@ public struct ParsedBlock: Sendable, Hashable {
     public var props: BlockProps
     /// Блоки внутри контейнера (колонки, таблица): их `containerId` — этот блок.
     public var contained: [ParsedBlock]
+    /// Упоминания страниц в тексте: импорт найдёт их страницы (`NotionImporter.resolvingMentions`).
+    var mentions: [NotionPageMention] = []
 
     public init(kind: BlockKind, text: InlineText = .empty, indent: Int = 0, isChecked: Bool = false,
                 pagePath: String? = nil, standaloneURL: URL? = nil, color: BlockColor = .none, props: BlockProps = .empty,
@@ -226,7 +228,9 @@ private struct PageBuilder {
                 let level: BlockKind = heading.level == 1 ? .heading1 : heading.level == 2 ? .heading2 : .heading3
                 let parsed = NotionInlineParser.parse(heading.text)
                 note(files: parsed.files)
-                emit(ParsedBlock(kind: level, text: parsed.text))
+                var headingBlock = ParsedBlock(kind: level, text: parsed.text)
+                headingBlock.mentions = parsed.pageMentions
+                emit(headingBlock)
                 continue
             }
             if trimmed.hasPrefix(">") {
@@ -284,7 +288,9 @@ private struct PageBuilder {
         } else {
             let parsed = NotionInlineParser.parse(Self.joined(block.lines))
             note(files: parsed.files)
-            emit(ParsedBlock(kind: block.kind, text: parsed.text, indent: block.indent, isChecked: block.isChecked))
+            var parsedBlock = ParsedBlock(kind: block.kind, text: parsed.text, indent: block.indent, isChecked: block.isChecked)
+            parsedBlock.mentions = parsed.pageMentions
+            emit(parsedBlock)
         }
     }
 
@@ -295,7 +301,10 @@ private struct PageBuilder {
         switch parsed.soleLink {
         case .page(let path)?: return ParsedBlock(kind: .pageLink, text: InlineText(parsed.text.string), pagePath: path)
         case .url(let url)?: return ParsedBlock(kind: .paragraph, text: parsed.text, standaloneURL: url)
-        default: return ParsedBlock(kind: .paragraph, text: parsed.text)
+        default:
+            var block = ParsedBlock(kind: .paragraph, text: parsed.text)
+            block.mentions = parsed.pageMentions
+            return block
         }
     }
 
