@@ -13,7 +13,7 @@ struct PopupMenuLookTests {
     nonisolated static let themes: [NSAppearance.Name] = [.aqua, .darkAqua]
 
     static func items(_ style: PopupMenuStyle) -> [PopupMenuItem] {
-        PopupMenuItem.blockKinds + (style == .block ? [.delete] : [])
+        PopupMenuItem.blockKinds + (style == .block ? [.color, .delete] : [])
     }
 
     static func menu(_ style: PopupMenuStyle) -> PopupMenuView {
@@ -93,10 +93,19 @@ struct PopupMenuLookTests {
     func blockMenuLayout() throws {
         let view = Self.menu(.block)
         let rows = view.subviews.compactMap { $0 as? PopupMenuRowView }
-        try #require(rows.count == PopupMenuItem.blockKinds.count + 1)
+        try #require(rows.count == PopupMenuItem.blockKinds.count + 2, "Типы блоков, «Цвет» и «Удалить»")
         #expect(view.sectionTitle == nil && view.footer == nil)
         #expect(rows.allSatisfy { $0.frame.height == 33 })
         #expect(rows[0].frame.minY == PopupMenuWindow.shadowMargin + Metrics.PopupMenu.verticalPadding)
+    }
+
+    @Test("Меню блока без прокрутки: «Цвет» и «Удалить» видны, а меню «/» по-прежнему прокручивается")
+    func blockMenuShowsActionsWithoutScrolling() throws {
+        let view = Self.menu(.block)
+        let rows = view.subviews.compactMap { $0 as? PopupMenuRowView }
+        #expect(rows.allSatisfy { !$0.isHidden }, "Строки меню блока скрыты прокруткой")
+        #expect(view.fittingMenuSize.height == Metrics.PopupMenu.verticalPadding * 2 + CGFloat(rows.count) * Metrics.PopupMenu.rowHeight)
+        #expect(PopupMenuStyle.slash.maximumVisibleRows == Metrics.PopupMenu.maximumVisibleRows)
     }
 
     @Test("Быстрые символы типов — как в Notion")

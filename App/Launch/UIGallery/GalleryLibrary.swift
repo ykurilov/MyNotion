@@ -19,6 +19,9 @@ struct GalleryLibrary {
     /// Страницы образцов блоков 002 по id образца (`BlockKinds.gallerySamples`).
     let kindSamplePages: [String: UUID]
     let nestedLists: UUID
+    /// Страница с цветами: слова девяти цветов в строке, цветные блоки (US2).
+    let colorsPage: UUID
+    let colorsBlocks: [UUID]
     /// Блоки с переносами строк (Shift+Enter): абзац, пункты и чекбокс в несколько строк.
     let softBreaksPage: UUID
     let softBreaks: [UUID]
@@ -132,6 +135,9 @@ struct GalleryLibrary {
                 (.checkbox, "Выполненная первого уровня", 0, true),
             ])
 
+            let colorsPage = try page("Цвета", icon: "🎨")
+            let colorsBlocks = try Self.insertColorBlocks(into: colorsPage, using: transaction)
+
             let emptyPage = try page("Пустая страница")
             _ = try blocks(emptyPage, [(.paragraph, "", 0, false)])
             let untitledPage = try page("")
@@ -168,12 +174,41 @@ struct GalleryLibrary {
             _ = try page("Цели на год", icon: "🎯", trashed: true)
 
             return GalleryLibrary(sample: sample, blockKindPages: blockKindPages, kindSamplePages: kindSamplePages, nestedLists: nestedLists,
+                                  colorsPage: colorsPage, colorsBlocks: colorsBlocks,
                                   softBreaksPage: softBreaksPage, softBreaks: softBreaks,
                                   nestedListGroup: nestedListIds[1], emptyPage: emptyPage,
                                   untitledPage: untitledPage, projects: projects, projectBranch: [projects, work, report],
                                   deepPage: deepPage, longTitlePage: longTitlePage, archive: archive,
                                   notesPage: notesPage, notesBlock: notesBlock,
                                   conflictPage: conflictPage, conflictBlock: conflictBlocks[1])
+        }
+    }
+
+    /// Блоки страницы цветов: по строке на цвет текста и на цвет фона, цветные блоки и подложки.
+    private static func insertColorBlocks(into pageId: UUID, using transaction: NotesTransaction) throws -> [UUID] {
+        func colored(_ prefix: String, style: (NotionColor) -> InlineStyle) -> InlineText {
+            var text = prefix, runs: [StyledRun] = []
+            for color in NotionColor.allCases {
+                let word = color.rawValue
+                runs.append(StyledRun(start: (text as NSString).length, length: (word as NSString).length, style: style(color)))
+                text += word + " "
+            }
+            return InlineText(text, runs: runs)
+        }
+        let blocks: [(BlockKind, InlineText, BlockColor)] = [
+            (.paragraph, colored("Цвет текста: ", style: { .textColor($0) }), .none),
+            (.paragraph, colored("Цвет фона: ", style: { .backgroundColor($0) }), .none),
+            (.paragraph, InlineText("Абзац целиком синего цвета"), BlockColor(text: .blue)),
+            (.paragraph, InlineText("Абзац на жёлтой подложке"), BlockColor(background: .yellow)),
+            (.heading2, InlineText("Заголовок красным по розовому"), BlockColor(text: .red, background: .pink)),
+            (.bulletItem, InlineText("Пункт на сером"), BlockColor(background: .gray)),
+            (.bulletItem, InlineText("Пункт зелёным"), BlockColor(text: .green)),
+            (.checkbox, InlineText("Задача на фиолетовом"), BlockColor(background: .purple)),
+        ]
+        var sortKey: FractionalSortKey?
+        return try blocks.map { kind, text, color in
+            sortKey = .between(sortKey, nil)
+            return try transaction.insertBlock(Block(pageId: pageId, kind: kind, text: text, sortKey: sortKey!, color: color)).id
         }
     }
 

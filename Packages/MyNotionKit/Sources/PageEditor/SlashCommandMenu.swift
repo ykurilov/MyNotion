@@ -7,6 +7,8 @@ import VisualStyle
 struct PopupMenuItem: Equatable {
     enum Action: Equatable {
         case setKind(BlockKind)
+        /// Окно цветов для блока.
+        case color
         case delete
     }
 
@@ -25,6 +27,7 @@ struct PopupMenuItem: Equatable {
     var identifier: String {
         switch action {
         case .setKind(let kind): kind.rawValue
+        case .color: "color"
         case .delete: "delete"
         }
     }
@@ -38,6 +41,7 @@ struct PopupMenuItem: Equatable {
     /// Типы блоков меню «/» и «Превратить в» — из описателей типов (`BlockKinds/`).
     static var blockKinds: [PopupMenuItem] { BlockKindRegistry.menuItems }
 
+    static let color = PopupMenuItem(title: "Цвет", icon: .symbol("paintpalette"), keywords: [], action: .color)
     static let delete = PopupMenuItem(title: "Удалить", icon: .symbol("trash"), keywords: [], action: .delete)
 
     /// Меню «/»: поиск по названию и словам-подсказкам без учёта регистра.
@@ -60,6 +64,9 @@ enum PopupMenuStyle {
     var width: CGFloat { self == .slash ? Metrics.PopupMenu.slashMenuWidth : Metrics.PopupMenu.blockMenuWidth }
     var sectionTitle: String? { self == .slash ? "Основные блоки" : nil }
     var hasCloseRow: Bool { self == .slash }
+    /// Сколько строк видно без прокрутки. В меню блока «Цвет» и «Удалить» — действия в конце списка: типы блоков
+    /// (сколько бы их ни было) и эти две строки видны целиком, прокручивать действия за типы нельзя.
+    var maximumVisibleRows: Int { self == .block ? PopupMenuItem.blockKinds.count + 2 : Metrics.PopupMenu.maximumVisibleRows }
 
     var windowIdentifier: String {
         switch self {
@@ -169,7 +176,7 @@ final class PopupMenuView: NSView {
     }
 
     var fittingMenuSize: NSSize {
-        let visibleRows = min(items.count, Metrics.PopupMenu.maximumVisibleRows)
+        let visibleRows = min(items.count, style.maximumVisibleRows)
         return NSSize(width: style.width, height: rowsTop + CGFloat(visibleRows) * Metrics.PopupMenu.rowHeight + rowsBottom)
     }
 
@@ -210,7 +217,7 @@ final class PopupMenuView: NSView {
     private func updateSelection() {
         for (index, row) in rows.enumerated() { row.isSelected = index == selectedIndex }
         // Выбранная строка видна, даже если строк больше, чем помещается.
-        let visible = Metrics.PopupMenu.maximumVisibleRows
+        let visible = style.maximumVisibleRows
         let firstVisible = max(0, min(selectedIndex - visible + 1, items.count - visible))
         layoutRows(firstVisible: firstVisible)
     }
@@ -221,7 +228,7 @@ final class PopupMenuView: NSView {
         let height = Metrics.PopupMenu.rowHeight
         for (index, row) in rows.enumerated() {
             let position = index - firstVisible
-            row.isHidden = position < 0 || position >= Metrics.PopupMenu.maximumVisibleRows
+            row.isHidden = position < 0 || position >= style.maximumVisibleRows
             row.frame = NSRect(x: menu.minX + inset, y: menu.minY + rowsTop + CGFloat(position) * height, width: menu.width - 2 * inset, height: height)
         }
         footer?.frame = NSRect(x: menu.minX + inset, y: menu.maxY - rowsBottom, width: menu.width - 2 * inset, height: height)
@@ -520,8 +527,9 @@ final class EditorPopupController {
 
     func choose(_ item: PopupMenuItem? = nil) {
         guard let session, let item = item ?? selectedItem else { return }
+        let frame = menuFrame
         close()
-        textView?.applyPopupItem(item, session: session)
+        textView?.applyPopupItem(item, session: session, menuFrame: frame)
     }
 
     func close() {
@@ -553,7 +561,7 @@ extension PageTextView {
 
     /// Открыть меню «⋮⋮» у блока: сменить тип или удалить.
     func openBlockMenu(forBlock id: UUID, below anchor: NSRect) {
-        popups.open(.block(blockId: id), items: PopupMenuItem.blockKinds + [.delete], below: anchor)
+        popups.open(.block(blockId: id), items: PopupMenuItem.blockKinds + [.color, .delete], below: anchor)
     }
 
     /// Щелчок по «⋮⋮», как в Notion: блок выделен целиком (режим блоков) и открыто его меню; Esc закрывает меню,
@@ -606,7 +614,7 @@ extension PageTextView {
     func closePopups() { if popups.isOpen { popups.close() } }
 
     /// Выбор в меню: из меню «/» убирается «/» с набранным поиском, затем меняется тип блока.
-    func applyPopupItem(_ item: PopupMenuItem, session: EditorPopupController.Session) {
+    func applyPopupItem(_ item: PopupMenuItem, session: EditorPopupController.Session, menuFrame: NSRect? = nil) {
         let blockId: UUID
         switch session {
         case .slash(let id, let slash):
@@ -620,6 +628,9 @@ extension PageTextView {
         switch item.action {
         case .setKind(let kind): setKind(kind, ofBlocksAt: index..<index + 1)
         case .delete: removeBlocks(at: index..<index + 1)
+        case .color:
+            openColorMenu(forBlock: blockId, replacing: menuFrame)
+            return
         }
         window?.makeFirstResponder(self)
     }

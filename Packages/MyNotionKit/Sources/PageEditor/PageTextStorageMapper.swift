@@ -463,7 +463,8 @@ public final class PageTextStorageMapper: NSObject {
         return attributes.merging(inlineRendering(attributes, line: Typography.line(for: textStyle(of: block.kind)))) { $1 }
     }
 
-    static let inlineKeys: [NSAttributedString.Key] = [.inlineBold, .inlineItalic, .inlineStrikethrough, .inlineCode, .inlineUnderline, .inlineLink]
+    static let inlineKeys: [NSAttributedString.Key] = [.inlineBold, .inlineItalic, .inlineStrikethrough, .inlineCode, .inlineUnderline, .inlineLink,
+                                                     .inlineTextColor, .inlineBackgroundColor]
 
     static func textStyle(of kind: BlockKind) -> BlockTextStyle {
         kind.descriptor.textStyle
@@ -498,7 +499,7 @@ public final class PageTextStorageMapper: NSObject {
 
         var attributes = paragraphAttributes(of: block)
         attributes[.font] = line.font
-        attributes[.foregroundColor] = Palette.textPrimary
+        attributes[.foregroundColor] = Palette.notionText(block.color.text?.tone)
         attributes[.paragraphStyle] = paragraphStyle
         if block.kind == .checkbox, block.isChecked {
             attributes[.foregroundColor] = Palette.textSecondary
@@ -561,6 +562,14 @@ public final class PageTextStorageMapper: NSObject {
                 font = NSFont(descriptor: font.fontDescriptor.withSymbolicTraits(.italic), size: line.fontSize) ?? font
             }
             rendering[.font] = font
+        }
+        // Цвет в строке главнее и цвета блока, и цвета кода.
+        if let tone = (attributes[.inlineTextColor] as? String).flatMap(NotionTone.init(rawValue:)) {
+            rendering[.foregroundColor] = Palette.notionText(tone)
+        }
+        if let tone = (attributes[.inlineBackgroundColor] as? String).flatMap(NotionTone.init(rawValue:)),
+           let background = Palette.notionBackground(tone) {
+            rendering[.backgroundColor] = background
         }
         if attributes[.inlineStrikethrough] as? Bool == true {
             rendering[.strikethroughStyle] = NSUnderlineStyle.single.rawValue

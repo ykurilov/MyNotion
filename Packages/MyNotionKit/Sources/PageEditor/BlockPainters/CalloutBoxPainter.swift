@@ -33,8 +33,9 @@ struct CalloutBoxPainter: BlockPainter {
             let bottom = isLast ? (context.lastLine.map { $0.top + $0.height } ?? rect.maxY) + padding * CGFloat(innerEnding) : rect.maxY
             let piece = CGRect(x: left, y: top, width: rect.maxX - left, height: max(0, bottom - top))
             let path = SubtreePiece.path(piece, roundsTop: callout == index, roundsBottom: isLast, radius: Metrics.Callout.cornerRadius)
-            if let color = blocks[callout].color.background {
-                CalloutColors.background(color).setFill()
+            if let fill = Palette.notionBackground(blocks[callout].color.background?.tone) {
+                // Цвет подложки — общая палитра (Palette), как у фона блока и слова.
+                fill.setFill()
                 path.fill()
             } else {
                 Self.strokeBorder(piece, roundsTop: callout == index, roundsBottom: isLast)
@@ -82,27 +83,5 @@ struct CalloutBoxPainter: BlockPainter {
         let side = Metrics.Callout.iconColumnWidth
         let x = originX + PageTextView.blockLeft(atIndent: indent) + Metrics.Callout.leadingPadding + Metrics.Page.blockHorizontalPadding
         return CGRect(x: x, y: line.top + (line.height - side) / 2, width: side, height: side)
-    }
-}
-
-/// Фон выноски по цвету Notion (contracts/blocks-and-keys.md, «Цвета»; общую палитру цветов вводит US2).
-enum CalloutColors {
-    static func background(_ color: NotionColor) -> NSColor {
-        let (light, dark): (UInt32, UInt32) = switch color {
-        case .gray: (0xF1F1EF, 0x2F2F2F)
-        case .brown: (0xF4EEEE, 0x4A3228)
-        case .orange: (0xFBECDD, 0x5C3B23)
-        case .yellow: (0xFBF3DB, 0x564328)
-        case .green: (0xEDF3EC, 0x243D30)
-        case .blue: (0xE7F3F8, 0x143A4E)
-        case .purple: (0xF6F3F9, 0x3C2D49)
-        case .pink: (0xFAF1F5, 0x4E2C3C)
-        case .red: (0xFDEBEC, 0x522E2A)
-        }
-        return NSColor(name: nil) { appearance in
-            let value = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
-            return NSColor(srgbRed: CGFloat((value >> 16) & 0xFF) / 255, green: CGFloat((value >> 8) & 0xFF) / 255,
-                           blue: CGFloat(value & 0xFF) / 255, alpha: 1)
-        }
     }
 }

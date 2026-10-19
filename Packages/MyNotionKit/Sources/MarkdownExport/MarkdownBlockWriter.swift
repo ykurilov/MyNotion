@@ -66,6 +66,7 @@ public struct MarkdownBlockWriter: Sendable {
                 }
                 guard let content = writer.lines(for: block, children: children, context: context) else { continue }
                 if !lines.isEmpty { lines.append("") }
+                if let comment = ColorWriter.commentLine(for: block) { lines.append(comment) }
                 lines.append(contentsOf: content)
                 list.record(kind: block.kind, atIndent: 0, markerWidth: 0)
                 previousWasListItem = false
@@ -78,6 +79,9 @@ public struct MarkdownBlockWriter: Sendable {
             else { continue }
             let continuesList = isListItem && previousWasListItem && !list.startsNewList(kind: block.kind, atIndent: indent)
             if !lines.isEmpty, !continuesList { lines.append("") }
+            if let comment = ColorWriter.commentLine(for: block) {
+                lines.append(String(repeating: " ", count: content.first?.prefix { $0 == " " }.count ?? 0) + comment)
+            }
             lines.append(contentsOf: content)
             list.record(kind: block.kind, atIndent: indent, markerWidth: Self.nestingStep(of: block, ordinal: ordinal))
             previousWasListItem = isListItem

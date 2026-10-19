@@ -17,6 +17,8 @@ struct FormatCommands: Commands {
                 .keyboardShortcut("x", modifiers: [.command, .shift])
             Button("Код") { send(#selector(PageTextView.toggleCodeStyle(_:))) }
                 .keyboardShortcut("e")
+            Button("Повторить последний цвет") { send(#selector(PageTextView.repeatLastColorStyle(_:))) }
+                .keyboardShortcut("h", modifiers: [.command, .shift])
             Divider()
             Button("Ссылка…") { send(#selector(PageTextView.editLink(_:))) }
         }

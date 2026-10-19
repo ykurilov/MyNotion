@@ -53,6 +53,9 @@ public final class PageTextView: NSTextView {
     /// Упоминания, даты и окно «@» (US3).
     let inlineAtoms = InlineAtomsState()
     let formatBar = FormatBarController()
+    /// Последние цвета текста и фона: окно цветов и ⌘⇧H.
+    var recentColors = RecentColors()
+    let colorMenu = ColorMenuController()
     /// Иконку выбрали в шапке (FR-034): «Добавить иконку», окно выбора; `nil` — убрать. Хозяин сохраняет её
     /// и возвращает через `showIcon`.
     public var onSetIcon: ((String?) -> Void)?
@@ -97,6 +100,7 @@ public final class PageTextView: NSTextView {
         collapsedParagraphs.textView = self
         popups.textView = self
         formatBar.textView = self
+        colorMenu.textView = self
 
         configureTextBehaviour()
         mapper = PageTextStorageMapper(document: document, textStorage: textStorage!)
@@ -361,6 +365,7 @@ public final class PageTextView: NSTextView {
         }
         if handleMentionPickerCommand(selector) { return }
         if handlePopupCommand(selector) { return }
+        if colorMenu.handleCommand(selector) { return }
         if formatBar.handleCommand(selector) { return }
         if handleBlockSelectionCommand(selector) { return }
         super.doCommand(by: selector)
@@ -421,6 +426,9 @@ public final class PageTextView: NSTextView {
         case .setKind(let kind):
             commitEdits()
             if let selected = selectedBlockRange() { setKind(kind, ofBlocksAt: selected) }
+        case .applyColor(let choice): applyColor(choice)
+        case .applyBlockColor(let choice): applyBlockColor(choice)
+        case .repeatLastColor: repeatLastColor()
         }
     }
 

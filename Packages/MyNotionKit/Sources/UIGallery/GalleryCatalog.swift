@@ -39,6 +39,10 @@ public enum GalleryScene: Hashable, Sendable {
     case blockSelection
     /// Панель форматирования над выделенным жирным словом; `kindMenu` — открыт список типов.
     case formatBar(kindMenu: Bool)
+    /// Страница с цветным текстом, цветным фоном строки и цветными блоками (US2, FR-112).
+    case colorsOnPage
+    /// Окно цветов: `fromBlockMenu` — открыто пунктом «Цвет» меню блока, иначе кнопкой «A» панели форматирования.
+    case colorMenu(fromBlockMenu: Bool)
     /// Блоки с переносами строк (Shift+Enter); курсор во второй строке пункта.
     case softLineBreaks
     /// Выделение через блоки с переносами строк: одна подложка на все строки.
@@ -288,6 +292,13 @@ public enum GalleryCatalog {
                      "Панель форматирования под выделенным словом, у его конца, как у Notion: тип блока «Текст», кнопки, «Жирный» нажат (синий)", section: "Правка"),
         GalleryState("format-bar-type-menu", .formatBar(kindMenu: true),
                      "Панель форматирования с открытым списком типов: те же типы, что в меню «/», текущий отмечен галочкой", section: "Правка"),
+        GalleryState("colors-on-page", .colorsOnPage,
+                     "Цвета как у Notion: девять цветов текста и фона в строке, цветные блоки, подложка цитаты и выноски", section: "Правка"),
+        GalleryState("color-menu-format-bar", .colorMenu(fromBlockMenu: false),
+                     "Окно цветов под панелью форматирования: «Недавние», «Цвет текста» и «Цвет фона», у каждого цвета образец «A»",
+                     section: "Правка"),
+        GalleryState("color-menu-block", .colorMenu(fromBlockMenu: true),
+                     "Окно цветов от пункта «Цвет» меню блока: на месте меню блока, те же разделы", section: "Правка"),
         GalleryState("page-icon-add-hover", .pageIcon(.addIconHover),
                      "Мышь над шапкой страницы без иконки: серая «Добавить иконку» со значком над названием, как у Notion", section: "Правка"),
         GalleryState("page-icon-picker", .pageIcon(.picker),

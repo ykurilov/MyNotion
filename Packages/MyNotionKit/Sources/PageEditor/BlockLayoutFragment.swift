@@ -98,10 +98,15 @@ final class BlockLayoutFragment: NSTextLayoutFragment, @unchecked Sendable {
             return BlockLine(indent: block.indent, shift: textView.layoutShift(ofBlock: block.id), top: top,
                              height: line.typographicBounds.height, baseline: top + line.glyphOrigin.y)
         }
+        // Пустая строка после последнего перевода строки страницы к тексту блока не относится.
         let lines = textLineFragments.filter { $0.characterRange.length > 0 }
+        let linesTop = lines.map(\.typographicBounds.minY).min() ?? 0
+        let linesBottom = lines.map(\.typographicBounds.maxY).max() ?? layoutFragmentFrame.height
+        let textRect = CGRect(x: rect.minX, y: point.y + linesTop, width: width, height: max(0, linesBottom - linesTop))
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
-        let paintContext = BlockPaintContext(paragraphRect: rect, firstLine: (lines.first ?? textLineFragments.first).map(blockLine),
+        let paintContext = BlockPaintContext(paragraphRect: rect, textRect: textRect,
+                                             firstLine: (lines.first ?? textLineFragments.first).map(blockLine),
                                              lastLine: (lines.last ?? textLineFragments.first).map(blockLine), textView: textView)
         for painter in painters { painter.paint(block, in: paintContext) }
         NSGraphicsContext.restoreGraphicsState()
