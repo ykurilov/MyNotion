@@ -97,6 +97,7 @@ public struct Outbox: Sendable {
                 changes += ChangeEncoding.fullBlock(block, baseHlc: nil)
             }
         }
+        changes += try transaction.allReminderStates().map(ChangeEncoding.reminderChange)
         for row in try Row.fetchAll(transaction.database, sql: "SELECT pageId FROM page_tombstone") {
             guard let pageId = UUID(uuidString: row["pageId"]),
                   let tombstone = try transaction.tombstone(ofPage: pageId) else { continue }
@@ -155,6 +156,9 @@ enum ChangeEncoding {
             guard let tombstone = try transaction.tombstone(ofPage: pageId), isMine(tombstone.erasedAt) else { continue }
             result.append(SyncChange(entity: .page, id: pageId, value: .erased, hlc: tombstone.erasedAt, known: tombstone.known))
         }
+        for state in changes.reminderStates where isMine(state.doneClock) {
+            result.append(reminderChange(state))
+        }
         for conflict in changes.resolvedConflicts {
             result.append(SyncChange(entity: .block, id: conflict.blockId,
                                      value: .conflictResolved(versions: [conflict.localVersion, conflict.remoteVersion]),
@@ -173,6 +177,11 @@ enum ChangeEncoding {
             guard change.value.field != "conflictResolved" else { return change }
             return lastIndex["\(change.entity.rawValue):\(change.id):\(change.value.field)"] == index ? change : nil
         }
+    }
+
+    /// Отметка «сделано» напоминания (contracts/sync-and-files-api.md, «Новая сущность reminder»).
+    static func reminderChange(_ state: ReminderState) -> SyncChange {
+        SyncChange(entity: .reminder, id: state.mentionId, value: .doneAt(state.doneAt), hlc: state.doneClock)
     }
 
     static func pageChange(_ page: Page, field: Page.Field, hlc: HybridTimestamp) -> SyncChange {

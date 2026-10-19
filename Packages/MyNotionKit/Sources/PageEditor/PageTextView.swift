@@ -48,6 +48,8 @@ public final class PageTextView: NSTextView {
     /// Абзацы детей свёрнутых переключателей: не раскладываются (research R1).
     let hiddenParagraphs = HiddenParagraphs()
     let popups = EditorPopupController()
+    /// Упоминания, даты и окно «@» (US3).
+    let inlineAtoms = InlineAtomsState()
     let formatBar = FormatBarController()
     /// Иконку выбрали в шапке (FR-034): «Добавить иконку», окно выбора; `nil` — убрать. Хозяин сохраняет её
     /// и возвращает через `showIcon`.
@@ -129,6 +131,7 @@ public final class PageTextView: NSTextView {
             self?.onSetIcon?(EmojiCatalog.shared.random(using: &generator).character)
         }
         header.onIconClick = { [weak self] in self?.openIconPicker() }
+        observeRevealRequests()
         _ = caret
         layoutColumn()
     }
@@ -213,6 +216,7 @@ public final class PageTextView: NSTextView {
         if document.blocks.count != blockCount { redrawBlockDecorations() }
         updateEmptyParagraphHint()
         textDidChangeForPopups()
+        refreshMentionPicker()
         updateSelectionLook()
         if !document.pendingConflicts.isEmpty { conflictMarks.update() }
     }
@@ -228,10 +232,15 @@ public final class PageTextView: NSTextView {
 
     /// Копирование: в простом тексте для других программ перенос строки внутри блока — обычный перевод строки.
     public override func writeSelection(to pboard: NSPasteboard, type: NSPasteboard.PasteboardType) -> Bool {
+        if type == Self.inlineTextPasteboardType { return writeInlineText(to: pboard) }
         guard type == .string else { return super.writeSelection(to: pboard, type: type) }
-        let text = selectedRanges.map { (string as NSString).substring(with: $0.rangeValue) }.joined(separator: "\n")
+        let text = selectedRanges.map { plainText(of: $0.rangeValue) }.joined(separator: "\n")
         guard !text.isEmpty else { return false }
         return pboard.setString(PageTextStorageMapper.blockString(ofPageText: text), forType: .string)
+    }
+
+    public override var writablePasteboardTypes: [NSPasteboard.PasteboardType] {
+        [Self.inlineTextPasteboardType] + super.writablePasteboardTypes
     }
 
     public override func writeSelection(to pboard: NSPasteboard, types: [NSPasteboard.PasteboardType]) -> Bool {
@@ -252,6 +261,7 @@ public final class PageTextView: NSTextView {
         }
         super.insertText(string, replacementRange: replacementRange)
         if typed == "/" { openSlashMenuAfterTypedSlash() }
+        openMentionPicker(afterTyping: typed)
     }
 
     /// Курсор стоит в блоке-подстранице (у него свой абзац без символов).
@@ -331,6 +341,7 @@ public final class PageTextView: NSTextView {
             blockHandles.cancelDrag()
             return
         }
+        if handleMentionPickerCommand(selector) { return }
         if handlePopupCommand(selector) { return }
         if formatBar.handleCommand(selector) { return }
         if handleBlockSelectionCommand(selector) { return }
@@ -528,6 +539,7 @@ public final class PageTextView: NSTextView {
         applyEmptyParagraphTypingAttributes()
         updateEmptyParagraphHint()
         selectionDidChangeForPopups()
+        refreshMentionPicker()
         updateFormatBar()
     }
 
@@ -568,6 +580,7 @@ public final class PageTextView: NSTextView {
             onOpenPage?(pageId)
             return
         }
+        if openAtom(at: point) { return }
         if openLink(at: point, modifiers: event.modifierFlags) { return }
         if isMarginPoint(point) {
             beginMarginDrag(at: point)
@@ -880,8 +893,10 @@ public final class PageTextView: NSTextView {
     }
 
     /// Текст блоков без служебного перевода строки в конце: строка после него — не блок.
+    /// Упоминания и даты читаются названием и словами, а не знаком-вложением.
     public override func accessibilityValue() -> String? {
-        string.hasSuffix("\n") ? String(string.dropLast()) : string
+        let text = plainText(of: NSRange(location: 0, length: (string as NSString).length))
+        return text.hasSuffix("\n") ? String(text.dropLast()) : text
     }
 
     // MARK: Фокус
@@ -898,6 +913,7 @@ public final class PageTextView: NSTextView {
             case .body: focusBody(at: 0)
             case .unchanged: break
             }
+            revealPendingBlock()
             onReady?()
         }
     }

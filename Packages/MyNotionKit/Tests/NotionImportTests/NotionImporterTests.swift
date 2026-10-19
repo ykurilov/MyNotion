@@ -101,13 +101,15 @@ struct NotionImporterTests {
         #expect(try texts(of: projects).contains("Удалённая страница"))
     }
 
-    @Test("Ссылка notion.so на страницу выгрузки в строке текста остаётся ссылкой; одна в строке — блок pageLink")
+    @Test("Ссылка на страницу выгрузки в строке текста — упоминание её (002); ссылка notion.so остаётся ссылкой")
     func notionURLLinks() throws {
         let report = try runImport()
         let projects = try child("Проекты", of: report.rootPageId)
-        let mixed = try #require(try blocks(of: projects).first { $0.text.string.hasPrefix("Ссылка на Дневник") })
-        #expect(mixed.text.string == "Ссылка на Дневник внутри текста и на MyNotion.")
-        #expect(mixed.text.runs.map(\.style) == [.link(URL(string: "https://www.notion.so/MyNotion-2a3b4c5d6e7f8091a2b3c4d5e6f70812?pvs=21")!)])
+        let diary = try #require(tree.pagesInTreeOrder.first { $0.title == "Дневник" })
+        let mixed = try #require(try blocks(of: projects).first { $0.text.string.hasPrefix("Ссылка на ") })
+        #expect(mixed.text.string == "Ссылка на \u{FFFC} внутри текста и на MyNotion.")
+        #expect(mixed.text.runs.map(\.style) == [.mention(diary.id),
+                                                 .link(URL(string: "https://www.notion.so/MyNotion-2a3b4c5d6e7f8091a2b3c4d5e6f70812?pvs=21")!)])
     }
 
     // MARK: Содержимое

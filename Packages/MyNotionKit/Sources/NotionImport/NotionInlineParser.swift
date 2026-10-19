@@ -31,6 +31,15 @@ struct NotionInlineResult {
     var files = 0
     /// Вся строка — одна ссылка и ничего больше: куда она ведёт.
     var soleLink: NotionLinkTarget?
+    /// Ссылки на страницы выгрузки внутри текста — упоминания с временным id; импорт заменит его id страницы.
+    var pageMentions: [NotionPageMention] = []
+}
+
+/// Упоминание страницы выгрузки до импорта: временный id в тексте, путь файла и название из ссылки.
+struct NotionPageMention: Hashable, Sendable {
+    var placeholder: UUID
+    var path: String
+    var title: String
 }
 
 /// Оформление в строке по правилам CommonMark и GFM: обратная косая черта, код в обратных кавычках, серии `*`, `_`, `~`
@@ -58,6 +67,8 @@ struct NotionInlineParser {
             case bracket(isImage: Bool)
             case linkOpen(NotionLinkTarget)
             case linkClose
+            /// Знак U+FFFC с атомом: дата из `<time>`.
+            case atom(InlineStyle)
         }
 
         var kind: Kind
@@ -318,6 +329,12 @@ struct NotionInlineParser {
             position += rest[match].count
             return
         }
+        if let match = rest.range(of: #"^<time\s[^<>]*>[^<]*</time>"#, options: .regularExpression),
+           let date = NotionDates.date(fromTimeTag: String(rest[match])) {
+            append(Node(.atom(.date(date))))
+            position += rest[match].count
+            return
+        }
         if let match = rest.range(of: #"^</?([A-Za-z][A-Za-z0-9\-]*)(?:\s[^<>]*)?/?>"#, options: .regularExpression) {
             let tag = String(rest[match])
             let isClosing = tag.hasPrefix("</")
@@ -433,6 +450,15 @@ struct NotionInlineParser {
         var starts: [Style: Int] = [:]
         var links: [(NotionLinkTarget, Int)] = []
         var runs: [StyledRun] = []
+        var pageMentions: [NotionPageMention] = []
+        // Строка целиком из одной ссылки на страницу — блок-подстраница, а не упоминание.
+        let sole = soleLink()
+        let mentionsPages: Bool = if case .page? = sole { false } else { true }
+        var skipUntil: Int?
+        func appendAtom(_ style: InlineStyle) {
+            runs.append(StyledRun(start: units.count, length: 1, style: style))
+            units.append(InlineText.objectReplacementCharacter)
+        }
 
         func open(_ style: Style) {
             depth[style, default: 0] += 1
@@ -446,9 +472,28 @@ struct NotionInlineParser {
             }
         }
 
-        for node in nodes {
+        for (index, node) in nodes.enumerated() {
+            if let end = skipUntil {
+                if index < end { continue }
+                skipUntil = nil
+                if index == end { continue }
+            }
             switch node.kind {
-            case .text(let text): units += text.utf16
+            case .linkOpen(.page(let path)) where mentionsPages:
+                // Ссылка на страницу внутри текста — упоминание: текст ссылки становится названием.
+                guard let close = Self.matchingClose(of: index, in: nodes) else { links.append((.page(path), units.count)); continue }
+                let mention = NotionPageMention(placeholder: UUID(), path: path, title: Self.plainText(of: nodes[(index + 1)..<close]))
+                pageMentions.append(mention)
+                appendAtom(.mention(mention.placeholder))
+                skipUntil = close
+            case .text(let text):
+                for piece in NotionDates.split(text) {
+                    switch piece {
+                    case .text(let plain): units += plain.utf16
+                    case .date(let date): appendAtom(.date(date))
+                    }
+                }
+            case .atom(let style): appendAtom(style)
             case .code(let code):
                 open(.code)
                 units += code.utf16
@@ -470,7 +515,22 @@ struct NotionInlineParser {
             close(style)
         }
         return NotionInlineResult(text: InlineText(String(decoding: units, as: UTF16.self), runs: runs).normalized(),
-                                  files: files, soleLink: soleLink())
+                                  files: files, soleLink: sole, pageMentions: pageMentions)
+    }
+
+    /// Закрытие ссылки, открытой узлом `index`.
+    private static func matchingClose(of index: Int, in nodes: [Node]) -> Int? {
+        var depth = 0
+        for position in (index + 1)..<nodes.count {
+            switch nodes[position].kind {
+            case .linkOpen: depth += 1
+            case .linkClose:
+                if depth == 0 { return position }
+                depth -= 1
+            default: break
+            }
+        }
+        return nil
     }
 
     /// Ссылка, которая и есть вся строка (пробелы по краям не в счёт).

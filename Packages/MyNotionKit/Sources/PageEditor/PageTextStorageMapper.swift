@@ -527,7 +527,9 @@ public final class PageTextStorageMapper: NSObject {
             case .link(let url): text.addAttribute(.inlineLink, value: url, range: range)
             case .textColor(let color): text.addAttribute(.inlineTextColor, value: color.rawValue, range: range)
             case .backgroundColor(let color): text.addAttribute(.inlineBackgroundColor, value: color.rawValue, range: range)
-            case .mention, .date, .equation: text.addAttribute(.inlineAtom, value: run.style, range: range)
+            case .mention, .date, .equation:
+                text.addAttribute(.inlineAtom, value: run.style, range: range)
+                if let attachment = InlineAtomAttachment.make(for: run.style) { text.addAttribute(.attachment, value: attachment, range: range) }
             }
         }
         if length > 0 {

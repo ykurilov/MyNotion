@@ -4,14 +4,17 @@ import NotesCore
 /// Текст блока с оформлением в строке — в Markdown. Перенос строки остаётся символом `\n`: блок превращает его
 /// в «два пробела и отступ». Смещения оформления — в единицах UTF-16, как в `InlineText`.
 enum InlineMarkdown {
-    static func render(_ text: InlineText) -> String {
+    /// `resolveLink` — файл страницы для упоминаний (`MentionDateMarkdown`).
+    static func render(_ text: InlineText, resolveLink: (UUID) -> PageLinkTarget? = { _ in nil }) -> String {
         let units = Array(text.string.utf16)
         guard !units.isEmpty else { return "" }
         // Наложение и выход за край текста разбирают сами отрезки: полная нормализация на каждый блок только тормозит.
         let segments = segments(of: text, unitCount: units.count)
-        var plan = Plan(units: units)
-        for (index, segment) in segments.enumerated() { plan.add(segment, at: index, in: segments) }
-        return plan.rendered()
+        return withoutActuallyEscaping(resolveLink) { resolveLink in
+            var plan = Plan(units: units, atomMarkdown: { MentionDateMarkdown.markdown(for: $0, resolveLink: resolveLink) })
+            for (index, segment) in segments.enumerated() { plan.add(segment, at: index, in: segments) }
+            return plan.rendered()
+        }
     }
 
     // MARK: Отрезки
@@ -29,6 +32,8 @@ enum InlineMarkdown {
         var range: Range<Int>
         var marks: Marks
         var link: URL?
+        /// Упоминание или дата на знаке U+FFFC — пишется своей разметкой.
+        var atom: InlineStyle?
     }
 
     /// Текст, разрезанный по всем границам оформления; соседние куски с одним видом слиты.
@@ -41,7 +46,7 @@ enum InlineMarkdown {
         let sorted = boundaries.sorted()
         var result: [Segment] = []
         for (lower, upper) in zip(sorted, sorted.dropFirst()) {
-            var segment = Segment(range: lower..<upper, marks: [], link: nil)
+            var segment = Segment(range: lower..<upper, marks: [], link: nil, atom: nil)
             for run in text.runs where run.start <= lower && run.start + run.length >= upper {
                 switch run.style {
                 case .bold: segment.marks.insert(.bold)
@@ -50,11 +55,14 @@ enum InlineMarkdown {
                 case .underline: segment.marks.insert(.underline)
                 case .code: segment.marks.insert(.code)
                 case .link(let url): segment.link = url
-                // Цвета, упоминания, даты и формулы в Markdown пишут свои этапы (contracts/markdown-and-notion.md).
-                case .textColor, .backgroundColor, .mention, .date, .equation: break
+                case .mention, .date:
+                    if upper - lower == 1, text.string.utf16[text.string.utf16.index(text.string.utf16.startIndex, offsetBy: lower)]
+                        == InlineText.objectReplacementCharacter { segment.atom = run.style }
+                // Цвета и формулы в Markdown пишут свои этапы (contracts/markdown-and-notion.md).
+                case .textColor, .backgroundColor, .equation: break
                 }
             }
-            if var last = result.last, last.marks == segment.marks, last.link == segment.link {
+            if var last = result.last, last.marks == segment.marks, last.link == segment.link, last.atom == nil, segment.atom == nil {
                 last.range = last.range.lowerBound..<upper
                 result[result.count - 1] = last
             } else {
@@ -130,12 +138,16 @@ enum InlineMarkdown {
     /// (`**жирный** текст`, а не `**жирный **текст`): иначе Markdown не распознает оформление.
     private struct Plan {
         let units: [UInt16]
+        let atomMarkdown: (InlineStyle) -> String
         private var items: [Item] = []
         private var spans: [Span] = []
         private var open: [Int] = []
         private var pendingSpace = ""
 
-        init(units: [UInt16]) { self.units = units }
+        init(units: [UInt16], atomMarkdown: @escaping (InlineStyle) -> String) {
+            self.units = units
+            self.atomMarkdown = atomMarkdown
+        }
 
         mutating func add(_ segment: Segment, at index: Int, in segments: [Segment]) {
             var start = segment.range.lowerBound
@@ -146,7 +158,9 @@ enum InlineMarkdown {
             guard start < end else { return }
 
             transition(to: desiredDelimiters(at: index, in: segments))
-            if segment.marks.contains(.code) {
+            if let atom = segment.atom {
+                items.append(.text(atomMarkdown(atom)))
+            } else if segment.marks.contains(.code) {
                 items.append(.text(InlineMarkdown.codeSpan(String(decoding: units[start..<end], as: UTF16.self))))
             } else {
                 items.append(.text(InlineMarkdown.escape(units, range: start..<end)))
