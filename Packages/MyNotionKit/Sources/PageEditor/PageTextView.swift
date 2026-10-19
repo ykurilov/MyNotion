@@ -103,7 +103,6 @@ public class PageTextView: NSTextView {
         self.document = document
         header = PageHeaderView(page: document.page)
         pendingFocus = initialFocus
-        BuiltInBlockViews.register()
 
         let contentStorage = NSTextContentStorage()
         let layoutManager = NSTextLayoutManager()
@@ -125,7 +124,7 @@ public class PageTextView: NSTextView {
         equationEditor.textView = self
 
         configureTextBehaviour()
-        CodeMathBlockViews.registerOnce()
+        BuiltInBlockViews.registerOnce()
         tableOfContentsTracker = TableOfContentsTracker(textView: self)
         mapper = PageTextStorageMapper(flow: document, textStorage: textStorage!)
         // После загрузки текста система ставит выделение в конец, и место курсора там считалось бы раскладкой

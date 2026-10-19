@@ -11,6 +11,8 @@ final class BlockViewHosting {
     /// Виды на странице по id блока.
     private(set) var views: [UUID: BlockAttachmentHostView] = [:]
     private var isUpdating = false
+    /// Пока ставили виды, вид узнал свою высоту (колонки, таблица) и попросил поставить заново.
+    private var needsAnotherPass = false
 
     init(textView: PageTextView) {
         self.textView = textView
@@ -21,24 +23,44 @@ final class BlockViewHosting {
 
     /// Поставить виды абзацам-вложениям видимой области (с запасом в экран сверху и снизу), снять остальные.
     func update() {
-        guard !isUpdating, let textView, let layoutManager = textView.textLayoutManager, let storage = textView.textContentStorage,
+        guard !isUpdating else {
+            needsAnotherPass = true
+            return
+        }
+        // Вид, поставленный впервые, узнаёт свою высоту и перекладывает абзац: ещё проход ставит его по новой высоте.
+        for _ in 0..<3 {
+            needsAnotherPass = false
+            isUpdating = true
+            place()
+            isUpdating = false
+            if !needsAnotherPass { break }
+        }
+    }
+
+    private func place() {
+        guard let textView, let layoutManager = textView.textLayoutManager, let storage = textView.textContentStorage,
               let textStorage = textView.textStorage else { return }
-        isUpdating = true
-        defer { isUpdating = false }
         let visible = textView.visibleRect
         let area = visible.insetBy(dx: 0, dy: -visible.height)
         let origin = textView.textContainerOrigin
         var wanted: [UUID: (BlockAttachment, NSRect)] = [:]
-        if !visible.isEmpty, let start = layoutManager.textLayoutFragment(for: NSPoint(x: 0, y: max(0, area.minY - origin.y)))?.rangeInElement.location
-            ?? Optional(storage.documentRange.location) {
+        // Страница без блоков-вложений: искать нечего (прокрутка страницы на 10 000 блоков — без лишнего прохода).
+        let hasAttachments = !views.isEmpty || textView.document.blocks.contains { $0.kind.rendersAsAttachment }
+        // Начало поиска — разложенный абзац у верха области. Его нет — прокрутка ушла туда, где TextKit ещё не раскладывал:
+        // раскладка от начала страницы стоила бы сотни миллисекунд, поэтому ждём её раскладки (`layout()` позовёт снова).
+        // Раскладывать с начала можно только у начала страницы — при открытии.
+        func laidOut(atY y: CGFloat) -> NSTextLocation? {
+            layoutManager.textLayoutFragment(for: NSPoint(x: 0, y: max(0, y - origin.y)))?.rangeInElement.location
+        }
+        let nearTop = visible.minY - origin.y < visible.height * 2
+        if hasAttachments, !visible.isEmpty,
+           let start = laidOut(atY: area.minY) ?? laidOut(atY: visible.minY) ?? (nearTop ? storage.documentRange.location : nil) {
             layoutManager.enumerateTextLayoutFragments(from: start, options: [.ensuresLayout]) { fragment in
                 let frame = fragment.layoutFragmentFrame.offsetBy(dx: origin.x, dy: origin.y)
                 guard frame.minY <= area.maxY else { return false }
                 let offset = storage.offset(from: storage.documentRange.location, to: fragment.rangeInElement.location)
-                // Колонки и таблицу ставит их раскладка (`Flows/EmbeddedViewLayout`): здесь их вид не ставится второй раз.
                 guard offset < textStorage.length,
                       let attachment = textStorage.attribute(.attachment, at: offset, effectiveRange: nil) as? BlockAttachment,
-                      !attachment.block.kind.hostsEmbeddedEditors,
                       let line = fragment.textLineFragments.first else { return true }
                 // Вид — по месту знака-вложения в строке: левее — отступ вложенности, сверху — отступ абзаца.
                 let lineBounds = line.typographicBounds
@@ -46,7 +68,7 @@ final class BlockViewHosting {
                 let x = frame.minX + lineBounds.minX + glyphX
                 let width = max(0, origin.x + (textView.textContainer?.size.width ?? frame.width) - x
                                 - (textView.textContainer?.lineFragmentPadding ?? 0))
-                let height = attachment.height(forWidth: width)
+                let height = attachment.height(forWidth: width, in: textView)
                 let rect = NSRect(x: x, y: frame.minY + lineBounds.minY, width: width, height: height)
                 if rect.intersects(area) { wanted[attachment.blockId] = (attachment, rect.integral) }
                 return true

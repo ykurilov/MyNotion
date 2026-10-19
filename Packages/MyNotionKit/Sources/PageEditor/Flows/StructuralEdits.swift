@@ -66,7 +66,7 @@ extension PageTextView {
         }
         applyStructuralChanges(changes, actionName: "Колонки")
         textLayoutManager?.textViewportLayoutController.layoutViewport()
-        layoutEmbeddedViews()
+        blockViews.update()
         flowEditors(inColumnList: list.id).first?.focus(atEnd: false)
     }
 }

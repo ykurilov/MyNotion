@@ -1,9 +1,9 @@
 import NotesCore
 
-/// Виды кода, формулы и оглавления: их модули редактор знает напрямую. Колонки и таблица — `BuiltInBlockViews`,
-/// картинки, файлы, видео регистрирует приложение (`BlockViewFactories`).
+/// Виды блоков, которые редактор знает напрямую: код, формула, оглавление, колонки, таблица.
+/// Картинки, файлы, видео регистрирует приложение (`BlockViewFactories`).
 @MainActor
-enum CodeMathBlockViews {
+enum BuiltInBlockViews {
     private static var isRegistered = false
 
     static func registerOnce() {
@@ -12,5 +12,7 @@ enum CodeMathBlockViews {
         BlockViewFactories.shared.register(CodeBlockViewFactory(), for: .code)
         BlockViewFactories.shared.register(EquationBlockViewFactory(), for: .equation)
         BlockViewFactories.shared.register(TableOfContentsViewFactory(), for: .tableOfContents)
+        BlockViewFactories.shared.register(ColumnsViewFactory(), for: .columnList)
+        BlockViewFactories.shared.register(TableViewFactory(), for: .table)
     }
 }

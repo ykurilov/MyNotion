@@ -25,7 +25,7 @@ extension PageTextView {
         }
         applyStructuralChanges(changes, actionName: "Таблица")
         textLayoutManager?.textViewportLayoutController.layoutViewport()
-        layoutEmbeddedViews()
+        blockViews.update()
         tableView(for: table.id)?.activate(TableCellPosition(row: 0, column: 0), caret: .start)
     }
 }

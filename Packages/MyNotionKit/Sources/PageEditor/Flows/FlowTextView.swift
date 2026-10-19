@@ -63,18 +63,13 @@ public class FlowTextView: PageTextView {
     }
 }
 
-/// Виды блоков-контейнеров в тексте редактора (колонки, таблицы): живые виды и их высоты для раскладки знака-вложения.
+/// Высоты видов колонок и таблиц для раскладки их знака-вложения и поля правки ячеек страницы.
 @MainActor
 final class EmbeddedBlockViews {
-    /// Редактор сейчас ставит виды: смена их рамок не запускает раскладку заново.
-    var isLayingOut = false
-    /// Пока ставили виды, высота одного из них поменялась.
-    var needsAnotherPass = false
     /// Поля правки ячеек таблиц страницы: живут, пока открыта страница, — их шаги ⌘Z остаются верны.
     var cellEditors: [CellKey: TableCellEditor] = [:]
     /// Высота вида по id блока при ширине, для которой она посчитана.
     private var heights: [UUID: (width: CGFloat, height: CGFloat)] = [:]
-    private let views = NSMapTable<NSUUID, NSView>.strongToStrongObjects()
 
     func height(of blockId: UUID, width: CGFloat) -> CGFloat? {
         // Вид колонок шире знака на поля строки — та же ширина.
@@ -89,27 +84,6 @@ final class EmbeddedBlockViews {
     func forgetHeight(of blockId: UUID) {
         heights[blockId] = nil
     }
-
-    func register(_ view: NSView, for blockId: UUID) {
-        views.setObject(view, forKey: blockId as NSUUID)
-    }
-
-    func view(for blockId: UUID) -> NSView? {
-        views.object(forKey: blockId as NSUUID)
-    }
-
-    func blockId(of view: NSView) -> UUID? {
-        guard let keys = views.keyEnumerator().allObjects as? [NSUUID] else { return nil }
-        return keys.first { views.object(forKey: $0) === view } as UUID?
-    }
-
-    func unregister(_ blockId: UUID) {
-        views.removeObject(forKey: blockId as NSUUID)
-    }
-
-    var liveViews: [NSView] {
-        views.objectEnumerator()?.allObjects.compactMap { $0 as? NSView } ?? []
-    }
 }
 
 extension PageTextView {
@@ -118,7 +92,7 @@ extension PageTextView {
         guard embeddedViews.height(of: blockId, width: width) != height else { return }
         embeddedViews.setHeight(height, of: blockId, width: width)
         relayoutParagraph(ofBlock: blockId)
-        layoutEmbeddedViews()
+        blockViews.update()
     }
 
     /// Переложить абзац блока: высота его вида поменялась.
@@ -136,9 +110,14 @@ extension PageTextView {
 
     /// Редакторы потоков внутри видов этого редактора — колонки по порядку слева направо.
     var embeddedFlowEditors: [FlowTextView] {
-        embeddedViews.liveViews.flatMap { view -> [FlowTextView] in
+        embeddedContentViews.flatMap { view -> [FlowTextView] in
             (view as? ColumnsView)?.editors ?? []
         }
+    }
+
+    /// Виды блоков этого редактора, что сейчас на странице (`BlockViewHosting`): вид колонок, таблицы, кода…
+    var embeddedContentViews: [NSView] {
+        blockViews.views.values.compactMap(\.subviews.first)
     }
 
     /// Редакторы колонок блока колонок `listId`, слева направо; вида нет на экране — пусто.
@@ -147,7 +126,7 @@ extension PageTextView {
     }
 
     func columnsView(for listId: UUID) -> ColumnsView? {
-        embeddedViews.view(for: listId) as? ColumnsView
+        blockViews.view(for: listId)?.subviews.first as? ColumnsView
     }
 
     /// Редактор страницы, в котором стоят все остальные.

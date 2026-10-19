@@ -60,8 +60,6 @@ final class BlockAttachment: NSTextAttachment, @unchecked Sendable {
     }
 
     override func viewProvider(for parentView: NSView?, location: any NSTextLocation, textContainer: NSTextContainer?) -> NSTextAttachmentViewProvider? {
-        // Колонки и таблицу ставит над абзацем сам редактор (`EmbeddedViewLayout`).
-        guard !block.kind.hostsEmbeddedEditors else { return nil }
         let provider = BlockAttachmentViewProvider(textAttachment: self, parentView: parentView,
                                                    textLayoutManager: textContainer?.textLayoutManager, location: location)
         provider.tracksTextAttachmentViewBounds = true

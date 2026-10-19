@@ -78,4 +78,25 @@ struct BlockViewHostingTests {
         #expect(host.frame.minY > before + 10)
         #expect(fixture.textView.blockViews.view(for: fixture.document.blocks[2].id) === host)
     }
+
+    /// Прокрутка длинной страницы (замер: 10 000 блоков, p95 ≤ 50 мс): поиск абзацев-вложений идёт только по видимой
+    /// части, без раскладки страницы с начала; на странице без вложений — ничего не перебирается.
+    @Test("Длинная страница: после прокрутки вниз поиск видов не раскладывает страницу с начала")
+    func updateDoesNotLayOutFromStart() throws {
+        var specs: [Spec] = (0..<3_000).map { .paragraph("Абзац \($0) с текстом, чтобы строка была подлиннее") }
+        specs.append(Spec(kind: .code, text: "низ"))
+        let fixture = try EditorFixture(specs)
+        let layoutManager = try #require(fixture.textView.textLayoutManager)
+        let storage = try #require(fixture.textView.textContentStorage)
+        let middle = try #require(storage.location(storage.documentRange.location, offsetBy: fixture.textLocation(ofBlock: 1_500)))
+        let before = layoutManager.textLayoutFragment(for: middle)?.state
+        // Прокрутка сдвигом видимой области, как колёсиком: виды ищутся при сдвиге, раньше, чем TextKit разложит новое место.
+        let clip = try #require(fixture.textView.enclosingScrollView?.contentView)
+        fixture.textView.frame.size.height = max(fixture.textView.frame.height, 90_000)
+        clip.scroll(to: NSPoint(x: 0, y: 80_000))
+        fixture.textView.blockViews.update()
+        let after = layoutManager.textLayoutFragment(for: middle)?.state
+        #expect(before != .layoutAvailable)
+        #expect(after != .layoutAvailable, "update() разложил середину страницы: \(String(describing: before)) → \(String(describing: after))")
+    }
 }

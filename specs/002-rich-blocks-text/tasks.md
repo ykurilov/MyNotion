@@ -256,7 +256,7 @@ description: "Задачи: новые блоки и оформление тек
 - [x] T110 [US6] `PK/Sources/PageEditor/PageFind/PageFindClient.swift` (`NSTextFinderClient` по всем потокам и ячейкам) вместо системного поиска одного `NSTextView`
 - [x] T111 [US6] Переход к найденному из поиска страниц в колонку или ячейку: `App/MainWindow/MainWindowModel.swift`
 - [x] T112 [P] [US6] Выгрузка и импорт: `PK/Sources/MarkdownExport/BlockWriters/TableColumnsWriters.swift`, `PK/Sources/NotionImport/BlockReaders/TableReaders.swift`
-- [ ] T113 [US6] Галерея, сверка с Notion; набор в колонке и в ячейке p95 ≤ 50 мс; затронутые тесты зелёные; коммит
+- [x] T113 [US6] Галерея, сверка с Notion; набор в колонке и в ячейке p95 ≤ 50 мс; затронутые тесты зелёные; коммит
 
 ---
 
