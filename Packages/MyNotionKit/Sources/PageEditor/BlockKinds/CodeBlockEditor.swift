@@ -137,7 +137,7 @@ final class CodeBlockViewFactory: BlockViewFactory {
 
 /// Вид блока кода: подложка, редактор кода с прокруткой вбок (строки не переносятся), язык и «Копировать» сверху.
 @MainActor
-final class CodeBlockView: NSView {
+final class CodeBlockView: NSView, BlockFieldsView {
     let blockId: UUID
     private(set) var block: Block
     weak var page: PageTextView?

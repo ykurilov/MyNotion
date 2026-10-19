@@ -10,5 +10,7 @@ enum BuiltInBlockViews {
         guard !isRegistered else { return }
         isRegistered = true
         BlockViewFactories.shared.register(CodeBlockViewFactory(), for: .code)
+        BlockViewFactories.shared.register(EquationBlockViewFactory(), for: .equation)
+        BlockViewFactories.shared.register(TableOfContentsViewFactory(), for: .tableOfContents)
     }
 }

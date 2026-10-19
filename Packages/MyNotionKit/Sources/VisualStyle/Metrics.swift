@@ -361,7 +361,7 @@ public enum Metrics {
         public static let horizontalPadding: CGFloat = 6
         public static let verticalPadding: CGFloat = 6
         public static let buttonWidth: CGFloat = 36
-        public static let buttonCount = 7
+        public static let buttonCount = 8
         public static let width: CGFloat = 2 * horizontalPadding + CGFloat(buttonCount) * buttonWidth
         /// Строка типа: середина значка в 18 от края карточки, название с 42, середина стрелки «›» в 23 от правого края.
         public static let kindRowHeight: CGFloat = 32

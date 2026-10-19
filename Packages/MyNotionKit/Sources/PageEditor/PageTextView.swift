@@ -54,6 +54,13 @@ public final class PageTextView: NSTextView {
     let inlineAtoms = InlineAtomsState()
     /// Виды блоков кода страницы и курсор между ними и текстом (US4).
     let codeBlocks = CodeBlockRegistry()
+    /// Окно правки формулы (US4).
+    let equationEditor = EquationEditorController()
+    /// Виды оглавлений и слежение за заголовками (US4).
+    let tableOfContentsViews = TableOfContentsViews()
+    private(set) var tableOfContentsTracker: TableOfContentsTracker?
+    /// Виды блоков без своего текста на экране: их ставит страница, TextKit 2 этого не делает (US4).
+    private(set) lazy var blockViews = BlockViewHosting(textView: self)
     let formatBar = FormatBarController()
     /// Последние цвета текста и фона: окно цветов и ⌘⇧H.
     var recentColors = RecentColors()
@@ -103,9 +110,11 @@ public final class PageTextView: NSTextView {
         popups.textView = self
         formatBar.textView = self
         colorMenu.textView = self
+        equationEditor.textView = self
 
         configureTextBehaviour()
         BuiltInBlockViews.registerOnce()
+        tableOfContentsTracker = TableOfContentsTracker(textView: self)
         mapper = PageTextStorageMapper(document: document, textStorage: textStorage!)
         // После загрузки текста система ставит выделение в конец, и место курсора там считалось бы раскладкой
         // всей страницы (на 10 000 блоках — секунды). Пока текст загружается, вид выделения не обновляется;
@@ -237,6 +246,7 @@ public final class PageTextView: NSTextView {
         refreshMentionPicker()
         updateSelectionLook()
         if !document.pendingConflicts.isEmpty { conflictMarks.update() }
+        blockViews.update()
     }
 
     /// Вставка: адрес поверх выделения — ссылка, текст других программ — с поддерживаемым оформлением.
@@ -438,6 +448,7 @@ public final class PageTextView: NSTextView {
         case .applyColor(let choice): applyColor(choice)
         case .applyBlockColor(let choice): applyBlockColor(choice)
         case .repeatLastColor: repeatLastColor()
+        case .insertInlineEquation: insertInlineEquation()
         }
     }
 
@@ -457,6 +468,10 @@ public final class PageTextView: NSTextView {
         guard kind != .pageLink else { return }
         if kind == .divider, range.count == 1 { return insertDivider(at: range.lowerBound) }
         if kind == .code, range.count == 1, document.blocks[range.lowerBound].kind != .code { return insertCode(at: range.lowerBound) }
+        if kind == .equation, range.count == 1, document.blocks[range.lowerBound].kind != .equation {
+            return insertEquation(at: range.lowerBound)
+        }
+        if kind == .tableOfContents, range.count == 1 { return insertTableOfContents(at: range.lowerBound) }
         let blocks = document.blocks
         let drafts = range.map { index in
             let block = blocks[index]
@@ -533,6 +548,7 @@ public final class PageTextView: NSTextView {
 
         restoreSelection(anchors, fallbackBlock: min(range.lowerBound, document.blocks.count - 1))
         redrawBlockDecorations()
+        blockViews.update()
         updateEmptyParagraphHint()
         closePopups()
 
@@ -770,6 +786,17 @@ public final class PageTextView: NSTextView {
 
     public override var textContainerOrigin: NSPoint {
         NSPoint(x: column.left, y: header.frame.maxY)
+    }
+
+    /// После раскладки видимой области — виды блоков на свои абзацы.
+    public override func layout() {
+        super.layout()
+        blockViews.update()
+    }
+
+    public override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        blockViews.observeScrolling()
     }
 
     public override func setFrameSize(_ newSize: NSSize) {

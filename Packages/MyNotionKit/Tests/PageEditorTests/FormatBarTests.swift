@@ -110,7 +110,7 @@ struct FormatBarTests {
 
     @Test("Кнопки по порядку: жирный, курсив, подчёркнутый, зачёркнутый, код, ссылка, цвет")
     func buttonOrder() {
-        #expect(FormatBarButton.allCases == [.bold, .italic, .underline, .strikethrough, .code, .link, .color])
+        #expect(FormatBarButton.allCases == [.bold, .italic, .underline, .strikethrough, .code, .equation, .link, .color])
     }
 
     // MARK: Тип блока
@@ -304,9 +304,9 @@ struct FormatBarTests {
         return view
     }
 
-    @Test("Размер карточки: ширина 7 кнопок по 36 (шесть как у Notion и цвет) и поля 6, строка типа 32, разделитель, ряд кнопок 31")
+    @Test("Размер карточки: ширина 8 кнопок по 36 (шесть как у Notion, «√x» и цвет) и поля 6, строка типа 32, разделитель, ряд кнопок 31")
     func cardSize() {
-        #expect(Metrics.FormatBar.width == 264)
+        #expect(Metrics.FormatBar.width == 300)
         let height: CGFloat = 6 + 32 + 6 + 31 + 6
         #expect(Metrics.FormatBar.height == height, "Высота \(Metrics.FormatBar.height)")
     }

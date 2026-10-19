@@ -24,6 +24,7 @@ class InlineAtomAttachment: NSTextAttachment, @unchecked Sendable {
         switch style {
         case .mention: MentionAttachment(style: style)
         case .date: DateMentionAttachment(style: style)
+        case .equation: InlineEquationAttachment(style: style)
         default: nil
         }
     }

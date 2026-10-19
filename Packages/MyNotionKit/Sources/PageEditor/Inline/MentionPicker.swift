@@ -295,6 +295,9 @@ extension PageTextView {
         case .date(let date):
             inlineAtoms.datePopover.open(for: date, atCharacter: index, in: self)
             return true
+        case .equation:
+            openEquationEditor(atCharacter: index)
+            return true
         default:
             return false
         }

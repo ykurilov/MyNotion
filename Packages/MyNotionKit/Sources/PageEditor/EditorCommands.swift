@@ -34,6 +34,8 @@ public enum EditorCommand: Sendable, Hashable {
     case applyColor(ColorChoice)
     case applyBlockColor(ColorChoice)
     case repeatLastColor
+    /// ⌃⇧E: выделенный текст — формула в строке (у Notion ⌘⇧E, но здесь она занята выгрузкой).
+    case insertInlineEquation
 }
 
 /// Какие клавиши какое действие запускают. ⌘K свободна: ссылка — вставкой адреса или «Формат → Ссылка».
@@ -45,6 +47,7 @@ public enum EditorKeyBindings {
         case ("i", [.command]): return .toggleInline(.italic)
         case ("x", [.command, .shift]): return .toggleInline(.strikethrough)
         case ("e", [.command]): return .toggleInline(.code)
+        case ("e", [.control, .shift]): return .insertInlineEquation
         case ("u", [.command]): return .toggleInline(.underline)
         case ("h", [.command, .shift]): return .repeatLastColor
         case ("\r", [.command]), ("\u{3}", [.command]): return .toggleChecked
