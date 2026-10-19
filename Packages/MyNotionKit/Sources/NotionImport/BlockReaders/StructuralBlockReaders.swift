@@ -38,12 +38,18 @@ struct CalloutReader: NotionBlockReader {
         if let first = blocks.first, first.kind == .paragraph {
             text = first.text
             blocks.removeFirst()
-            // Notion пишет иконку первым знаком текста: «💡 Совет».
-            if icon == nil {
-                let (emoji, rest) = NotionMarkdownParser.splitIcon(text.string)
-                if let emoji {
-                    icon = emoji
-                    text = StructuralMarkup.dropping(prefixUTF16: (text.string as NSString).length - (rest as NSString).length, from: text)
+            // Notion пишет иконку первым знаком текста («💡 Совет») или, как 7.39, отдельной строкой — тогда текст
+            // выноски — следующий абзац.
+            if icon == nil, case (let emoji?, let rest) = NotionMarkdownParser.splitIcon(text.string + " ") {
+                icon = emoji
+                let remaining = String(rest.dropLast())
+                if !remaining.isEmpty {
+                    text = StructuralMarkup.dropping(prefixUTF16: (text.string as NSString).length - (remaining as NSString).length, from: text)
+                } else if let next = blocks.first, next.kind == .paragraph, next.indent == 0 {
+                    text = next.text
+                    blocks.removeFirst()
+                } else {
+                    text = .empty
                 }
             }
         }

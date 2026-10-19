@@ -266,7 +266,7 @@ description: "Задачи: новые блоки и оформление тек
 
 - [x] T114 Круговой тест `PK/Tests/NotionImportTests/RichRoundTripTests.swift`: «богатая» страница → выгрузка → импорт — текст 100 %, блоки, оформление и файлы (SHA-256) совпадают (SC-105)
 - [x] T115 Отчёт импорта честно называет потерю (решение Юрия, research R14): в итоге импорта из Notion всегда строка «Цвета и колонки Notion в Markdown не выгружает — они не перенесены» — `PK/Sources/NotionImport/NotionImporter.swift`, `App/Settings/NotionImportView.swift`, тест в `PK/Tests/NotionImportTests/NotionImporterTests.swift`
-- [ ] T116 Живая выгрузка Notion Юрия: импорт в виртуальном Mac (`scripts/vm/run-in-vm.sh run --import-notion <путь>`); сверить таблицу импорта в contracts/markdown-and-notion.md с фактом и поправить; сколько формул не разобрал SwiftMath — в research.md R6
+- [x] T116 Живая выгрузка Notion Юрия: импорт в виртуальном Mac (`scripts/vm/run-in-vm.sh run --import-notion <путь>`); сверить таблицу импорта в contracts/markdown-and-notion.md с фактом и поправить; сколько формул не разобрал SwiftMath — в research.md R6
 - [x] T117 [P] Создание любого блока через «/» ≤ 3 с набора (SC-101) — `UITests/SlashMenuSpeedTests.swift`
 - [ ] T118 Полная галерея `scripts/vm/run-in-vm.sh gallery` в обеих темах; отдельный агент-проверяющий сверяет с живым Notion и contracts/blocks-and-keys.md; каждая найденная кривость — исправление и проверка геометрии в тестах
 - [ ] T119 **Единственный полный прогон**: `swift test` всего пакета; все UI-тесты `scripts/vm/run-in-vm.sh uitest`; `cd server && pnpm test`; ни одного красного
