@@ -47,12 +47,11 @@ final class PagesLibrary {
         reminders.openBlock = { [weak self] pageId, blockId in self?.openBlock(blockId, inPage: pageId) }
     }
 
-    /// Щелчок по уведомлению: страница в окне, где работают, курсор — у блока с датой.
+    /// Щелчок по уведомлению: страница в окне, где работают, курсор — у блока с датой; свёрнутые предки раскрываются.
     func openBlock(_ blockId: UUID, inPage pageId: UUID) {
         guard tree.page(pageId) != nil else { return }
-        PageTextView.requestReveal(block: blockId, inPage: pageId)
         let window = activeWindow ?? firstWindow
-        window?.select(pageId)
+        window?.select(pageId, revealing: blockId)
         window?.window?.makeKeyAndOrderFront(nil)
     }
 

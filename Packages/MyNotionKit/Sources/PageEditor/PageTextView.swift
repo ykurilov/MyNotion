@@ -47,6 +47,8 @@ public final class PageTextView: NSTextView {
     let layoutDelegate = BlockLayoutDelegate()
     /// Абзацы детей свёрнутых переключателей: не раскладываются (research R1).
     let hiddenParagraphs = HiddenParagraphs()
+    /// Свёрнутые переключатели этого Mac и отступы по поддеревьям (`Collapsing/`).
+    let collapsedParagraphs = CollapsedParagraphs()
     let popups = EditorPopupController()
     /// Упоминания, даты и окно «@» (US3).
     let inlineAtoms = InlineAtomsState()
@@ -92,6 +94,7 @@ public final class PageTextView: NSTextView {
         layoutManager.delegate = layoutDelegate
         hiddenParagraphs.textView = self
         contentStorage.delegate = hiddenParagraphs
+        collapsedParagraphs.textView = self
         popups.textView = self
         formatBar.textView = self
 
@@ -102,6 +105,7 @@ public final class PageTextView: NSTextView {
         // курсор — в начало, куда его потом и ставит открытие страницы.
         isLoadingText = true
         mapper.load()
+        refreshBlockStructure()
         isLoadingText = false
         setSelectedRange(NSRange(location: 0, length: 0))
         // Отмена правки текста не зовёт didChangeText: забрать её в документ сразу после ⌘Z и ⇧⌘Z.
@@ -131,7 +135,6 @@ public final class PageTextView: NSTextView {
             self?.onSetIcon?(EmojiCatalog.shared.random(using: &generator).character)
         }
         header.onIconClick = { [weak self] in self?.openIconPicker() }
-        observeRevealRequests()
         _ = caret
         layoutColumn()
     }
@@ -170,6 +173,7 @@ public final class PageTextView: NSTextView {
         guard notification.object as? UndoManager === undoManager, mapper.hasPendingEdits else { return }
         let blockCount = document.blocks.count
         mapper.commitPendingEdits()
+        refreshBlockStructure()
         if document.blocks.count != blockCount { redrawBlockDecorations() }
         updateEmptyParagraphHint()
     }
@@ -199,6 +203,7 @@ public final class PageTextView: NSTextView {
         if change.touchesBlocks {
             let anchors = selectionAnchors()
             mapper.renderExternalChanges(change)
+            refreshBlockStructure()
             undoManager?.removeAllActions()
             restoreSelection(anchors, fallbackBlock: 0)
             redrawBlockDecorations()
@@ -213,7 +218,13 @@ public final class PageTextView: NSTextView {
         guard !hasMarkedText() else { return }
         let blockCount = document.blocks.count
         mapper.commitPendingEdits()
-        if document.blocks.count != blockCount { redrawBlockDecorations() }
+        if document.blocks.count != blockCount {
+            refreshBlockStructure()
+            redrawBlockDecorations()
+        } else if let position = mapper.blockPosition(at: selectedRange().location) {
+            // Набор внутри блока: поддеревья те же, поправки нужны только перерисованным абзацам.
+            reapplyAdjustments(aroundBlockAt: position.index)
+        }
         updateEmptyParagraphHint()
         textDidChangeForPopups()
         refreshMentionPicker()
@@ -254,6 +265,11 @@ public final class PageTextView: NSTextView {
         if isBlockSelection, replacementRange.location == NSNotFound, !hasMarkedText() { return }
         hideBlockHandles()
         if typed == " ", replacementRange.location == NSNotFound, !hasMarkedText(), applyMarkdownShortcut() { return }
+        if typed == "-", replacementRange.location == NSNotFound, !hasMarkedText(), isCaretAfterTwoDashes {
+            super.insertText(string, replacementRange: replacementRange)
+            convertDashesToDivider()
+            return
+        }
         if replacementRange.location == NSNotFound, !hasMarkedText(), !typed.isEmpty, !typed.hasPrefix("\n"), isCaretInPageLink {
             // В блоке-подстранице текста нет: набранное уходит в новый абзац под ним.
             super.insertText("\n" + typed, replacementRange: replacementRange)
@@ -278,7 +294,9 @@ public final class PageTextView: NSTextView {
     }
 
     public override func deleteBackward(_ sender: Any?) {
-        if !hasMarkedText(), handleBackspaceAtBlockStart() { return }
+        if !hasMarkedText(), handleBackspaceUnderCollapsedToggle() || handleBackspaceAtContainerStart() || handleBackspaceAtBlockStart() {
+            return
+        }
         super.deleteBackward(sender)
     }
 
@@ -295,7 +313,7 @@ public final class PageTextView: NSTextView {
     }
 
     public override func insertNewline(_ sender: Any?) {
-        if !hasMarkedText(), handleNewlineInEmptyItem() { return }
+        if !hasMarkedText(), handleNewlineInContainer() || handleNewlineInEmptyChild() || handleNewlineInEmptyItem() { return }
         super.insertNewline(sender)
     }
 
@@ -398,6 +416,7 @@ public final class PageTextView: NSTextView {
         case .moveBlocksUp: moveSelectedBlocks(by: -1)
         case .moveBlocksDown: moveSelectedBlocks(by: 1)
         case .toggleChecked: toggleCheckedSelectedBlocks()
+        case .toggleAllCollapsed: toggleAllCollapsed()
         case .toggleInline(let format): toggleInline(format)
         case .setKind(let kind):
             commitEdits()
@@ -419,10 +438,16 @@ public final class PageTextView: NSTextView {
 
     func setKind(_ kind: BlockKind, ofBlocksAt range: Range<Int>) {
         guard kind != .pageLink else { return }
-        let drafts = document.blocks[range].map { block in
+        if kind == .divider, range.count == 1 { return insertDivider(at: range.lowerBound) }
+        let blocks = document.blocks
+        let drafts = range.map { index in
+            let block = blocks[index]
             var draft = BlockDraft(block)
             draft.kind = kind
             if kind != .checkbox { draft.isChecked = false }
+            if kind != block.kind { draft.adoptDefaults(of: kind, from: block) }
+            // Заголовок вкладывается только внутрь переключателя, выноски, цитаты.
+            if kind.isHeading { draft.indent = BlockMoveController.headingIndent(block.indent, at: index, in: blocks) }
             return draft
         }
         changeBlocks(range, to: drafts, actionName: "Тип блока")
@@ -443,7 +468,8 @@ public final class PageTextView: NSTextView {
         commitEdits()
         guard let selected = selectedBlockRange() else { return }
         let checkboxes = selected.filter { document.blocks[$0].kind == .checkbox }
-        guard let first = checkboxes.first, let last = checkboxes.last else { return }
+        // Без чекбоксов ⌘Enter сворачивает и раскрывает переключатели.
+        guard let first = checkboxes.first, let last = checkboxes.last else { return toggleCollapsedSelectedBlocks() }
         let checked = !checkboxes.allSatisfy { document.blocks[$0].isChecked }
         let range = first..<last + 1
         let drafts = document.blocks[range].map { block in
@@ -485,6 +511,7 @@ public final class PageTextView: NSTextView {
         let ids = document.replaceBlocks(after: previousId, before: nextId, with: drafts, movedBlockIds: moved, origin: textStorage)
         let changed = range.lowerBound..<range.lowerBound + ids.count
         mapper.renderBlocks(changed, replacing: characters)
+        refreshBlockStructure()
 
         restoreSelection(anchors, fallbackBlock: min(range.lowerBound, document.blocks.count - 1))
         redrawBlockDecorations()
@@ -528,6 +555,11 @@ public final class PageTextView: NSTextView {
             let location = ranges[0].rangeValue.location
             let skipped = caretSkippingAttachments(location, from: selectedRange().location)
             if skipped != location { ranges = [NSValue(range: NSRange(location: skipped, length: 0))] }
+        }
+        // Курсор и выделение у детей свёрнутого переключателя (research R1).
+        if ranges.count == 1, !isLoadingText {
+            let adjusted = selectionRespectingCollapsed(ranges[0].rangeValue, from: selectedRange())
+            if adjusted != ranges[0].rangeValue { ranges = [NSValue(range: adjusted)] }
         }
         super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
         guard !isLoadingText else { return }
@@ -576,6 +608,7 @@ public final class PageTextView: NSTextView {
             toggleCheckbox(ofBlock: id)
             return
         }
+        if handleStructuralBlockClick(at: point) { return }
         if let pageId = linkedPage(at: point) {
             onOpenPage?(pageId)
             return
@@ -826,7 +859,7 @@ public final class PageTextView: NSTextView {
             guard let first = lines.first, let last = lines.last else { continue }
             let top = lineBox(first, in: fragment, startingAt: fragmentStart).minY - Metrics.BlockSelection.verticalOutset
             let bottom = lineBox(last, in: fragment, startingAt: fragmentStart).maxY + Metrics.BlockSelection.verticalOutset
-            let left = origin.x + CGFloat(document.blocks[index].indent) * Metrics.Page.indentPerLevel - outset
+            let left = origin.x + blockLeft(ofBlockAt: index) - outset
             let right = origin.x + container.size.width + outset
             rects.append(NSRect(x: left, y: top, width: right - left, height: bottom - top))
         }
@@ -913,7 +946,6 @@ public final class PageTextView: NSTextView {
             case .body: focusBody(at: 0)
             case .unchanged: break
             }
-            revealPendingBlock()
             onReady?()
         }
     }

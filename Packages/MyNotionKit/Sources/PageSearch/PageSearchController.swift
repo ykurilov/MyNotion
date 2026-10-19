@@ -14,6 +14,9 @@ public final class PageSearchController: NSObject, NSTextFieldDelegate {
     private var panel: SearchResultsPanel?
     private var deactivationObserver: NSObjectProtocol?
 
+    /// Открыть найденное: страницу и блок со словами. Без него открывается только страница (`open`).
+    public var openResult: ((PageSearchResult) -> Void)?
+
     /// Выдача по тексту в поле; пусто — поле пустое или ничего не нашлось.
     public private(set) var results: [PageSearchResult] = []
     /// Подсвеченная строка выдачи.
@@ -103,12 +106,12 @@ public final class PageSearchController: NSObject, NSTextFieldDelegate {
 
     private func openSelected() {
         guard results.indices.contains(selectedIndex) else { return }
-        open(results[selectedIndex].pageId)
+        open(results[selectedIndex])
     }
 
-    private func open(_ pageId: UUID) {
+    private func open(_ result: PageSearchResult) {
         dismiss()
-        openPage(pageId)
+        if let openResult { openResult(result) } else { openPage(result.pageId) }
     }
 
     /// Закрыть выдачу, очистить поле и уйти из него (Esc).
@@ -141,7 +144,7 @@ public final class PageSearchController: NSObject, NSTextFieldDelegate {
         panel.resultsView.onHover = { [weak self] index in self?.select(index) }
         panel.resultsView.onClick = { [weak self] index in
             guard let self, results.indices.contains(index) else { return }
-            open(results[index].pageId)
+            open(results[index])
         }
         self.panel = panel
         return panel

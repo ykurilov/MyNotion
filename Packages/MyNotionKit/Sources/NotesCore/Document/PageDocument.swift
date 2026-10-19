@@ -562,7 +562,9 @@ public struct BlockDraft: Sendable, Hashable {
         let kind = kind == .pageLink && linkedPageId == nil ? .paragraph : kind
         block.kind = kind
         block.text = text.normalized()
-        block.indent = kind.isHeading ? 0 : min(max(indent, Block.indentRange.lowerBound), Block.indentRange.upperBound)
+        // Заголовок вкладывается только внутрь переключателя, выноски, цитаты: это решает редактор по соседям
+        // (`BlockMoveController`), а лишнее после слияния урезается при показе (`BlockNesting`).
+        block.indent = min(max(indent, Block.indentRange.lowerBound), Block.indentRange.upperBound)
         block.isChecked = kind == .checkbox && isChecked
         block.linkedPageId = kind == .pageLink ? linkedPageId : nil
         if let color { block.color = color } else if isNew { block.color = .defaults(for: kind) }

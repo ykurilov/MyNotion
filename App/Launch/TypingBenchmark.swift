@@ -5,7 +5,7 @@ import PageEditor
 
 /// Замер отклика (T048, research R13): по флагу `--typing-benchmark <путь>` приложение само печатает
 /// в открытой странице на 1 000 блоков, переходит между страницами, печатает и листает страницу
-/// на 10 000 блоков, пишет время каждого действия и p95 в файл и выходит.
+/// на 10 000 блоков, затем печатает в «богатой» странице 002 (quickstart.md), пишет время каждого действия и p95 в файл и выходит.
 /// Каждое действие — интервал signpost (`Keystroke`, `PageSwitch`, `Scroll`) для Instruments.
 /// Нажатие считается от отправки события окну до конца перерисовки окна.
 @MainActor
@@ -30,6 +30,9 @@ enum TypingBenchmark {
         var hugePageOpenMs: Double?
         var hugePageTypingMs: [Double] = []
         var hugePageScrollMs: [Double] = []
+        var richPageOpenMs: Double?
+        var richPageTypingMs: [Double] = []
+        var richPageTypingP95Ms: Double?
         var typingP95Ms: Double?
         var pageSwitchP95Ms: Double?
         var hugePageTypingP95Ms: Double?
@@ -41,6 +44,7 @@ enum TypingBenchmark {
             pageSwitchP95Ms = TypingBenchmark.p95(pageSwitchMs)
             hugePageTypingP95Ms = TypingBenchmark.p95(hugePageTypingMs)
             hugePageScrollP95Ms = TypingBenchmark.p95(hugePageScrollMs)
+            richPageTypingP95Ms = TypingBenchmark.p95(richPageTypingMs)
         }
 
         func write(to url: URL) {
@@ -125,6 +129,11 @@ enum TypingBenchmark {
         let hugePage = try openTextView()
         report.hugePageScrollMs = try await scroll(hugePage, steps: scrollSteps)
         report.hugePageTypingMs = try await type(hugePageKeystrokes, in: hugePage)
+
+        // «Богатая» страница 002: переключатели (один свёрнут с 200 детьми), выноски, цитаты, разделители, цвета.
+        let richPageId = try RichPageGenerator(parts: BlockKinds.richPageParts).ensure(in: model.store)
+        report.richPageOpenMs = try await switchPage(to: richPageId, model: model)
+        report.richPageTypingMs = try await type(hugePageKeystrokes, in: try openTextView())
         return report
     }
 

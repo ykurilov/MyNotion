@@ -472,7 +472,7 @@ public final class PageTextStorageMapper: NSObject {
     /// Отступ над блоком: свой у типа блока, между абзацем и пунктом, чекбоксом или подстраницей — больше,
     /// как у Notion (contracts/visual-style.md, «Блоки»).
     static func spacingBefore(_ kind: BlockKind, after previous: BlockKind?) -> CGFloat {
-        let own = Metrics.block(textStyle(of: kind)).topSpacing
+        let own = kind.descriptor.topSpacing ?? Metrics.block(textStyle(of: kind)).topSpacing
         guard let previous else { return own }
         let listLike: Set<BlockKind> = [.bulletItem, .numberedItem, .checkbox, .pageLink]
         let crossesGroup = kind == .paragraph && listLike.contains(previous) || previous == .paragraph && listLike.contains(kind)
@@ -483,10 +483,15 @@ public final class PageTextStorageMapper: NSObject {
         let style = textStyle(of: block.kind)
         let line = Typography.line(for: style)
         let spacing = Metrics.block(style)
+        let descriptor = block.kind.descriptor
         let paragraphStyle = (line.paragraphStyle.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
+        if let lineHeight = descriptor.lineHeight {
+            paragraphStyle.minimumLineHeight = lineHeight
+            paragraphStyle.maximumLineHeight = lineHeight
+        }
         paragraphStyle.paragraphSpacingBefore = spacingBefore(block.kind, after: previous)
-        paragraphStyle.paragraphSpacing = max(0, spacing.height - line.lineHeight - spacing.topSpacing)
-        let marker: CGFloat = block.kind.hasMarkerColumn ? Metrics.BlockMarker.textInset : 0
+        paragraphStyle.paragraphSpacing = descriptor.bottomSpacing ?? max(0, spacing.height - line.lineHeight - spacing.topSpacing)
+        let marker: CGFloat = block.kind.hasMarkerColumn ? Metrics.BlockMarker.textInset : descriptor.leadingInset
         let indent = CGFloat(block.indent) * Metrics.Page.indentPerLevel + marker
         paragraphStyle.firstLineHeadIndent = indent
         paragraphStyle.headIndent = indent

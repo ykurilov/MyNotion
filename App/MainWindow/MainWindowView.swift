@@ -294,6 +294,8 @@ private struct PagesWindow: View {
                 onOpenPage: { model.select($0) },
                 onSetIcon: { model.setIcon(document.pageId, to: $0) },
                 onResolveConflict: { model.resolveConflict($0, in: document) },
+                blockViewState: model.blockViewState,
+                blockReveal: model.blockReveal,
                 onReady: onEditorReady,
                 mentions: mentionSettings
             )

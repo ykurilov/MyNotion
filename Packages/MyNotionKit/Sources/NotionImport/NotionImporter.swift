@@ -225,7 +225,8 @@ public struct NotionImporter: Sendable {
         var linkedChildren: Set<Int> = []
         func append(_ kind: BlockKind, _ text: InlineText = .empty, indent: Int = 0, checked: Bool = false, link: UUID? = nil) {
             sortKey = .between(sortKey, nil)
-            result.append(Block(pageId: pageId, kind: kind, text: text, indent: kind.isHeading ? 0 : indent,
+            // Заголовок бывает вложен в переключатель, выноску, цитату (research R1).
+            result.append(Block(pageId: pageId, kind: kind, text: text, indent: indent,
                                 isChecked: kind == .checkbox && checked, linkedPageId: link, sortKey: sortKey!))
         }
         /// Блок 002 с цветом, свойствами и потоками внутри (колонки, таблица).
