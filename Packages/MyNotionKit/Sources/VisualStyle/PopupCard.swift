@@ -121,7 +121,7 @@ private final class PopupCardPanel: NSPanel {
         }
 
         override func draw(_ dirtyRect: NSRect) {
-            PopupSurface.draw(card: cardRect)
+            PopupSurface.draw(card: cardRect, shadow: Palette.popupCardShadow)
         }
     }
 }

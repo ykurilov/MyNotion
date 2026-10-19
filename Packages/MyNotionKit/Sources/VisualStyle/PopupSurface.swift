@@ -1,13 +1,13 @@
 import AppKit
 
 /// Карточка всплывающей панели — меню «/», меню блока, окно корзины (contracts/visual-style.md, «Всплывающие меню»):
-/// скругление 10, тень и рамка `popupMenuShadow`, фон `popupMenuBackground`. Окно вокруг карточки оставляет место под тень.
+/// скругление 10, тень и рамка (`popupMenuShadow` у меню, `popupCardShadow` у окон-карточек), фон `popupMenuBackground`. Окно вокруг карточки оставляет место под тень.
 public enum PopupSurface {
     @MainActor
-    public static func draw(card: NSRect) {
+    public static func draw(card: NSRect, shadow layers: [ShadowLayer] = Palette.popupMenuShadow) {
         let radius = Metrics.PopupMenu.cornerRadius
         let path = NSBezierPath(roundedRect: card, xRadius: radius, yRadius: radius)
-        for layer in Palette.popupMenuShadow {
+        for layer in layers {
             NSGraphicsContext.saveGraphicsState()
             if layer.spread > 0 {
                 // Слой без размытия — рамка: кольцо шире карточки на spread.

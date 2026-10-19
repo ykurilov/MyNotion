@@ -82,7 +82,16 @@ public enum Palette {
 
     /// Тень всплывающих панелей: четыре слоя, последний — тонкая рамка. В тёмной теме тень гуще, а рамка светлая:
     /// тёмная тень на тёмной странице не видна (≈ по Notion).
-    /// Подобрано по снимкам меню Notion 7.39 (19.10.2026): в светлой теме у края светлее, а вниз тянется на ≈ 42;
+    /// Тень окон-карточек над страницей (корзина, подтверждение, выдача поиска): со всех сторон, верхний край поверх
+    /// текста не выглядит срезом строки (ui-review № 26).
+    public static let popupCardShadow: [ShadowLayer] = [
+        ShadowLayer(offsetY: 20, blurRadius: 24, spread: 0, color: themed(light: .rgba(25, 25, 25, 0.05), dark: .rgba(0, 0, 0, 0.4))),
+        ShadowLayer(offsetY: 5, blurRadius: 8, spread: 0, color: themed(light: .rgba(25, 25, 25, 0.027), dark: .rgba(0, 0, 0, 0.2))),
+        ShadowLayer(offsetY: 0, blurRadius: 8, spread: 0, color: themed(light: .rgba(15, 15, 15, 0.1), dark: .rgba(0, 0, 0, 0.6))),
+        ShadowLayer(offsetY: 0, blurRadius: 0, spread: 1, color: themed(light: .rgba(42, 28, 0, 0.07), dark: .rgba(255, 255, 255, 0.094))),
+    ]
+
+    /// Тень всплывающих меню. Подобрано по снимкам меню Notion 7.39 (19.10.2026): в светлой теме у края светлее, а вниз тянется на ≈ 42;
     /// в тёмной снаружи тени нет — только светлая рамка.
     public static let popupMenuShadow: [ShadowLayer] = [
         ShadowLayer(offsetY: 12, blurRadius: 32, spread: 0, color: themed(light: .rgba(15, 15, 15, 0.06), dark: .rgba(0, 0, 0, 0))),
