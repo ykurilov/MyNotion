@@ -83,7 +83,7 @@ description: "Задачи: новые блоки и оформление тек
 - [x] T025 [P] [US5] Тесты в `server/test/backup.test.ts`: копия `backups/files-<дата>` жёсткими ссылками, 14 копий; уборка: корзина старше 30 дней и несобранные без новых частей 7 дней стираются
 - [x] T026 [US5] `server/src/files.ts` и таблица `files (id, part_count, bytes, complete_at, deleted_at, created_at)` в `server/src/db.ts`; части в `/data/files/<2 знака id>/<id>/<index>.part` через временный файл и переименование; квота `FILES_LIMIT_GB` (по умолчанию 50) в `server/src/config.ts`
 - [x] T027 [US5] Маршруты в `server/src/app.ts` (тело `application/octet-stream`, свой предел), суточная уборка в `server/src/main.ts`, копия файлов в `server/src/backup.ts`; `pnpm test` и `pnpm typecheck` зелёные; коммит
-- [ ] T028 [US5] Развёртывание на `mynotion.kurilov.cloud` по скиллу server-deploy: `client_max_body_size` ≥ 9 МБ, тайм-аут чтения тела 120 с, том `./data/files`; проверка `/health` и `GET /files/usage`; ссылка и итог — в quickstart.md
+- [x] T028 [US5] Развёртывание на `mynotion.kurilov.cloud` по скиллу server-deploy: `client_max_body_size` ≥ 9 МБ, тайм-аут чтения тела 120 с, том `./data/files`; проверка `/health` и `GET /files/usage`; ссылка и итог — в quickstart.md
 
 **Checkpoint**: сервер принимает файлы; приложение подключится в US5.
 
