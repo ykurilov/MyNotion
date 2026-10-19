@@ -100,7 +100,7 @@ description: "Задачи: новые блоки и оформление тек
 - [x] T029 [P] [US1] `PK/Tests/PageEditorTests/StructuralBlockTests.swift`: `> `, `" `, `---`, «/» → «Выноска»; Tab под переключателем, выноской, цитатой; Enter в конце раскрытого переключателя — первый ребёнок, в свёрнутом — после детей; Enter в пустом ребёнке — выход на уровень; ⌫ в начале — абзац, дети поднимаются; заголовок вкладывается только внутрь переключателя, выноски, цитаты; ⌘Z каждого шага
 - [x] T030 [P] [US1] `PK/Tests/PageEditorTests/CollapsingTests.swift`: скрытые абзацы не раскладываются; курсор, попавший внутрь, уходит к концу строки переключателя; ⌫ под свёрнутым склеивает с текстом переключателя; выделение через свёрнутое захватывает детей; выделение внутрь скрытого раскрывает всех предков; ⌘Enter и ⌘⌥T; ⌘Z/⇧⌘Z не задеты свёртыванием
 - [x] T031 [P] [US1] `PK/Tests/NotesCoreTests/BlockViewStateTests.swift`: свёрнутость пишется сразу в `block_view_state`, переживает перезапуск, не попадает в очередь исходящих и в отмену
-- [ ] T032 [P] [US1] `PK/Tests/MarkdownExportTests/StructuralBlocksExportTests.swift` и `PK/Tests/NotionImportTests/StructuralBlocksImportTests.swift`: `<details>`/`<summary>`, `<aside data-icon>`, `>` с детьми, `---` по contracts/markdown-and-notion.md; выгрузка → импорт — те же блоки; выгрузка Notion: `<details>`, `<aside>`, `>` больше не «упрощены»
+- [x] T032 [P] [US1] `PK/Tests/MarkdownExportTests/StructuralBlocksExportTests.swift` и `PK/Tests/NotionImportTests/StructuralBlocksImportTests.swift`: `<details>`/`<summary>`, `<aside data-icon>`, `>` с детьми, `---` по contracts/markdown-and-notion.md; выгрузка → импорт — те же блоки; выгрузка Notion: `<details>`, `<aside>`, `>` больше не «упрощены»
 - [ ] T033 [P] [US1] `UITests/StructuralBlocksTests.swift`: сценарий Independent Test + поиск страниц (⇧⌘F) по слову в свёрнутом раскрывает до найденного
 
 ### Код
@@ -111,7 +111,7 @@ description: "Задачи: новые блоки и оформление тек
 - [x] T037 [P] [US1] Рисователи `PK/Sources/PageEditor/BlockPainters/TogglePainter.swift` (▸/▾), `QuoteBarPainter.swift`, `CalloutBoxPainter.swift` (по поддереву), разделитель — вид-вложение высотой 13; размеры в `PK/Sources/VisualStyle/Metrics.swift`
 - [x] T038 [US1] Иконка выноски — окно эмодзи 001 без «Убрать» (`PK/Sources/EmojiPicker/`); `props.icon` по умолчанию 💡, фон gray в `color`
 - [ ] T039 [US1] Переход к найденному из поиска страниц раскрывает свёрнутых предков: `App/MainWindow/MainWindowModel.swift`
-- [ ] T040 [P] [US1] Выгрузка `PK/Sources/MarkdownExport/BlockWriters/StructuralBlockWriters.swift`, импорт `PK/Sources/NotionImport/BlockReaders/StructuralBlockReaders.swift`; убрать «упрощено» для цитаты, выноски, переключателя, разделителя
+- [x] T040 [P] [US1] Выгрузка `PK/Sources/MarkdownExport/BlockWriters/StructuralBlockWriters.swift`, импорт `PK/Sources/NotionImport/BlockReaders/StructuralBlockReaders.swift`; убрать «упрощено» для цитаты, выноски, переключателя, разделителя
 - [ ] T041 [US1] Галерея (`scripts/vm/run-in-vm.sh gallery --only structural`) в обеих темах, сверка с живым Notion, цифры — в contracts/blocks-and-keys.md; замер набора на «богатой» странице p95 ≤ 50 мс; затронутые тесты зелёные; коммит
 
 **Checkpoint**: US1 работает сам по себе — MVP.

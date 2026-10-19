@@ -162,7 +162,7 @@ struct NotionMarkdownParserTests {
         #expect(page.simplifications == [.file: 2])
     }
 
-    @Test("Цитата, выноска, код, переключатель, разделитель, формула, встраивание — абзацы с исходным текстом")
+    @Test("Код, формула, встраивание — абзацы с исходным текстом; цитата, выноска, переключатель, разделитель — блоками (US1)")
     func simplifiedBlocks() {
         let markdown = """
             # С
@@ -197,17 +197,20 @@ struct NotionMarkdownParserTests {
             <figure><img src="x.png">Подпись</figure>
             """
         let page = parser.parse(markdown)
+        var callout = ParsedBlock(kind: .callout, text: InlineText("Выноска"), color: .defaults(for: .callout), props: .defaults(for: .callout))
+        callout.props.icon = "💡"
         #expect(page.blocks == [
-            block(.paragraph, "Цитата\nв две строки"),
-            block(.paragraph, "💡 Выноска"),
+            block(.quote, "Цитата\nв две строки"),
+            callout,
             block(.paragraph, "let a = **1**\n  print(a)"),
-            block(.paragraph, "Переключатель"),
-            block(.paragraph, "Внутри"),
+            block(.toggle, "Переключатель"),
+            block(.paragraph, "Внутри", indent: 1),
+            block(.divider, ""),
             block(.paragraph, "E = mc^2"),
             block(.paragraph, "https://www.youtube.com/embed/xyz"),
             block(.paragraph, "Подпись"),
         ])
-        #expect(page.simplifications == [.quote: 1, .callout: 1, .code: 1, .toggle: 1, .divider: 1, .equation: 1, .embed: 2])
+        #expect(page.simplifications == [.code: 1, .equation: 1, .embed: 2])
     }
 
     @Test("Таблица Markdown — абзац на строку: «Колонка: значение» через перенос, пустые ячейки пропущены")

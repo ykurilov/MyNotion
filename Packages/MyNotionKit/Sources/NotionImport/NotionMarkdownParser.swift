@@ -86,6 +86,13 @@ public struct NotionMarkdownParser: Sendable {
         return ParsedNotionPage(title: title, icon: icon, blocks: builder.blocks, simplifications: builder.simplifications)
     }
 
+    /// Блоки куска Markdown без строки названия — то, что внутри переключателя, выноски, цитаты.
+    static func blocks(in lines: [String]) -> (blocks: [ParsedBlock], simplifications: [NotionSimplification: Int]) {
+        var builder = PageBuilder()
+        builder.consume(lines[...])
+        return (builder.blocks, builder.simplifications)
+    }
+
     // MARK: Строки
 
     static func isBlank(_ line: some StringProtocol) -> Bool {
@@ -120,7 +127,7 @@ public struct NotionMarkdownParser: Sendable {
 }
 
 /// Сборка блоков страницы строка за строкой.
-private struct PageBuilder {
+struct PageBuilder {
     private(set) var blocks: [ParsedBlock] = []
     private(set) var simplifications: [NotionSimplification: Int] = [:]
 
@@ -151,7 +158,9 @@ private struct PageBuilder {
             }
             if let reading = NotionBlockReaders.all.lazy.compactMap({ $0.read(lines, at: index - 1) }).first {
                 closeOpenBlock()
+                listColumns = []
                 for block in reading.blocks { emit(block) }
+                simplifications.merge(reading.simplifications, uniquingKeysWith: +)
                 index = max(reading.nextIndex, index)
                 continue
             }
@@ -370,7 +379,7 @@ private struct PageBuilder {
         return nil
     }
 
-    private static func isThematicBreak(_ trimmed: String) -> Bool {
+    static func isThematicBreak(_ trimmed: String) -> Bool {
         guard let mark = trimmed.first, mark == "-" || mark == "*" || mark == "_" else { return false }
         let compact = trimmed.filter { $0 != " " && $0 != "\t" }
         return compact.count >= 3 && compact.allSatisfy { $0 == mark }

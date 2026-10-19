@@ -13,8 +13,10 @@ protocol NotionBlockReader: Sendable {
 struct NotionBlockReading {
     var blocks: [ParsedBlock]
     var nextIndex: Int
+    /// Что упрощено внутри прочитанного (например, таблица в переключателе).
+    var simplifications: [NotionSimplification: Int] = [:]
 }
 
 enum NotionBlockReaders {
-    static let all: [any NotionBlockReader] = []
+    static let all: [any NotionBlockReader] = [ToggleReader(), CalloutReader(), QuoteReader(), DividerReader()]
 }
