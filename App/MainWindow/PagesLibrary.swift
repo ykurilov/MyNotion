@@ -1,4 +1,5 @@
 import AppKit
+import Attachments
 import Foundation
 import NotesCore
 import Observation
@@ -13,6 +14,8 @@ import PageTree
 @Observable
 final class PagesLibrary {
     let store: NotesStore
+    /// Копии файлов блоков (US5): рядом с базой, в `Attachments/`.
+    @ObservationIgnored let attachments: AttachmentStore
     @ObservationIgnored let openDocuments: OpenDocuments
     /// Дерево без корзины.
     private(set) var tree = PageTreeSnapshot(allPages: [])
@@ -39,9 +42,11 @@ final class PagesLibrary {
     init(store: NotesStore, startsSync: Bool = true, reminders: ReminderNotifications) {
         self.store = store
         self.reminders = reminders
+        attachments = AttachmentStore(store: store, folder: AttachmentStore.folder(forDatabaseAt: store.database.url))
+        MediaBlocks.install(AppMediaServices(attachments: attachments))
         openDocuments = OpenDocuments(store: store)
         reloadTree()
-        sync = SyncController(store: store, openDocuments: openDocuments, startsEngine: startsSync)
+        sync = SyncController(store: store, openDocuments: openDocuments, attachments: attachments, startsEngine: startsSync)
         sync.onRemoteChange = { [weak self] _ in self?.remoteChangesApplied() }
         firstWindow = MainWindowModel(library: self, opening: nil)
         reminders.openBlock = { [weak self] pageId, blockId in self?.openBlock(blockId, inPage: pageId) }

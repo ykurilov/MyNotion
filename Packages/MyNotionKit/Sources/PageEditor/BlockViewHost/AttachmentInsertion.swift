@@ -278,6 +278,7 @@ extension PageTextView {
             guard let self else { return }
             self.mediaInsertion.insertionPopover?.close()
             self.mediaInsertion.insertionPopover = nil
+            self.window?.makeFirstResponder(self)
             let blockId = self.document.blocks[min(index, self.document.blocks.count - 1)].id
             Task { [weak self] in
                 guard let self, let index = self.document.index(ofBlock: blockId) else { return }

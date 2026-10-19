@@ -35,7 +35,7 @@ extension BlockKindDescriptor {
 @MainActor
 final class ImageBlockView: MediaBlockView {
     private let availability: MediaAvailability
-    private let imageLayerView = NSView()
+    private let imageLayerView = MediaSurfaceView()
     private let placeholderLabel = NSTextField(labelWithString: "")
     private var handles: [NSView] = []
     private var menuButton: MediaOverlayButton?
@@ -54,13 +54,9 @@ final class ImageBlockView: MediaBlockView {
         availability = MediaBlocks.availability(of: block.props.attachment)
         super.init(block: block, width: width)
         setAccessibilityIdentifier("image-block")
-        imageLayerView.wantsLayer = true
-        imageLayerView.layer?.cornerRadius = Metrics.Media.cornerRadius
-        imageLayerView.layer?.masksToBounds = true
-        imageLayerView.layer?.contentsGravity = .resizeAspectFill
         addSubview(imageLayerView)
         if let status = statusText {
-            imageLayerView.layer?.backgroundColor = Palette.hoverBackground.cgColor
+            imageLayerView.fill = Palette.hoverBackground
             placeholderLabel.stringValue = status
             placeholderLabel.font = .systemFont(ofSize: Metrics.Media.captionFontSize)
             placeholderLabel.textColor = Palette.textSecondary
@@ -117,12 +113,12 @@ final class ImageBlockView: MediaBlockView {
         let scale = NSScreen.main?.backingScaleFactor ?? 2
         let pixels = Int(Self.imageSize(for: block, width: bounds.width).width * scale)
         if let image = ImageThumbnailCache.shared.cached(url, maxPixelSize: pixels) {
-            imageLayerView.layer?.contents = image
+            imageLayerView.image = image
             return
         }
         Task { [weak self] in
             let image = await ImageThumbnailCache.shared.thumbnail(url, maxPixelSize: pixels)
-            self?.imageLayerView.layer?.contents = image
+            self?.imageLayerView.image = image
         }
     }
 

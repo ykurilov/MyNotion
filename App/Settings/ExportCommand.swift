@@ -1,4 +1,5 @@
 import AppKit
+import Attachments
 import MarkdownExport
 import NotesCore
 import Observation
@@ -25,17 +26,20 @@ final class MarkdownExportController {
     enum State: Equatable {
         case idle
         case running(done: Int, total: Int)
-        case finished(folder: URL, pageCount: Int)
+        case finished(folder: URL, pageCount: Int, missingFiles: Int = 0)
         case failed(String)
     }
 
     private(set) var state = State.idle
     @ObservationIgnored private let store: NotesStore
+    /// Копии файлов: в выгрузку — в папку страницы; нескачанные — строкой и счётом в итоге.
+    @ObservationIgnored private let attachments: AttachmentStore?
     /// Записать правки открытых страниц на диск: в выгрузку попадает то, что на экране. `false` — не записалось.
     @ObservationIgnored private let saveOpenPages: @MainActor () -> Bool
     @ObservationIgnored private var task: Task<Void, Never>?
 
-    init(store: NotesStore, saveOpenPages: @escaping @MainActor () -> Bool) {
+    init(store: NotesStore, attachments: AttachmentStore? = nil, saveOpenPages: @escaping @MainActor () -> Bool) {
+        self.attachments = attachments
         self.store = store
         self.saveOpenPages = saveOpenPages
     }
@@ -65,7 +69,8 @@ final class MarkdownExportController {
             return
         }
         state = .running(done: 0, total: 0)
-        let exporter = MarkdownExporter(store: store)
+        let attachments = attachments
+        let exporter = MarkdownExporter(store: store, attachmentFile: { attachments?.fileURL(for: $0) })
         task = Task { [weak self] in
             let outcome = await Task.detached(priority: .userInitiated) { () -> Result<MarkdownExportResult, any Error> in
                 Result {
@@ -92,7 +97,7 @@ final class MarkdownExportController {
 
     private func finish(_ outcome: Result<MarkdownExportResult, any Error>) {
         switch outcome {
-        case .success(let result): state = .finished(folder: result.folder, pageCount: result.pageCount)
+        case .success(let result): state = .finished(folder: result.folder, pageCount: result.pageCount, missingFiles: result.missingFileCount)
         case .failure(let error): state = .failed(error.localizedDescription)
         }
     }
@@ -121,9 +126,13 @@ struct ExportNoticeView: View {
                 NoticeProgress(done: done, total: total,
                                text: total > 0 ? "Выгружено в Markdown страниц: \(number(done)) из \(number(total))" : "Выгружаю в Markdown…")
             }
-        case .finished(let folder, let pageCount):
+        case .finished(let folder, let pageCount, let missingFiles):
             NoticeCard(identifier: "export-notice") {
                 Text(verbatim: "Выгружено в Markdown страниц: \(number(pageCount))")
+                if missingFiles > 0 {
+                    Text(verbatim: MarkdownExportResult.missingFilesMessage(count: missingFiles))
+                        .foregroundStyle(Color(nsColor: Palette.textSecondary))
+                }
                 Button("Показать в Finder") { controller.showInFinder(folder) }
                     .accessibilityIdentifier("export-show-in-finder")
                 closeButton

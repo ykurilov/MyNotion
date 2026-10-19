@@ -44,7 +44,7 @@ struct SyncFileTransportTests {
 
     @Test("Ошибки файлов понятны Юрию")
     func fileErrorsReadWell() {
-        #expect(SyncServerError.storageFull.localizedDescription == "На сервере кончилось место для файлов")
+        #expect(SyncServerError.storageFull.localizedDescription == "Кончилось место для файлов, общих для ваших Mac — новые файлы пока ждут на этом Mac")
         #expect(SyncServerError.fileIncomplete.localizedDescription == "Ждёт отправки с другого Mac")
     }
 

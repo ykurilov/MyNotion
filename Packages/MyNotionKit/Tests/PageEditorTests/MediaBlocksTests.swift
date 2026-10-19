@@ -35,7 +35,7 @@ struct MediaBlocksTests {
     @Test("Картинка по ширине колонки с пропорциями файла; ширина — доля колонки 10–100 %; подпись добавляет строку")
     func imageGeometry() throws {
         _ = try fixture()
-        let factory = try #require(BlockViewFactories.shared.factory(for: .image))
+        let factory = MediaBlockViewFactory(kind: .image)
         let full = try #require(factory.height(for: imageBlock(), width: 800))
         let half = try #require(factory.height(for: imageBlock(width: 0.5), width: 800))
         #expect(full == 450 + 2 * Metrics.Media.verticalPadding)
@@ -88,7 +88,7 @@ struct MediaBlocksTests {
         #expect(view.nameText == "отчёт.pdf")
         #expect(view.sizeText == "2,4 МБ")
         #expect(view.iconImage != nil)
-        let factory = try #require(BlockViewFactories.shared.factory(for: .file))
+        let factory = MediaBlockViewFactory(kind: .file)
         #expect(factory.height(for: view.block, width: 700) == Metrics.Media.fileRowHeight + 2 * Metrics.Media.verticalPadding)
     }
 
@@ -279,6 +279,12 @@ final class FakeMediaServices: MediaBlockServices {
         let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height, bitsPerSample: 8, samplesPerPixel: 4,
                                    hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)
         image.addRepresentation(rep!)
+        // Непрозрачная заливка: картинку видно на снимке.
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep!)
+        NSColor.systemTeal.setFill()
+        NSRect(x: 0, y: 0, width: width, height: height).fill()
+        NSGraphicsContext.restoreGraphicsState()
         return rep?.representation(using: .png, properties: [:])
     }
 
@@ -295,4 +301,41 @@ final class FakeMediaServices: MediaBlockServices {
 struct MediaImportError: LocalizedError {
     let message: String
     var errorDescription: String? { message }
+}
+
+extension MediaBlocksTests {
+    /// Снимки окна (галерея) рисуют виды через `cacheDisplay`: картинка, заглушка, рамка закладки должны рисоваться
+    /// самим видом, а не только содержимым слоя.
+    @Test("Картинка, заглушка и карточка закладки видны на снимке вида")
+    func viewsDrawThemselves() async throws {
+        let services = FakeMediaServices()
+        MediaBlocks.install(services)
+        let png = try services.sampleFile("снимок.png", pngWidth: 400, height: 200)
+        let ref = try await services.importFile(at: png)
+        var props = BlockProps()
+        props.attachment = ref
+        props.pixelSize = PixelSize(width: 400, height: 200)
+        let block = Block(pageId: UUID(), kind: .image, sortKey: .between(nil, nil), props: props)
+        let factory = MediaBlockViewFactory(kind: .image)
+        let height = try #require(factory.height(for: block, width: 600))
+        _ = await ImageThumbnailCache.shared.thumbnail(png, maxPixelSize: Int(600 * (NSScreen.main?.backingScaleFactor ?? 2)))
+        let image = try #require(factory.makeView(for: block, context: BlockViewContext(textView: nil, width: 600)))
+        image.frame = NSRect(x: 0, y: 0, width: 600, height: height)
+        let pixels = try ViewPixels(image, appearance: .aqua)
+        #expect(pixels.inkBounds(in: image.bounds)?.width ?? 0 >= 590, "картинка во всю ширину не нарисовалась")
+
+        services.availability = .downloading
+        var waiting = props
+        waiting.attachment = AttachmentRef(name: "нет.png", byteCount: 1, contentType: "public.png", sha256: "")
+        let placeholder = ImageBlockView(block: Block(pageId: UUID(), kind: .image, sortKey: .between(nil, nil), props: waiting), width: 600)
+        placeholder.frame.size = NSSize(width: 600, height: height)
+        #expect(try ViewPixels(placeholder, appearance: .darkAqua).inkBounds(in: placeholder.bounds, threshold: 0.02) != nil,
+                "серая заглушка не нарисовалась")
+
+        var bookmark = BlockProps()
+        bookmark.url = URL(string: "https://example.com")
+        let card = BookmarkBlockView(block: Block(pageId: UUID(), kind: .bookmark, sortKey: .between(nil, nil), props: bookmark), width: 600)
+        card.frame.size = NSSize(width: 600, height: Metrics.Media.bookmarkHeight + 2 * Metrics.Media.verticalPadding)
+        #expect(try ViewPixels(card, appearance: .aqua).inkBounds(in: card.bounds, threshold: 0.05) != nil, "карточка закладки не нарисовалась")
+    }
 }

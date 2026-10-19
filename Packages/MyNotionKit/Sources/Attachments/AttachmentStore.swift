@@ -93,6 +93,26 @@ public final class AttachmentStore: Sendable {
         return (byteCount, hex(hasher.finalize()))
     }
 
+    /// Положить копию под готовым описанием файла — для образцов галереи и «богатой» страницы замеров,
+    /// где блоки ссылаются на файлы, которых на Mac ещё нет.
+    public func adoptSampleCopy(_ data: Data, as ref: AttachmentRef) throws {
+        let directory = folder.appendingPathComponent(ref.id.attachmentKey, isDirectory: true)
+        let fileName = Self.safeFileName(ref.name)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try data.write(to: directory.appendingPathComponent(fileName))
+        var record = AttachmentRecord(ref: ref, localPath: "\(ref.id.attachmentKey)/\(fileName)", state: .uploaded, orphanedAt: nil)
+        record.uploadedParts = Set(0..<ref.partCount)
+        try store.database.dbWriter.write { db in try record.save(in: db) }
+    }
+
+    /// Образец заглушки «Ждёт отправки с другого Mac» для галереи.
+    public func markWaitingForOtherMac(_ id: UUID) throws {
+        try update(id) {
+            $0.state = .remote
+            $0.lastError = AttachmentTransfer.waitingForOtherMac
+        }
+    }
+
     // MARK: Чтение
 
     /// Копия на этом Mac; `nil` — файла здесь ещё нет.

@@ -93,7 +93,7 @@ import Testing
 
         let next = try await transfer.runDue()
 
-        #expect(await transfer.notice == "На сервере кончилось место для файлов")
+        #expect(await transfer.notice == "Кончилось место для файлов, общих для ваших Mac — новые файлы пока ждут на этом Mac")
         #expect(next == mac.now.date.addingTimeInterval(3_600))
         #expect(try Data(contentsOf: try #require(mac.attachments.fileURL(for: ref.id))) == bytes)
         #expect(try mac.record(ref.id)?.state != .uploaded)

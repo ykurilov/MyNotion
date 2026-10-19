@@ -148,6 +148,11 @@ class MediaBlockView: NSView {
 
     override var isFlipped: Bool { true }
 
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        needsLayout = true
+    }
+
     /// Файл появился на этом Mac или сменил состояние.
     func availabilityDidChange() {}
 
@@ -263,5 +268,46 @@ final class MediaCaptionField: NSTextField, NSTextFieldDelegate {
 
     func controlTextDidEndEditing(_ obj: Notification) {
         onCommit?(stringValue)
+    }
+}
+
+/// Поверхность медиа-блока: заливка, картинка с заполнением и рамка, нарисованные самим видом — так они есть
+/// и на снимках окна (`cacheDisplay`), которые содержимое слоя не видят.
+@MainActor
+final class MediaSurfaceView: NSView {
+    var fill: NSColor? { didSet { needsDisplay = true } }
+    var image: CGImage? { didSet { needsDisplay = true } }
+    var borderColor: NSColor? { didSet { needsDisplay = true } }
+    var cornerRadius: CGFloat = Metrics.Media.cornerRadius
+
+    override var isFlipped: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let path = NSBezierPath(roundedRect: bounds, xRadius: cornerRadius, yRadius: cornerRadius)
+        NSGraphicsContext.saveGraphicsState()
+        path.addClip()
+        if let fill {
+            fill.setFill()
+            bounds.fill()
+        }
+        if let image, let context = NSGraphicsContext.current?.cgContext {
+            // Заполнение без искажения: лишнее по краям обрезается.
+            let scale = max(bounds.width / CGFloat(image.width), bounds.height / CGFloat(image.height))
+            let size = NSSize(width: CGFloat(image.width) * scale, height: CGFloat(image.height) * scale)
+            let rect = NSRect(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2, width: size.width, height: size.height)
+            context.saveGState()
+            context.translateBy(x: 0, y: rect.maxY + rect.minY)
+            context.scaleBy(x: 1, y: -1)
+            context.interpolationQuality = .high
+            context.draw(image, in: rect)
+            context.restoreGState()
+        }
+        NSGraphicsContext.restoreGraphicsState()
+        if let borderColor {
+            borderColor.setStroke()
+            let inset = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: cornerRadius, yRadius: cornerRadius)
+            inset.lineWidth = 1
+            inset.stroke()
+        }
     }
 }

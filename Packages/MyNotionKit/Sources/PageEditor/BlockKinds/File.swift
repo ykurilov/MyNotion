@@ -59,8 +59,6 @@ final class FileBlockView: MediaBlockView {
         sizeLabel.font = .systemFont(ofSize: Metrics.Media.fileSizeFontSize)
         sizeLabel.textColor = Palette.textSecondary
         [iconView, nameLabel, sizeLabel].forEach(addSubview)
-        wantsLayer = true
-        layer?.cornerRadius = Metrics.Media.cornerRadius
         frame.size.height = Metrics.Media.fileRowHeight + 2 * Metrics.Media.verticalPadding
     }
 
@@ -92,8 +90,15 @@ final class FileBlockView: MediaBlockView {
         menuButton?.frame.origin = NSPoint(x: bounds.width - Metrics.Media.menuButtonSize - 4, y: rowTop + (rowHeight - Metrics.Media.menuButtonSize) / 2)
     }
 
+    override func draw(_ dirtyRect: NSRect) {
+        guard isHovered else { return }
+        Palette.hoverBackground.setFill()
+        NSBezierPath(roundedRect: NSRect(x: 0, y: Metrics.Media.verticalPadding, width: bounds.width, height: Metrics.Media.fileRowHeight),
+                     xRadius: Metrics.Media.cornerRadius, yRadius: Metrics.Media.cornerRadius).fill()
+    }
+
     override func hoverDidChange() {
-        layer?.backgroundColor = isHovered ? Palette.hoverBackground.cgColor : nil
+        needsDisplay = true
         if isHovered, menuButton == nil {
             let button = MediaOverlayButton(symbol: "ellipsis", size: Metrics.Media.menuButtonSize) { [weak self] in
                 guard let self, let button = self.menuButton else { return }

@@ -38,12 +38,12 @@ extension MediaSamples {
 /// Карточка закладки (contracts/blocks-and-keys.md, «Закладка»): щелчок открывает сайт, «⋯» — «Обновить», «Открыть».
 @MainActor
 final class BookmarkBlockView: MediaBlockView {
-    private let card = NSView()
+    private let card = MediaSurfaceView()
     private let titleLabel = NSTextField(labelWithString: "")
     private let descriptionLabel = NSTextField(wrappingLabelWithString: "")
     private let iconView = NSImageView()
     private let urlLabel = NSTextField(labelWithString: "")
-    private let imageView = NSView()
+    private let imageView = MediaSurfaceView()
     private var menuButton: MediaOverlayButton?
 
     private var imageURL: URL? { MediaBlocks.availability(of: block.props.image).fileURL }
@@ -51,11 +51,7 @@ final class BookmarkBlockView: MediaBlockView {
     override init(block: Block, width: CGFloat) {
         super.init(block: block, width: width)
         setAccessibilityIdentifier("bookmark-block")
-        card.wantsLayer = true
-        card.layer?.borderWidth = 1
-        card.layer?.borderColor = Palette.border.cgColor
-        card.layer?.cornerRadius = Metrics.Media.cornerRadius
-        card.layer?.masksToBounds = true
+        card.borderColor = Palette.border
         addSubview(card)
         let props = block.props
         let address = props.url?.absoluteString ?? ""
@@ -74,9 +70,7 @@ final class BookmarkBlockView: MediaBlockView {
         urlLabel.lineBreakMode = .byTruncatingTail
         iconView.imageScaling = .scaleProportionallyUpOrDown
         if let icon = MediaBlocks.availability(of: props.iconAttachment).fileURL { iconView.image = NSImage(contentsOf: icon) }
-        imageView.wantsLayer = true
-        imageView.layer?.contentsGravity = .resizeAspectFill
-        imageView.layer?.masksToBounds = true
+        imageView.cornerRadius = 0
         [titleLabel, descriptionLabel, iconView, urlLabel, imageView].forEach(card.addSubview)
         frame.size.height = Metrics.Media.bookmarkHeight + 2 * Metrics.Media.verticalPadding
         loadImage()
@@ -114,7 +108,7 @@ final class BookmarkBlockView: MediaBlockView {
         guard let url = imageURL else { return }
         let pixels = Int(Metrics.Media.bookmarkHeight * 3 * (NSScreen.main?.backingScaleFactor ?? 2))
         Task { [weak self] in
-            self?.imageView.layer?.contents = await ImageThumbnailCache.shared.thumbnail(url, maxPixelSize: pixels)
+            self?.imageView.image = await ImageThumbnailCache.shared.thumbnail(url, maxPixelSize: pixels)
         }
     }
 
@@ -123,7 +117,7 @@ final class BookmarkBlockView: MediaBlockView {
     }
 
     override func hoverDidChange() {
-        card.layer?.backgroundColor = isHovered ? Palette.hoverBackground.cgColor : nil
+        card.fill = isHovered ? Palette.hoverBackground : nil
         if isHovered, menuButton == nil {
             let button = MediaOverlayButton(symbol: "ellipsis", size: Metrics.Media.menuButtonSize) { [weak self] in
                 guard let self, let button = self.menuButton else { return }

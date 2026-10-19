@@ -88,7 +88,7 @@ public enum SyncServerError: Error, Equatable, LocalizedError {
     case fileComplete
     /// Файл ещё не собран: другой Mac не закончил отправку (`409 file_incomplete`).
     case fileIncomplete
-    /// На сервере кончилось место для файлов (`507 storage_full`).
+    /// Кончилось место для файлов, общих для ваших Mac — новые файлы пока ждут на этом Mac (`507 storage_full`).
     case storageFull
 
     public var errorDescription: String? {
@@ -99,9 +99,9 @@ public enum SyncServerError: Error, Equatable, LocalizedError {
         case .logCompacted: "Догоняю другие Mac — загружаю все записи целиком"
         case .notFound: "Не нашлось того, что нужно для связи с другими Mac — попробую ещё раз сам"
         case .badRequest, .server: "Другие Mac сейчас не отвечают — попробую ещё раз сам"
-        case .fileComplete: "Этот файл уже целиком на сервере"
+        case .fileComplete: "Этот файл уже передан целиком"
         case .fileIncomplete: "Ждёт отправки с другого Mac"
-        case .storageFull: "На сервере кончилось место для файлов"
+        case .storageFull: "Кончилось место для файлов, общих для ваших Mac — новые файлы пока ждут на этом Mac"
         }
     }
 }

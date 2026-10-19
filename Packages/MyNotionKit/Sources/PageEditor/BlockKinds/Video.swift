@@ -48,7 +48,7 @@ enum MediaCoverRequests {
 /// Блок ушёл с экрана — вид отпускается вместе с проигрывателем.
 @MainActor
 final class VideoBlockView: MediaBlockView {
-    private let coverView = NSView()
+    private let coverView = MediaSurfaceView()
     private let statusLabel = NSTextField(labelWithString: "")
     private let titleLabel = NSTextField(labelWithString: "")
     private var playButton: MediaOverlayButton?
@@ -63,11 +63,7 @@ final class VideoBlockView: MediaBlockView {
     override init(block: Block, width: CGFloat) {
         super.init(block: block, width: width)
         setAccessibilityIdentifier("video-block")
-        coverView.wantsLayer = true
-        coverView.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.85).cgColor
-        coverView.layer?.cornerRadius = Metrics.Media.cornerRadius
-        coverView.layer?.masksToBounds = true
-        coverView.layer?.contentsGravity = .resizeAspectFill
+        coverView.fill = NSColor.black.withAlphaComponent(0.85)
         addSubview(coverView)
         for label in [statusLabel, titleLabel] {
             label.textColor = .white
@@ -134,12 +130,12 @@ final class VideoBlockView: MediaBlockView {
             }
             let pixels = Int(Self.videoSize(for: block, width: bounds.width).width * (NSScreen.main?.backingScaleFactor ?? 2))
             Task { [weak self] in
-                self?.coverView.layer?.contents = await ImageThumbnailCache.shared.thumbnail(url, maxPixelSize: pixels)
+                self?.coverView.image = await ImageThumbnailCache.shared.thumbnail(url, maxPixelSize: pixels)
             }
         } else if let url = fileAvailability.fileURL {
             Task { [weak self] in
                 guard let image = await services?.posterImage(forVideoAt: url) else { return }
-                self?.coverView.layer?.contents = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+                self?.coverView.image = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
             }
         }
     }
