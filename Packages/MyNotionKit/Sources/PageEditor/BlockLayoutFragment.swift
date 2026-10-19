@@ -89,14 +89,16 @@ final class BlockLayoutFragment: NSTextLayoutFragment, @unchecked Sendable {
         let offset = CGPoint(x: point.x - layoutFragmentFrame.minX, y: point.y - layoutFragmentFrame.minY)
         let width = textLayoutManager?.textContainer?.size.width ?? Metrics.Page.columnWidth
         let rect = CGRect(x: offset.x, y: point.y, width: width, height: layoutFragmentFrame.height)
-        let firstLine = textLineFragments.first.map { line -> BlockLine in
+        func blockLine(_ line: NSTextLineFragment) -> BlockLine {
             let top = layoutFragmentFrame.minY + line.typographicBounds.minY + offset.y
             return BlockLine(indent: block.indent, top: top, height: line.typographicBounds.height,
                              baseline: top + line.glyphOrigin.y)
         }
+        let lines = textLineFragments.filter { $0.characterRange.length > 0 }
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
-        let paintContext = BlockPaintContext(paragraphRect: rect, firstLine: firstLine, textView: textView)
+        let paintContext = BlockPaintContext(paragraphRect: rect, firstLine: (lines.first ?? textLineFragments.first).map(blockLine),
+                                             lastLine: (lines.last ?? textLineFragments.first).map(blockLine), textView: textView)
         for painter in painters { painter.paint(block, in: paintContext) }
         NSGraphicsContext.restoreGraphicsState()
     }
@@ -261,7 +263,7 @@ extension PageTextView {
         case .number: .number(ListMarkers.number(ordinal(ofBlock: block), atIndent: block.indent))
         case .checkbox: .checkbox(checked: block.isChecked)
         case .pageLink: .pageLink(block.linkedPageId.flatMap { linkedPages[$0] })
-        case .none: nil
+        case .none, .painted: nil
         }
     }
 

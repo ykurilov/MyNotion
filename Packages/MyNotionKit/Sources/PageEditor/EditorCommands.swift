@@ -27,6 +27,8 @@ public enum EditorCommand: Sendable, Hashable {
     case moveBlocksUp
     case moveBlocksDown
     case toggleChecked
+    /// ⌘⌥T: свернуть или раскрыть все переключатели страницы.
+    case toggleAllCollapsed
     case toggleInline(InlineFormat)
     case setKind(BlockKind)
 }
@@ -42,6 +44,7 @@ public enum EditorKeyBindings {
         case ("e", [.command]): return .toggleInline(.code)
         case ("u", [.command]): return .toggleInline(.underline)
         case ("\r", [.command]), ("\u{3}", [.command]): return .toggleChecked
+        case ("t", [.command, .option]): return .toggleAllCollapsed
         case ("\u{F700}", [.option, .shift]): return .moveBlocksUp
         case ("\u{F701}", [.option, .shift]): return .moveBlocksDown
         default: return nil
@@ -62,7 +65,7 @@ public enum EditorKeyBindings {
         return command(characters: latin, modifiers: event.modifierFlags)
     }
 
-    /// Клавиши B, I, X, E, U на месте букв латинской раскладки.
+    /// Клавиши B, I, X, E, U, T на месте букв латинской раскладки.
     private static func latinLetter(forKeyCode keyCode: UInt16) -> String? {
         switch keyCode {
         case 11: "b"
@@ -70,6 +73,7 @@ public enum EditorKeyBindings {
         case 7: "x"
         case 14: "e"
         case 32: "u"
+        case 17: "t"
         default: nil
         }
     }

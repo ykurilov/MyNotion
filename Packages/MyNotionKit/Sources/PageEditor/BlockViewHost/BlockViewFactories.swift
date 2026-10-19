@@ -33,6 +33,9 @@ public final class BlockViewFactories {
     }
 
     func factory(for kind: BlockKind) -> (any BlockViewFactory)? {
-        factories[kind]
+        factories[kind] ?? builtIn[kind]
     }
+
+    /// Виды, которые редактор рисует сам, без модулей приложения: разделитель.
+    private let builtIn: [BlockKind: any BlockViewFactory] = [.divider: DividerViewFactory()]
 }

@@ -14,6 +14,13 @@ struct BlockKindDescriptor: Sendable {
     var textStyle: BlockTextStyle = .paragraph
     /// Что стоит в колонке маркера слева от текста.
     var marker: BlockMarker = .none
+    /// Где начинается текст блока без колонки маркера: правее черты цитаты, иконки выноски.
+    var leadingInset: CGFloat = 0
+    /// Своя высота строки вместо высоты стиля текста (строка разделителя).
+    var lineHeight: CGFloat?
+    /// Свои отступы над и под абзацем блока вместо отступов стиля текста (поля выноски, строка разделителя).
+    var topSpacing: CGFloat?
+    var bottomSpacing: CGFloat?
     /// Подсказка пустого блока; у абзаца — только под курсором.
     var emptyHint: String?
     /// Enter в пустом блоке превращает его в абзац (пункты списков).
@@ -28,13 +35,18 @@ struct BlockKindDescriptor: Sendable {
     var richPageBlocks: [RichBlockSpec] = []
 
     init(kind: BlockKind, menuItem: PopupMenuItem? = nil, markdownShortcuts: [String] = [], textStyle: BlockTextStyle = .paragraph,
-         marker: BlockMarker = .none, emptyHint: String? = nil, exitsOnEmptyEnter: Bool = false, continuesAfterSplit: Bool = false,
+         marker: BlockMarker = .none, leadingInset: CGFloat = 0, lineHeight: CGFloat? = nil, topSpacing: CGFloat? = nil,
+         bottomSpacing: CGFloat? = nil, emptyHint: String? = nil, exitsOnEmptyEnter: Bool = false, continuesAfterSplit: Bool = false,
          painters: [any BlockPainter] = [], gallerySamples: [BlockGallerySample] = [], richPageBlocks: [RichBlockSpec] = []) {
         self.kind = kind
         self.menuItem = menuItem
         self.markdownShortcuts = markdownShortcuts
         self.textStyle = textStyle
         self.marker = marker
+        self.leadingInset = leadingInset
+        self.lineHeight = lineHeight
+        self.topSpacing = topSpacing
+        self.bottomSpacing = bottomSpacing
         self.emptyHint = emptyHint
         self.exitsOnEmptyEnter = exitsOnEmptyEnter
         self.continuesAfterSplit = continuesAfterSplit
@@ -56,6 +68,8 @@ enum BlockMarker: Sendable, Hashable {
     case number
     case checkbox
     case pageLink
+    /// Колонка маркера есть, значок в ней рисует рисователь типа (треугольник переключателя).
+    case painted
 }
 
 /// Слой рисователя: под текстом (подложка) или поверх него (черта, треугольник).
@@ -76,6 +90,8 @@ struct BlockPaintContext {
     let paragraphRect: CGRect
     /// Первая строка абзаца (маркер, базовая линия), в координатах рисования.
     let firstLine: BlockLine?
+    /// Последняя строка абзаца, в координатах рисования.
+    let lastLine: BlockLine?
     let textView: PageTextView
 }
 
