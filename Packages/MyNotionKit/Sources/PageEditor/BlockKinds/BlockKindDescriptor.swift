@@ -74,6 +74,8 @@ protocol BlockPainter: Sendable {
 struct BlockPaintContext {
     /// Колонка страницы по высоте абзаца: от левого края колонки до правого.
     let paragraphRect: CGRect
+    /// Та же колонка, но только по высоте строк текста: без отступов между абзацами сверху и снизу.
+    let textRect: CGRect
     /// Первая строка абзаца (маркер, базовая линия), в координатах рисования.
     let firstLine: BlockLine?
     let textView: PageTextView

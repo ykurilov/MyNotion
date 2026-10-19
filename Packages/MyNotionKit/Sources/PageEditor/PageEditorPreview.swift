@@ -93,6 +93,22 @@ public enum PageEditorPreview {
         return bar.isKindMenuOpen
     }
 
+    /// Открыть окно цветов панели форматирования, как щелчком по кнопке «A»; `false` — панели нет.
+    @discardableResult
+    public static func openFormatBarColorMenu(in window: NSWindow) -> Bool {
+        guard let textView = textView(in: window), textView.formatBar.isShown else { return false }
+        textView.formatBar.toggleColorMenu()
+        return textView.colorMenu.isOpen
+    }
+
+    /// Окно цветов от меню блока, как выбором пункта «Цвет»; `false` — меню блока не открылось.
+    @discardableResult
+    public static func openBlockColorMenu(forBlock blockId: UUID, in window: NSWindow) -> Bool {
+        guard openBlockMenu(forBlock: blockId, in: window), let textView = textView(in: window) else { return false }
+        textView.popups.choose(.color)
+        return textView.colorMenu.isOpen
+    }
+
     /// Мышь над шапкой страницы, как при наведении; `false` — «Добавить иконку» не видна (у страницы есть иконка).
     @discardableResult
     public static func hoverHeader(in window: NSWindow) -> Bool {

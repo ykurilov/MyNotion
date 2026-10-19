@@ -231,6 +231,29 @@ final class UIGalleryRunner {
             if kindMenu, !PageEditorPreview.openFormatBarKindMenu(in: window) { return "список типов не открылся" }
             if let problem = GalleryTarget.popupsProblem("панель форматирования", in: window) { return problem }
 
+        case .colorsOnPage:
+            await open(library.colorsPage)
+            guard let first = library.colorsBlocks.first else { return "нет блоков страницы цветов" }
+            _ = GalleryTarget.scrollToBlock(first, in: window)
+
+        case .colorMenu(let fromBlockMenu):
+            if fromBlockMenu {
+                await open(library.colorsPage)
+                guard let block = library.colorsBlocks.first, GalleryTarget.scrollToBlock(block, in: window),
+                      PageEditorPreview.openBlockColorMenu(forBlock: block, in: window) else {
+                    return "окно цветов от меню блока не открылось"
+                }
+            } else {
+                await open(library.sample.page.id)
+                guard let block = library.sample.blocks.first else { return "образец пуст" }
+                let bold = (block.text.string as NSString).range(of: "жирный")
+                guard bold.location != NSNotFound else { return "в первом абзаце нет слова «жирный»" }
+                PageEditorPreview.select(bold, inBlock: block.id, in: window)
+                GalleryTarget.scrollToSelection(in: window)
+                guard PageEditorPreview.openFormatBarColorMenu(in: window) else { return "окно цветов панели не открылось" }
+            }
+            if let problem = GalleryTarget.popupsProblem("окно цветов", in: window) { return problem }
+
         case .pageIcon(let state):
             switch state {
             case .addIconHover:

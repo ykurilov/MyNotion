@@ -4,6 +4,9 @@ extension Metrics {
     /// Подложка цвета блока (contracts/visual-style.md, «Цвета»).
     public enum BlockBackground {
         public static let cornerRadius: CGFloat = 4
+        /// Подложка выступает за строки текста: текст лежит в строке низко, снизу нужен запас больше, чем сверху.
+        public static let topOutset: CGFloat = 1
+        public static let bottomOutset: CGFloat = 5
     }
 }
 
