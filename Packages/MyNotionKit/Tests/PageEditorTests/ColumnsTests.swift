@@ -233,7 +233,7 @@ extension EditorFixture {
         textView.layoutSubtreeIfNeeded()
         textView.textLayoutManager?.textViewportLayoutController.layoutViewport()
         for editor in textView.editorTree {
-            editor.layoutEmbeddedViews()
+            editor.blockViews.update()
             editor.layoutSubtreeIfNeeded()
         }
     }

@@ -17,7 +17,7 @@ enum BlockDropTarget: Equatable {
 enum FlowDragCoordinator {
     /// Редактор под точкой окна: самый глубокий; в просвете между колонками — ближайшая колонка.
     static func editor(atWindowPoint point: NSPoint, in root: PageTextView) -> PageTextView {
-        for view in root.embeddedViews.liveViews {
+        for view in root.embeddedContentViews {
             guard let columns = view as? ColumnsView, !columns.isHiddenOrHasHiddenAncestor, columns.window != nil else { continue }
             let local = columns.convert(point, from: nil)
             guard columns.bounds.insetBy(dx: -Metrics.Columns.gap / 2, dy: 0).contains(local) else { continue }

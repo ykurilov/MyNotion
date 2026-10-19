@@ -31,7 +31,7 @@ extension PageTextView {
         let start = mapper.paragraphStart(ofBlockAt: index)
         scrollRangeToVisible(NSRange(location: start, length: 0))
         textLayoutManager?.textViewportLayoutController.layoutViewport()
-        layoutEmbeddedViews()
+        blockViews.update()
         // Глубже: таблица или блок внутри колонки — в редакторе этой колонки.
         if top != id, let inner = embeddedFlowEditors.first(where: { editor in chain.contains { editor.document.index(ofBlock: $0) != nil } }) {
             inner.scrollToNestedBlock(id)

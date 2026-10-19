@@ -632,7 +632,7 @@ extension PageTextView {
     /// Вид таблицы на экране — в этом редакторе или в редакторе колонки.
     func tableView(for tableId: UUID) -> TableView? {
         for editor in pageEditor.editorTree {
-            if let view = editor.embeddedViews.view(for: tableId) as? TableView { return view }
+            if let view = editor.blockViews.view(for: tableId)?.subviews.first as? TableView { return view }
         }
         return nil
     }

@@ -99,7 +99,10 @@ final class ColumnsView: NSView {
     func layoutEditors() {
         let ratios = draftRatios ?? ColumnLayout.ratios(of: columns)
         guard ratios.count == editors.count else { return }
-        let frames = Self.columnFrames(ratios: ratios, width: bounds.width)
+        // Вид стоит с места текста страницы, а редакторы колонок сами отступают поле строки: сдвинуть их на него,
+        // и текст колонок встаёт вровень с текстом страницы.
+        let padding = editors.first?.textContainer?.lineFragmentPadding ?? 0
+        let frames = Self.columnFrames(ratios: ratios, width: bounds.width).map { (x: $0.x - padding, width: $0.width + padding) }
         var height: CGFloat = 0
         for (editor, frame) in zip(editors, frames) {
             if editor.frame.width != frame.width || editor.frame.minX != frame.x {
@@ -235,19 +238,6 @@ final class ColumnsViewFactory: BlockViewFactory {
         let estimated = ColumnsView.estimatedHeight(of: block.id, in: textView.document.pageDocument, width: width)
         textView.embeddedViews.setHeight(estimated, of: block.id, width: width)
         return estimated
-    }
-}
-
-/// Виды блоков, которые редактор рисует сам: колонки и таблица.
-@MainActor
-enum BuiltInBlockViews {
-    private static var isRegistered = false
-
-    static func register() {
-        guard !isRegistered else { return }
-        isRegistered = true
-        BlockViewFactories.shared.register(ColumnsViewFactory(), for: .columnList)
-        BlockViewFactories.shared.register(TableViewFactory(), for: .table)
     }
 }
 
