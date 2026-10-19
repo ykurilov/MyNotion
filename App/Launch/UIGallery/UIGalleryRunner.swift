@@ -164,7 +164,8 @@ final class UIGalleryRunner {
             await open(pageId)
             PageEditorPreview.placeCaret(atEndOf: empty, in: window)
             GalleryTarget.scrollToSelection(in: window)
-            PageEditorPreview.type("@" + query, in: window)
+            // Каждая сцена — с нового абзаца: прошлая оставила свой «@» в пустом блоке.
+            PageEditorPreview.type("\n@" + query, in: window)
             if !InlineAtomGallery.isMentionPickerOpen(in: window) { return "окно «@» не открылось" }
             if let problem = GalleryTarget.popupsProblem("окно «@»", in: window) { return problem }
 

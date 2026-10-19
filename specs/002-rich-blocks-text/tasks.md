@@ -157,7 +157,7 @@ description: "Задачи: новые блоки и оформление тек
 - [x] T056 [P] [US3] `PK/Tests/RemindersTests/ReminderSchedulerTests.swift` с подменёнными часами и центром уведомлений: ставятся ближайшие 50 несделанных; идентификатор = id упоминания, повтор не дублирует; после «пробуждения» просроченные за 7 дней показываются сразу один раз; `doneAt` снимает доставленное и запланированное
 - [x] T057 [P] [US3] `PK/Tests/SyncTests/ReminderSyncTests.swift`: `reminder.doneAt` сходится на двух Mac; «Готово» на одном снимает уведомление на другом
 - [x] T058 [P] [US3] Выгрузка и импорт упоминаний и дат: `PK/Tests/MarkdownExportTests/MentionDateExportTests.swift` (`<time datetime data-remind>`, ссылка на файл страницы) и `PK/Tests/NotionImportTests/MentionDateImportTests.swift` (`@October 20, 2026`, ссылки на страницы выгрузки внутри текста — упоминания)
-- [ ] T059 [P] [US3] `UITests/MentionsAndDatesTests.swift`: сценарий Independent Test (напоминание через подменённые часы приложения), щелчок по уведомлению открывает страницу у блока
+- [x] T059 [P] [US3] `UITests/MentionsAndDatesTests.swift`: сценарий Independent Test (напоминание через подменённые часы приложения), щелчок по уведомлению открывает страницу у блока
 
 ### Код
 
@@ -168,7 +168,7 @@ description: "Задачи: новые блоки и оформление тек
 - [x] T064 [US3] `App/Notifications/ReminderNotifications.swift`: делегат уведомлений, кнопка «Готово», открытие страницы у блока, запрос разрешения при первом «Напомнить», подсказка при отказе
 - [x] T065 [US3] Применение `reminder` в `PK/Sources/Sync/ChangeMerger.swift` и `Outbox.swift`
 - [x] T066 [P] [US3] Выгрузка и импорт: `PK/Sources/MarkdownExport/InlineMarkdown.swift`, `PK/Sources/NotionImport/NotionInlineParser.swift`
-- [ ] T067 [US3] Галерея, опоздание напоминания ≤ 1 мин (SC-104) в виртуальном Mac; затронутые тесты зелёные; коммит
+- [x] T067 [US3] Галерея, опоздание напоминания ≤ 1 мин (SC-104) в виртуальном Mac; затронутые тесты зелёные; коммит
 
 ---
 

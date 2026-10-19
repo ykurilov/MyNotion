@@ -11,6 +11,9 @@ class InlineAtomAttachment: NSTextAttachment, @unchecked Sendable {
     init(style: InlineStyle) {
         self.style = style
         super.init(data: nil, ofType: nil)
+        // Без своей картинки TextKit 2 вложение не рисует: заглушка, настоящую даёт `image(for:…)`.
+        allowsTextAttachmentView = false
+        image = NSImage(size: NSSize(width: 1, height: 1))
     }
 
     @available(*, unavailable)
