@@ -101,41 +101,41 @@ public enum NotionTone: String, Sendable, Hashable, CaseIterable {
 }
 
 extension Palette {
-    /// Цвет текста Notion; `nil` — основной цвет текста страницы. Предварительные значения — contracts/blocks-and-keys.md,
-    /// сверка с живым Notion — этап 7 (FR-119).
+    /// Цвет текста Notion; `nil` — основной цвет текста страницы. Значения сняты с живого Notion 7.39.0 (пиксели
+    /// заголовков в обеих темах): текст у Notion в обеих темах один и тот же.
     public static func notionText(_ tone: NotionTone?) -> NSColor {
         guard let tone else { return textPrimary }
         return notionTextColors[tone] ?? textPrimary
     }
 
-    /// Цвет подложки Notion (фон текста или блока); `nil` — без подложки.
+    /// Цвет подложки Notion (фон текста или блока); `nil` — без подложки. Фон слова и фон блока у Notion одного цвета.
     public static func notionBackground(_ tone: NotionTone?) -> NSColor? {
         guard let tone else { return nil }
         return notionBackgroundColors[tone]
     }
 
     private static let notionTextColors: [NotionTone: NSColor] = [
-        .gray: themed(light: .hex(0x787774), dark: .hex(0x9B9B9B)),
-        .brown: themed(light: .hex(0x9F6B53), dark: .hex(0xBA856F)),
-        .orange: themed(light: .hex(0xD9730D), dark: .hex(0xC77D48)),
-        .yellow: themed(light: .hex(0xCB912F), dark: .hex(0xCA9849)),
-        .green: themed(light: .hex(0x448361), dark: .hex(0x529E72)),
-        .blue: themed(light: .hex(0x337EA9), dark: .hex(0x379AD3)),
-        .purple: themed(light: .hex(0x9065B0), dark: .hex(0x9D68D3)),
-        .pink: themed(light: .hex(0xC14C8A), dark: .hex(0xD15796)),
-        .red: themed(light: .hex(0xD44C47), dark: .hex(0xDF5452)),
+        .gray: .hex(0x7D7A75),
+        .brown: .hex(0x9F765A),
+        .orange: .hex(0xD27B2D),
+        .yellow: .hex(0xCB9434),
+        .green: .hex(0x50946E),
+        .blue: .hex(0x387DC9),
+        .purple: .hex(0x9A6BB4),
+        .pink: .hex(0xC14C8A),
+        .red: .hex(0xCF5148),
     ]
 
     private static let notionBackgroundColors: [NotionTone: NSColor] = [
-        .gray: themed(light: .hex(0xF1F1EF), dark: .hex(0x2F2F2F)),
-        .brown: themed(light: .hex(0xF4EEEE), dark: .hex(0x4A3228)),
-        .orange: themed(light: .hex(0xFBECDD), dark: .hex(0x5C3B23)),
-        .yellow: themed(light: .hex(0xFBF3DB), dark: .hex(0x564328)),
-        .green: themed(light: .hex(0xEDF3EC), dark: .hex(0x243D30)),
-        .blue: themed(light: .hex(0xE7F3F8), dark: .hex(0x143A4E)),
-        .purple: themed(light: .hex(0xF6F3F9), dark: .hex(0x3C2D49)),
-        .pink: themed(light: .hex(0xFAF1F5), dark: .hex(0x4E2C3C)),
-        .red: themed(light: .hex(0xFDEBEC), dark: .hex(0x522E2A)),
+        .gray: themed(light: .hex(0xF0EFED), dark: .hex(0x383836)),
+        .brown: themed(light: .hex(0xF5EDE9), dark: .hex(0x45362D)),
+        .orange: themed(light: .hex(0xFBEBDE), dark: .hex(0x53361F)),
+        .yellow: themed(light: .hex(0xF9F3DC), dark: .hex(0x504425)),
+        .green: themed(light: .hex(0xE8F1EC), dark: .hex(0x263D30)),
+        .blue: themed(light: .hex(0xE5F2FC), dark: .hex(0x233850)),
+        .purple: themed(light: .hex(0xF3EBF9), dark: .hex(0x3C2D47)),
+        .pink: themed(light: .hex(0xFAE9F1), dark: .hex(0x4E2B3C)),
+        .red: themed(light: .hex(0xFCE9E7), dark: .hex(0x502C29)),
     ]
 }
 

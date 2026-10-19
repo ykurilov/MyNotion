@@ -5,23 +5,24 @@ import Testing
 /// Цвета текста и фона Notion в светлой и тёмной теме (FR-112; contracts/blocks-and-keys.md, «Цвета»).
 @Suite("Палитра цветов Notion")
 struct NotionPaletteTests {
-    private static let table: [(NotionTone, text: (String, String), background: (String, String))] = [
-        (.gray, ("787774", "9B9B9B"), ("F1F1EF", "2F2F2F")),
-        (.brown, ("9F6B53", "BA856F"), ("F4EEEE", "4A3228")),
-        (.orange, ("D9730D", "C77D48"), ("FBECDD", "5C3B23")),
-        (.yellow, ("CB912F", "CA9849"), ("FBF3DB", "564328")),
-        (.green, ("448361", "529E72"), ("EDF3EC", "243D30")),
-        (.blue, ("337EA9", "379AD3"), ("E7F3F8", "143A4E")),
-        (.purple, ("9065B0", "9D68D3"), ("F6F3F9", "3C2D49")),
-        (.pink, ("C14C8A", "D15796"), ("FAF1F5", "4E2C3C")),
-        (.red, ("D44C47", "DF5452"), ("FDEBEC", "522E2A")),
+    /// Значения сняты с живого Notion 7.39.0 (пиксели снимков экрана, обе темы): текст в обеих темах один и тот же.
+    private static let table: [(NotionTone, text: String, background: (String, String))] = [
+        (.gray, "7D7A75", ("F0EFED", "383836")),
+        (.brown, "9F765A", ("F5EDE9", "45362D")),
+        (.orange, "D27B2D", ("FBEBDE", "53361F")),
+        (.yellow, "CB9434", ("F9F3DC", "504425")),
+        (.green, "50946E", ("E8F1EC", "263D30")),
+        (.blue, "387DC9", ("E5F2FC", "233850")),
+        (.purple, "9A6BB4", ("F3EBF9", "3C2D47")),
+        (.pink, "C14C8A", ("FAE9F1", "4E2B3C")),
+        (.red, "CF5148", ("FCE9E7", "502C29")),
     ]
 
     @Test("Девять цветов: текст и фон в обеих темах совпадают с таблицей")
     func valuesMatchTable() throws {
         for row in Self.table {
-            #expect(try hex(Palette.notionText(row.0), in: .aqua) == row.text.0, "текст \(row.0), светлая")
-            #expect(try hex(Palette.notionText(row.0), in: .darkAqua) == row.text.1, "текст \(row.0), тёмная")
+            #expect(try hex(Palette.notionText(row.0), in: .aqua) == row.text, "текст \(row.0), светлая")
+            #expect(try hex(Palette.notionText(row.0), in: .darkAqua) == row.text, "текст \(row.0), тёмная")
             #expect(try hex(#require(Palette.notionBackground(row.0)), in: .aqua) == row.background.0, "фон \(row.0), светлая")
             #expect(try hex(#require(Palette.notionBackground(row.0)), in: .darkAqua) == row.background.1, "фон \(row.0), тёмная")
         }
@@ -40,9 +41,9 @@ struct NotionPaletteTests {
         #expect(Palette.notionBackground(nil) == nil)
     }
 
-    @Test("Цвета меняются вместе с темой, без перекраски текста")
-    func colorsAreDynamic() throws {
-        let color = Palette.notionText(.red)
+    @Test("Фон меняется вместе с темой")
+    func backgroundIsDynamic() throws {
+        let color = try #require(Palette.notionBackground(.red))
         #expect(try hex(color, in: .aqua) != hex(color, in: .darkAqua))
     }
 
