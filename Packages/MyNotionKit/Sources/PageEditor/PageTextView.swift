@@ -49,6 +49,8 @@ public final class PageTextView: NSTextView {
     let hiddenParagraphs = HiddenParagraphs()
     let popups = EditorPopupController()
     let formatBar = FormatBarController()
+    /// Последние цвета текста и фона: окно цветов и ⌘⇧H.
+    var recentColors = RecentColors()
     /// Иконку выбрали в шапке (FR-034): «Добавить иконку», окно выбора; `nil` — убрать. Хозяин сохраняет её
     /// и возвращает через `showIcon`.
     public var onSetIcon: ((String?) -> Void)?
@@ -391,6 +393,9 @@ public final class PageTextView: NSTextView {
         case .setKind(let kind):
             commitEdits()
             if let selected = selectedBlockRange() { setKind(kind, ofBlocksAt: selected) }
+        case .applyColor(let choice): applyColor(choice)
+        case .applyBlockColor(let choice): applyBlockColor(choice)
+        case .repeatLastColor: repeatLastColor()
         }
     }
 

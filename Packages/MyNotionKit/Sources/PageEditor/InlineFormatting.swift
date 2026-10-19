@@ -40,7 +40,7 @@ public enum InlineFormatting {
         return InlineText(text.string, runs: runs).normalized()
     }
 
-    private static func subtract(_ range: Range<Int>, from run: StyledRun) -> [StyledRun] {
+    static func subtract(_ range: Range<Int>, from run: StyledRun) -> [StyledRun] {
         let runRange = run.start..<run.start + run.length
         guard runRange.overlaps(range) else { return [run] }
         var parts: [StyledRun] = []

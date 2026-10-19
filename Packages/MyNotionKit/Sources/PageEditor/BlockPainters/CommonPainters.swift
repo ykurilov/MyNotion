@@ -1,8 +1,8 @@
 import NotesCore
 
-/// Рисователи для блоков любого типа (например, подложка цвета блока, US2). Свои рисователи типа — в его описателе.
+/// Рисователи для блоков любого типа (например, подложка цвета блока). Свои рисователи типа — в его описателе.
 enum BlockPainters {
-    static let common: [any BlockPainter] = []
+    static let common: [any BlockPainter] = [BlockBackgroundPainter()]
 
     /// Рисователи блока: общие, затем его типа.
     static func painters(for kind: BlockKind) -> [any BlockPainter] {

@@ -29,6 +29,9 @@ public enum EditorCommand: Sendable, Hashable {
     case toggleChecked
     case toggleInline(InlineFormat)
     case setKind(BlockKind)
+    case applyColor(ColorChoice)
+    case applyBlockColor(ColorChoice)
+    case repeatLastColor
 }
 
 /// Какие клавиши какое действие запускают. ⌘K свободна: ссылка — вставкой адреса или «Формат → Ссылка».
@@ -41,6 +44,7 @@ public enum EditorKeyBindings {
         case ("x", [.command, .shift]): return .toggleInline(.strikethrough)
         case ("e", [.command]): return .toggleInline(.code)
         case ("u", [.command]): return .toggleInline(.underline)
+        case ("h", [.command, .shift]): return .repeatLastColor
         case ("\r", [.command]), ("\u{3}", [.command]): return .toggleChecked
         case ("\u{F700}", [.option, .shift]): return .moveBlocksUp
         case ("\u{F701}", [.option, .shift]): return .moveBlocksDown
@@ -62,7 +66,7 @@ public enum EditorKeyBindings {
         return command(characters: latin, modifiers: event.modifierFlags)
     }
 
-    /// Клавиши B, I, X, E, U на месте букв латинской раскладки.
+    /// Клавиши B, I, X, E, U, H на месте букв латинской раскладки.
     private static func latinLetter(forKeyCode keyCode: UInt16) -> String? {
         switch keyCode {
         case 11: "b"
@@ -70,6 +74,7 @@ public enum EditorKeyBindings {
         case 7: "x"
         case 14: "e"
         case 32: "u"
+        case 4: "h"
         default: nil
         }
     }
