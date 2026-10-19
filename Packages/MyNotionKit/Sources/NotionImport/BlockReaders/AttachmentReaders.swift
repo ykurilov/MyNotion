@@ -59,6 +59,9 @@ struct EmbeddedVideoReader: NotionBlockReader {
         var block = ParsedBlock(kind: .video)
         block.props.videoSource = link.sourceName == "vimeo" ? .vimeo : .youtube
         block.props.url = link.watchURL
+        if case .file(let path)? = attributes["data-poster"].flatMap(NotionLinkTarget.init(destination:)) {
+            block.decorationPaths[.poster] = path
+        }
         var next = index + 1
         if next < lines.endIndex, let match = lines[next].trimmingCharacters(in: .whitespaces).wholeMatch(of: AttachmentMarkup.linkLine),
            match.output.1.isEmpty, let url = URL(string: String(match.output.3)) {
@@ -75,14 +78,18 @@ struct EmbeddedVideoReader: NotionBlockReader {
     }
 }
 
-/// `<a href data-bookmark>заголовок</a>`, описание курсивом строкой ниже.
+/// `<a href data-bookmark data-image data-icon>заголовок</a>`, описание курсивом строкой ниже.
 struct BookmarkTagReader: NotionBlockReader {
     func read(_ lines: ArraySlice<String>, at index: Int) -> NotionBlockReading? {
         let line = lines[index].trimmingCharacters(in: .whitespaces)
-        guard let match = line.wholeMatch(of: /<a\s([^>]*\bdata-bookmark\b[^>]*)>([\s\S]*?)<\/a>/.ignoresCase()),
-              let url = AttachmentMarkup.attributes(String(match.output.1))["href"].flatMap(URL.init(string:)) else { return nil }
+        guard let match = line.wholeMatch(of: /<a\s([^>]*\bdata-bookmark\b[^>]*)>([\s\S]*?)<\/a>/.ignoresCase()) else { return nil }
+        let attributes = AttachmentMarkup.attributes(String(match.output.1))
+        guard let url = attributes["href"].flatMap(URL.init(string:)) else { return nil }
         var block = ParsedBlock(kind: .bookmark)
         block.props.url = url
+        for (file, name) in [(ParsedBlock.DecorationFile.image, "data-image"), (.icon, "data-icon")] {
+            if case .file(let path)? = attributes[name].flatMap(NotionLinkTarget.init(destination:)) { block.decorationPaths[file] = path }
+        }
         let title = HTMLMetadata.decodeEntities(String(match.output.2))
         if !title.isEmpty, title != url.absoluteString { block.props.title = title }
         var next = index + 1

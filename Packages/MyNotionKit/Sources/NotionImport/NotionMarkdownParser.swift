@@ -45,6 +45,11 @@ public struct ParsedBlock: Sendable, Hashable {
     /// Картинка, файл, видео-файл: путь файла в выгрузке от папки страницы, раскодированный. Импорт копирует файл
     /// во вложения; файла нет или он больше 100 МБ — абзац «[файл: имя]».
     public var attachmentPath: String?
+    /// Обложка ролика, картинка и значок закладки из нашей выгрузки: пути файлов, как у `attachmentPath`.
+    /// Нет файла — блок остаётся, без картинки («Обновить» скачает её заново).
+    public var decorationPaths: [DecorationFile: String] = [:]
+
+    public enum DecorationFile: Sendable, Hashable, CaseIterable { case poster, image, icon }
 
     public init(kind: BlockKind, text: InlineText = .empty, indent: Int = 0, isChecked: Bool = false,
                 pagePath: String? = nil, standaloneURL: URL? = nil, color: BlockColor = .none, props: BlockProps = .empty,

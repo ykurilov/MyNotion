@@ -198,6 +198,8 @@ struct NotionImporterTests {
         #expect(report.simplified.map(\.pageTitle).sorted() == ["Задачи", "Идеи", "Проекты"])
         #expect(report.simplified.first { $0.pageTitle == "Задачи" }?.items == ["таблицы — по строке на абзац"])
         #expect(NotionSimplification.quote.title(count: 12) == "цитаты (12)")
+        // Чего в Markdown Notion нет, отчёт называет всегда, даже если упрощать было нечего (research R14).
+        #expect(report.notices == ["Цвета и колонки Notion в Markdown не выгружает — они не перенесены"])
 
         let run = try #require(try importer().runs().first)
         #expect(run.status == .finished)
@@ -336,6 +338,7 @@ struct NotionImporterTests {
         #expect(content.contains { $0.kind == .checkbox && $0.indent == 1 && $0.text.string == "Вложенная задача" })
         #expect(content.contains { $0.text.string == "Первая строка блока\nВторая строка после переноса\nТретья строка после переноса" })
         #expect(report.simplified.isEmpty)
+        #expect(report.notices == [NotionImportReport.markdownLossNotice])
     }
 }
 
