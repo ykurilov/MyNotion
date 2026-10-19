@@ -84,6 +84,12 @@ public enum SyncServerError: Error, Equatable, LocalizedError {
     case notFound
     case badRequest(String)
     case server(String)
+    /// Файл уже собран и не меняется (`409 file_complete`).
+    case fileComplete
+    /// Файл ещё не собран: другой Mac не закончил отправку (`409 file_incomplete`).
+    case fileIncomplete
+    /// На сервере кончилось место для файлов (`507 storage_full`).
+    case storageFull
 
     public var errorDescription: String? {
         switch self {
@@ -93,6 +99,9 @@ public enum SyncServerError: Error, Equatable, LocalizedError {
         case .logCompacted: "Догоняю другие Mac — загружаю все записи целиком"
         case .notFound: "Не нашлось того, что нужно для связи с другими Mac — попробую ещё раз сам"
         case .badRequest, .server: "Другие Mac сейчас не отвечают — попробую ещё раз сам"
+        case .fileComplete: "Этот файл уже целиком на сервере"
+        case .fileIncomplete: "Ждёт отправки с другого Mac"
+        case .storageFull: "На сервере кончилось место для файлов"
         }
     }
 }
@@ -116,6 +125,50 @@ public protocol SyncTransport: Sendable {
 public protocol SyncServer: Sendable {
     func join(inviteCode: String, deviceName: String) async throws -> SyncJoinResult
     func transport(deviceToken: String) -> any SyncTransport
+}
+
+/// Что лежит на сервере от файла (`GET /files/{id}`).
+public struct SyncFileStatus: Sendable, Hashable, Codable {
+    public let fileId: String
+    public let partCount: Int
+    public let parts: [Int]
+    public let complete: Bool
+    public let bytes: Int
+
+    public init(fileId: String, partCount: Int, parts: [Int], complete: Bool, bytes: Int) {
+        self.fileId = fileId
+        self.partCount = partCount
+        self.parts = parts
+        self.complete = complete
+        self.bytes = bytes
+    }
+}
+
+/// Место файлов на сервере (`GET /files/usage`) — для «Настройки → Синхронизация».
+public struct SyncFilesUsage: Sendable, Hashable, Codable {
+    public let usedBytes: Int
+    public let limitBytes: Int
+    public let files: Int
+
+    public init(usedBytes: Int, limitBytes: Int, files: Int) {
+        self.usedBytes = usedBytes
+        self.limitBytes = limitBytes
+        self.files = files
+    }
+}
+
+/// Файлы на сервере (contracts/sync-and-files-api.md, «Файлы на сервере»): зашифрованные части, сервер блоков не знает.
+public protocol SyncFileTransport: Sendable {
+    /// Что уже лежит; `nil` — ничего (ещё не начали отправку или стёрт).
+    func fileStatus(_ fileId: UUID) async throws -> SyncFileStatus?
+    /// Часть как есть; повтор той же части безопасен.
+    func putFilePart(_ fileId: UUID, index: Int, count: Int, data: Data) async throws
+    func completeFile(_ fileId: UUID, partCount: Int) async throws
+    /// Часть собранного файла; до сборки — `fileIncomplete`, нет — `notFound`.
+    func filePart(_ fileId: UUID, index: Int) async throws -> Data
+    /// В корзину сервера; повтор безопасен.
+    func deleteFile(_ fileId: UUID) async throws
+    func filesUsage() async throws -> SyncFilesUsage
 }
 
 /// Сервер по HTTPS (в тестах — локальный по HTTP).
@@ -146,9 +199,23 @@ public struct HTTPSyncServer: SyncServer {
     public func transport(deviceToken: String) -> any SyncTransport {
         HTTPSyncTransport(baseURL: url, token: deviceToken, session: session)
     }
+
+    public func fileTransport(deviceToken: String) -> any SyncFileTransport {
+        HTTPSyncTransport(baseURL: url, token: deviceToken, session: Self.fileSession)
+    }
+
+    /// Части по 8 МБ: тайм-аут на запрос — как у сервера на чтение тела (120 с).
+    public static let fileSession: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 120
+        configuration.timeoutIntervalForResource = 600
+        configuration.waitsForConnectivity = false
+        configuration.httpMaximumConnectionsPerHost = 2
+        return URLSession(configuration: configuration)
+    }()
 }
 
-struct HTTPSyncTransport: SyncTransport {
+struct HTTPSyncTransport: SyncTransport, SyncFileTransport {
     let baseURL: URL
     let token: String?
     let session: URLSession
@@ -195,6 +262,41 @@ struct HTTPSyncTransport: SyncTransport {
         let _: Ignored = try await send("DELETE", "devices/\(deviceId)")
     }
 
+    // MARK: Файлы
+
+    func fileStatus(_ fileId: UUID) async throws -> SyncFileStatus? {
+        do {
+            return try await send("GET", "files/\(fileId.uuidString.lowercased())")
+        } catch SyncServerError.notFound {
+            return nil
+        }
+    }
+
+    func putFilePart(_ fileId: UUID, index: Int, count: Int, data: Data) async throws {
+        let _: Ignored = try await send("PUT", "files/\(fileId.uuidString.lowercased())/parts/\(index)", query: ["count": "\(count)"],
+                                        rawBody: data)
+    }
+
+    func completeFile(_ fileId: UUID, partCount: Int) async throws {
+        let _: Ignored = try await send("POST", "files/\(fileId.uuidString.lowercased())/complete", body: ["partCount": partCount])
+    }
+
+    func filePart(_ fileId: UUID, index: Int) async throws -> Data {
+        let request = try makeRequest("GET", "files/\(fileId.uuidString.lowercased())/parts/\(index)")
+        let (data, response) = try await session.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else { throw Self.error(status: status, data: data) }
+        return data
+    }
+
+    func deleteFile(_ fileId: UUID) async throws {
+        let _: Ignored = try await send("DELETE", "files/\(fileId.uuidString.lowercased())")
+    }
+
+    func filesUsage() async throws -> SyncFilesUsage {
+        try await send("GET", "files/usage")
+    }
+
     // MARK: Запрос
 
     private struct Ignored: Decodable {
@@ -209,21 +311,29 @@ struct HTTPSyncTransport: SyncTransport {
     }
 
     func send<Answer: Decodable>(_ method: String, _ path: String, query: [String: String] = [:],
-                                 body: (any Encodable)? = nil) async throws -> Answer {
-        var components = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
-        if !query.isEmpty { components.queryItems = query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) } }
-        var request = URLRequest(url: components.url!)
-        request.httpMethod = method
-        if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+                                 body: (any Encodable)? = nil, rawBody: Data? = nil) async throws -> Answer {
+        var request = try makeRequest(method, path, query: query)
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONEncoder().encode(AnyEncodable(body))
+        } else if let rawBody {
+            request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+            request.httpBody = rawBody
         }
         let (data, response) = try await session.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else { throw Self.error(status: status, data: data) }
         if Answer.self == Ignored.self || data.isEmpty { return try SyncJSON.decoder().decode(Answer.self, from: Data("{}".utf8)) }
         return try SyncJSON.decoder().decode(Answer.self, from: data)
+    }
+
+    private func makeRequest(_ method: String, _ path: String, query: [String: String] = [:]) throws -> URLRequest {
+        var components = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
+        if !query.isEmpty { components.queryItems = query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) } }
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = method
+        if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        return request
     }
 
     private static func error(status: Int, data: Data) -> SyncServerError {
@@ -234,6 +344,9 @@ struct HTTPSyncTransport: SyncTransport {
         case (410, "log_compacted"): return .logCompacted(snapshotSeq: body?.snapshotSeq ?? 0)
         case (410, _), (_, "invite_expired"): return .inviteExpired
         case (413, _), (_, "too_large"): return .tooLarge
+        case (_, "file_complete"): return .fileComplete
+        case (_, "file_incomplete"): return .fileIncomplete
+        case (507, _), (_, "storage_full"): return .storageFull
         case (404, _): return .notFound
         case (400, _): return .badRequest(message)
         default: return .server(message)
