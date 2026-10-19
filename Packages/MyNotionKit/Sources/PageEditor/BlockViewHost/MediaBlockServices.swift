@@ -112,7 +112,7 @@ final class MediaBlockViewFactory: BlockViewFactory {
         case .image: return ImageBlockView.contentHeight(for: block, width: width) + padding
         case .video: return VideoBlockView.contentHeight(for: block, width: width) + padding
         case .file: return Metrics.Media.fileRowHeight + padding
-        default: return Metrics.Media.bookmarkHeight + padding
+        default: return BookmarkBlockView.contentHeight(for: block) + padding
         }
     }
 }
@@ -299,11 +299,27 @@ final class MediaSurfaceView: NSView {
     var image: CGImage? { didSet { needsDisplay = true } }
     var borderColor: NSColor? { didSet { needsDisplay = true } }
     var cornerRadius: CGFloat = Metrics.Media.cornerRadius
+    /// Скруглены только левые углы (картинка у левого края карточки закладки).
+    var roundsLeadingCornersOnly = false
 
     override var isFlipped: Bool { true }
 
+    private var shape: NSBezierPath {
+        guard roundsLeadingCornersOnly else { return NSBezierPath(roundedRect: bounds, xRadius: cornerRadius, yRadius: cornerRadius) }
+        let path = NSBezierPath()
+        let r = min(cornerRadius, bounds.height / 2, bounds.width / 2)
+        path.move(to: NSPoint(x: bounds.maxX, y: bounds.minY))
+        path.line(to: NSPoint(x: bounds.minX + r, y: bounds.minY))
+        path.appendArc(withCenter: NSPoint(x: bounds.minX + r, y: bounds.minY + r), radius: r, startAngle: 270, endAngle: 180, clockwise: true)
+        path.line(to: NSPoint(x: bounds.minX, y: bounds.maxY - r))
+        path.appendArc(withCenter: NSPoint(x: bounds.minX + r, y: bounds.maxY - r), radius: r, startAngle: 180, endAngle: 90, clockwise: true)
+        path.line(to: NSPoint(x: bounds.maxX, y: bounds.maxY))
+        path.close()
+        return path
+    }
+
     override func draw(_ dirtyRect: NSRect) {
-        let path = NSBezierPath(roundedRect: bounds, xRadius: cornerRadius, yRadius: cornerRadius)
+        let path = shape
         NSGraphicsContext.saveGraphicsState()
         path.addClip()
         if let fill {

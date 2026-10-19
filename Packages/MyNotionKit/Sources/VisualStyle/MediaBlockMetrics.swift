@@ -4,8 +4,9 @@ import AppKit
 /// в галерее `--only media`).
 extension Metrics {
     public enum Media {
-        /// Поле над и под картинкой, видео, строкой файла и карточкой закладки.
-        public static let verticalPadding: CGFloat = 4
+        /// Поле над и под картинкой, видео, строкой файла и карточкой закладки (Notion 19.10.2026: от текста
+        /// до картинки ≈ 19, вместе с полем абзаца).
+        public static let verticalPadding: CGFloat = 8
         /// Строка подписи под картинкой и видео: отступ 6 и строка 20.
         public static let captionSpacing: CGFloat = 6
         public static let captionLineHeight: CGFloat = 20
@@ -18,7 +19,7 @@ extension Metrics {
         /// Ручки ширины по бокам картинки под мышью.
         public static let resizeHandleWidth: CGFloat = 6
         public static let resizeHandleHeight: CGFloat = 48
-        public static let resizeHandleInset: CGFloat = 8
+        public static let resizeHandleInset: CGFloat = 6
         /// Кнопка «⋯» в правом верхнем углу под мышью.
         public static let menuButtonSize: CGFloat = 24
         public static let menuButtonInset: CGFloat = 6
@@ -36,15 +37,21 @@ extension Metrics {
         public static let fileSizeFontSize: CGFloat = 12
         public static let fileNameSizeSpacing: CGFloat = 6
 
-        /// Карточка закладки: слева заголовок 14 medium, описание 12 серым в 2 строки, значок 16 и адрес 12;
-        /// справа картинка сайта на 33 % ширины; рамка 1, скругление 4.
-        public static let bookmarkHeight: CGFloat = 106
-        public static let bookmarkPadding: CGFloat = 14
-        public static let bookmarkImageFraction: CGFloat = 0.33
-        public static let bookmarkTitleFontSize: CGFloat = 14
+        /// Карточка закладки — как у Notion (сверка 19.10.2026): слева картинка сайта на 26 % ширины во всю высоту,
+        /// справа сверху значок 20, заголовок 16, описание 12 серым в 2 строки по 18, внизу адрес 12 серым;
+        /// рамка 1, скругление 8. Без данных сайта — низкая карточка с одним адресом.
+        public static let bookmarkHeight: CGFloat = 154
+        public static let bookmarkCompactHeight: CGFloat = 64
+        public static let bookmarkPadding: CGFloat = 20
+        public static let bookmarkTextLeading: CGFloat = 24
+        public static let bookmarkImageFraction: CGFloat = 0.26
+        public static let bookmarkCornerRadius: CGFloat = 8
+        public static let bookmarkTitleFontSize: CGFloat = 16
+        public static let bookmarkTitleLineHeight: CGFloat = 22
         public static let bookmarkDescriptionFontSize: CGFloat = 12
+        public static let bookmarkDescriptionLineHeight: CGFloat = 18
         public static let bookmarkURLFontSize: CGFloat = 12
-        public static let bookmarkIconSize: CGFloat = 16
-        public static let bookmarkLineSpacing: CGFloat = 4
+        public static let bookmarkIconSize: CGFloat = 20
+        public static let bookmarkLineSpacing: CGFloat = 6
     }
 }
