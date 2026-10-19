@@ -212,7 +212,7 @@ description: "Задачи: новые блоки и оформление тек
 - [x] T083 [P] [US5] `PK/Tests/AttachmentsTests/FileCipherTests.swift`: ключ HKDF-SHA256 (соль — id файла, `mynotion-file-v1`); части по 8 388 608 байт; подмена, перестановка и обрезка части не расшифровываются; сверка SHA-256
 - [x] T084 [P] [US5] `PK/Tests/AttachmentsTests/AttachmentTransferTests.swift` с файлами в `PK/Tests/SyncTests/Support/FakeSyncServer.swift`: отправка по частям и докачка с первой отсутствующей; пачка с блоком не ждёт файла; скачивание по одному, файлы открытой страницы первыми; `409 file_incomplete` и `404` — повтор 1, 2, 4 … 60 мин; `507` — сообщение, файл цел; выключение синхронизации файлы не трогает
 - [x] T085 [P] [US5] `PK/Tests/LinkPreviewTests/LinkPreviewTests.swift`: `og:title|description|image`, `<title>`, `<link rel="icon">` на образцах; предел 512 КБ и 10 с; oEmbed YouTube и Vimeo; без сети — только адрес
-- [ ] T086 [P] [US5] `PK/Tests/PageEditorTests/MediaBlocksTests.swift`: картинка по ширине колонки, ширина 10–100 %, подпись в `text`; заглушки «Загружается…» и «Ждёт отправки с другого Mac»; блок-файл — значок, имя, размер; меню вставки ссылки YouTube «Встроить видео / Закладка / Ссылка»
+- [x] T086 [P] [US5] `PK/Tests/PageEditorTests/MediaBlocksTests.swift`: картинка по ширине колонки, ширина 10–100 %, подпись в `text`; заглушки «Загружается…» и «Ждёт отправки с другого Mac»; блок-файл — значок, имя, размер; меню вставки ссылки YouTube «Встроить видео / Закладка / Ссылка»
 - [x] T087 [P] [US5] Выгрузка и импорт: `PK/Tests/MarkdownExportTests/AttachmentsExportTests.swift` (копии в папке страницы, « (2)» при совпадении, `[файл не скачан: …]` и итог), `PK/Tests/NotionImportTests/AttachmentsImportTests.swift` (картинки и файлы из выгрузки — вложения; больше 100 МБ или нет файла — «[файл: имя]»; ссылки YouTube/Vimeo — видео; одиночная ссылка — закладка)
 - [ ] T088 [P] [US5] `UITests/MediaBlocksTests.swift`: сценарий Independent Test, удаление оригинала, сообщение о 100 МБ
 
@@ -220,9 +220,9 @@ description: "Задачи: новые блоки и оформление тек
 
 - [x] T089 [US5] Модуль `PK/Sources/Attachments/`: `AttachmentStore.swift`, `AttachmentReferenceCounter.swift` (хук транзакции), `FileCipher.swift`, `AttachmentCollector.swift` (30 дней, `DELETE /files/{id}`)
 - [x] T090 [US5] Передача `PK/Sources/Attachments/AttachmentTransfer.swift` и эндпоинты файлов в `PK/Sources/Sync/SyncClient.swift`; запуск очереди из `SyncEngine.swift` только при непустой очереди
-- [ ] T091 [US5] `PK/Sources/PageEditor/BlockKinds/Image.swift`, `ImageThumbnailCache.swift` (ImageIO, до 48 МБ, вытесняемый), ширина и подпись
-- [ ] T092 [US5] `PK/Sources/PageEditor/BlockKinds/File.swift`: двойной щелчок — программа по умолчанию, «Показать в Finder», «Скачать копию…», «Переименовать»
-- [ ] T093 [US5] Модуль `PK/Sources/EmbeddedMedia/`: `VideoFilePlayerView.swift` (`AVPlayerView` по нажатию, первый кадр), `WebVideoPlayerView.swift` (`WKWebView` по нажатию, один на окно, закрытие вне экрана); `PK/Sources/PageEditor/BlockKinds/Video.swift`
+- [x] T091 [US5] `PK/Sources/PageEditor/BlockKinds/Image.swift`, `ImageThumbnailCache.swift` (ImageIO, до 48 МБ, вытесняемый), ширина и подпись
+- [x] T092 [US5] `PK/Sources/PageEditor/BlockKinds/File.swift`: двойной щелчок — программа по умолчанию, «Показать в Finder», «Скачать копию…», «Переименовать»
+- [x] T093 [US5] Модуль `PK/Sources/EmbeddedMedia/`: `VideoFilePlayerView.swift` (`AVPlayerView` по нажатию, первый кадр), `WebVideoPlayerView.swift` (`WKWebView` по нажатию, один на окно, закрытие вне экрана); `PK/Sources/PageEditor/BlockKinds/Video.swift`
 - [ ] T094 [US5] Модуль `PK/Sources/LinkPreview/` и `PK/Sources/PageEditor/BlockKinds/Bookmark.swift` (картинка и значок — вложениями, «Обновить»)
 - [ ] T095 [US5] Вставка: перетаскивание из Finder, ⌘V картинки, окно «Выбрать файл… / Вставить ссылку» — `PK/Sources/PageEditor/BlockViewHost/AttachmentInsertion.swift`; фабрики видов — в `App/MainWindow/`
 - [ ] T096 [US5] Место файлов и квота сервера в `App/Settings/SyncSettingsView.swift` (`GET /files/usage`)

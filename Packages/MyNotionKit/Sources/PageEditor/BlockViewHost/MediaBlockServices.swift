@@ -1,0 +1,267 @@
+import AppKit
+import NotesCore
+import VisualStyle
+
+/// Что редактору нужно от вложений, сети и проигрывателей для картинки, файла, видео и закладки (plan.md, Structure
+/// Decision): копии файлов (`Attachments`), карточки и обложки (`LinkPreview`), проигрыватели (`EmbeddedMedia`).
+/// Реализует приложение; редактор этих модулей не знает.
+@MainActor
+public protocol MediaBlockServices: AnyObject {
+    /// Есть ли файл на этом Mac, а если нет — что показать на заглушке.
+    func availability(of ref: AttachmentRef) -> MediaAvailability
+    /// Скопировать файл (Finder, «Выбрать файл…»); больше 100 МБ — ошибка с понятным сообщением.
+    func importFile(at url: URL) async throws -> AttachmentRef
+    /// Записать содержимое буфера как файл (картинка — PNG).
+    func importData(_ data: Data, name: String, contentType: String) async throws -> AttachmentRef
+    /// Скачать файл по ссылке («Вставить ссылку» для картинки и файла).
+    func downloadFile(from url: URL) async throws -> AttachmentRef
+    /// YouTube или Vimeo; `nil` — не видео.
+    func videoSource(for url: URL) -> VideoSource?
+    /// Данные карточки закладки: один запрос; картинка и значок — уже вложениями. Без сети — пусто.
+    func linkPreview(for url: URL) async -> MediaLinkPreview
+    /// Название и обложка ролика YouTube или Vimeo; `nil` — без сети.
+    func videoCover(for url: URL) async -> MediaLinkPreview?
+    /// Первый кадр видеофайла.
+    func posterImage(forVideoAt url: URL) async -> NSImage?
+    /// Проигрыватель блока видео, уже играющий: файл — проигрыватель macOS, YouTube и Vimeo — проигрыватель сайта.
+    func makePlayer(for block: Block, fileURL: URL?) -> NSView?
+    /// Открыть адрес в браузере.
+    func open(_ url: URL)
+}
+
+/// Что вид блока показывает вместо файла (contracts/blocks-and-keys.md, «Картинка»).
+public enum MediaAvailability: Sendable, Hashable {
+    case ready(URL)
+    case downloading
+    case waitingForOtherMac
+    case failed(String)
+
+    var fileURL: URL? {
+        if case .ready(let url) = self { url } else { nil }
+    }
+
+    /// Надпись на заглушке.
+    var statusText: String {
+        switch self {
+        case .ready: ""
+        case .downloading: "Загружается…"
+        case .waitingForOtherMac: "Ждёт отправки с другого Mac"
+        case .failed(let message): message
+        }
+    }
+}
+
+/// Данные карточки закладки или обложки ролика.
+public struct MediaLinkPreview: Sendable, Hashable {
+    public var title: String?
+    public var description: String?
+    public var image: AttachmentRef?
+    public var icon: AttachmentRef?
+
+    public init(title: String?, description: String?, image: AttachmentRef?, icon: AttachmentRef?) {
+        self.title = title
+        self.description = description
+        self.image = image
+        self.icon = icon
+    }
+}
+
+/// Службы медиа-блоков и их виды: приложение ставит службы при запуске, виды картинки, файла, видео и закладки
+/// регистрируются в `BlockViewFactories`.
+@MainActor
+public enum MediaBlocks {
+    private(set) static var services: (any MediaBlockServices)?
+
+    public static func install(_ services: any MediaBlockServices) {
+        self.services = services
+        BlockViewFactories.shared.register(MediaBlockViewFactory(kind: .image), for: .image)
+        BlockViewFactories.shared.register(MediaBlockViewFactory(kind: .file), for: .file)
+        BlockViewFactories.shared.register(MediaBlockViewFactory(kind: .video), for: .video)
+        BlockViewFactories.shared.register(MediaBlockViewFactory(kind: .bookmark), for: .bookmark)
+    }
+
+    static func availability(of ref: AttachmentRef?) -> MediaAvailability {
+        guard let ref else { return .failed("Файл не выбран") }
+        return services?.availability(of: ref) ?? .downloading
+    }
+}
+
+/// Фабрика видов медиа-блоков: высота строки и вид по типу.
+@MainActor
+final class MediaBlockViewFactory: BlockViewFactory {
+    let kind: BlockKind
+
+    init(kind: BlockKind) {
+        self.kind = kind
+    }
+
+    func makeView(for block: Block, context: BlockViewContext) -> NSView? {
+        let view: MediaBlockView = switch kind {
+        case .image: ImageBlockView(block: block, width: context.width)
+        case .file: FileBlockView(block: block, width: context.width)
+        case .video: VideoBlockView(block: block, width: context.width)
+        default: BookmarkBlockView(block: block, width: context.width)
+        }
+        view.textView = context.textView
+        return view
+    }
+
+    func height(for block: Block, width: CGFloat) -> CGFloat? {
+        let padding = 2 * Metrics.Media.verticalPadding
+        switch kind {
+        case .image: return ImageBlockView.contentHeight(for: block, width: width) + padding
+        case .video: return VideoBlockView.contentHeight(for: block, width: width) + padding
+        case .file: return Metrics.Media.fileRowHeight + padding
+        default: return Metrics.Media.bookmarkHeight + padding
+        }
+    }
+}
+
+/// Общее у видов медиа-блоков: блок, правки через страницу, меню «⋯», перерисовка при приходе файла.
+@MainActor
+class MediaBlockView: NSView {
+    let block: Block
+    weak var textView: PageTextView?
+    private var availabilityObserver: NSObjectProtocol?
+    private var trackingArea: NSTrackingArea?
+    private(set) var isHovered = false
+
+    init(block: Block, width: CGFloat) {
+        self.block = block
+        super.init(frame: NSRect(x: 0, y: 0, width: width, height: 1))
+        let ids = Set(block.props.attachmentRefs.map(\.id))
+        if !ids.isEmpty {
+            availabilityObserver = NotificationCenter.default.addObserver(forName: AttachmentRef.availabilityDidChange, object: nil,
+                                                                          queue: .main) { [weak self] note in
+                guard let id = note.object as? UUID, ids.contains(id) else { return }
+                MainActor.assumeIsolated { self?.availabilityDidChange() }
+            }
+        }
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
+
+    isolated deinit {
+        if let availabilityObserver { NotificationCenter.default.removeObserver(availabilityObserver) }
+    }
+
+    override var isFlipped: Bool { true }
+
+    /// Файл появился на этом Mac или сменил состояние.
+    func availabilityDidChange() {}
+
+    /// Пункты меню «⋯» и правого щелчка.
+    func menuItems() -> [NSMenuItem] { [] }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea { removeTrackingArea(trackingArea) }
+        let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self)
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
+        hoverDidChange()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+        hoverDidChange()
+    }
+
+    func hoverDidChange() {}
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let items = menuItems()
+        guard !items.isEmpty else { return nil }
+        let menu = NSMenu()
+        items.forEach(menu.addItem)
+        return menu
+    }
+
+    /// Пункт меню, который выполняет `action`.
+    func menuItem(_ title: String, _ action: @escaping @MainActor () -> Void) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: #selector(MenuAction.perform(_:)), keyEquivalent: "")
+        let target = MenuAction(action)
+        item.target = target
+        item.representedObject = target
+        return item
+    }
+
+    /// Кнопка «⋯»: то же меню, что правым щелчком.
+    func showMenu(from button: NSView) {
+        let menu = NSMenu()
+        menuItems().forEach(menu.addItem)
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.maxY + 2), in: button)
+    }
+
+    /// Щелчок по виду, а не по его кнопкам — выделить блок, как щелчок по «⋮⋮».
+    override func mouseDown(with event: NSEvent) {
+        superview?.mouseDown(with: event)
+    }
+}
+
+@MainActor
+final class MenuAction: NSObject {
+    let action: @MainActor () -> Void
+
+    init(_ action: @escaping @MainActor () -> Void) {
+        self.action = action
+    }
+
+    @objc func perform(_ sender: Any?) {
+        action()
+    }
+}
+
+/// Кнопка-значок поверх медиа-блока: «⋯», ▶.
+@MainActor
+final class MediaOverlayButton: NSButton {
+    convenience init(symbol: String, size: CGFloat, action: @escaping @MainActor () -> Void) {
+        self.init(frame: NSRect(x: 0, y: 0, width: size, height: size))
+        isBordered = false
+        image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: size * 0.45, weight: .semibold))
+        contentTintColor = .white
+        wantsLayer = true
+        layer?.cornerRadius = size == Metrics.Media.playButtonSize ? size / 2 : 4
+        layer?.backgroundColor = NSColor.black.withAlphaComponent(0.55).cgColor
+        let target = MenuAction(action)
+        self.target = target
+        self.action = #selector(MenuAction.perform(_:))
+        objc_setAssociatedObject(self, &MediaOverlayButton.targetKey, target, .OBJC_ASSOCIATION_RETAIN)
+    }
+
+    nonisolated(unsafe) private static var targetKey: UInt8 = 0
+}
+
+/// Подпись под картинкой и видео: строка 14 серым; пустая видна только под мышью («Добавить подпись»).
+@MainActor
+final class MediaCaptionField: NSTextField, NSTextFieldDelegate {
+    var onCommit: ((String) -> Void)?
+
+    init(text: String) {
+        super.init(frame: .zero)
+        stringValue = text
+        isBordered = false
+        drawsBackground = false
+        focusRingType = .none
+        font = .systemFont(ofSize: Metrics.Media.captionFontSize)
+        textColor = Palette.textSecondary
+        placeholderString = "Добавить подпись"
+        lineBreakMode = .byTruncatingTail
+        cell?.usesSingleLineMode = true
+        delegate = self
+        setAccessibilityIdentifier("media-caption")
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
+
+    func controlTextDidEndEditing(_ obj: Notification) {
+        onCommit?(stringValue)
+    }
+}

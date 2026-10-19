@@ -572,7 +572,10 @@ extension PageTextView {
         openBlockMenu(forBlock: id, below: anchor)
     }
 
-    func textDidChangeForPopups() { refreshSlashMenu() }
+    func textDidChangeForPopups() {
+        refreshSlashMenu()
+        mediaInsertion.closePastedLinkMenu()
+    }
 
     /// Подсветка и подсказка строки с «/» пересчитываются по курсору: посреди обработки правки раскладка строки
     /// ещё не окончательная и сдвинута на отступ абзаца, а к смене курсора — уже верная.
