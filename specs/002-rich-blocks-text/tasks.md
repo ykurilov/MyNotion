@@ -30,8 +30,8 @@ description: "Задачи: новые блоки и оформление тек
 
 **Purpose**: новые модули и места для файлов «по типу блока», чтобы параллельные этапы добавляли файлы, а не правили общие
 
-- [ ] T001 В `PK/Package.swift` добавить цели и тестовые цели: `CodeHighlighting` (без зависимостей), `MathRendering` (без зависимостей, ресурс — шрифт), `Attachments` (NotesCore, Sync, GRDB), `LinkPreview` (без зависимостей), `Reminders` (NotesCore, GRDB), `EmbeddedMedia` (VisualStyle); `PageEditor` получает зависимости `CodeHighlighting` и `MathRendering`, остальные тяжёлые модули редактор видит только через протоколы фабрик (plan.md, Structure Decision); создать пустые папки `PK/Sources/PageEditor/{BlockKinds,BlockViewHost,Collapsing,Flows,Table,Inline,PageFind}/`
-- [ ] T002 В `project.yml` подключить новые модули к приложению `MyNotion`; проверить `xcodegen generate && xcodebuild build -scheme MyNotion` на основном Mac
+- [x] T001 В `PK/Package.swift` добавить цели и тестовые цели: `CodeHighlighting` (без зависимостей), `MathRendering` (без зависимостей, ресурс — шрифт), `Attachments` (NotesCore, Sync, GRDB), `LinkPreview` (без зависимостей), `Reminders` (NotesCore, GRDB), `EmbeddedMedia` (VisualStyle); `PageEditor` получает зависимости `CodeHighlighting` и `MathRendering`, остальные тяжёлые модули редактор видит только через протоколы фабрик (plan.md, Structure Decision); создать пустые папки `PK/Sources/PageEditor/{BlockKinds,BlockViewHost,Collapsing,Flows,Table,Inline,PageFind}/`
+- [x] T002 В `project.yml` подключить новые модули к приложению `MyNotion`; проверить `xcodegen generate && xcodebuild build -scheme MyNotion` на основном Mac
 
 ---
 
