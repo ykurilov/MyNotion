@@ -14,12 +14,13 @@ enum CodeBlockStyle {
     static let lineHeight: CGFloat = (fontSize * 1.5).rounded()
     static var font: NSFont { .monospacedSystemFont(ofSize: fontSize, weight: .regular) }
     /// Поля текста внутри подложки, как у Notion: сверху место под строку языка.
-    static let padding = NSEdgeInsets(top: 34, left: 32, bottom: 32, right: 16)
+    /// Сверено с Notion 19.10.2026: текст в 24 от левого края, первая строка — в 34 от верха, под последней — 36.
+    static let padding = NSEdgeInsets(top: 34, left: 24, bottom: 36, right: 16)
     static let cornerRadius: CGFloat = 4
     /// Отступ блока от соседних абзацев.
     static let outerSpacing: CGFloat = 4
 
-    static let background = themed(light: 0xF7F6F3, dark: 0x202020)
+    static let background = themed(light: 0xF9F8F7, dark: 0x202020)
     static let text = Palette.textPrimary
     static let chromeText = Palette.textSecondary
 
@@ -32,21 +33,24 @@ enum CodeBlockStyle {
         height(lineCount: code.utf16.reduce(1) { $1 == 0x0A ? $0 + 1 : $0 })
     }
 
-    /// Цвета токенов — тема Prism, как у Notion (светлая и тёмная).
+    /// Цвета токенов как у Notion (сняты с живого Notion 19.10.2026): светлая тема — Prism по умолчанию,
+    /// тёмная — своя тема Notion (комментарии, строки и числа — как у prism-dark, ключевые слова голубые,
+    /// функции жёлтые).
     private static let tokenColors: [CodeTokenKind: NSColor] = [
-        .keyword: themed(light: 0x0077AA, dark: 0xC792EA),
-        .type: themed(light: 0xDD4A68, dark: 0xFFCB6B),
-        .string: themed(light: 0x669900, dark: 0xC3E88D),
-        .number: themed(light: 0x990055, dark: 0xF78C6C),
-        .comment: themed(light: 0x708090, dark: 0x8C8C8C),
-        .function: themed(light: 0xDD4A68, dark: 0x82AAFF),
-        .literal: themed(light: 0x990055, dark: 0xFF5874),
-        .property: themed(light: 0x990055, dark: 0x80CBC4),
-        .tag: themed(light: 0x990055, dark: 0xF07178),
-        .attribute: themed(light: 0x669900, dark: 0xFFCB6B),
-        .variable: themed(light: 0xEE9900, dark: 0xF78C6C),
-        .annotation: themed(light: 0x0077AA, dark: 0xC792EA),
-        .punctuation: themed(light: 0x999999, dark: 0x89DDFF),
+        .keyword: themed(light: 0x0077AA, dark: 0x66A2CC),
+        .type: themed(light: 0xDD4A68, dark: 0xECEC93),
+        .string: themed(light: 0x669900, dark: 0xBDE052),
+        .number: themed(light: 0x990055, dark: 0xD1949E),
+        .comment: themed(light: 0x708090, dark: 0x998066),
+        .function: themed(light: 0xDD4A68, dark: 0xECEC93),
+        .literal: themed(light: 0x990055, dark: 0xD1949E),
+        .property: themed(light: 0x990055, dark: 0xD1949E),
+        .tag: themed(light: 0x990055, dark: 0xD1949E),
+        .attribute: themed(light: 0x669900, dark: 0xBDE052),
+        .variable: themed(light: 0xEE9900, dark: 0xF4B73D),
+        .annotation: themed(light: 0x0077AA, dark: 0x66A2CC),
+        .operator: themed(light: 0x9A6E3A, dark: 0xF4B73D),
+        .punctuation: themed(light: 0x999999, dark: 0xA8A7A5),
     ]
 
     static func color(for kind: CodeTokenKind) -> NSColor? { tokenColors[kind] }
@@ -411,9 +415,10 @@ final class CodeBlockView: NSView, BlockFieldsView {
     private func layoutChrome(in box: NSRect) {
         languageButton.sizeToFit()
         copyButton.sizeToFit()
+        // Как у Notion: язык и «Копировать» — справа сверху, язык левее.
         let top = box.minY + 6
-        languageButton.frame.origin = NSPoint(x: box.minX + 8, y: top)
         copyButton.frame.origin = NSPoint(x: box.maxX - 8 - copyButton.frame.width, y: top)
+        languageButton.frame.origin = NSPoint(x: copyButton.frame.minX - 8 - languageButton.frame.width, y: top)
     }
 
     @objc private func copyButtonPressed() { copyCode() }

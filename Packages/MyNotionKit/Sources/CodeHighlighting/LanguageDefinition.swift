@@ -23,6 +23,8 @@ public enum CodeTokenKind: String, Sendable, Hashable, CaseIterable {
     case variable
     /// `@Decorator`, `#include`, `@media`.
     case annotation
+    /// `=`, `->`, `+`, `&&`: у Notion свой цвет, отдельный от скобок и запятых.
+    case `operator`
     case punctuation
 }
 

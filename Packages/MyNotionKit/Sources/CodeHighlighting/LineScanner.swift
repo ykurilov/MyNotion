@@ -154,7 +154,9 @@ public struct LineScanner: Sendable {
                 continue
             }
             if Ascii.isPunctuation(unit) {
+                let isOperator = Ascii.isOperator(unit)
                 while cursor.position < count, Ascii.isPunctuation(units[cursor.position]),
+                      Ascii.isOperator(units[cursor.position]) == isOperator,
                       cursor.position == start || !startsToken(units[cursor.position]),
                       !lineComments.contains(where: { cursor.matches($0, at: cursor.position) }),
                       !blockComments.contains(where: { cursor.matches($0.open, at: cursor.position) }),
@@ -162,7 +164,7 @@ public struct LineScanner: Sendable {
                     cursor.position += 1
                 }
                 if cursor.position == start { cursor.position += 1 }
-                tokens.append(CodeToken(start..<cursor.position, .punctuation))
+                tokens.append(CodeToken(start..<cursor.position, isOperator ? .operator : .punctuation))
                 continue
             }
             cursor.position += 1
@@ -404,6 +406,11 @@ enum Ascii {
     static func isLetter(_ unit: UInt16) -> Bool { (unit | 0x20) >= 0x61 && (unit | 0x20) <= 0x7A || unit >= 0x80 && !isSpace(unit) }
     static func isIdentifierStart(_ unit: UInt16) -> Bool { isLetter(unit) || unit == underscore }
     static func isIdentifierPart(_ unit: UInt16) -> Bool { isIdentifierStart(unit) || isDigit(unit) }
+    /// `+ - * / = < > ! & | ^ % ~ ? :`.
+    static func isOperator(_ unit: UInt16) -> Bool {
+        [0x2B, 0x2D, 0x2A, 0x2F, 0x3D, 0x3C, 0x3E, 0x21, 0x26, 0x7C, 0x5E, 0x25, 0x7E, 0x3F, 0x3A].contains(unit)
+    }
+
     static func isPunctuation(_ unit: UInt16) -> Bool {
         unit < 0x80 && !isIdentifierPart(unit) && !isSpace(unit) && unit > 0x20 && unit != quote && unit != apostrophe && unit != backtick
     }
