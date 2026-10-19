@@ -93,4 +93,33 @@ struct EmbeddedPlayersTests {
         #expect(!player.isPlaying)
         player.removeFromSuperview()
     }
+
+    @Test("Проигрыватель уходит только на страницы проигрывателя YouTube и Vimeo; ссылки из него — в браузер, прочее — нет")
+    func navigationStaysInsidePlayer() {
+        let youtube = URL(string: "https://www.youtube-nocookie.com/embed/abc?autoplay=1")!
+        let vimeo = URL(string: "https://player.vimeo.com/video/42?autoplay=1")!
+        func decision(_ text: String, embed: URL = youtube, mainFrame: Bool = true, clicked: Bool = false) -> WebVideoPlayerView.NavigationDecision {
+            WebVideoPlayerView.navigationDecision(for: URL(string: text)!, embedURL: embed, isMainFrame: mainFrame, userInitiated: clicked)
+        }
+        #expect(decision("https://www.youtube-nocookie.com/embed/abc?autoplay=1") == .allow)
+        #expect(decision("https://www.youtube.com/embed/abc") == .allow)
+        #expect(decision("https://player.vimeo.com/video/42", embed: vimeo) == .allow)
+        #expect(decision("about:blank") == .allow)
+        // Рамки внутри проигрывателя (реклама, счётчики) — только веб-адреса.
+        #expect(decision("https://googleads.g.doubleclick.net/pagead/id", mainFrame: false) == .allow)
+        #expect(decision("smb://nas/share", mainFrame: false) == .cancel)
+        // Щелчок по названию ролика — в браузере; сама страница проигрывателя не меняется.
+        #expect(decision("https://www.youtube.com/watch?v=abc", clicked: true) == .openInBrowser)
+        #expect(decision("https://evil.example/phish") == .cancel)
+        #expect(decision("vnc://host", clicked: true) == .cancel)
+        #expect(decision("https://vimeo.com/42", embed: vimeo, clicked: true) == .openInBrowser)
+    }
+
+    @Test("Отменённая загрузка (-999, переход запрещён) — не «Нет подключения»; обрыв сети — да")
+    func cancelledLoadIsNotOffline() {
+        #expect(!WebVideoPlayerView.isOffline(URLError(.cancelled)))
+        #expect(!WebVideoPlayerView.isOffline(NSError(domain: "WebKitErrorDomain", code: 102)))
+        #expect(WebVideoPlayerView.isOffline(URLError(.notConnectedToInternet)))
+        #expect(WebVideoPlayerView.isOffline(URLError(.timedOut)))
+    }
 }

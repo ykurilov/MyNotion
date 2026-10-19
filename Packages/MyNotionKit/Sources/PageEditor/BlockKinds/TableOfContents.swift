@@ -108,7 +108,7 @@ final class TableOfContentsTracker {
         let document = textView.document.pageDocument
         TableOfContents.track(document)
         for name in [PageDocument.didApplyLocalEdits, PageDocument.didApplyExternalChanges] {
-            observers.append(NotificationCenter.default.addObserver(forName: name, object: document, queue: nil) { [weak self] _ in
+            observers.append(NotificationCenter.default.addObserver(forName: name, object: document, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.documentDidChange() }
             })
         }

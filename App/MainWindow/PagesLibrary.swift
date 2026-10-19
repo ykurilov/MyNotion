@@ -44,8 +44,8 @@ final class PagesLibrary {
         self.reminders = reminders
         attachments = AttachmentStore(store: store, folder: AttachmentStore.folder(forDatabaseAt: store.database.url))
         try? attachments.abandonInterruptedCopies()
-        MediaBlocks.install(AppMediaServices(attachments: attachments))
         openDocuments = OpenDocuments(store: store)
+        MediaBlocks.install(AppMediaServices(attachments: attachments, openDocuments: openDocuments))
         reloadTree()
         sync = SyncController(store: store, openDocuments: openDocuments, attachments: attachments, startsEngine: startsSync)
         sync.onRemoteChange = { [weak self] _ in self?.remoteChangesApplied() }

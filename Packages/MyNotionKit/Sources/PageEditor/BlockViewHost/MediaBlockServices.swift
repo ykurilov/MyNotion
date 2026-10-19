@@ -86,6 +86,15 @@ public enum MediaBlocks {
         BlockViewFactories.shared.register(MediaBlockViewFactory(kind: .bookmark), for: .bookmark)
     }
 
+    /// Адрес закладки или ролика — в браузере; не http и не https (с другого Mac, из импорта) — не открывается.
+    static func openLink(_ url: URL) {
+        guard InlineFormatting.isOpenable(url), url.scheme?.lowercased() != "mailto" else {
+            NSSound.beep()
+            return
+        }
+        services?.open(url)
+    }
+
     static func availability(of ref: AttachmentRef?) -> MediaAvailability {
         guard let ref else { return .failed("Файл не выбран") }
         if let fraction = copyProgress[ref.id] { return .copying(fraction) }

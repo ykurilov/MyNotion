@@ -11,7 +11,13 @@ public final class EmojiPickerController: NSObject, NSWindowDelegate {
     private(set) var view: EmojiPickerView?
     private var window: EmojiPickerWindow?
     private var onChoose: ((String?) -> Void)?
-    private var observers: [NSObjectProtocol] = []
+    /// Подписка снимается в `deinit` — он не привязан к главному потоку.
+    nonisolated(unsafe) private var observers: [NSObjectProtocol] = []
+
+    deinit {
+        observers.forEach(NotificationCenter.default.removeObserver)
+    }
+
     /// Место карточки без тени, в координатах экрана; `nil` — окно закрыто.
     public private(set) var cardFrame: NSRect?
 

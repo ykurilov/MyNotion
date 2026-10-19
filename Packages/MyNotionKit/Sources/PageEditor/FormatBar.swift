@@ -371,7 +371,12 @@ final class FormatBarController {
     var anchor: FormatBarAnchor?
     private var window: FormatBarWindow?
     private var kindMenu: PopupMenuWindow?
-    private var observers: [NSObjectProtocol] = []
+    /// Подписка снимается в `deinit` — он не привязан к главному потоку.
+    nonisolated(unsafe) private var observers: [NSObjectProtocol] = []
+
+    deinit {
+        observers.forEach(NotificationCenter.default.removeObserver)
+    }
 
     var isShown: Bool { state != nil }
     var isKindMenuOpen: Bool { kindMenu != nil }

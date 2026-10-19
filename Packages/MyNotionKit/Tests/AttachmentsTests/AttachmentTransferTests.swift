@@ -110,6 +110,72 @@ import Testing
         #expect(await transfer.notice == nil)
     }
 
+    @Test func failingFileDoesNotStopOtherUploadsAndRetriesWithGrowingPauses() async throws {
+        let mac = try AttachmentTestMac()
+        let broken = try mac.attachments.importFile(at: try mac.folder.file("пропал.txt", sampleBytes(100, seed: 1)))
+        let fine = try mac.attachments.importFile(at: try mac.folder.file("цел.txt", sampleBytes(100, seed: 2)))
+        try mac.insertBlock(attachment: broken)
+        try mac.insertBlock(attachment: fine)
+        // Копию первого стёрли из папки — прочитать её нельзя.
+        try FileManager.default.removeItem(at: try #require(mac.attachments.fileURL(for: broken.id)))
+        let server = FakeFileServer()
+        let transfer = transfer(mac, server)
+
+        let next = try #require(try await transfer.runDue())
+
+        #expect(try mac.record(fine.id)?.state == .uploaded)
+        #expect(try mac.record(broken.id)?.state == .failed)
+        #expect(next == mac.now.date.addingTimeInterval(60))
+        // До срока — не трогается.
+        await server.clearLog()
+        mac.now.advance(by: 30)
+        #expect(try await transfer.runDue() == next)
+        #expect(await server.log.isEmpty)
+        // Повтор по сроку, пауза растёт.
+        mac.now.advance(by: 30)
+        let second = try #require(try await transfer.runDue())
+        #expect(second == mac.now.date.addingTimeInterval(120))
+        #expect(await server.log == ["STATUS \(broken.id)"])
+
+        // Копия вернулась — следующий повтор отправляет файл.
+        try sampleBytes(100, seed: 1).write(to: mac.attachments.folder.appendingPathComponent(try #require(mac.record(broken.id)?.localPath)))
+        mac.now.advance(by: 120)
+        #expect(try await transfer.runDue() == nil)
+        #expect(try mac.record(broken.id)?.state == .uploaded)
+        #expect(try mac.record(broken.id)?.lastError == nil)
+    }
+
+    @Test func recordWithoutCopyIsNotRetriedInALoop() async throws {
+        let mac = try AttachmentTestMac()
+        let ref = try mac.attachments.importFile(at: try mac.folder.file("a.txt", sampleBytes(10)))
+        try mac.insertBlock(attachment: ref)
+        try mac.attachments.update(ref.id) { $0.localPath = nil }
+        let server = FakeFileServer()
+
+        #expect(try await transfer(mac, server).runDue() == nil)
+        #expect(try mac.record(ref.id)?.state == .failed)
+        #expect(try !mac.attachments.hasPendingTransfers())
+        #expect(await server.log.isEmpty)
+    }
+
+    @Test func failingDownloadDoesNotStopOtherDownloads() async throws {
+        let server = FakeFileServer()
+        let (first, refA, _) = try macWithFile(size: 300, name: "a.bin", seed: 1)
+        let refB = try first.attachments.importFile(at: try first.folder.file("b.bin", sampleBytes(300, seed: 2)))
+        try first.insertBlock(attachment: refB)
+        _ = try await transfer(first, server).runDue()
+        let second = try receivingMac([(refA, nil), (refB, nil)])
+        // Папка копий второго Mac не даёт создать каталог первого файла.
+        try FileManager.default.createDirectory(at: second.attachments.folder, withIntermediateDirectories: true)
+        try Data().write(to: second.attachments.folder.appendingPathComponent(refA.id.uuidString.lowercased()))
+
+        let next = try #require(try await transfer(second, server).runDue())
+
+        #expect(second.attachments.fileURL(for: refB.id) != nil)
+        #expect(try second.record(refA.id)?.state == .failed)
+        #expect(next == second.now.date.addingTimeInterval(60))
+    }
+
     // MARK: Скачивание
 
     /// Второй Mac, к которому пришли блоки с файлами первого.
@@ -211,6 +277,26 @@ import Testing
         let record = try #require(try second.record(ref.id))
         #expect(record.state == .failed)
         #expect(second.attachments.fileURL(for: ref.id) == nil)
+    }
+
+    @Test func damagedDownloadRetriesWithTheCorrectedDescription() async throws {
+        let (first, ref, bytes) = try macWithFile(size: 500)
+        let server = FakeFileServer()
+        _ = try await transfer(first, server).runDue()
+        var forged = ref
+        forged.sha256 = String(repeating: "a", count: 64)
+        let second = try receivingMac([(forged, nil)])
+        let transfer = transfer(second, server)
+        let next = try #require(try await transfer.runDue())
+        #expect(try second.record(ref.id)?.state == .failed)
+
+        // Пришло верное описание: запись следует за ним, повтор по сроку скачивает файл.
+        var block = try #require(try second.store.write { try $0.blocks(ofPage: second.pageId) }.first { $0.props.attachment?.id == ref.id })
+        block.props.attachment = ref
+        try second.store.write { _ = try $0.updateBlock(block) }
+        second.now.advance(by: next.timeIntervalSince(second.now.date))
+        #expect(try await transfer.runDue() == nil)
+        #expect(try Data(contentsOf: try #require(second.attachments.fileURL(for: ref.id))) == bytes)
     }
 
     @Test func turningSyncOffLeavesFilesOnThisMac() throws {

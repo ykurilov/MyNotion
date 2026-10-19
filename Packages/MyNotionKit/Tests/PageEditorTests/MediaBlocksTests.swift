@@ -32,6 +32,25 @@ struct MediaBlocksTests {
 
     // MARK: Картинка
 
+    @Test("Программы и скрипты из файлов не запускаются — показываются в Finder; документы открываются")
+    func runnableFilesAreNotOpenedDirectly() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("MyNotionOpenTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        func file(_ name: String, executable: Bool = false) throws -> URL {
+            let url = folder.appendingPathComponent(name)
+            try Data("x".utf8).write(to: url)
+            if executable { try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path) }
+            return url
+        }
+        for name in ["Установка.app", "запуск.command", "скрипт.sh", "пакет.pkg", "ссылка.webloc", "a.terminal", "a.workflow", "a.scpt"] {
+            #expect(!MediaFileActions.opensDirectly(try file(name)), "\(name)")
+        }
+        #expect(!MediaFileActions.opensDirectly(try file("без расширения", executable: true)))
+        #expect(MediaFileActions.opensDirectly(try file("отчёт.pdf")))
+        #expect(MediaFileActions.opensDirectly(try file("заметки.txt")))
+    }
+
     @Test("Картинка по ширине колонки с пропорциями файла; ширина — доля колонки 10–100 %; подпись добавляет строку")
     func imageGeometry() throws {
         _ = try fixture()
@@ -225,6 +244,17 @@ struct MediaBlocksTests {
         #expect(fixture.texts[0] == "Доhttps://youtu.be/dQw4w9WgXcQ")
     }
 
+    @Test("Закладка открывается только по http и https: smb, ssh, vnc, file с другого Mac или из импорта — нет")
+    func bookmarkOpensOnlyWebAddresses() throws {
+        let (_, services) = try fixture()
+        for text in ["smb://nas/share", "ssh://host", "vnc://host", "file://localhost/Applications/Calculator.app", "x-apple.systempreferences:"] {
+            MediaBlocks.openLink(try #require(URL(string: text)))
+        }
+        #expect(services.opened.isEmpty)
+        MediaBlocks.openLink(try #require(URL(string: "https://example.com")))
+        #expect(services.opened == [URL(string: "https://example.com")!])
+    }
+
     @Test("«/» → «Закладка» с адресом — карточка; данные сайта приходят позже и не отдельный шаг ⌘Z")
     func bookmarkFromSlashMenu() async throws {
         let (fixture, services) = try fixture()
@@ -336,7 +366,8 @@ final class FakeMediaServices: MediaBlockServices {
     func videoCover(for url: URL) async -> MediaLinkPreview? { nil }
     func posterImage(forVideoAt url: URL) async -> NSImage? { nil }
     func makePlayer(for block: Block, fileURL: URL?) -> NSView? { nil }
-    func open(_ url: URL) {}
+    private(set) var opened: [URL] = []
+    func open(_ url: URL) { opened.append(url) }
 
     func sampleFile(_ name: String, pngWidth: Int? = nil, height: Int = 0) throws -> URL {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

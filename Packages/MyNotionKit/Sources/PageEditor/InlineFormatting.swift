@@ -75,6 +75,13 @@ public enum InlineFormatting {
         return URL(string: "https://" + trimmed)
     }
 
+    /// Можно ли открыть адрес: http и https с сайтом или mailto. Ссылки с другого Mac и из импорта не проверялись при
+    /// вводе, а smb, ssh, vnc, file и подобные подключают диски, запускают программы или открывают файлы Mac.
+    public static func isOpenable(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased(), linkSchemes.contains(scheme) else { return false }
+        return scheme == "mailto" || url.host()?.isEmpty == false
+    }
+
     /// Вставленный текст, который делает выделение ссылкой: только адрес со схемой, без других слов.
     public static func pastedLinkURL(from string: String) -> URL? {
         let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -191,7 +198,7 @@ extension PageTextView {
     /// ⌘-щелчок по тексту ссылки открывает её адрес, как в Notion. Простой щелчок ставит курсор.
     func openLink(at point: NSPoint, modifiers: NSEvent.ModifierFlags) -> Bool {
         guard modifiers.contains(.command), let url = link(at: point) else { return false }
-        openURL(url)
+        if InlineFormatting.isOpenable(url) { openURL(url) } else { NSSound.beep() }
         return true
     }
 
