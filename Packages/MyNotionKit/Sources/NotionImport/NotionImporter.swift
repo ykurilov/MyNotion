@@ -228,12 +228,34 @@ public struct NotionImporter: Sendable {
             result.append(Block(pageId: pageId, kind: kind, text: text, indent: kind.isHeading ? 0 : indent,
                                 isChecked: kind == .checkbox && checked, linkedPageId: link, sortKey: sortKey!))
         }
+        /// Блок 002 с цветом, свойствами и потоками внутри (колонки, таблица).
+        func appendRich(_ parsed: ParsedBlock) {
+            sortKey = .between(sortKey, nil)
+            let block = Block(pageId: pageId, kind: parsed.kind, text: parsed.text, indent: parsed.indent,
+                              isChecked: parsed.kind == .checkbox && parsed.isChecked, sortKey: sortKey!,
+                              color: parsed.color, props: parsed.props)
+            result.append(block)
+            func appendContained(_ children: [ParsedBlock], in containerId: UUID) {
+                var key: FractionalSortKey?
+                for child in children {
+                    key = .between(key, nil)
+                    let inner = Block(pageId: pageId, kind: child.kind, text: child.text, indent: child.indent,
+                                      isChecked: child.kind == .checkbox && child.isChecked, sortKey: key!, containerId: containerId,
+                                      color: child.color, props: child.props)
+                    result.append(inner)
+                    appendContained(child.contained, in: inner.id)
+                }
+            }
+            appendContained(parsed.contained, in: block.id)
+        }
         for block in page.blocks {
             if let target = NotionExportReader.linkedPage(block, from: index, in: plan) {
                 if page.children.contains(target) { linkedChildren.insert(target) }
                 append(.pageLink, link: ids[target])
             } else if block.kind == .pageLink {
                 append(.paragraph, block.text)
+            } else if !block.color.isNone || !block.props.isEmpty || !block.contained.isEmpty {
+                appendRich(block)
             } else {
                 append(block.kind, block.text, indent: block.indent, checked: block.isChecked)
             }

@@ -53,7 +53,12 @@ enum PageDocumentWriter {
             if edited.contains(.isChecked) || edited.contains(.kindAndIndent) {
                 merged.isChecked = current.isChecked
             }
-            if edited.contains(.sortKey) { merged.sortKey = current.sortKey }
+            if edited.contains(.placement) {
+                merged.sortKey = current.sortKey
+                merged.containerId = current.containerId
+            }
+            if edited.contains(.color) { merged.color = current.color }
+            if edited.contains(.props) { merged.props = current.props }
             if edited.contains(.text) {
                 if stored.fieldClocks.text == current.textBaseClock {
                     merged.text = current.text

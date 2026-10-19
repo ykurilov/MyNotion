@@ -87,8 +87,10 @@ private struct MergeRun {
             switch group[0].entity {
             case .page: try mergePage(group)
             case .block: try mergeBlock(group)
+            case .reminder: try mergeReminder(group)
             }
         }
+        try reviveContainersOfLiveBlocks()
         try removeStaleLinks()
         try repairLoops()
         report.touchedPageIds.formUnion(Self.touchedPages(transaction.changes))
@@ -275,11 +277,26 @@ private struct MergeRun {
                 block.isChecked = checked
                 block.fieldClocks.isChecked = change.hlc
                 changed.insert(.isChecked)
-            case .sortKey(let raw) where change.hlc > (block.fieldClocks.sortKey ?? .distantPast):
+            case .blockPlacement(let containerId, let raw) where change.hlc > (block.fieldClocks.placement ?? .distantPast):
+                guard let key = FractionalSortKey(rawValue: raw), containerId != blockId else { continue }
+                block.sortKey = key
+                block.containerId = containerId
+                block.fieldClocks.placement = change.hlc
+                changed.insert(.placement)
+            case .sortKey(let raw) where change.hlc > (block.fieldClocks.placement ?? .distantPast):
+                // Пачка версии 1: порядок без контейнера — блок остаётся в своём контейнере.
                 guard let key = FractionalSortKey(rawValue: raw) else { continue }
                 block.sortKey = key
-                block.fieldClocks.sortKey = change.hlc
-                changed.insert(.sortKey)
+                block.fieldClocks.placement = change.hlc
+                changed.insert(.placement)
+            case .color(let color) where change.hlc > (block.fieldClocks.color ?? .distantPast):
+                block.color = color
+                block.fieldClocks.color = change.hlc
+                changed.insert(.color)
+            case .props(let props) where change.hlc > (block.fieldClocks.props ?? .distantPast):
+                block.props = props
+                block.fieldClocks.props = change.hlc
+                changed.insert(.props)
             case .text(let text):
                 if try mergeText(text, change, into: &block) {
                     changed.insert(.text)
@@ -367,35 +384,83 @@ private struct MergeRun {
         var kind: (BlockKind, Int, UUID?, HybridTimestamp)?
         var text: (InlineText, HybridTimestamp)?
         var checked: (Bool, HybridTimestamp)?
-        var sortKey: (FractionalSortKey, HybridTimestamp)?
+        var placement: (UUID?, FractionalSortKey, HybridTimestamp)?
+        var color: (BlockColor, HybridTimestamp)?
+        var props: (BlockProps, HybridTimestamp)?
         var deleted: HybridTimestamp?
         for change in group {
             switch change.value {
             case .kindAndIndent(let value, let indent, let link): kind = (value, indent, link, change.hlc)
             case .text(let value): text = (value, change.hlc)
             case .isChecked(let value): checked = (value, change.hlc)
-            case .sortKey(let raw): if let key = FractionalSortKey(rawValue: raw) { sortKey = (key, change.hlc) }
+            case .blockPlacement(let containerId, let raw):
+                if let key = FractionalSortKey(rawValue: raw) { placement = (containerId == change.id ? nil : containerId, key, change.hlc) }
+            case .sortKey(let raw): if let key = FractionalSortKey(rawValue: raw) { placement = (nil, key, change.hlc) }
+            case .color(let value): color = (value, change.hlc)
+            case .props(let value): props = (value, change.hlc)
             case .deleted: deleted = change.hlc
             default: break
             }
         }
-        guard let kind, let text, let checked, let sortKey else { return }
+        // Пачка версии 1 цвета и свойств не знает: они пустые и без метки.
+        guard let kind, let text, let checked, let placement else { return }
         var block = Block(id: group[0].id, pageId: pageId, kind: kind.0, text: text.0, indent: kind.1, isChecked: checked.0,
-                          linkedPageId: kind.2, sortKey: sortKey.0,
+                          linkedPageId: kind.2, sortKey: placement.1, containerId: placement.0,
+                          color: color?.0 ?? .none, props: props?.0 ?? .empty,
                           fieldClocks: BlockFieldClocks(kindAndIndent: kind.3, text: text.1, isChecked: checked.1,
-                                                        sortKey: sortKey.1, deleted: deleted),
+                                                        placement: placement.2, color: color?.1, props: props?.1, deleted: deleted),
                           textBaseClock: text.1)
         Self.makeConsistent(&block)
         try transaction.writeReplicatedBlock(block, isDeleted: deleted != nil, changedFields: Set(Block.Field.allCases))
     }
 
-    /// Поля, пришедшие с разных Mac, могут не сочетаться (отметка у абзаца, отступ у заголовка):
-    /// приводятся к допустимым одинаково на всех Mac.
+    /// Поля, пришедшие с разных Mac, могут не сочетаться (отметка у абзаца, ссылка без страницы):
+    /// приводятся к допустимым одинаково на всех Mac. Глубину сверх допустимой урезает показ (`BlockNesting`).
     private static func makeConsistent(_ block: inout Block) {
         if block.kind == .pageLink, block.linkedPageId == nil { block.kind = .paragraph }
         if block.kind != .pageLink { block.linkedPageId = nil }
         if block.kind != .checkbox { block.isChecked = false }
-        block.indent = block.kind.isHeading ? 0 : min(max(block.indent, Block.indentRange.lowerBound), Block.indentRange.upperBound)
+        block.indent = min(max(block.indent, Block.indentRange.lowerBound), Block.indentRange.upperBound)
+    }
+
+    // MARK: Контейнеры
+
+    /// Живой блок в удалённом контейнере: удаление, не видевшее его правки, отменяется — контейнер возвращается
+    /// и уходит на другие Mac целиком (research R3, правило 001 R8). Строка таблицы — контейнер своих ячеек,
+    /// столбец — ячеек со своим `columnId`. Смотрим только блоки, записанные этой пачкой: пометки удаления
+    /// остальных блоков контейнера могут прийти следующей пачкой.
+    private func reviveContainersOfLiveBlocks() throws {
+        var queue: [Block] = transaction.changes.blocks.compactMap { change in
+            if case .saved(let block, _, _) = change { block } else { nil }
+        }
+        var revived: Set<UUID> = []
+        while let block = queue.popLast() {
+            var owners = [block.containerId]
+            if block.kind == .tableCell { owners.append(block.props.columnId) }
+            for case let ownerId? in owners where !revived.contains(ownerId) {
+                guard let (owner, isDeleted) = try transaction.block(ownerId, includingDeleted: true), isDeleted,
+                      owner.pageId == block.pageId else { continue }
+                revived.insert(ownerId)
+                try transaction.writeReplicatedBlock(owner, isDeleted: false, changedFields: [])
+                try transaction.restampBlock(ownerId)
+                if let restored = try transaction.block(ownerId) { queue.append(restored) }
+            }
+        }
+    }
+
+    // MARK: Напоминания
+
+    /// Отметка «сделано»: позднее побеждает. Уведомления по ней переставляет модуль напоминаний (US3).
+    private func mergeReminder(_ group: [SyncChange]) throws {
+        let mentionId = group[0].id
+        var current = try transaction.reminderState(mentionId)
+        for change in group {
+            guard case .doneAt(let doneAt) = change.value, change.hlc > (current?.doneClock ?? .distantPast) else { continue }
+            current = ReminderState(mentionId: mentionId, doneAt: doneAt, doneClock: change.hlc)
+        }
+        if let current, try current != transaction.reminderState(mentionId) {
+            try transaction.writeReplicatedReminderState(current)
+        }
     }
 
     // MARK: Ссылки на подстраницы

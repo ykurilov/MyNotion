@@ -196,8 +196,10 @@ extension PageTextView {
 
     /// Часть выделения внутри текста блока, в смещениях от начала его текста.
     func localRange(of selection: NSRange, inBlockAt index: Int) -> Range<Int> {
+        // У блока без своего текста на странице оформлять нечего.
+        guard !document.blocks[index].kind.rendersAsAttachment else { return 0..<0 }
         let start = mapper.paragraphStart(ofBlockAt: index)
-        let length = (document.blocks[index].text.string as NSString).length
+        let length = document.blocks[index].pageTextLength
         let lower = max(selection.location, start), upper = min(NSMaxRange(selection), start + length)
         return lower < upper ? lower - start..<upper - start : 0..<0
     }

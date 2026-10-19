@@ -50,6 +50,8 @@ enum InlineMarkdown {
                 case .underline: segment.marks.insert(.underline)
                 case .code: segment.marks.insert(.code)
                 case .link(let url): segment.link = url
+                // Цвета, упоминания, даты и формулы в Markdown пишут свои этапы (contracts/markdown-and-notion.md).
+                case .textColor, .backgroundColor, .mention, .date, .equation: break
                 }
             }
             if var last = result.last, last.marks == segment.marks, last.link == segment.link {

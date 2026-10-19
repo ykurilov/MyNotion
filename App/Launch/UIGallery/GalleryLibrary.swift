@@ -164,6 +164,8 @@ struct GalleryLibrary {
         case .numberedItem: "Нумерованный список"
         case .checkbox: "Чекбокс"
         case .pageLink: "Подстраница"
+        // Блоки 002 снимаются своими страницами из описателей типов.
+        default: kind.rawValue
         }
     }
 }

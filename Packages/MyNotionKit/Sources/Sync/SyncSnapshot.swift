@@ -16,7 +16,7 @@ public struct SyncSnapshot: Sendable, Hashable, Codable {
         self.knowledge = knowledge
     }
 
-    /// Снять снимок базы: страницы, блоки (и пометки удалённых), надгробия.
+    /// Снять снимок базы: страницы, блоки всех потоков (и пометки удалённых), отметки напоминаний, надгробия.
     public static func make(seq: Int, from store: NotesStore) throws -> SyncSnapshot {
         try store.write { transaction in
             var changes: [SyncChange] = []
@@ -34,6 +34,10 @@ public struct SyncSnapshot: Sendable, Hashable, Codable {
                     }
                     block.fieldClocks.all.forEach { knowledge.record($0) }
                 }
+            }
+            for state in try transaction.allReminderStates() {
+                changes.append(SyncChange(entity: .reminder, id: state.mentionId, value: .doneAt(state.doneAt), hlc: state.doneClock))
+                knowledge.record(state.doneClock)
             }
             for tombstone in try transaction.allTombstones() {
                 changes.append(SyncChange(entity: .page, id: tombstone.pageId, value: .erased, hlc: tombstone.erasedAt,

@@ -45,6 +45,8 @@ public final class PageTextView: NSTextView {
     /// ⌘-щелчок по ссылке: открыть адрес (по умолчанию — в браузере по умолчанию).
     public var openURL: @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) }
     let layoutDelegate = BlockLayoutDelegate()
+    /// Абзацы детей свёрнутых переключателей: не раскладываются (research R1).
+    let hiddenParagraphs = HiddenParagraphs()
     let popups = EditorPopupController()
     let formatBar = FormatBarController()
     /// Иконку выбрали в шапке (FR-034): «Добавить иконку», окно выбора; `nil` — убрать. Хозяин сохраняет её
@@ -86,6 +88,8 @@ public final class PageTextView: NSTextView {
         super.init(frame: NSRect(x: 0, y: 0, width: Metrics.Page.columnWidth, height: 0), textContainer: container)
         layoutDelegate.textView = self
         layoutManager.delegate = layoutDelegate
+        hiddenParagraphs.textView = self
+        contentStorage.delegate = hiddenParagraphs
         popups.textView = self
         formatBar.textView = self
 
@@ -268,6 +272,18 @@ public final class PageTextView: NSTextView {
         super.deleteBackward(sender)
     }
 
+    /// ⌦ в конце блока перед блоком без текста не склеивает их, а выделяет тот блок.
+    public override func deleteForward(_ sender: Any?) {
+        let selection = selectedRange()
+        if !hasMarkedText(), selection.length == 0, let position = mapper.blockPosition(at: selection.location),
+           position.offset == document.blocks[position.index].pageTextLength,
+           position.index + 1 < document.blocks.count, document.blocks[position.index + 1].kind.rendersAsAttachment {
+            selectBlocks(position.index + 1..<position.index + 2)
+            return
+        }
+        super.deleteForward(sender)
+    }
+
     public override func insertNewline(_ sender: Any?) {
         if !hasMarkedText(), handleNewlineInEmptyItem() { return }
         super.insertNewline(sender)
@@ -331,7 +347,7 @@ public final class PageTextView: NSTextView {
         // В абзац блока-подстраницы символы не попадают, кроме перевода строки в его начале.
         if let replacement = replacementString, !replacement.isEmpty, !replacement.hasPrefix("\n"), affectedCharRange.length == 0,
            !mapper.hasPendingEdits, let position = mapper.blockPosition(at: affectedCharRange.location),
-           document.blocks[position.index].kind == .pageLink {
+           document.blocks[position.index].kind == .pageLink || document.blocks[position.index].kind.rendersAsAttachment {
             return false
         }
         return super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
@@ -484,7 +500,7 @@ public final class PageTextView: NSTextView {
     private func restoreSelection(_ anchors: (start: (UUID, Int), end: (UUID, Int))?, fallbackBlock: Int) {
         func location(_ anchor: (UUID, Int)) -> Int? {
             guard let index = document.index(ofBlock: anchor.0) else { return nil }
-            let length = (document.blocks[index].text.string as NSString).length
+            let length = document.blocks[index].pageTextLength
             return mapper.paragraphStart(ofBlockAt: index) + min(anchor.1, length)
         }
         let fallback = mapper.paragraphStart(ofBlockAt: max(0, fallbackBlock))
@@ -495,7 +511,14 @@ public final class PageTextView: NSTextView {
 
     public override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
         if !isApplyingBlockSelection { blockSelectionEnds = nil }
-        super.setSelectedRanges(ranges.map(keepingBeforeFinalNewline), affinity: affinity, stillSelecting: stillSelecting)
+        var ranges = ranges.map(keepingBeforeFinalNewline)
+        // Курсор в абзац блока без текста не встаёт — перешагивает его (research R2).
+        if ranges.count == 1, ranges[0].rangeValue.length == 0, !isLoadingText {
+            let location = ranges[0].rangeValue.location
+            let skipped = caretSkippingAttachments(location, from: selectedRange().location)
+            if skipped != location { ranges = [NSValue(range: NSRange(location: skipped, length: 0))] }
+        }
+        super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
         guard !isLoadingText else { return }
         updateSelectionLook()
         guard !stillSelecting else {
@@ -668,15 +691,7 @@ public final class PageTextView: NSTextView {
     var slashQueryHighlightFrame: NSRect? { slashQueryHighlight.isHidden ? nil : slashQueryHighlight.frame }
 
     static func emptyBlockHint(for kind: BlockKind) -> String? {
-        switch kind {
-        case .paragraph: "Введите «/» для выбора блока"
-        case .bulletItem, .numberedItem: "Список"
-        case .checkbox: "Задача"
-        case .heading1: "Заголовок 1"
-        case .heading2: "Заголовок 2"
-        case .heading3: "Заголовок 3"
-        case .pageLink: nil
-        }
+        kind.descriptor.emptyHint
     }
 
     // MARK: Колонка и шапка

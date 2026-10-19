@@ -36,9 +36,10 @@ struct GalleryCatalogTests {
         for scene in required { #expect(scenes.contains(scene), "\(scene)") }
     }
 
-    @Test("Каждый тип блока: с текстом, пустой в середине и в конце, с курсором и без")
+    @Test("Каждый тип блока с текстом из 001: с текстом, пустой в середине и в конце, с курсором и без")
     func everyBlockKindPresent() {
-        for kind in BlockKind.allCases where kind != .pageLink {
+        // Блоки 002 снимаются своими состояниями из описателей типов (`BlockKindDescriptor.gallerySamples`).
+        for kind in [BlockKind.paragraph, .heading1, .heading2, .heading3, .bulletItem, .numberedItem, .checkbox] {
             for caret in GalleryCaret.allCases {
                 #expect(scenes.contains(.block(kind, caret)), "\(kind) \(caret)")
             }

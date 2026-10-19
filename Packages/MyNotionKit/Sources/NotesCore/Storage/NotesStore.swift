@@ -40,7 +40,8 @@ public final class NotesStore: Sendable {
     public func pageContent(_ pageId: UUID) throws -> PageContent? {
         try database.dbWriter.read { db in
             guard let page = try NotesTransaction.fetchPage(pageId, in: db) else { return nil }
-            return PageContent(page: page, blocks: try NotesTransaction.fetchBlocks(ofPage: pageId, in: db))
+            return PageContent(page: page, blocks: try NotesTransaction.fetchBlocks(ofPage: pageId, in: db),
+                               removedContainers: try NotesTransaction.fetchRemovedContainers(ofPage: pageId, in: db))
         }
     }
 

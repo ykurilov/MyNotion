@@ -16,6 +16,7 @@ public struct SchemaMigrations: Sendable {
         Step(version: "v3", migrate: addSidebarCollapsed),
         Step(version: "v4", migrate: fillSearchIndex),
         Step(version: "v5", migrate: addSyncBookkeeping),
+        Step(version: "v6", migrate: addRichBlocks),
     ])
 
     /// Та же схема плюс ещё один шаг — для проверки миграций.
@@ -32,8 +33,11 @@ public struct SchemaMigrations: Sendable {
     }
 }
 
+/// Типы блоков первой версии схемы. Выпущенный шаг не меняется: новые типы добавляет v6.
+private let blockKindsOf001 = ["paragraph", "heading1", "heading2", "heading3", "bulletItem", "numberedItem", "checkbox", "pageLink"]
+
 private func createInitialSchema(_ db: Database) throws {
-    let blockKinds = BlockKind.allCases.map { "'\($0.rawValue)'" }.joined(separator: ", ")
+    let blockKinds = blockKindsOf001.map { "'\($0)'" }.joined(separator: ", ")
 
     // id — строки UUID в нижнем регистре, метки часов — строки HybridTimestamp, *Clocks — JSON.
     // У parentId нет внешнего ключа: страница, чей родитель исчез, показывается в корне.
@@ -139,6 +143,74 @@ private func addSyncBookkeeping(_ db: Database) throws {
         ALTER TABLE sync_account ADD COLUMN lastSentSeq INTEGER NOT NULL DEFAULT 0;
         ALTER TABLE sync_account ADD COLUMN lastSnapshotSeq INTEGER NOT NULL DEFAULT 0;
         CREATE INDEX block_deleted ON block(isDeleted) WHERE isDeleted = 1;
+        """)
+}
+
+/// Новые блоки и оформление (002, data-model.md, «Схема v6»). `CHECK` на тип блока в SQLite не поменять — таблица
+/// пересоздаётся с теми же rowid (на них держится индекс поиска); в метках полей `sortKey` становится `placement`.
+/// GRDB на время миграции выключает внешние ключи и проверяет их в конце: конфликты блоков не стираются.
+private func addRichBlocks(_ db: Database) throws {
+    let blockKinds = BlockKind.allCases.map { "'\($0.rawValue)'" }.joined(separator: ", ")
+    try db.execute(sql: """
+        CREATE TABLE block_v6 (
+            id TEXT PRIMARY KEY NOT NULL,
+            pageId TEXT NOT NULL REFERENCES page(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+            kind TEXT NOT NULL CHECK (kind IN (\(blockKinds))),
+            text TEXT NOT NULL,
+            textStyles TEXT NOT NULL DEFAULT '[]',
+            indent INTEGER NOT NULL DEFAULT 0 CHECK (indent BETWEEN 0 AND 8),
+            isChecked BOOLEAN NOT NULL DEFAULT 0,
+            linkedPageId TEXT,
+            sortKey TEXT NOT NULL,
+            containerId TEXT,
+            color TEXT,
+            props TEXT NOT NULL DEFAULT '{}',
+            isDeleted BOOLEAN NOT NULL DEFAULT 0,
+            fieldClocks TEXT NOT NULL,
+            textBaseClock TEXT
+        );
+        INSERT INTO block_v6 (rowid, id, pageId, kind, text, textStyles, indent, isChecked, linkedPageId, sortKey,
+                              isDeleted, fieldClocks, textBaseClock)
+            SELECT rowid, id, pageId, kind, text, textStyles, indent, isChecked, linkedPageId, sortKey,
+                   isDeleted, replace(fieldClocks, '"sortKey":', '"placement":'), textBaseClock
+            FROM block;
+        DROP TABLE block;
+        ALTER TABLE block_v6 RENAME TO block;
+        CREATE INDEX block_by_page ON block(pageId, sortKey);
+        CREATE INDEX block_deleted ON block(isDeleted) WHERE isDeleted = 1;
+        CREATE INDEX block_by_container ON block(containerId, sortKey) WHERE containerId IS NOT NULL;
+
+        CREATE TABLE attachment (
+            id TEXT PRIMARY KEY NOT NULL,
+            ref TEXT NOT NULL,
+            localPath TEXT,
+            state TEXT NOT NULL CHECK (state IN ('local', 'uploading', 'uploaded', 'remote', 'downloading', 'failed')),
+            uploadedParts TEXT NOT NULL DEFAULT '[]',
+            downloadedParts TEXT NOT NULL DEFAULT '[]',
+            orphanedAt DATETIME,
+            lastError TEXT
+        );
+
+        CREATE TABLE reminder_state (
+            mentionId TEXT PRIMARY KEY NOT NULL,
+            doneAt DATETIME,
+            doneClock TEXT NOT NULL
+        );
+
+        CREATE TABLE reminder_index (
+            mentionId TEXT PRIMARY KEY NOT NULL,
+            pageId TEXT NOT NULL,
+            blockId TEXT NOT NULL,
+            fireAt DATETIME NOT NULL,
+            deliveredAt DATETIME
+        );
+        CREATE INDEX reminder_index_by_fire ON reminder_index(fireAt);
+        CREATE INDEX reminder_index_by_block ON reminder_index(blockId);
+
+        CREATE TABLE block_view_state (
+            blockId TEXT PRIMARY KEY NOT NULL,
+            isCollapsed BOOLEAN NOT NULL DEFAULT 0
+        );
         """)
 }
 

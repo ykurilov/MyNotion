@@ -38,7 +38,7 @@ public enum PageEditorPreview {
     @discardableResult
     public static func placeCaret(atEndOf blockId: UUID, in window: NSWindow) -> Bool {
         guard let textView = textView(in: window), let index = textView.document.index(ofBlock: blockId) else { return false }
-        let length = (textView.document.blocks[index].text.string as NSString).length
+        let length = textView.document.blocks[index].pageTextLength
         textView.focusBody(at: textView.mapper.paragraphStart(ofBlockAt: index) + length)
         return true
     }
@@ -72,7 +72,7 @@ public enum PageEditorPreview {
               let lastIndex = textView.document.index(ofBlock: last) else { return false }
         window.makeFirstResponder(textView)
         let start = textView.mapper.paragraphStart(ofBlockAt: firstIndex)
-        let end = textView.mapper.paragraphStart(ofBlockAt: lastIndex) + (textView.document.blocks[lastIndex].text.string as NSString).length
+        let end = textView.mapper.paragraphStart(ofBlockAt: lastIndex) + textView.document.blocks[lastIndex].pageTextLength
         textView.setSelectedRange(NSRange(location: start, length: end - start))
         return true
     }

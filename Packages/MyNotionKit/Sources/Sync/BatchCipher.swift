@@ -5,9 +5,12 @@ import Foundation
 /// id устройства-отправителя и id пачки входят в проверяемые данные — пачку нельзя выдать за чужую.
 public struct BatchCipher: Sendable {
     let key: SymmetricKey
+    /// Самая новая версия формата, которую этот Mac понимает.
+    let supportedFormatVersion: Int
 
-    public init(key: SymmetricKey) {
+    public init(key: SymmetricKey, supportedFormatVersion: Int = SyncBatch.currentFormatVersion) {
         self.key = key
+        self.supportedFormatVersion = supportedFormatVersion
     }
 
     /// Зашифровать пачку для `POST /changes`; результат — base64.
@@ -51,7 +54,7 @@ public struct BatchCipher: Sendable {
     /// Сначала версия формата: пачку новее этого Mac не разбираем, а ждём обновления.
     private func decodeChecked<T: Decodable>(_ type: T.Type, from plaintext: Data) throws -> T {
         guard let header = try? SyncJSON.decoder().decode(FormatHeader.self, from: plaintext) else { throw BatchCipherError.tampered }
-        guard header.formatVersion <= SyncBatch.currentFormatVersion else {
+        guard header.formatVersion <= supportedFormatVersion else {
             throw BatchCipherError.newerFormat(header.formatVersion)
         }
         guard let value = try? SyncJSON.decoder().decode(type, from: plaintext) else { throw BatchCipherError.tampered }

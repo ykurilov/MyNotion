@@ -107,6 +107,9 @@ targets:
         product: NotionImport
       - package: MyNotionKit
         product: PageSearch
+      # Пробы TextKit 2 этапа 0 (research R16) открывают настоящий редактор страницы.
+      - package: MyNotionKit
+        product: PageEditor
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion.performancetests

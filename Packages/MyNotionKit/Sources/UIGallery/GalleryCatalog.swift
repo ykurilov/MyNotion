@@ -195,6 +195,23 @@ public enum GalleryCatalog {
         case .numberedItem: "нумерованный пункт"
         case .checkbox: "чекбокс"
         case .pageLink: "подстраница"
+        case .toggle: "раскрывающийся список"
+        case .quote: "цитата"
+        case .callout: "выноска"
+        case .divider: "разделитель"
+        case .code: "код"
+        case .equation: "формула"
+        case .tableOfContents: "оглавление"
+        case .image: "картинка"
+        case .file: "файл"
+        case .video: "видео"
+        case .bookmark: "закладка"
+        case .table: "таблица"
+        case .tableRow: "строка таблицы"
+        case .tableColumn: "столбец таблицы"
+        case .tableCell: "ячейка таблицы"
+        case .columnList: "колонки"
+        case .column: "колонка"
         }
     }
 
