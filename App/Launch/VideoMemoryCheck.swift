@@ -9,30 +9,33 @@ import LinkPreview
 @MainActor
 enum VideoMemoryCheck {
     static let playSeconds: Double = 20
-    static let settleSeconds: Double = 10
+    static let settleSeconds: Double = 20
 
     static func start(window: NSWindow?, reportTo url: URL) {
         Task {
             try? await Task.sleep(for: .seconds(3))
             let idle = snapshot()
             guard let content = window?.contentView else { return finish("Замер видео: нет окна", url) }
-            let player = WebVideoPlayerView(embedURL: VideoLink.youtube(id: "aqz-KE-bpKQ").embedURL)
-            player.frame = NSRect(x: 40, y: 40, width: 720, height: 405)
-            content.addSubview(player)
-            player.play()
-            try? await Task.sleep(for: .seconds(playSeconds))
-            let playing = snapshot()
-            player.removeFromSuperview()
-            try? await Task.sleep(for: .seconds(settleSeconds))
-            let after = snapshot()
-            let delta = Double(Int64(after.app) - Int64(idle.app)) / 1_048_576
-            let verdict = abs(delta) <= 10 ? "в бюджете ± 10 МБ" : "ВНЕ бюджета ± 10 МБ"
-            finish("""
-                Память в покое до видео: приложение \(mb(idle.app)), WebKit \(mb(idle.web))
-                Во время игры YouTube: приложение \(mb(playing.app)), WebKit \(mb(playing.web)), всего \(mb(playing.app + playing.web))
-                Через \(Int(settleSeconds)) с после закрытия: приложение \(mb(after.app)), WebKit \(mb(after.web)); \
-                разница приложения с покоем \(String(format: "%+.1f", delta)) МБ (\(verdict))
-                """, url)
+            var lines = ["Память в покое до видео: приложение \(mb(idle.app)), WebKit \(mb(idle.web))"]
+            // Два просмотра подряд: первый показывает разовую цену WebKit, второй — растёт ли память от просмотра к просмотру.
+            for round in 1...2 {
+                let player = WebVideoPlayerView(embedURL: VideoLink.youtube(id: "aqz-KE-bpKQ").embedURL)
+                player.frame = NSRect(x: 40, y: 40, width: 720, height: 405)
+                content.addSubview(player)
+                player.play()
+                try? await Task.sleep(for: .seconds(playSeconds))
+                let playing = snapshot()
+                player.removeFromSuperview()
+                try? await Task.sleep(for: .seconds(settleSeconds))
+                let after = snapshot()
+                let delta = Double(Int64(after.app) - Int64(idle.app)) / 1_048_576
+                let verdict = abs(delta) <= 10 ? "в бюджете ± 10 МБ" : "ВНЕ бюджета ± 10 МБ"
+                lines.append("Просмотр \(round), во время игры YouTube: приложение \(mb(playing.app)), WebKit \(mb(playing.web)), "
+                             + "всего \(mb(playing.app + playing.web))")
+                lines.append("Просмотр \(round), через \(Int(settleSeconds)) с после закрытия: приложение \(mb(after.app)), "
+                             + "WebKit \(mb(after.web)); разница приложения с покоем \(String(format: "%+.1f", delta)) МБ (\(verdict))")
+            }
+            finish(lines.joined(separator: "\n"), url)
         }
     }
 

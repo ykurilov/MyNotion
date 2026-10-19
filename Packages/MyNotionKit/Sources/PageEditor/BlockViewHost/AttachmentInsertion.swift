@@ -201,19 +201,25 @@ extension PageTextView {
             props.poster = preview.image ?? props.poster
         }
         draft.props = props
-        withoutUndo { changeBlocks(index..<index + 1, to: [draft], actionName: "Данные сайта") }
+        replaceBlockQuietly(at: index, with: draft)
+    }
+
+    /// Свойства блока-вложения из сети: без шага ⌘Z и не закрывая открытых меню (Юрий мог уже набирать «/»).
+    /// Абзац вложения той же длины — выделение остаётся на месте.
+    private func replaceBlockQuietly(at index: Int, with draft: BlockDraft) {
+        let blocks = document.blocks
+        let characters = mapper.characterRange(ofBlocksAt: index..<index + 1)
+        let selection = selectedRanges
+        _ = document.replaceBlocks(after: index > 0 ? blocks[index - 1].id : nil,
+                                   before: index + 1 < blocks.count ? blocks[index + 1].id : nil,
+                                   with: [draft], movedBlockIds: [], origin: textStorage)
+        mapper.renderBlocks(index..<index + 1, replacing: characters)
+        selectedRanges = selection
     }
 
     /// «Обновить» в меню закладки.
     func refreshBookmark(ofBlock id: UUID) {
         Task { await fetchPreview(for: id) }
-    }
-
-    private func withoutUndo(_ body: () -> Void) {
-        guard let undoManager else { return body() }
-        undoManager.disableUndoRegistration()
-        body()
-        undoManager.enableUndoRegistration()
     }
 
     // MARK: Меню вставленной ссылки на ролик

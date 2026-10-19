@@ -206,6 +206,16 @@ struct MediaBlocksTests {
         #expect(bookmark.title == "Пример")
         #expect(bookmark.description == "Описание")
         #expect(bookmark.fetchedAt != nil)
+        // Данные сайта, пришедшие позже, не закрывают меню «/», которое Юрий уже открыл.
+        fixture.placeCaret(inBlock: 2)
+        fixture.type("/")
+        #expect(fixture.textView.popups.isOpen)
+        fixture.textView.applyFetchedPreview(MediaLinkPreview(title: "Новее", description: nil, image: nil, icon: nil),
+                                             toBlock: fixture.document.blocks[1].id)
+        #expect(fixture.textView.popups.isOpen)
+        #expect(fixture.document.blocks[1].props.title == "Новее")
+        fixture.textView.popups.close()
+        fixture.undo()
         fixture.undo()
         #expect(fixture.kinds == [.paragraph, .paragraph, .paragraph])
     }
