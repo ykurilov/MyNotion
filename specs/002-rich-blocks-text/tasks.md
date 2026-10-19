@@ -112,7 +112,7 @@ description: "Задачи: новые блоки и оформление тек
 - [x] T038 [US1] Иконка выноски — окно эмодзи 001 без «Убрать» (`PK/Sources/EmojiPicker/`); `props.icon` по умолчанию 💡, фон gray в `color`
 - [x] T039 [US1] Переход к найденному из поиска страниц раскрывает свёрнутых предков: `App/MainWindow/MainWindowModel.swift`
 - [x] T040 [P] [US1] Выгрузка `PK/Sources/MarkdownExport/BlockWriters/StructuralBlockWriters.swift`, импорт `PK/Sources/NotionImport/BlockReaders/StructuralBlockReaders.swift`; убрать «упрощено» для цитаты, выноски, переключателя, разделителя
-- [ ] T041 [US1] Галерея (`scripts/vm/run-in-vm.sh gallery --only structural`) в обеих темах, сверка с живым Notion, цифры — в contracts/blocks-and-keys.md; замер набора на «богатой» странице p95 ≤ 50 мс; затронутые тесты зелёные; коммит
+- [x] T041 [US1] Галерея (`scripts/vm/run-in-vm.sh gallery --only structural`) в обеих темах, сверка с живым Notion, цифры — в contracts/blocks-and-keys.md; замер набора на «богатой» странице p95 ≤ 50 мс; затронутые тесты зелёные; коммит
 
 **Checkpoint**: US1 работает сам по себе — MVP.
 

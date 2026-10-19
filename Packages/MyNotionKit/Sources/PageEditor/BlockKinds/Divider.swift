@@ -11,6 +11,7 @@ extension BlockKindDescriptor {
         lineHeight: Metrics.Divider.rowHeight,
         topSpacing: Metrics.Divider.verticalSpacing,
         bottomSpacing: Metrics.Divider.verticalSpacing,
+        painters: [DividerLinePainter()],
         gallerySamples: [
             BlockGallerySample(id: "structural-divider", summary: "Разделитель между абзацами и внутри переключателя",
                                blocks: [
@@ -60,19 +61,18 @@ extension PageTextView {
     }
 }
 
-/// Линия разделителя по середине строки (вид-вложение блока).
-@MainActor
-final class DividerViewFactory: BlockViewFactory {
-    func makeView(for block: Block, context: BlockViewContext) -> NSView? { DividerView() }
-    func height(for block: Block, width: CGFloat) -> CGFloat? { Metrics.Divider.rowHeight }
-}
+/// Линия разделителя по середине его строки, от края вложенности до края колонки. Рисуется фрагментом абзаца,
+/// а не видом-вложением: так она есть и в снимках окна, где виды вложений не рисуются.
+struct DividerLinePainter: BlockPainter {
+    var layer: BlockPaintLayer { .foreground }
 
-final class DividerView: NSView {
-    override var isFlipped: Bool { true }
-
-    override func draw(_ dirtyRect: NSRect) {
-        Palette.border.setFill()
+    @MainActor
+    func paint(_ block: Block, in context: BlockPaintContext) {
+        guard let line = context.firstLine else { return }
+        let rect = context.paragraphRect
+        let left = rect.minX + Metrics.Page.blockHorizontalPadding + PageTextView.blockLeft(atIndent: block.indent)
         let lineWidth = Metrics.Divider.lineWidth
-        NSRect(x: 0, y: ((bounds.height - lineWidth) / 2).rounded(.down), width: bounds.width, height: lineWidth).fill()
+        Palette.border.setFill()
+        NSRect(x: left, y: (line.top + (line.height - lineWidth) / 2).rounded(.down), width: rect.maxX - left, height: lineWidth).fill()
     }
 }

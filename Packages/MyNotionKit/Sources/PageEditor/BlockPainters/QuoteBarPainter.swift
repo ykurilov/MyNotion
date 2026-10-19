@@ -7,6 +7,9 @@ import VisualStyle
 struct QuoteBarPainter: BlockPainter {
     var layer: BlockPaintLayer { .background }
 
+    /// Черта — у самой цитаты и у вложенных блоков (они могут быть её детьми).
+    func applies(to block: Block) -> Bool { block.kind == .quote || block.indent > 0 }
+
     @MainActor
     func paint(_ block: Block, in context: BlockPaintContext) {
         let textView = context.textView

@@ -62,7 +62,9 @@ final class BlockLayoutFragment: NSTextLayoutFragment, @unchecked Sendable {
         let bounds = super.renderingSurfaceBounds
         // Колонка маркера лежит левее текста, название подстраницы — правее пустой строки.
         let containerWidth = textLayoutManager?.textContainer?.size.width ?? Metrics.Page.columnWidth
-        let wide = CGRect(x: -layoutFragmentFrame.minX, y: 0, width: containerWidth, height: layoutFragmentFrame.height)
+        // Сверху — место поля выноски: у первого блока страницы TextKit не даёт отступа над абзацем.
+        let wide = CGRect(x: -layoutFragmentFrame.minX, y: -Metrics.Callout.verticalPadding, width: containerWidth,
+                          height: layoutFragmentFrame.height + Metrics.Callout.verticalPadding)
         return bounds.union(wide)
     }
 
@@ -84,7 +86,7 @@ final class BlockLayoutFragment: NSTextLayoutFragment, @unchecked Sendable {
         guard let textView, let paragraph = textElement as? NSTextParagraph, paragraph.attributedString.length > 0,
               let id = paragraph.attributedString.attribute(.blockID, at: 0, effectiveRange: nil) as? UUID,
               let block = textView.document.block(id) else { return }
-        let painters = BlockPainters.painters(for: block.kind).filter { $0.layer == layer }
+        let painters = BlockPainters.painters(for: block.kind).filter { $0.layer == layer && $0.applies(to: block) }
         guard !painters.isEmpty else { return }
         let offset = CGPoint(x: point.x - layoutFragmentFrame.minX, y: point.y - layoutFragmentFrame.minY)
         let width = textLayoutManager?.textContainer?.size.width ?? Metrics.Page.columnWidth

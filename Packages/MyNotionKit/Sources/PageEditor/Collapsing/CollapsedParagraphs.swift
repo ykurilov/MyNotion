@@ -29,15 +29,15 @@ final class CollapsedParagraphs {
         guard !collapsedIds.isEmpty else { return [] }
         var hidden: Set<UUID> = []
         var index = 0
+        // Поля блоков читаются по месту, без копии блока: страница бывает на 10 000 блоков, а проход — на каждое нажатие.
         while index < blocks.count {
-            let block = blocks[index]
-            let end = BlockMoveController.subtreeEnd(blocks, of: index)
-            if block.kind == .toggle, collapsedIds.contains(block.id), end > index + 1 {
-                for child in blocks[(index + 1)..<end] { hidden.insert(child.id) }
-                index = end
-            } else {
+            guard blocks[index].kind == .toggle, collapsedIds.contains(blocks[index].id) else {
                 index += 1
+                continue
             }
+            let end = BlockMoveController.subtreeEnd(blocks, of: index)
+            for child in (index + 1)..<end { hidden.insert(blocks[child].id) }
+            index = max(end, index + 1)
         }
         return hidden
     }
@@ -48,7 +48,8 @@ final class CollapsedParagraphs {
     /// на каждую), раскрытый переключатель без детей — строка подсказки.
     func extraSpacing(in blocks: [Block], isHidden: (UUID) -> Bool) -> [UUID: CGFloat] {
         var result: [UUID: CGFloat] = [:]
-        for (index, block) in blocks.enumerated() where block.kind == .callout || block.kind == .toggle {
+        for index in blocks.indices where blocks[index].kind == .callout || blocks[index].kind == .toggle {
+            let block = blocks[index]
             guard !isHidden(block.id) else { continue }
             let end = BlockMoveController.subtreeEnd(blocks, of: index)
             if block.kind == .toggle {

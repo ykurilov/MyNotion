@@ -8,6 +8,9 @@ import VisualStyle
 struct CalloutBoxPainter: BlockPainter {
     var layer: BlockPaintLayer { .background }
 
+    /// Подложка — у самой выноски и у вложенных блоков (они могут быть её детьми).
+    func applies(to block: Block) -> Bool { block.kind == .callout || block.indent > 0 }
+
     @MainActor
     func paint(_ block: Block, in context: BlockPaintContext) {
         let textView = context.textView
@@ -61,9 +64,16 @@ struct CalloutBoxPainter: BlockPainter {
         guard let line = context.firstLine else { return }
         let iconRect = iconRect(indent: block.indent, line: line, originX: context.paragraphRect.minX)
         let icon = block.props.icon ?? BlockProps.defaults(for: .callout).icon ?? "💡"
-        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: Metrics.Callout.iconFontSize)]
-        let size = (icon as NSString).size(withAttributes: attributes)
-        (icon as NSString).draw(at: CGPoint(x: iconRect.midX - size.width / 2, y: iconRect.midY - size.height / 2), withAttributes: attributes)
+        let font = NSFont.systemFont(ofSize: Metrics.Callout.iconFontSize)
+        let glyphs = CTLineCreateWithAttributedString(NSAttributedString(string: icon, attributes: [.font: font]))
+        // Рисунок знака — по середине квадрата иконки, а значит и первой строки.
+        let ink = CTLineGetImageBounds(glyphs, nil)
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        context.saveGState()
+        context.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
+        context.textPosition = CGPoint(x: iconRect.midX - ink.midX, y: iconRect.midY + ink.midY)
+        CTLineDraw(glyphs, context)
+        context.restoreGState()
     }
 
     /// Квадрат иконки по середине первой строки (координаты строки `line`, левый край контейнера — `originX`).

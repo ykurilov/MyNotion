@@ -81,7 +81,13 @@ enum BlockPaintLayer: Sendable {
 /// Рисует часть вида блока в его фрагменте раскладки (`BlockLayoutFragment`).
 protocol BlockPainter: Sendable {
     var layer: BlockPaintLayer { get }
+    /// Рисует ли что-то у этого блока: общие рисователи проверяют дёшево, до подготовки рисования.
+    func applies(to block: Block) -> Bool
     @MainActor func paint(_ block: Block, in context: BlockPaintContext)
+}
+
+extension BlockPainter {
+    func applies(to block: Block) -> Bool { true }
 }
 
 /// Где рисовать: абзац блока в координатах рисования фрагмента.

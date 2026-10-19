@@ -9,8 +9,8 @@ extension BlockKindDescriptor {
                                 action: .setKind(.callout)),
         textStyle: .paragraph,
         leadingInset: Metrics.Callout.textInset,
+        // Поле снизу — у последнего видимого блока выноски (`CollapsedParagraphs.extraSpacing`): у самой выноски или её ребёнка.
         topSpacing: Metrics.Callout.outerSpacing + Metrics.Callout.verticalPadding,
-        bottomSpacing: Metrics.Callout.outerSpacing + Metrics.Callout.verticalPadding,
         emptyHint: "Введите текст…",
         gallerySamples: [
             BlockGallerySample(id: "structural-callout", summary: "Выноска по умолчанию, с детьми, другая иконка, пустая",
