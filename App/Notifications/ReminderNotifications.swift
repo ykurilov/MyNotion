@@ -65,7 +65,10 @@ final class ReminderNotifications: NSObject, UNUserNotificationCenterDelegate {
 
     /// Первое «Напомнить»: разрешение macOS. Отказ — календарик покажет подсказку.
     func requestPermission() async -> Bool {
-        await SystemReminderNotificationCenter.requestAuthorization()
+        let allowed = await SystemReminderNotificationCenter.requestAuthorization()
+        // До разрешения система уведомлений не принимала: поставить их заново.
+        if allowed, isStarted { await scheduler.reschedule() }
+        return allowed
     }
 
     // MARK: UNUserNotificationCenterDelegate

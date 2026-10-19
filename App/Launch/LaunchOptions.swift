@@ -37,6 +37,8 @@ struct LaunchOptions {
     /// `--reminders-clock-offset <секунды>`: часы напоминаний приложения сдвинуты вперёд — проверка «пропущенное
     /// во сне показывается сразу» без настоящего ожидания (UI-тесты US3).
     var remindersClockOffset: TimeInterval = 0
+    /// `--reminder-latency-check <путь>`: живой замер опоздания напоминания (SC-104), итог в файл и выход.
+    var reminderLatencyURL: URL?
     /// Служебный запуск — в фоне: не забирает фокус и не всплывает.
     let presence: LaunchPresence
 
@@ -66,6 +68,7 @@ struct LaunchOptions {
             case "--ui-gallery": uiGalleryURL = remaining.popFirst().map(Self.fileURL)
             case "--ui-gallery-only": uiGalleryFilter = remaining.popFirst()
             case "--hover-sidebar-row": hoveredSidebarRow = remaining.popFirst().flatMap { Int($0) }
+            case "--reminder-latency-check": reminderLatencyURL = remaining.popFirst().map(Self.fileURL)
             case "--reminders-clock-offset": remindersClockOffset = remaining.popFirst().flatMap { TimeInterval($0) } ?? 0
             case "--sync-server": syncAutomation = (syncAutomation ?? .init()).with { $0.serverAddress = remaining.popFirst() }
             case "--sync-connect-token-file":

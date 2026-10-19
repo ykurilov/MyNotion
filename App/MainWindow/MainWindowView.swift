@@ -65,6 +65,9 @@ struct MainWindowView: View {
         if let benchmarkURL = options.searchBenchmarkURL, case .success(let library) = library {
             SearchBenchmark.editorReady(model: model ?? library.firstWindow, reportTo: benchmarkURL)
         }
+        if let latencyURL = options.reminderLatencyURL, case .success(let library) = library {
+            ReminderLatencyCheck.start(library: library, reportTo: latencyURL)
+        }
     }
 }
 

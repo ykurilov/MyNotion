@@ -244,7 +244,12 @@ final class MainWindowModel {
     private func open(_ pageId: UUID, focus: PageTextView.InitialFocus, remember: Bool) {
         do {
             let document = try openDocuments.open(pageId)
-            if let previous = openDocument { openDocuments.release(previous.pageId) }
+            if let previous = openDocument {
+                let renamed = tree.page(previous.pageId).map { $0.title != previous.page.title || $0.icon != previous.page.icon } ?? false
+                openDocuments.release(previous.pageId)
+                // Название меняли в шапке: упоминания и подстраницы на других страницах берут его из дерева.
+                if renamed { library.reloadTree() }
+            }
             initialFocus = focus
             openDocument = document
             loadError = nil

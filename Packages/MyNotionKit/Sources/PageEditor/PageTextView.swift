@@ -893,8 +893,10 @@ public final class PageTextView: NSTextView {
     }
 
     /// Текст блоков без служебного перевода строки в конце: строка после него — не блок.
+    /// Упоминания и даты читаются названием и словами, а не знаком-вложением.
     public override func accessibilityValue() -> String? {
-        string.hasSuffix("\n") ? String(string.dropLast()) : string
+        let text = plainText(of: NSRange(location: 0, length: (string as NSString).length))
+        return text.hasSuffix("\n") ? String(text.dropLast()) : text
     }
 
     // MARK: Фокус
