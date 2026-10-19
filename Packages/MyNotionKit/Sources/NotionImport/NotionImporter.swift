@@ -232,7 +232,7 @@ public struct NotionImporter: Sendable {
         /// Блок 002 с цветом, свойствами и потоками внутри (колонки, таблица).
         func appendRich(_ parsed: ParsedBlock) {
             sortKey = .between(sortKey, nil)
-            let block = Block(pageId: pageId, kind: parsed.kind, text: parsed.text, indent: parsed.indent,
+            let block = Block(id: parsed.id ?? .timeOrdered(), pageId: pageId, kind: parsed.kind, text: parsed.text, indent: parsed.indent,
                               isChecked: parsed.kind == .checkbox && parsed.isChecked, sortKey: sortKey!,
                               color: parsed.color, props: parsed.props)
             result.append(block)
@@ -240,7 +240,11 @@ public struct NotionImporter: Sendable {
                 var key: FractionalSortKey?
                 for child in children {
                     key = .between(key, nil)
-                    let inner = Block(pageId: pageId, kind: child.kind, text: child.text, indent: child.indent,
+                    // Упоминания в ячейках таблицы и блоках колонок — на страницы выгрузки, как в потоке страницы.
+                    let text = child.mentions.isEmpty ? child.text : resolvingMentions(in: child.text, mentions: child.mentions) { path in
+                        plan.page(atPath: path, from: index).map { ids[$0] }
+                    }
+                    let inner = Block(id: child.id ?? .timeOrdered(), pageId: pageId, kind: child.kind, text: text, indent: child.indent,
                                       isChecked: child.kind == .checkbox && child.isChecked, sortKey: key!, containerId: containerId,
                                       color: child.color, props: child.props)
                     result.append(inner)

@@ -217,13 +217,11 @@ struct NotionMarkdownParserTests {
         #expect(page.simplifications == [.code: 1, .equation: 1, .embed: 2])
     }
 
-    @Test("Таблица Markdown — абзац на строку: «Колонка: значение» через перенос, пустые ячейки пропущены")
+    @Test("Таблица Markdown — блок-таблица (002, US6), а не абзацы; подробности — TablesImportTests")
     func markdownTable() {
-        let page = parser.parse("# С\n\n| Имя | Роль |\n| --- | :-: |\n| Юрий | автор |\n| Мишка |  |\n| a \\| b | `x` |\n")
-        #expect(page.blocks == [
-            block(.paragraph, "Имя: Юрий\nРоль: автор"), block(.paragraph, "Имя: Мишка"), block(.paragraph, "Имя: a | b\nРоль: x"),
-        ])
-        #expect(page.simplifications == [.table: 1])
+        let page = parser.parse("# С\n\n| Имя | Роль |\n| --- | :-: |\n| Юрий | автор |\n")
+        #expect(page.blocks.map(\.kind) == [.table])
+        #expect(page.simplifications.isEmpty)
     }
 
     @Test("Строка с | без строки-разделителя — обычный абзац")
