@@ -50,6 +50,8 @@ public final class PageTextView: NSTextView {
     /// Свёрнутые переключатели этого Mac и отступы по поддеревьям (`Collapsing/`).
     let collapsedParagraphs = CollapsedParagraphs()
     let popups = EditorPopupController()
+    /// Вставка картинок, файлов, видео и закладок: меню вставленной ссылки, окно «Выбрать файл…» (US5).
+    let mediaInsertion = MediaInsertionState()
     /// Упоминания, даты и окно «@» (US3).
     let inlineAtoms = InlineAtomsState()
     let formatBar = FormatBarController()
@@ -447,6 +449,7 @@ public final class PageTextView: NSTextView {
     func setKind(_ kind: BlockKind, ofBlocksAt range: Range<Int>) {
         guard kind != .pageLink else { return }
         if kind == .divider, range.count == 1 { return insertDivider(at: range.lowerBound) }
+        if BlockKind.withAttachments.contains(kind) { return beginAttachmentInsertion(kind, at: range.lowerBound) }
         let blocks = document.blocks
         let drafts = range.map { index in
             let block = blocks[index]

@@ -268,6 +268,8 @@ final class MainWindowModel {
             blockReveal = nil
             openDocument = document
             loadError = nil
+            // Файлы открытой страницы — первыми в очереди скачивания (FR-120).
+            library.sync.prioritizeFiles(onPage: pageId)
             if remember { saveWindowState { $0.openPageId = pageId } }
         } catch {
             loadError = "Не удалось открыть страницу: \(SaveStatus.reason(for: error))"

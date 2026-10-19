@@ -121,6 +121,7 @@ struct SyncSettingsView: View {
             }
             joinCodeSection
             devicesSection
+            filesSection
             Button("Выключить на этом Mac…") { confirmsDisable = true }
                 .buttonStyle(ModalCardButtonStyle())
                 .accessibilityIdentifier("sync-disable")
@@ -131,6 +132,37 @@ struct SyncSettingsView: View {
                     Text("Записи останутся на этом Mac. Новые правки перестанут уходить на другие Mac, пока вы снова не подключите этот.")
                 }
         }
+    }
+
+    /// Сколько места занимают файлы: на этом Mac и общее место на сервере (`GET /files/usage`, research R10).
+    private var filesSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Файлы в записях").font(.headline)
+            if let local = controller.localFilesUsage {
+                Text("На этом Mac: \(Self.filesText(local.files)), \(Self.bytesText(local.bytes))")
+                    .accessibilityIdentifier("sync-files-local")
+            }
+            if let server = controller.serverFilesUsage {
+                Text("Общее место для файлов ваших Mac: занято \(Self.bytesText(server.usedBytes)) из \(Self.bytesText(server.limitBytes))")
+                    .accessibilityIdentifier("sync-files-server")
+            }
+        }
+        .foregroundStyle(Color(nsColor: Palette.textSecondary))
+        .task(id: controller.account?.deviceId) { await controller.refreshFilesUsage() }
+    }
+
+    static func bytesText(_ bytes: Int) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: Int64(bytes))
+    }
+
+    /// «1 файл», «3 файла», «12 файлов».
+    static func filesText(_ count: Int) -> String {
+        let tens = count % 100
+        let ones = count % 10
+        let word = (11...14).contains(tens) ? "файлов" : ones == 1 ? "файл" : (2...4).contains(ones) ? "файла" : "файлов"
+        return "\(count) \(word)"
     }
 
     @ViewBuilder

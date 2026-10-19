@@ -12,6 +12,13 @@ public struct MarkdownExportResult: Sendable, Equatable {
     public var folder: URL
     public var pageCount: Int
     public var blockCount: Int
+    /// Файлы, которые ещё не скачались на этот Mac: вместо них в выгрузке строка «[файл не скачан: имя]».
+    public var missingFileCount: Int = 0
+
+    /// Итог выгрузки о нескачанных файлах (contracts/markdown-and-notion.md, «Файлы»).
+    public static func missingFilesMessage(count: Int) -> String {
+        "Не выгружено файлов: \(count) — они ещё не скачались с сервера"
+    }
 }
 
 public enum MarkdownExportError: Error, LocalizedError, Equatable {
@@ -35,13 +42,17 @@ public enum MarkdownExportError: Error, LocalizedError, Equatable {
 public struct MarkdownExporter: Sendable {
     private let store: NotesStore
     private let now: @Sendable () -> Date
+    /// Копия файла на этом Mac по id; `nil` — файл ещё не скачан.
+    private let attachmentFile: @Sendable (UUID) -> URL?
     private let blockWriter = MarkdownBlockWriter()
     /// Запись одного файла; подменяется в тестах, чтобы проверить, что случается при ошибке диска.
     var writeFile: @Sendable (Data, URL) throws -> Void = { data, url in try data.write(to: url) }
 
-    public init(store: NotesStore, now: @escaping @Sendable () -> Date = { Date() }) {
+    public init(store: NotesStore, now: @escaping @Sendable () -> Date = { Date() },
+                attachmentFile: @escaping @Sendable (UUID) -> URL? = { _ in nil }) {
         self.store = store
         self.now = now
+        self.attachmentFile = attachmentFile
     }
 
     public func export(into parentFolder: URL, progress: (@Sendable (MarkdownExportProgress) -> Void)? = nil) throws -> MarkdownExportResult {
@@ -61,9 +72,10 @@ public struct MarkdownExporter: Sendable {
             throw MarkdownExportError.cannotWrite(error.localizedDescription)
         }
         do {
-            let blockCount = try writePages(of: plan, into: draft, progress: progress)
+            let (blockCount, missingFiles) = try writePages(of: plan, into: draft, progress: progress)
             let folder = try publish(draft, in: parentFolder)
-            return MarkdownExportResult(folder: folder, pageCount: plan.orderedPages.count, blockCount: blockCount)
+            return MarkdownExportResult(folder: folder, pageCount: plan.orderedPages.count, blockCount: blockCount,
+                                        missingFileCount: missingFiles)
         } catch {
             try? FileManager.default.removeItem(at: draft)
             switch error {
@@ -75,33 +87,68 @@ public struct MarkdownExporter: Sendable {
 
     // MARK: Запись
 
-    private func writePages(of plan: ExportPlan, into draft: URL, progress: (@Sendable (MarkdownExportProgress) -> Void)?) throws -> Int {
+    private func writePages(of plan: ExportPlan, into draft: URL,
+                            progress: (@Sendable (MarkdownExportProgress) -> Void)?) throws -> (blocks: Int, missingFiles: Int) {
         var createdFolders: Set<[String]> = []
         var blockCount = 0
+        var missingFiles = 0
+        func createFolder(_ components: [String]) throws {
+            guard !createdFolders.contains(components) else { return }
+            let folder = components.reduce(draft) { $0.appendingPathComponent($1, isDirectory: true) }
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            createdFolders.insert(components)
+        }
         for (index, page) in plan.orderedPages.enumerated() {
             try Task.checkCancellation()
             let content: PageContent?
             do { content = try store.pageContent(page.id) } catch { throw MarkdownExportError.cannotRead(error.localizedDescription) }
             if let content, let location = plan.location(of: page.id) {
-                let text = markdown(for: content, at: location, in: plan)
-                if !createdFolders.contains(location.folder) {
-                    let folder = location.folder.reduce(draft) { $0.appendingPathComponent($1, isDirectory: true) }
-                    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-                    createdFolders.insert(location.folder)
-                }
+                let (attachmentPaths, missing) = try copyAttachments(of: content, at: location, in: plan, into: draft,
+                                                                     createFolder: createFolder)
+                missingFiles += missing
+                let text = markdown(for: content, at: location, in: plan, attachmentPaths: attachmentPaths)
+                try createFolder(location.folder)
                 let file = (location.folder + [location.fileName]).reduce(draft) { $0.appendingPathComponent($1) }
                 try writeFile(Data(text.utf8), file)
                 blockCount += content.blocks.count
             }
             progress?(MarkdownExportProgress(pagesDone: index + 1, pagesTotal: plan.orderedPages.count))
         }
-        return blockCount
+        return (blockCount, missingFiles)
     }
 
-    private func markdown(for content: PageContent, at location: ExportPlan.Location, in plan: ExportPlan) -> String {
+    /// Копии файлов страницы — в её папку `Название/`, рядом с подстраницами; совпадающие имена — с « (2)».
+    /// Возвращает пути копий от файла страницы и сколько файлов ещё не скачано.
+    private func copyAttachments(of content: PageContent, at location: ExportPlan.Location, in plan: ExportPlan, into draft: URL,
+                                 createFolder: ([String]) throws -> Void) throws -> (paths: [UUID: String], missing: Int) {
+        let refs = content.blocks.compactMap { block -> AttachmentRef? in
+            [.image, .file, .video].contains(block.kind) ? block.props.attachment : nil
+        }
+        guard !refs.isEmpty else { return ([:], 0) }
+        let pageFolder = location.folder + [location.stem]
+        var taken = plan.entryNames(inFolder: pageFolder)
+        var paths: [UUID: String] = [:]
+        var missing = 0
+        for ref in refs where paths[ref.id] == nil {
+            guard let source = attachmentFile(ref.id) else {
+                missing += 1
+                continue
+            }
+            let name = ExportFileNames.uniqueFileName(ref.name, taken: &taken)
+            try createFolder(pageFolder)
+            let destination = pageFolder.reduce(draft) { $0.appendingPathComponent($1, isDirectory: true) }.appendingPathComponent(name)
+            try FileManager.default.copyItem(at: source, to: destination)
+            paths[ref.id] = location.stem + "/" + name
+        }
+        return (paths, missing)
+    }
+
+    private func markdown(for content: PageContent, at location: ExportPlan.Location, in plan: ExportPlan,
+                          attachmentPaths: [UUID: String]) -> String {
         let titleLine = "# " + ([content.page.icon].compactMap { $0 } + [blockWriter.escapedTitle(content.page.displayTitle)])
             .joined(separator: " ")
-        let body = blockWriter.markdown(for: content.blocks) { plan.linkTarget(for: $0, from: location) }
+        let body = blockWriter.markdown(for: content.blocks, resolveLink: { plan.linkTarget(for: $0, from: location) },
+                                        resolveAttachment: { attachmentPaths[$0.id] })
         return body.isEmpty ? titleLine + "\n" : titleLine + "\n\n" + body
     }
 
@@ -135,6 +182,8 @@ private struct ExportPlan {
         var folder: [String]
         var fileName: String
         var components: [String] { folder + [fileName] }
+        /// Имя без `.md` — оно же имя папки подстраниц и файлов страницы.
+        var stem: String { String(fileName.dropLast(3)) }
     }
 
     private(set) var orderedPages: [Page] = []
@@ -162,6 +211,11 @@ private struct ExportPlan {
     }
 
     func location(of pageId: UUID) -> Location? { locations[pageId] }
+
+    /// Имена, уже занятые в папке подстраницами: их файлы `.md` и папки.
+    func entryNames(inFolder folder: [String]) -> Set<String> {
+        Set(locations.values.filter { $0.folder == folder }.flatMap { [$0.fileName, $0.stem] }.map(ExportFileNames.key))
+    }
 
     /// Ссылка из страницы `source` на `pageId`: путь файла от папки, где лежит `source`.
     func linkTarget(for pageId: UUID, from source: Location) -> PageLinkTarget? {

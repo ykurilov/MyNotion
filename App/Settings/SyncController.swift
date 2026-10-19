@@ -1,4 +1,5 @@
 import AppKit
+import Attachments
 import Foundation
 import NotesCore
 import Observation
@@ -25,15 +26,24 @@ final class SyncController {
     private(set) var notices: [SyncNotice] = []
     /// Состояние для галереи вместо настоящего цикла.
     var previewBadge: SyncBadgeState?
+    /// Сообщение очереди файлов: «Кончилось место для файлов, общих для ваших Mac — новые файлы пока ждут на этом Mac».
+    private(set) var fileNotice: String?
+    /// Место файлов на сервере (`GET /files/usage`) — для настроек.
+    private(set) var serverFilesUsage: SyncFilesUsage?
 
     @ObservationIgnored let store: NotesStore
+    @ObservationIgnored let attachments: AttachmentStore?
+    /// Отправка и докачка файлов рядом с циклом синхронизации.
+    @ObservationIgnored private var fileWork: AttachmentSyncWork?
     @ObservationIgnored private let openDocuments: OpenDocuments
     @ObservationIgnored private let secrets: any SyncSecrets
     /// Пришедшие правки легли в базу: окну перечитать дерево.
     @ObservationIgnored var onRemoteChange: ((MergeReport) -> Void)?
 
-    init(store: NotesStore, openDocuments: OpenDocuments, secrets: any SyncSecrets = SyncKeychain(), startsEngine: Bool = true) {
+    init(store: NotesStore, openDocuments: OpenDocuments, attachments: AttachmentStore? = nil, secrets: any SyncSecrets = SyncKeychain(),
+         startsEngine: Bool = true) {
         self.store = store
+        self.attachments = attachments
         self.openDocuments = openDocuments
         self.secrets = secrets
         account = try? SyncSetup.resume(store: store)
@@ -50,6 +60,9 @@ final class SyncController {
     var badge: SyncBadgeState? {
         if let previewBadge { return previewBadge }
         guard let engine else { return nil }
+        if let fileNotice, !engine.status.isError {
+            return SyncBadgeState(kind: .error, detail: fileNotice, lastSyncedAt: engine.lastSyncedAt)
+        }
         switch engine.status {
         case .ready:
             return SyncBadgeState(kind: .ready, detail: "На всех ваших Mac одни и те же записи.", lastSyncedAt: engine.lastSyncedAt)
@@ -138,6 +151,9 @@ final class SyncController {
             }
             self.engine?.stop()
             self.engine = nil
+            self.fileWork = nil
+            AttachmentQueueSignal.handler = nil
+            self.fileNotice = nil
             try SyncSetup.disable(store: self.store, secrets: self.secrets)
             self.account = nil
             self.devices = []
@@ -147,6 +163,23 @@ final class SyncController {
 
     func syncNow() {
         engine?.syncNow()
+    }
+
+    /// Открытая страница: её файлы — первыми в очереди скачивания (FR-120).
+    func prioritizeFiles(onPage pageId: UUID) {
+        guard let fileWork, (try? attachments?.attachmentIds(onPage: pageId).isEmpty) == false else { return }
+        fileWork.prioritize(pageId: pageId)
+        engine?.syncNow()
+    }
+
+    /// Сколько места занимают файлы на этом Mac.
+    var localFilesUsage: (bytes: Int, files: Int)? {
+        try? attachments?.localUsage()
+    }
+
+    func refreshFilesUsage() async {
+        guard let account, let secret = try? secrets.load(for: account.deviceId) else { return }
+        serverFilesUsage = try? await HTTPSyncServer(url: account.serverURL).fileTransport(deviceToken: secret.deviceToken).filesUsage()
     }
 
     func dismissNotice() {
@@ -193,6 +226,20 @@ final class SyncController {
         let engine = SyncEngine(store: store, account: account,
                                 transport: HTTPSyncServer(url: account.serverURL).transport(deviceToken: secret.deviceToken),
                                 cipher: BatchCipher(key: secret.encryptionKey), applier: applier)
+        if let attachments {
+            let work = AttachmentSyncWork(attachments: attachments,
+                                          transport: HTTPSyncServer(url: account.serverURL).fileTransport(deviceToken: secret.deviceToken),
+                                          cipher: FileCipher(syncKey: secret.encryptionKey))
+            Task { [weak self] in
+                await work.transfer.setNoticeHandler { notice in Task { @MainActor in self?.fileNotice = notice } }
+            }
+            engine.fileWork = work
+            fileWork = work
+            AttachmentQueueSignal.handler = { [weak self] in
+                self?.fileWork?.wake()
+                self?.engine?.syncNow()
+            }
+        }
         self.engine = engine
         engine.start()
     }

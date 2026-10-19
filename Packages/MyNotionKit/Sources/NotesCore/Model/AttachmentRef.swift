@@ -49,3 +49,21 @@ public struct AttachmentRef: Sendable, Hashable, Codable {
         }
     }
 }
+
+extension AttachmentRef {
+    /// Файл стал доступен на этом Mac или сменил состояние (скачан, ждёт отправки): виды блоков перерисовываются.
+    /// `object` — id файла (`UUID`). Шлёт модуль вложений, слушают виды редактора.
+    public static let availabilityDidChange = Notification.Name("MyNotion.attachmentAvailabilityDidChange")
+}
+
+extension BlockProps {
+    /// Все файлы блока: картинка, файл, видео-файл, обложка видео, картинка и значок закладки.
+    public var attachmentRefs: [AttachmentRef] {
+        [attachment, poster, image, iconAttachment].compactMap { $0 }
+    }
+}
+
+extension BlockKind {
+    /// Типы, в `props` которых бывают файлы (data-model.md, «props по типам»).
+    public static let withAttachments: Set<BlockKind> = [.image, .file, .video, .bookmark]
+}
