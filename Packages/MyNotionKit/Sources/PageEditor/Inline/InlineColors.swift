@@ -57,8 +57,9 @@ enum InlineColors {
         var result: Set<NotionColor?> = []
         var covered = IndexSet()
         for run in text.runs where isColor(run.style, of: target) {
-            let clipped = max(run.start, range.lowerBound)..<min(run.start + run.length, range.upperBound)
-            guard !clipped.isEmpty else { continue }
+            let lower = max(run.start, range.lowerBound), upper = min(run.start + run.length, range.upperBound)
+            guard lower < upper else { continue }
+            let clipped = lower..<upper
             switch run.style {
             case .textColor(let color), .backgroundColor(let color): result.insert(color)
             default: continue

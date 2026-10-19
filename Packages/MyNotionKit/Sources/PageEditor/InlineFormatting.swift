@@ -30,6 +30,12 @@ public enum InlineFormatting {
         return InlineText(text.string, runs: runs).normalized()
     }
 
+    /// Текст без оформления, ссылок и цветов на отрезке `range`; упоминания, даты и формулы остаются.
+    static func text(_ text: InlineText, clearingFormatsIn range: Range<Int>) -> InlineText {
+        let runs = text.runs.flatMap { run in run.style.isAtom ? [run] : subtract(range, from: run) }
+        return InlineText(text.string, runs: runs).normalized()
+    }
+
     /// Текст со ссылкой `url` на отрезке `range`; `nil` — ссылку убрать.
     static func text(_ text: InlineText, settingLink url: URL?, in range: Range<Int>) -> InlineText {
         var runs = text.runs.flatMap { run -> [StyledRun] in
@@ -136,6 +142,20 @@ extension PageTextView {
             return draft
         }
         changeBlocks(blocks, to: drafts, actionName: "Оформление")
+    }
+
+    /// «Tx»: снять с выделения оформление, ссылки и цвета одним шагом ⌘Z.
+    func clearInlineFormatting() {
+        commitEdits()
+        let selection = selectedRange()
+        guard selection.length > 0, let blocks = selectedBlockRange() else { return }
+        let drafts = blocks.map { index in
+            var draft = BlockDraft(document.blocks[index])
+            let range = localRange(of: selection, inBlockAt: index)
+            if !range.isEmpty { draft.text = InlineFormatting.text(draft.text, clearingFormatsIn: range) }
+            return draft
+        }
+        changeBlocks(blocks, to: drafts, actionName: "Убрать оформление")
     }
 
     /// Без выделения ⌘B и т. п. включают оформление для набираемого текста.

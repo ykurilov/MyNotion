@@ -57,10 +57,6 @@ enum ColorMenuRow: Equatable {
         if case .choice(let choice, _) = self { choice } else { nil }
     }
 
-    var height: CGFloat {
-        if case .header = self { Metrics.PopupMenu.sectionHeaderHeight } else { Metrics.PopupMenu.rowHeight }
-    }
-
     var identifier: String {
         switch self {
         case .header(let title): "color-header-\(title)"
@@ -69,11 +65,77 @@ enum ColorMenuRow: Equatable {
     }
 }
 
+/// Раскладка окна цветов, как у Notion 7.39: у каждого раздела заголовок и сетка по `columns` образцов в ряд.
+/// Отсчёт — от левого верхнего угла карточки.
+struct ColorMenuLayout: Equatable {
+    /// Места образцов по порядку `ColorMenuRow.choice`.
+    private(set) var swatchFrames: [NSRect] = []
+    private(set) var headers: [(title: String, frame: NSRect)] = []
+    /// Номера образцов каждого раздела.
+    private(set) var sections: [Range<Int>] = []
+    private(set) var height: CGFloat = 0
+
+    init(rows: [ColorMenuRow]) {
+        typealias M = Metrics.ColorMenu
+        var y = M.topPadding
+        var column = 0
+        var sectionStart = 0
+        for row in rows {
+            switch row {
+            case .header(let title):
+                if !swatchFrames.isEmpty {
+                    sections.append(sectionStart..<swatchFrames.count)
+                    y = (swatchFrames.last?.maxY ?? y) + M.sectionSpacing
+                }
+                sectionStart = swatchFrames.count
+                headers.append((title, NSRect(x: 0, y: y, width: M.width, height: M.sectionHeaderHeight)))
+                y += M.sectionHeaderHeight
+                column = 0
+            case .choice:
+                if column == M.columns {
+                    column = 0
+                    y += M.swatchSize + M.swatchSpacing
+                }
+                swatchFrames.append(NSRect(x: M.horizontalPadding + CGFloat(column) * (M.swatchSize + M.swatchSpacing), y: y,
+                                           width: M.swatchSize, height: M.swatchSize))
+                column += 1
+            }
+        }
+        if sectionStart < swatchFrames.count { sections.append(sectionStart..<swatchFrames.count) }
+        height = (swatchFrames.last?.maxY ?? y) + M.bottomPadding
+    }
+
+    /// Образец после стрелки: ←/→ — соседний по порядку; ↑/↓ — тот же столбец в соседнем ряду, за краем раздела —
+    /// в соседнем разделе (по кругу).
+    func index(from index: Int, dx: Int, dy: Int) -> Int {
+        let count = swatchFrames.count
+        guard count > 0 else { return 0 }
+        guard dy != 0 else { return (index + dx + count) % count }
+        let columns = Metrics.ColorMenu.columns
+        guard let sectionIndex = sections.firstIndex(where: { $0.contains(index) }) else { return index }
+        let section = sections[sectionIndex]
+        let local = index - section.lowerBound
+        let column = local % columns
+        let row = local / columns + dy
+        let rows = (section.count + columns - 1) / columns
+        if (0..<rows).contains(row) { return section.lowerBound + min(row * columns + column, section.count - 1) }
+        let next = sections[(sectionIndex + (dy > 0 ? 1 : -1) + sections.count) % sections.count]
+        let targetRow = dy > 0 ? 0 : (next.count - 1) / columns
+        return next.lowerBound + min(targetRow * columns + column, next.count - 1)
+    }
+
+    static func == (lhs: ColorMenuLayout, rhs: ColorMenuLayout) -> Bool {
+        lhs.swatchFrames == rhs.swatchFrames && lhs.headers.map(\.title) == rhs.headers.map(\.title) && lhs.height == rhs.height
+    }
+}
+
 /// Образец цвета: квадрат с буквой «A». Цвет текста — буква цвета на пустом квадрате, цвет фона — квадрат цвета.
+/// Текущий цвет — кольцо вместо рамки, выбранный стрелками или под мышью — подсветка, как у Notion 7.39.
 @MainActor
 enum ColorSwatch {
-    static func draw(_ choice: ColorChoice, isCurrent: Bool = false, in rect: NSRect) {
-        let radius = Metrics.ColorMenu.swatchCornerRadius
+    static func draw(_ choice: ColorChoice, isCurrent: Bool = false, isSelected: Bool = false, in rect: NSRect) {
+        typealias M = Metrics.ColorMenu
+        let radius = M.swatchCornerRadius
         let tone = choice.color?.tone
         let shape = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), xRadius: radius, yRadius: radius)
         let letter: NSColor
@@ -87,26 +149,32 @@ enum ColorSwatch {
                 shape.fill()
             }
         }
-        let border = tone.map { Palette.notionText($0).withAlphaComponent(Metrics.ColorMenu.swatchToneBorderAlpha) } ?? Palette.popupDivider
-        border.setStroke()
-        shape.lineWidth = Metrics.ColorMenu.swatchBorderWidth
-        shape.stroke()
-        if isCurrent {
-            let ring = NSBezierPath(roundedRect: rect.insetBy(dx: 1, dy: 1), xRadius: radius, yRadius: radius)
-            Palette.textPrimary.setStroke()
-            ring.lineWidth = Metrics.ColorMenu.currentRingWidth
-            ring.stroke()
+        if isSelected {
+            Palette.hoverBackground.setFill()
+            shape.fill()
         }
-        let font = NSFont.systemFont(ofSize: Metrics.ColorMenu.swatchGlyphSize, weight: .medium)
+        if isCurrent {
+            let ring = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
+            Palette.textPrimary.withAlphaComponent(M.currentRingAlpha).setStroke()
+            ring.lineWidth = M.currentRingWidth
+            ring.stroke()
+        } else {
+            let border = tone.map { Palette.notionText($0).withAlphaComponent(M.swatchToneBorderAlpha) } ?? Palette.popupDivider
+            border.setStroke()
+            shape.lineWidth = M.swatchBorderWidth
+            shape.stroke()
+        }
+        guard choice.target == .text else { return }
+        let font = NSFont.systemFont(ofSize: M.swatchGlyphSize, weight: .medium)
         let glyph = NSAttributedString(string: "A", attributes: [.font: font, .foregroundColor: letter])
         let size = glyph.size()
-        glyph.draw(at: NSPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2))
+        glyph.draw(at: NSPoint(x: (rect.midX - size.width / 2).rounded(), y: (rect.midY - size.height / 2).rounded()))
     }
 }
 
-/// Строка с цветом: образец и название; выбранная — на фоне hoverBackground.
+/// Образец в сетке окна цветов; подсказка — название цвета.
 @MainActor
-final class ColorMenuRowView: NSView {
+final class ColorSwatchView: NSView {
     let choice: ColorChoice
     var isSelected = false { didSet { if isSelected != oldValue { needsDisplay = true } } }
     /// Текущий цвет того, что красит окно: образец обведён кольцом.
@@ -123,6 +191,7 @@ final class ColorMenuRowView: NSView {
     init(row: ColorMenuRow, choice: ColorChoice) {
         self.choice = choice
         super.init(frame: .zero)
+        toolTip = choice.title
         setAccessibilityElement(true)
         setAccessibilityRole(.menuItem)
         setAccessibilityLabel(choice.title)
@@ -153,72 +222,16 @@ final class ColorMenuRowView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        if isSelected { PopupMenuRowView.drawHighlight(in: bounds) }
-        let padding = Metrics.PopupMenu.rowHorizontalPadding
-        let side = Metrics.ColorMenu.swatchSize
-        ColorSwatch.draw(choice, isCurrent: isCurrent, in: NSRect(x: padding, y: (bounds.height - side) / 2, width: side, height: side))
-        let style = Typography.popupMenuTitle
-        let textX = padding + side + Metrics.PopupMenu.iconToTitleSpacing
-        NSAttributedString(string: choice.title, attributes: [.font: style.font, .foregroundColor: Palette.textPrimary])
-            .draw(in: NSRect(x: textX, y: (bounds.height - style.lineHeight) / 2, width: bounds.width - textX - padding, height: style.lineHeight))
+        ColorSwatch.draw(choice, isCurrent: isCurrent, isSelected: isSelected, in: bounds)
     }
 }
 
-/// Столбец строк окна цветов; заголовки разделов рисует сам.
-@MainActor
-final class ColorMenuListView: NSView {
-    private(set) var rows: [ColorMenuRow] = []
-    private(set) var rowViews: [ColorMenuRowView] = []
-    private var headerFrames: [(title: String, frame: NSRect)] = []
-
-    override var isFlipped: Bool { true }
-
-    static func contentHeight(of rows: [ColorMenuRow]) -> CGFloat { rows.reduce(0) { $0 + $1.height } }
-
-    func setRows(_ rows: [ColorMenuRow], current: Set<ColorChoice>, onHover: @escaping (Int) -> Void, onClick: @escaping (ColorChoice) -> Void) {
-        self.rows = rows
-        rowViews.forEach { $0.removeFromSuperview() }
-        rowViews = []
-        headerFrames = []
-        let inset = Metrics.PopupMenu.rowInset
-        var y: CGFloat = 0
-        for row in rows {
-            let frame = NSRect(x: inset, y: y, width: Metrics.ColorMenu.width - 2 * inset, height: row.height)
-            switch row {
-            case .header(let title):
-                headerFrames.append((title, frame))
-            case .choice(let choice, let section):
-                let view = ColorMenuRowView(row: row, choice: choice)
-                view.isCurrent = section != .recent && current.contains(choice)
-                let index = rowViews.count
-                view.frame = frame
-                view.onHover = { onHover(index) }
-                view.onClick = { onClick(choice) }
-                addSubview(view)
-                rowViews.append(view)
-            }
-            y += row.height
-        }
-        setFrameSize(NSSize(width: Metrics.ColorMenu.width, height: y))
-        needsDisplay = true
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let style = Typography.popupMenuSectionHeader
-        for header in headerFrames where header.frame.intersects(dirtyRect) {
-            let x = header.frame.minX + Metrics.PopupMenu.rowHorizontalPadding
-            NSAttributedString(string: header.title, attributes: [.font: style.font, .foregroundColor: Palette.textSecondary])
-                .draw(in: NSRect(x: x, y: header.frame.minY + (header.frame.height - style.lineHeight) / 2,
-                                 width: header.frame.maxX - x, height: style.lineHeight))
-        }
-    }
-}
-
-/// Карточка окна цветов с прокручиваемым списком внутри.
+/// Карточка окна цветов: заголовки разделов и сетки образцов (`ColorMenuLayout`).
 @MainActor
 final class ColorMenuView: NSView {
-    private let scrollView = NSScrollView()
-    private let list = ColorMenuListView()
+    private(set) var rows: [ColorMenuRow] = []
+    private(set) var gridLayout = ColorMenuLayout(rows: [])
+    private(set) var swatches: [ColorSwatchView] = []
     private(set) var selectedIndex = 0
     var onChoose: ((ColorChoice) -> Void)?
 
@@ -226,12 +239,6 @@ final class ColorMenuView: NSView {
         super.init(frame: frame)
         setAccessibilityRole(.menu)
         setAccessibilityLabel("Цвет")
-        scrollView.drawsBackground = false
-        scrollView.hasVerticalScroller = false
-        scrollView.hasHorizontalScroller = false
-        scrollView.verticalScrollElasticity = .none
-        scrollView.documentView = list
-        addSubview(scrollView)
     }
 
     @available(*, unavailable)
@@ -239,60 +246,73 @@ final class ColorMenuView: NSView {
 
     override var isFlipped: Bool { true }
 
-    var rows: [ColorMenuRow] { list.rows }
-    var choices: [ColorChoice] { list.rows.compactMap(\.choice) }
+    var choices: [ColorChoice] { rows.compactMap(\.choice) }
     var selectedChoice: ColorChoice? { choices.indices.contains(selectedIndex) ? choices[selectedIndex] : nil }
 
-    /// Какие строки отмечены кольцом как текущий цвет (в «Последних» — никогда).
+    /// Какие образцы отмечены кольцом как текущий цвет (в «Последних» — никогда).
     private(set) var currentChoices: Set<ColorChoice> = []
 
     func setRows(_ rows: [ColorMenuRow], current: Set<ColorChoice> = []) {
-        currentChoices = current
-        list.setRows(rows, current: current, onHover: { [weak self] in self?.select($0, scroll: false) }, onClick: { [weak self] in self?.onChoose?($0) })
+        self.rows = rows
+        gridLayout = ColorMenuLayout(rows: rows)
+        swatches.forEach { $0.removeFromSuperview() }
+        swatches = rows.compactMap { row -> ColorSwatchView? in
+            guard let choice = row.choice else { return nil }
+            return ColorSwatchView(row: row, choice: choice)
+        }
+        for (index, swatch) in swatches.enumerated() {
+            swatch.onHover = { [weak self] in self?.select(index) }
+            swatch.onClick = { [weak self] in self?.onChoose?(swatch.choice) }
+            addSubview(swatch)
+        }
+        setCurrent(current)
         select(0)
-        scrollView.contentView.scroll(to: .zero)
         needsLayout = true
+        needsDisplay = true
     }
 
-    /// Размер карточки; выше `maximumHeight` (и места на экране) не растёт.
-    func fittingMenuSize(availableHeight: CGFloat) -> NSSize {
-        let padding = 2 * Metrics.PopupMenu.verticalPadding
-        let limit = min(Metrics.ColorMenu.maximumHeight, max(availableHeight, 0))
-        return NSSize(width: Metrics.ColorMenu.width, height: min(ColorMenuListView.contentHeight(of: rows) + padding, limit))
+    /// Отметить кольцом текущие цвета, не трогая разделов (у Notion «Последние» обновляются при следующем открытии).
+    func setCurrent(_ current: Set<ColorChoice>) {
+        currentChoices = current
+        for (row, swatch) in zip(rows.filter { $0.choice != nil }, swatches) {
+            if case .choice(let choice, let section) = row { swatch.isCurrent = section != .recent && current.contains(choice) }
+        }
     }
 
-    private var cardSize = NSSize(width: Metrics.ColorMenu.width, height: Metrics.ColorMenu.maximumHeight)
-
-    func fit(to size: NSSize) {
-        cardSize = size
-        needsLayout = true
-    }
+    var fittingMenuSize: NSSize { NSSize(width: Metrics.ColorMenu.width, height: gridLayout.height) }
 
     private var card: NSRect {
         let margin = PopupMenuWindow.shadowMargin
-        return NSRect(x: margin, y: margin, width: cardSize.width, height: cardSize.height)
+        return NSRect(origin: NSPoint(x: margin, y: margin), size: fittingMenuSize)
     }
 
-    func moveSelection(by delta: Int) {
-        let count = choices.count
-        guard count > 0 else { return }
-        select((selectedIndex + delta + count) % count, scroll: true)
+    func moveSelection(dx: Int = 0, dy: Int = 0) {
+        guard !swatches.isEmpty else { return }
+        select(gridLayout.index(from: selectedIndex, dx: dx, dy: dy))
     }
 
-    func select(_ index: Int, scroll: Bool = true) {
+    func select(_ index: Int) {
         selectedIndex = index
-        for (position, view) in list.rowViews.enumerated() { view.isSelected = position == index }
-        if scroll, list.rowViews.indices.contains(index) { list.scrollToVisible(list.rowViews[index].frame) }
+        for (position, view) in swatches.enumerated() { view.isSelected = position == index }
     }
 
     override func layout() {
         super.layout()
-        scrollView.frame = card.insetBy(dx: 0, dy: Metrics.PopupMenu.verticalPadding)
-        list.setFrameSize(NSSize(width: scrollView.frame.width, height: list.frame.height))
+        let origin = card.origin
+        for (swatch, frame) in zip(swatches, gridLayout.swatchFrames) { swatch.frame = frame.offsetBy(dx: origin.x, dy: origin.y) }
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        let card = card
         PopupSurface.draw(card: card)
+        let style = Typography.popupMenuSectionHeader
+        for header in gridLayout.headers {
+            let frame = header.frame.offsetBy(dx: card.minX, dy: card.minY)
+            let x = frame.minX + Metrics.ColorMenu.sectionHeaderTitleX
+            NSAttributedString(string: header.title, attributes: [.font: style.font, .foregroundColor: Palette.textSecondary])
+                .draw(in: NSRect(x: x, y: frame.minY + Metrics.ColorMenu.sectionHeaderTitleCenterY - style.lineHeight / 2,
+                                 width: frame.maxX - x, height: style.lineHeight))
+        }
     }
 }
 
@@ -317,7 +337,6 @@ final class ColorMenuWindow: NSPanel {
 
     /// Показать на месте `frame` (без тени, координаты экрана).
     func show(menuFrame frame: NSRect, parent: NSWindow) {
-        menuView.fit(to: frame.size)
         let margin = PopupMenuWindow.shadowMargin
         setFrame(frame.insetBy(dx: -margin, dy: -margin), display: true)
         PopupWindows.show(self, over: parent)
@@ -362,7 +381,7 @@ final class ColorMenuController {
         menu.menuView.onChoose = { [weak self] in self?.choose($0) }
         menu.menuView.setRows(ColorMenuRow.rows(recent: textView.recentColors.choices), current: textView.currentColors(for: target))
         let visible = parent.screen.map { $0.visibleFrame.intersection(parent.frame) } ?? parent.frame
-        let size = menu.menuView.fittingMenuSize(availableHeight: visible.height)
+        let size = menu.menuView.fittingMenuSize
         let frame = place(size, visible)
         self.target = target
         menu.show(menuFrame: frame, parent: parent)
@@ -375,21 +394,30 @@ final class ColorMenuController {
         if let deactivationObserver { NotificationCenter.default.removeObserver(deactivationObserver) }
         deactivationObserver = nil
         window?.hide()
+        textView?.formatBar.colorMenuDidClose()
     }
 
-    /// Выбор цвета: окно закрывается, цвет применяется к тому, ради чего оно открыто.
+    /// Выбор цвета: цвет применяется к тому, ради чего окно открыто. Для выделения окно остаётся открытым и кольцо
+    /// переходит на новый цвет, как у Notion 7.39; для блока (меню «⋮⋮») — закрывается.
     func choose(_ choice: ColorChoice? = nil) {
-        guard let target, let choice = choice ?? selectedChoice else { return }
-        close()
-        textView?.applyColorChoice(choice, to: target)
+        guard let target, let choice = choice ?? selectedChoice, let textView else { return }
+        guard target == .selection else {
+            close()
+            textView.applyColorChoice(choice, to: target)
+            return
+        }
+        textView.applyColorChoice(choice, to: target)
+        window?.menuView.setCurrent(textView.currentColors(for: target))
     }
 
     /// Стрелки, Enter и Esc, пока окно открыто.
     func handleCommand(_ selector: Selector) -> Bool {
         guard isOpen, let window else { return false }
         switch selector {
-        case #selector(NSResponder.moveUp(_:)): window.menuView.moveSelection(by: -1)
-        case #selector(NSResponder.moveDown(_:)): window.menuView.moveSelection(by: 1)
+        case #selector(NSResponder.moveUp(_:)): window.menuView.moveSelection(dy: -1)
+        case #selector(NSResponder.moveDown(_:)): window.menuView.moveSelection(dy: 1)
+        case #selector(NSResponder.moveLeft(_:)): window.menuView.moveSelection(dx: -1)
+        case #selector(NSResponder.moveRight(_:)): window.menuView.moveSelection(dx: 1)
         case #selector(NSResponder.insertNewline(_:)), #selector(NSResponder.insertTab(_:)): choose()
         case #selector(NSResponder.cancelOperation(_:)): close()
         default: return false

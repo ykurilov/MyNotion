@@ -464,6 +464,7 @@ public class PageTextView: NSTextView {
         case .toggleChecked: toggleCheckedSelectedBlocks()
         case .toggleAllCollapsed: toggleAllCollapsed()
         case .toggleInline(let format): toggleInline(format)
+        case .clearInlineFormatting: clearInlineFormatting()
         case .setKind(let kind):
             commitEdits()
             if let selected = selectedBlockRange() { setKind(kind, ofBlocksAt: selected) }
