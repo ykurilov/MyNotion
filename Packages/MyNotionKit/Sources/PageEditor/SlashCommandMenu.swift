@@ -64,6 +64,8 @@ enum PopupMenuStyle {
     var width: CGFloat { self == .slash ? Metrics.PopupMenu.slashMenuWidth : Metrics.PopupMenu.blockMenuWidth }
     var sectionTitle: String? { self == .slash ? "Основные блоки" : nil }
     var hasCloseRow: Bool { self == .slash }
+    /// Сколько строк видно без прокрутки.
+    var maximumVisibleRows: Int { self == .block ? Metrics.PopupMenu.blockMenuVisibleRows : Metrics.PopupMenu.maximumVisibleRows }
 
     var windowIdentifier: String {
         switch self {
@@ -173,7 +175,7 @@ final class PopupMenuView: NSView {
     }
 
     var fittingMenuSize: NSSize {
-        let visibleRows = min(items.count, Metrics.PopupMenu.maximumVisibleRows)
+        let visibleRows = min(items.count, style.maximumVisibleRows)
         return NSSize(width: style.width, height: rowsTop + CGFloat(visibleRows) * Metrics.PopupMenu.rowHeight + rowsBottom)
     }
 
@@ -214,7 +216,7 @@ final class PopupMenuView: NSView {
     private func updateSelection() {
         for (index, row) in rows.enumerated() { row.isSelected = index == selectedIndex }
         // Выбранная строка видна, даже если строк больше, чем помещается.
-        let visible = Metrics.PopupMenu.maximumVisibleRows
+        let visible = style.maximumVisibleRows
         let firstVisible = max(0, min(selectedIndex - visible + 1, items.count - visible))
         layoutRows(firstVisible: firstVisible)
     }
@@ -225,7 +227,7 @@ final class PopupMenuView: NSView {
         let height = Metrics.PopupMenu.rowHeight
         for (index, row) in rows.enumerated() {
             let position = index - firstVisible
-            row.isHidden = position < 0 || position >= Metrics.PopupMenu.maximumVisibleRows
+            row.isHidden = position < 0 || position >= style.maximumVisibleRows
             row.frame = NSRect(x: menu.minX + inset, y: menu.minY + rowsTop + CGFloat(position) * height, width: menu.width - 2 * inset, height: height)
         }
         footer?.frame = NSRect(x: menu.minX + inset, y: menu.maxY - rowsBottom, width: menu.width - 2 * inset, height: height)

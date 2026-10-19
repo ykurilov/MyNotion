@@ -282,6 +282,8 @@ public enum Metrics {
         public static let bottomPadding: CGFloat = 2
         /// Сколько строк видно без прокрутки.
         public static let maximumVisibleRows = 8
+        /// В меню блока «Цвет» и «Удалить» — действия в конце списка: прокручивать их за типы блоков нельзя.
+        public static let blockMenuVisibleRows = 10
         /// Зазор между строкой текста и меню.
         public static let anchorSpacing: CGFloat = 4
         /// Подложка под «/» с поиском в строке, пока открыто меню «/»: скругление и поля по бокам (≈ по Notion).

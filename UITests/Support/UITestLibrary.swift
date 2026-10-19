@@ -25,9 +25,9 @@ struct UITestLibrary {
     }
 
     @MainActor
-    func launchApp() -> XCUIApplication {
+    func launchApp(appearance: String? = nil) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["--database", databaseURL.path]
+        app.launchArguments = ["--database", databaseURL.path] + (appearance.map { ["--appearance", $0] } ?? [])
         app.launch()
         return app
     }
@@ -47,6 +47,11 @@ struct UITestLibrary {
     /// Оформление блоков страницы — записи отрезков в том виде, как они лежат в базе (JSON). Читать после выхода.
     func savedTextStyles(ofPage title: String) throws -> [String] {
         try rows(ofPage: title, columns: "block.textStyles") { String(cString: sqlite3_column_text($0, 0)) }
+    }
+
+    /// Цвет блоков страницы в том виде, как лежит в базе (JSON, например `{"text":"blue"}`). Читать после выхода.
+    func savedBlockColors(ofPage title: String) throws -> [String] {
+        try rows(ofPage: title, columns: "COALESCE(block.color, '')") { String(cString: sqlite3_column_text($0, 0)) }
     }
 
     /// Иконка страницы в базе; `nil` — без иконки. Читать после выхода.
