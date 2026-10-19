@@ -19,11 +19,55 @@ public struct PageLinkTarget: Sendable, Hashable {
 public struct MarkdownBlockWriter: Sendable {
     public init() {}
 
+    /// `blocks` — блоки страницы всех потоков. Пишется поток страницы; колонки и таблицы пишут свои потоки сами
+    /// (`BlockWriters/`). Блок, чьего контейнера нет, пишется в конце страницы.
     public func markdown(for blocks: [Block], resolveLink: (UUID) -> PageLinkTarget?) -> String {
+        let ids = Set(blocks.map(\.id))
+        var flows: [UUID: [Block]] = [:]
+        var pageFlow: [Block] = []
+        var orphans: [Block] = []
+        for block in blocks {
+            guard let containerId = block.containerId else { pageFlow.append(block); continue }
+            if ids.contains(containerId) { flows[containerId, default: []].append(block) } else { orphans.append(block) }
+        }
+        return withoutActuallyEscaping(resolveLink) { resolveLink in
+            func render(_ flow: [Block]) -> String {
+                write(flow, context: MarkdownWriteContext(flow: { flows[$0] ?? [] }, render: render, resolveLink: resolveLink))
+            }
+            return render(pageFlow + orphans)
+        }
+    }
+
+    private func write(_ blocks: [Block], context: MarkdownWriteContext) -> String {
+        let resolveLink = context.resolveLink
         var lines: [String] = []
         var list = ListState()
         var previousWasListItem = false
-        for block in blocks {
+        var position = 0
+        while position < blocks.count {
+            let block = blocks[position]
+            position += 1
+            if let writer = MarkdownBlockWriters.writer(for: block.kind) {
+                var children: [String] = []
+                if writer.writesChildren {
+                    var end = position
+                    while end < blocks.count, blocks[end].indent > block.indent { end += 1 }
+                    let nested = blocks[position..<end].map { child -> Block in
+                        var child = child
+                        child.indent -= block.indent + 1
+                        return child
+                    }
+                    let text = write(Array(nested), context: context)
+                    children = text.isEmpty ? [] : Array(text.components(separatedBy: "\n").dropLast())
+                    position = end
+                }
+                guard let content = writer.lines(for: block, children: children, context: context) else { continue }
+                if !lines.isEmpty { lines.append("") }
+                lines.append(contentsOf: content)
+                list.record(kind: block.kind, atIndent: 0, markerWidth: 0)
+                previousWasListItem = false
+                continue
+            }
             let isListItem = Self.family(of: block.kind) != nil
             let indent = isListItem ? block.indent : 0
             let ordinal = list.nextOrdinal(atIndent: indent)
@@ -64,6 +108,9 @@ public struct MarkdownBlockWriter: Sendable {
             let title = escapedTitle(target.title)
             guard let path = target.path else { return [title] }
             return ["[\(title)](\(InlineMarkdown.encodedPath(path)))"]
+        default:
+            // Блок 002, у которого ещё нет своей записи: текст не теряется — абзацем.
+            return Self.splitLines(InlineMarkdown.render(block.text), firstPrefix: "", continuation: "")
         }
     }
 

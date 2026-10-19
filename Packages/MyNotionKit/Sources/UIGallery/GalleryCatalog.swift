@@ -1,4 +1,5 @@
 import NotesCore
+import PageEditor
 
 /// Что показать в окне на одном снимке галереи (флаг `--ui-gallery`, plan.md, «Проверка интерфейса»).
 /// Приложение приводит окно в каждую сцену по очереди; `switch` по сцене там полный, поэтому новая сцена
@@ -8,6 +9,8 @@ public enum GalleryScene: Hashable, Sendable {
     case samplePage(scrolledToBottom: Bool)
     /// Страница одного типа блока: заполненный блок, пустой в середине и пустой в конце.
     case block(BlockKind, GalleryCaret)
+    /// Страница из блоков образца типа 002 (`BlockKindDescriptor.gallerySamples`).
+    case kindSample(BlockGallerySample)
     /// Страница из одного пустого абзаца, курсор в нём.
     case emptyPage
     /// Страница без названия, курсор в названии.
@@ -172,8 +175,15 @@ public struct GalleryShot: Hashable, Sendable {
 
 public enum GalleryCatalog {
     /// Все состояния по порядку съёмки.
-    public static let states: [GalleryState] = pageStates + blockStates + editingStates + sidebarStates + trashStates + importStates + exportStates
-        + syncStates
+    public static let states: [GalleryState] = pageStates + blockStates + kindSampleStates + editingStates + sidebarStates + trashStates
+        + importStates + exportStates + syncStates
+
+    /// Снимки блоков 002 — из описателей типов: этап, вводящий тип, добавляет образец в описатель, а не сюда.
+    static var kindSampleStates: [GalleryState] {
+        BlockKinds.gallerySamples.map { sample in
+            GalleryState("kind-\(sample.id)", .kindSample(sample), sample.summary, section: "Блоки 002", narrowToo: sample.narrowToo)
+        }
+    }
 
     /// Все снимки: каждое состояние в каждом размере, светлая и тёмная тема подряд.
     public static var shots: [GalleryShot] {
@@ -195,6 +205,23 @@ public enum GalleryCatalog {
         case .numberedItem: "нумерованный пункт"
         case .checkbox: "чекбокс"
         case .pageLink: "подстраница"
+        case .toggle: "раскрывающийся список"
+        case .quote: "цитата"
+        case .callout: "выноска"
+        case .divider: "разделитель"
+        case .code: "код"
+        case .equation: "формула"
+        case .tableOfContents: "оглавление"
+        case .image: "картинка"
+        case .file: "файл"
+        case .video: "видео"
+        case .bookmark: "закладка"
+        case .table: "таблица"
+        case .tableRow: "строка таблицы"
+        case .tableColumn: "столбец таблицы"
+        case .tableCell: "ячейка таблицы"
+        case .columnList: "колонки"
+        case .column: "колонка"
         }
     }
 

@@ -67,11 +67,38 @@ final class BlockLayoutFragment: NSTextLayoutFragment, @unchecked Sendable {
     }
 
     override func draw(at point: CGPoint, in context: CGContext) {
-        super.draw(at: point, in: context)
         // TextKit рисует на главном потоке; фрагмент и контекст дальше этого вызова не уходят.
         nonisolated(unsafe) let fragment = self
         nonisolated(unsafe) let context = context
-        MainActor.assumeIsolated { fragment.drawDecorations(at: point, in: context) }
+        MainActor.assumeIsolated { fragment.paint(.background, at: point, in: context) }
+        super.draw(at: point, in: context)
+        MainActor.assumeIsolated {
+            fragment.drawDecorations(at: point, in: context)
+            fragment.paint(.foreground, at: point, in: context)
+        }
+    }
+
+    /// Рисователи блока этого абзаца (`BlockPainters`): подложка под текстом, черта и значки поверх.
+    @MainActor
+    private func paint(_ layer: BlockPaintLayer, at point: CGPoint, in context: CGContext) {
+        guard let textView, let paragraph = textElement as? NSTextParagraph, paragraph.attributedString.length > 0,
+              let id = paragraph.attributedString.attribute(.blockID, at: 0, effectiveRange: nil) as? UUID,
+              let block = textView.document.block(id) else { return }
+        let painters = BlockPainters.painters(for: block.kind).filter { $0.layer == layer }
+        guard !painters.isEmpty else { return }
+        let offset = CGPoint(x: point.x - layoutFragmentFrame.minX, y: point.y - layoutFragmentFrame.minY)
+        let width = textLayoutManager?.textContainer?.size.width ?? Metrics.Page.columnWidth
+        let rect = CGRect(x: offset.x, y: point.y, width: width, height: layoutFragmentFrame.height)
+        let firstLine = textLineFragments.first.map { line -> BlockLine in
+            let top = layoutFragmentFrame.minY + line.typographicBounds.minY + offset.y
+            return BlockLine(indent: block.indent, top: top, height: line.typographicBounds.height,
+                             baseline: top + line.glyphOrigin.y)
+        }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
+        let paintContext = BlockPaintContext(paragraphRect: rect, firstLine: firstLine, textView: textView)
+        for painter in painters { painter.paint(block, in: paintContext) }
+        NSGraphicsContext.restoreGraphicsState()
     }
 
     @MainActor
@@ -227,13 +254,14 @@ extension PageTextView {
         return BlockLine(indent: indent, top: top, height: line.typographicBounds.height, baseline: top + line.glyphOrigin.y, caretX: caretX)
     }
 
+    /// Маркер в колонке слева — по описателю типа (`BlockKinds/`).
     func decoration(for block: Block) -> BlockDecoration? {
-        switch block.kind {
-        case .bulletItem: .bullet(ListMarkers.bullet(atIndent: block.indent))
-        case .numberedItem: .number(ListMarkers.number(ordinal(ofBlock: block), atIndent: block.indent))
+        switch block.kind.descriptor.marker {
+        case .bullet: .bullet(ListMarkers.bullet(atIndent: block.indent))
+        case .number: .number(ListMarkers.number(ordinal(ofBlock: block), atIndent: block.indent))
         case .checkbox: .checkbox(checked: block.isChecked)
         case .pageLink: .pageLink(block.linkedPageId.flatMap { linkedPages[$0] })
-        case .paragraph, .heading1, .heading2, .heading3: nil
+        case .none: nil
         }
     }
 

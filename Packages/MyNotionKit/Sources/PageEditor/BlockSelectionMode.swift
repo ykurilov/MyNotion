@@ -28,7 +28,7 @@ extension PageTextView {
         let anchor = min(max(anchor, 0), last), head = min(max(head, 0), last)
         let lower = min(anchor, head), upper = max(anchor, head)
         let start = mapper.paragraphStart(ofBlockAt: lower)
-        let end = mapper.paragraphStart(ofBlockAt: upper) + (document.blocks[upper].text.string as NSString).length
+        let end = mapper.paragraphStart(ofBlockAt: upper) + document.blocks[upper].pageTextLength
         isApplyingBlockSelection = true
         blockSelectionEnds = (anchor, head)
         setSelectedRange(NSRange(location: start, length: end - start))
@@ -38,7 +38,7 @@ extension PageTextView {
 
     /// Снять режим блоков: курсор в конец блока `index`.
     private func leaveBlockSelection(caretAtEndOf index: Int) {
-        let end = mapper.paragraphStart(ofBlockAt: index) + (document.blocks[index].text.string as NSString).length
+        let end = mapper.paragraphStart(ofBlockAt: index) + document.blocks[index].pageTextLength
         setSelectedRange(NSRange(location: end, length: 0))
     }
 

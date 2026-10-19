@@ -9,6 +9,11 @@ extension NSAttributedString.Key {
     static let blockIndent = NSAttributedString.Key("MyNotion.blockIndent")
     static let blockChecked = NSAttributedString.Key("MyNotion.blockChecked")
     static let blockLinkedPage = NSAttributedString.Key("MyNotion.blockLinkedPage")
+    /// Цвет и свойства блока (`BlockColor`, `BlockProps`) — чтобы абзац, возвращённый ⌘Z текста, вернул и их.
+    static let blockColor = NSAttributedString.Key("MyNotion.blockColor")
+    static let blockProps = NSAttributedString.Key("MyNotion.blockProps")
+    /// Текст блока без своего текста на странице (подпись картинки, запись формулы): на странице у него один U+FFFC.
+    static let blockText = NSAttributedString.Key("MyNotion.blockText")
 
     static let inlineBold = NSAttributedString.Key("MyNotion.inlineBold")
     static let inlineItalic = NSAttributedString.Key("MyNotion.inlineItalic")
@@ -16,6 +21,11 @@ extension NSAttributedString.Key {
     static let inlineCode = NSAttributedString.Key("MyNotion.inlineCode")
     static let inlineUnderline = NSAttributedString.Key("MyNotion.inlineUnderline")
     static let inlineLink = NSAttributedString.Key("MyNotion.inlineLink")
+    /// Цвет текста и фона в строке — `NotionColor.rawValue` (вид — этап US2).
+    static let inlineTextColor = NSAttributedString.Key("MyNotion.inlineTextColor")
+    static let inlineBackgroundColor = NSAttributedString.Key("MyNotion.inlineBackgroundColor")
+    /// Атом на знаке U+FFFC — упоминание, дата, формула (`InlineStyle`; вид — этапы US3, US4).
+    static let inlineAtom = NSAttributedString.Key("MyNotion.inlineAtom")
 }
 
 /// Связь текста страницы с её блоками (research R2): один `NSTextStorage` на страницу, абзац = блок,
@@ -161,14 +171,15 @@ public final class PageTextStorageMapper: NSObject {
             let (paragraph, id) = pair
             let text = Self.inlineText(in: textStorage, range: Self.contentRange(of: paragraph, in: string))
             if let id, let block = document.block(id) {
-                return BlockDraft(id: id, kind: block.kind, text: text, indent: block.indent,
+                // У блока без своего текста на странице только знак-вложение: текст — из документа (research R2).
+                return BlockDraft(id: id, kind: block.kind, text: block.kind.rendersAsAttachment ? block.text : text, indent: block.indent,
                                   isChecked: block.isChecked, linkedPageId: block.linkedPageId)
             }
             // Возврат удалённого абзаца (⌘Z): у его символов id блока, которого в документе уже нет.
             if let firstId = paragraphIds[position].first, document.block(firstId) == nil, paragraph.length > 0 {
                 var draft = Self.blockDrafts(in: textStorage.attributedSubstring(from: paragraph)).first ?? BlockDraft(id: nil)
                 draft.id = nil
-                draft.text = text
+                if !draft.kind.rendersAsAttachment { draft.text = text }
                 return draft
             }
             let source = paragraphIds[position].lazy.compactMap(document.block).first
@@ -184,9 +195,9 @@ public final class PageTextStorageMapper: NSObject {
         return ids
     }
 
-    /// Новый блок после Enter: пункт и чекбокс продолжаются, заголовок и ссылка на страницу — нет.
+    /// Новый блок после Enter: пункт и чекбокс продолжаются, заголовок и ссылка на страницу — нет (описатель типа).
     private static func kindAfterSplit(of kind: BlockKind) -> BlockKind {
-        kind.isHeading || kind == .pageLink ? .paragraph : kind
+        kind.descriptor.continuesAfterSplit ? kind : .paragraph
     }
 
     /// Переписать атрибуты абзацев по их блокам: один id на абзац, вид по типу блока.
@@ -199,7 +210,15 @@ public final class PageTextStorageMapper: NSObject {
                 let hasNewline = NSMaxRange(paragraph) > Self.contentRange(of: paragraph, in: string).upperBound
                 let rendered = Self.paragraph(block, withNewline: hasNewline, after: previousKind(ofBlockAt: index))
                 guard rendered.length == paragraph.length else { continue }
+                // Вид блока остаётся тем же: вложение не пересоздаётся, только получает новые поля блока.
+                let existing = paragraph.length > 0
+                    ? textStorage.attribute(.attachment, at: paragraph.location, effectiveRange: nil) as? BlockAttachment : nil
                 rendered.enumerateAttributes(in: NSRange(location: 0, length: rendered.length)) { attributes, range, _ in
+                    var attributes = attributes
+                    if let existing, existing.blockId == block.id, attributes[.attachment] is BlockAttachment {
+                        existing.update(block)
+                        attributes[.attachment] = existing
+                    }
                     textStorage.setAttributes(attributes, range: NSRange(location: paragraph.location + range.location, length: range.length))
                 }
             }
@@ -361,13 +380,17 @@ public final class PageTextStorageMapper: NSObject {
         let string = text.string as NSString
         return paragraphRanges(in: string, from: 0, to: string.length).map { paragraph in
             let attributes = text.attributes(at: paragraph.location, effectiveRange: nil)
+            let kind = (attributes[.blockKind] as? String).flatMap(BlockKind.init(rawValue:)) ?? .paragraph
             return BlockDraft(
                 id: attributes[.blockID] as? UUID,
-                kind: (attributes[.blockKind] as? String).flatMap(BlockKind.init(rawValue:)) ?? .paragraph,
-                text: inlineText(in: text, range: contentRange(of: paragraph, in: string)),
+                kind: kind,
+                text: kind.rendersAsAttachment ? attributes[.blockText] as? InlineText ?? .empty
+                    : inlineText(in: text, range: contentRange(of: paragraph, in: string)),
                 indent: attributes[.blockIndent] as? Int ?? 0,
                 isChecked: attributes[.blockChecked] as? Bool ?? false,
-                linkedPageId: attributes[.blockLinkedPage] as? UUID
+                linkedPageId: attributes[.blockLinkedPage] as? UUID,
+                color: attributes[.blockColor] as? BlockColor,
+                props: attributes[.blockProps] as? BlockProps
             )
         }
     }
@@ -404,6 +427,9 @@ public final class PageTextStorageMapper: NSObject {
             if attributes[.inlineCode] as? Bool == true { add(.code) }
             if attributes[.inlineUnderline] as? Bool == true { add(.underline) }
             if let url = attributes[.inlineLink] as? URL { add(.link(url)) }
+            if let color = (attributes[.inlineTextColor] as? String).flatMap(NotionColor.init(rawValue:)) { add(.textColor(color)) }
+            if let color = (attributes[.inlineBackgroundColor] as? String).flatMap(NotionColor.init(rawValue:)) { add(.backgroundColor(color)) }
+            if let atom = attributes[.inlineAtom] as? InlineStyle { add(atom) }
         }
         return InlineText(string, runs: runs).normalized()
     }
@@ -418,6 +444,9 @@ public final class PageTextStorageMapper: NSObject {
             .blockChecked: block.isChecked,
         ]
         attributes[.blockLinkedPage] = block.linkedPageId
+        if !block.color.isNone { attributes[.blockColor] = block.color }
+        if !block.props.isEmpty { attributes[.blockProps] = block.props }
+        if block.kind.rendersAsAttachment { attributes[.blockText] = block.text }
         return attributes
     }
 
@@ -437,13 +466,7 @@ public final class PageTextStorageMapper: NSObject {
     static let inlineKeys: [NSAttributedString.Key] = [.inlineBold, .inlineItalic, .inlineStrikethrough, .inlineCode, .inlineUnderline, .inlineLink]
 
     static func textStyle(of kind: BlockKind) -> BlockTextStyle {
-        switch kind {
-        case .heading1: .heading1
-        case .heading2: .heading2
-        case .heading3: .heading3
-        case .bulletItem, .numberedItem, .checkbox: .listItem
-        case .paragraph, .pageLink: .paragraph
-        }
+        kind.descriptor.textStyle
     }
 
     /// Отступ над блоком: свой у типа блока, между абзацем и пунктом, чекбоксом или подстраницей — больше,
@@ -482,6 +505,13 @@ public final class PageTextStorageMapper: NSObject {
     /// Абзац блока: текст с оформлением и, если нужно, перевод строки с атрибутами того же абзаца.
     static func paragraph(_ block: Block, withNewline: Bool, after previous: BlockKind? = nil) -> NSAttributedString {
         let base = baseAttributes(for: block, after: previous)
+        if block.kind.rendersAsAttachment {
+            // Блок без своего текста: один знак-вложение с видом блока (research R2).
+            let text = NSMutableAttributedString(attachment: BlockAttachment(block: block))
+            text.addAttributes(base, range: NSRange(location: 0, length: text.length))
+            if withNewline { text.append(NSAttributedString(string: "\n", attributes: base)) }
+            return text
+        }
         let line = Typography.line(for: textStyle(of: block.kind))
         let text = NSMutableAttributedString(string: pageString(ofBlockText: block.text.string), attributes: base)
         let length = text.length
@@ -495,6 +525,9 @@ public final class PageTextStorageMapper: NSObject {
             case .code: text.addAttribute(.inlineCode, value: true, range: range)
             case .underline: text.addAttribute(.inlineUnderline, value: true, range: range)
             case .link(let url): text.addAttribute(.inlineLink, value: url, range: range)
+            case .textColor(let color): text.addAttribute(.inlineTextColor, value: color.rawValue, range: range)
+            case .backgroundColor(let color): text.addAttribute(.inlineBackgroundColor, value: color.rawValue, range: range)
+            case .mention, .date, .equation: text.addAttribute(.inlineAtom, value: run.style, range: range)
             }
         }
         if length > 0 {
@@ -536,12 +569,16 @@ public final class PageTextStorageMapper: NSObject {
     }
 }
 
+extension Block {
+    /// Длина абзаца блока на странице без перевода строки: у блока без своего текста — один знак-вложение.
+    var pageTextLength: Int {
+        kind.rendersAsAttachment ? 1 : (text.string as NSString).length
+    }
+}
+
 extension BlockKind {
     /// Слева от текста — колонка маркера, номера, квадрата чекбокса или значка подстраницы.
     var hasMarkerColumn: Bool {
-        switch self {
-        case .bulletItem, .numberedItem, .checkbox, .pageLink: true
-        case .paragraph, .heading1, .heading2, .heading3: false
-        }
+        descriptor.marker != .none
     }
 }

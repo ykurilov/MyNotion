@@ -2,6 +2,7 @@ import AppKit
 import MarkdownExport
 import NotesCore
 import NotionImport
+import PageEditor
 import PageSearch
 import ServiceLaunch
 import SwiftUI
@@ -97,6 +98,11 @@ struct MyNotionApp: App {
             // Образец сразу открыт: для сверки с Notion и снимков окна.
             let sample = try VisualSamplePage.ensure(in: store)
             try store.saveWindowState(WindowState(windowId: WindowState.mainWindowId, openPageId: sample.id))
+        }
+        if options.generatesRichSample {
+            // Каждый тип 002 добавляет свою часть через описатель (`BlockKinds.richPageParts`).
+            let pageId = try RichPageGenerator(parts: BlockKinds.richPageParts).ensure(in: store)
+            try store.saveWindowState(WindowState(windowId: WindowState.mainWindowId, openPageId: pageId))
         }
         if options.typingBenchmarkURL != nil {
             try TypingBenchmark.ensureHugePage(in: store)

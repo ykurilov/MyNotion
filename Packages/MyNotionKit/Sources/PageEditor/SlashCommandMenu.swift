@@ -31,30 +31,12 @@ struct PopupMenuItem: Equatable {
 
     /// Быстрые символы типа, как справа в меню «/» у Notion: набранные в начале строки с пробелом, они меняют тип блока.
     var shortcut: String? {
-        switch action {
-        case .setKind(.heading1): "#"
-        case .setKind(.heading2): "##"
-        case .setKind(.heading3): "###"
-        case .setKind(.bulletItem): "-"
-        case .setKind(.numberedItem): "1."
-        case .setKind(.checkbox): "[]"
-        default: nil
-        }
+        guard case .setKind(let kind) = action else { return nil }
+        return kind.descriptor.markdownShortcuts.first
     }
 
-    /// Типы блоков меню «/» и «Превратить в». Подстраница создаётся в боковом дереве (US2), здесь её нет.
-    static let blockKinds: [PopupMenuItem] = [
-        PopupMenuItem(title: "Текст", icon: .label("T"), keywords: ["text", "paragraph", "абзац", "текст"], action: .setKind(.paragraph)),
-        PopupMenuItem(title: "Заголовок 1", icon: .label("H₁"), keywords: ["h1", "heading", "#"], action: .setKind(.heading1)),
-        PopupMenuItem(title: "Заголовок 2", icon: .label("H₂"), keywords: ["h2", "heading", "##"], action: .setKind(.heading2)),
-        PopupMenuItem(title: "Заголовок 3", icon: .label("H₃"), keywords: ["h3", "heading", "###"], action: .setKind(.heading3)),
-        PopupMenuItem(title: "Маркированный список", icon: .symbol("list.bullet"),
-                      keywords: ["bullet", "list", "ul", "-", "пункт"], action: .setKind(.bulletItem)),
-        PopupMenuItem(title: "Нумерованный список", icon: .symbol("list.number"),
-                      keywords: ["numbered", "ordered", "list", "ol", "1.", "номер"], action: .setKind(.numberedItem)),
-        PopupMenuItem(title: "Чекбокс", icon: .checkbox,
-                      keywords: ["todo", "to-do", "checkbox", "task", "[]", "дело", "задача"], action: .setKind(.checkbox)),
-    ]
+    /// Типы блоков меню «/» и «Превратить в» — из описателей типов (`BlockKinds/`).
+    static var blockKinds: [PopupMenuItem] { BlockKindRegistry.menuItems }
 
     static let delete = PopupMenuItem(title: "Удалить", icon: .symbol("trash"), keywords: [], action: .delete)
 

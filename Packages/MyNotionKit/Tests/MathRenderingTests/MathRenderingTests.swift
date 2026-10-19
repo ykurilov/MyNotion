@@ -1,0 +1,4 @@
+import Testing
+@testable import MathRendering
+
+// Тесты модуля пишет этап US4 (tasks.md); цель заведена заранее, чтобы параллельные этапы не правили Package.swift.

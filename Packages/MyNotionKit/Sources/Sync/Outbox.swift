@@ -190,7 +190,9 @@ enum ChangeEncoding {
         case .kindAndIndent: .kindAndIndent(kind: block.kind, indent: block.indent, linkedPageId: block.linkedPageId)
         case .text: .text(block.text)
         case .isChecked: .isChecked(block.isChecked)
-        case .sortKey: .sortKey(block.sortKey.rawValue)
+        case .placement: .blockPlacement(containerId: block.containerId, sortKey: block.sortKey.rawValue)
+        case .color: .color(block.color)
+        case .props: .props(block.props)
         case .deleted: .deleted
         }
         return SyncChange(entity: .block, id: block.id, pageId: block.pageId, value: value, hlc: hlc, baseHlc: baseHlc)
@@ -206,7 +208,7 @@ enum ChangeEncoding {
     }
 
     static func fullBlock(_ block: Block, baseHlc: HybridTimestamp?) -> [SyncChange] {
-        [Block.Field.kindAndIndent, .text, .isChecked, .sortKey].map { field in
+        [Block.Field.kindAndIndent, .text, .isChecked, .placement, .color, .props].map { field in
             blockChange(block, field: field, hlc: block.fieldClocks[field] ?? .distantPast, baseHlc: field == .text ? baseHlc : nil)
         }
     }
@@ -229,7 +231,9 @@ extension BlockFieldClocks {
         case .kindAndIndent: kindAndIndent
         case .text: text
         case .isChecked: isChecked
-        case .sortKey: sortKey
+        case .placement: placement
+        case .color: color
+        case .props: props
         case .deleted: deleted
         }
     }

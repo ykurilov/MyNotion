@@ -64,6 +64,23 @@ final class EditorFixture {
         window.makeFirstResponder(textView)
     }
 
+    /// Та же страница из базы заново: в новом документе и новом окне (например, после правки записей в обход редактора).
+    init(reopening other: EditorFixture) throws {
+        folder = other.folder
+        store = other.store
+        pageId = other.pageId
+        document = try PageDocument(content: #require(try store.pageContent(pageId)))
+        textView = PageTextView(document: document, initialFocus: .body)
+        undoManager.groupsByEvent = false
+        textView.fallbackUndoManager = undoManager
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800), styleMask: [.titled], backing: .buffered, defer: true)
+        let scroll = NSScrollView(frame: window.contentLayoutRect)
+        scroll.documentView = textView
+        textView.frame.size.width = 1200
+        window.contentView = scroll
+        window.makeFirstResponder(textView)
+    }
+
     // MARK: Шаги
 
     /// Одно действие пользователя — одна группа отмены, как одно событие клавиатуры.

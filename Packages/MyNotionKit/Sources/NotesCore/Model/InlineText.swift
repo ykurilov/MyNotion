@@ -26,7 +26,7 @@ public struct StyledRun: Sendable, Hashable, Codable {
         self.style = style
     }
 
-    private enum CodingKeys: String, CodingKey { case start, length, style, url }
+    private enum CodingKeys: String, CodingKey { case start, length, style, url, color, pageId, date, latex }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -39,6 +39,11 @@ public struct StyledRun: Sendable, Hashable, Codable {
         case "code": style = .code
         case "underline": style = .underline
         case "link": style = .link(try container.decode(URL.self, forKey: .url))
+        case "textColor": style = .textColor(try container.decode(NotionColor.self, forKey: .color))
+        case "backgroundColor": style = .backgroundColor(try container.decode(NotionColor.self, forKey: .color))
+        case "mention": style = .mention(try container.decode(UUID.self, forKey: .pageId))
+        case "date": style = .date(try container.decode(DateMention.self, forKey: .date))
+        case "equation": style = .equation(try container.decode(String.self, forKey: .latex))
         case let unknown:
             throw DecodingError.dataCorruptedError(forKey: .style, in: container, debugDescription: "Неизвестное оформление: \(unknown)")
         }
@@ -57,6 +62,21 @@ public struct StyledRun: Sendable, Hashable, Codable {
         case .link(let url):
             try container.encode("link", forKey: .style)
             try container.encode(url, forKey: .url)
+        case .textColor(let color):
+            try container.encode("textColor", forKey: .style)
+            try container.encode(color, forKey: .color)
+        case .backgroundColor(let color):
+            try container.encode("backgroundColor", forKey: .style)
+            try container.encode(color, forKey: .color)
+        case .mention(let pageId):
+            try container.encode("mention", forKey: .style)
+            try container.encode(pageId, forKey: .pageId)
+        case .date(let date):
+            try container.encode("date", forKey: .style)
+            try container.encode(date, forKey: .date)
+        case .equation(let latex):
+            try container.encode("equation", forKey: .style)
+            try container.encode(latex, forKey: .latex)
         }
     }
 }
@@ -68,18 +88,47 @@ public enum InlineStyle: Sendable, Hashable {
     case code
     case underline
     case link(URL)
+    /// Цвет текста — один на символ, как ссылка (002, research R13).
+    case textColor(NotionColor)
+    /// Цвет фона — один на символ.
+    case backgroundColor(NotionColor)
+    /// Упоминание страницы — атом: ровно на одном знаке U+FFFC (research R12).
+    case mention(UUID)
+    /// Дата или напоминание — атом.
+    case date(DateMention)
+    /// Формула в строке — атом, запись LaTeX (research R6).
+    case equation(String)
+
+    /// Атом стоит ровно на одном знаке U+FFFC.
+    public var isAtom: Bool {
+        switch self {
+        case .mention, .date, .equation: true
+        default: false
+        }
+    }
 }
 
 extension InlineText {
+    /// Знак-вложение: на нём живёт атом — упоминание, дата, формула.
+    public static let objectReplacementCharacter: unichar = 0xFFFC
+
     /// Единая запись того же оформления: отрезки одного стиля слиты, выходы за край текста срезаны,
-    /// у символа не больше одной ссылки (побеждает последняя), порядок — по началу, затем по стилю.
-    /// Так одинаковый вид текста всегда хранится одинаково, и сравнение «изменилось ли» честное.
+    /// у символа не больше одной ссылки, одного цвета текста и одного цвета фона (побеждает последний),
+    /// порядок — по началу, затем по стилю. Атом стоит ровно на одном U+FFFC: атом без своего знака отбрасывается,
+    /// знак без атома — тоже, вместе с местом в тексте. Так одинаковый вид текста всегда хранится одинаково,
+    /// и сравнение «изменилось ли» честное.
     public func normalized() -> InlineText {
-        let length = (string as NSString).length
-        guard length > 0, !runs.isEmpty else { return InlineText(string) }
+        let units = Array(string.utf16)
+        let length = units.count
+        guard length > 0 else { return InlineText(string) }
+        let hasObjectCharacters = units.contains(Self.objectReplacementCharacter)
+        guard !runs.isEmpty || hasObjectCharacters else { return InlineText(string) }
 
         var flags = [[Bool]](repeating: [Bool](repeating: false, count: length), count: InlineStyle.flagStyles.count)
         var links = [URL?](repeating: nil, count: length)
+        var textColors = [NotionColor?](repeating: nil, count: length)
+        var backgroundColors = [NotionColor?](repeating: nil, count: length)
+        var atoms = [InlineStyle?](repeating: nil, count: length)
         for run in runs {
             let start = max(run.start, 0)
             let end = min(run.start + run.length, length)
@@ -87,30 +136,44 @@ extension InlineText {
             for index in start..<end {
                 switch run.style {
                 case .link(let url): links[index] = url
+                case .textColor(let color): textColors[index] = color
+                case .backgroundColor(let color): backgroundColors[index] = color
+                case .mention, .date, .equation:
+                    if units[index] == Self.objectReplacementCharacter { atoms[index] = run.style }
                 default: flags[run.style.rank][index] = true
                 }
             }
         }
 
+        // Знаки U+FFFC без атома выпадают; `kept` — места, которые остаются, по порядку.
+        var kept: [Int] = []
+        kept.reserveCapacity(length)
+        for index in 0..<length where units[index] != Self.objectReplacementCharacter || atoms[index] != nil {
+            kept.append(index)
+        }
+        let normalizedString = kept.count == length ? string : String(decoding: kept.map { units[$0] }, as: UTF16.self)
+
         var normalizedRuns: [StyledRun] = []
-        for (rank, style) in InlineStyle.flagStyles.enumerated() {
-            var index = 0
-            while index < length {
-                guard flags[rank][index] else { index += 1; continue }
-                let start = index
-                while index < length, flags[rank][index] { index += 1 }
-                normalizedRuns.append(StyledRun(start: start, length: index - start, style: style))
+        func collect<Value: Equatable>(_ values: [Value?], style: (Value) -> InlineStyle) {
+            var position = 0
+            while position < kept.count {
+                guard let value = values[kept[position]] else { position += 1; continue }
+                let start = position
+                while position < kept.count, values[kept[position]] == value { position += 1 }
+                normalizedRuns.append(StyledRun(start: start, length: position - start, style: style(value)))
             }
         }
-        var index = 0
-        while index < length {
-            guard let url = links[index] else { index += 1; continue }
-            let start = index
-            while index < length, links[index] == url { index += 1 }
-            normalizedRuns.append(StyledRun(start: start, length: index - start, style: .link(url)))
+        for (rank, style) in InlineStyle.flagStyles.enumerated() {
+            collect(flags[rank].map { $0 ? true : nil }) { _ in style }
+        }
+        collect(links) { .link($0) }
+        collect(textColors) { .textColor($0) }
+        collect(backgroundColors) { .backgroundColor($0) }
+        for (position, index) in kept.enumerated() {
+            if let atom = atoms[index] { normalizedRuns.append(StyledRun(start: position, length: 1, style: atom)) }
         }
         normalizedRuns.sort { ($0.start, $0.style.rank, $0.length) < ($1.start, $1.style.rank, $1.length) }
-        return InlineText(string, runs: normalizedRuns)
+        return InlineText(normalizedString, runs: normalizedRuns)
     }
 }
 
@@ -126,6 +189,11 @@ extension InlineStyle {
         case .code: 3
         case .underline: 4
         case .link: 5
+        case .textColor: 6
+        case .backgroundColor: 7
+        case .mention: 8
+        case .date: 9
+        case .equation: 10
         }
     }
 }

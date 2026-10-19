@@ -33,15 +33,24 @@ public struct ParsedBlock: Sendable, Hashable {
     public var pagePath: String?
     /// Абзац — одна ссылка на адрес и ничего больше (например, на notion.so): импорт может узнать в нём страницу выгрузки.
     public var standaloneURL: URL?
+    /// Цвет и свойства блоков 002.
+    public var color: BlockColor
+    public var props: BlockProps
+    /// Блоки внутри контейнера (колонки, таблица): их `containerId` — этот блок.
+    public var contained: [ParsedBlock]
 
     public init(kind: BlockKind, text: InlineText = .empty, indent: Int = 0, isChecked: Bool = false,
-                pagePath: String? = nil, standaloneURL: URL? = nil) {
+                pagePath: String? = nil, standaloneURL: URL? = nil, color: BlockColor = .none, props: BlockProps = .empty,
+                contained: [ParsedBlock] = []) {
         self.kind = kind
         self.text = text
         self.indent = indent
         self.isChecked = isChecked
         self.pagePath = pagePath
         self.standaloneURL = standaloneURL
+        self.color = color
+        self.props = props
+        self.contained = contained
     }
 }
 
@@ -138,6 +147,12 @@ private struct PageBuilder {
             if NotionMarkdownParser.isBlank(line) {
                 closeOpenBlock()
                 blankLines += 1
+                continue
+            }
+            if let reading = NotionBlockReaders.all.lazy.compactMap({ $0.read(lines, at: index - 1) }).first {
+                closeOpenBlock()
+                for block in reading.blocks { emit(block) }
+                index = max(reading.nextIndex, index)
                 continue
             }
             if let fence = Self.fence(trimmed) {

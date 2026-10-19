@@ -102,7 +102,7 @@ struct NotesStoreTests {
         #expect(stored.textBaseClock == stored.fieldClocks.text)
         #expect(stored.fieldClocks.kindAndIndent == block.fieldClocks.kindAndIndent)
         #expect(stored.fieldClocks.isChecked == block.fieldClocks.isChecked)
-        #expect(stored.fieldClocks.sortKey == block.fieldClocks.sortKey)
+        #expect(stored.fieldClocks.placement == block.fieldClocks.placement)
     }
 
     @Test("Смена типа и отступа — одно поле «тип и отступ»")
@@ -173,15 +173,14 @@ struct NotesStoreTests {
         var tooDeep = block
         tooDeep.kind = .bulletItem
         tooDeep.indent = 9
-        var indentedHeading = block
-        indentedHeading.kind = .heading2
-        indentedHeading.indent = 1
+        // Заголовок с отступом с 002 записывается: внутри переключателя, выноски и цитаты он допустим,
+        // а допустимость по соседям решает показ (BlockNesting).
         var checkedParagraph = block
         checkedParagraph.isChecked = true
         var paragraphWithLink = block
         paragraphWithLink.linkedPageId = page.id
 
-        for invalid in [tooDeep, indentedHeading, checkedParagraph, paragraphWithLink] {
+        for invalid in [tooDeep, checkedParagraph, paragraphWithLink] {
             #expect(throws: NotesStoreError.self) { try store.write { try $0.updateBlock(invalid) } }
         }
     }

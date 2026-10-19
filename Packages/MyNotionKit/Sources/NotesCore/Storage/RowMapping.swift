@@ -53,6 +53,15 @@ enum JSONColumn {
     static func encodeRuns(_ runs: [StyledRun]) throws -> String {
         runs.isEmpty ? "[]" : try encode(runs)
     }
+
+    /// Цвет блока: `NULL`, если его нет.
+    static func encodeColor(_ color: BlockColor) throws -> String? {
+        color.isNone ? nil : try encode(color)
+    }
+
+    static func encodeProps(_ props: BlockProps) throws -> String {
+        props.isEmpty ? "{}" : try encode(props)
+    }
 }
 
 extension PageFieldClocks {
@@ -64,7 +73,7 @@ extension PageFieldClocks {
 extension BlockFieldClocks {
     var databaseJSON: String {
         JSONColumn.encodeClocks([("kindAndIndent", kindAndIndent), ("text", text), ("isChecked", isChecked),
-                                 ("sortKey", sortKey), ("deleted", deleted)])
+                                 ("placement", placement), ("color", color), ("props", props), ("deleted", deleted)])
     }
 }
 
@@ -113,6 +122,7 @@ extension Block {
             throw NotesStoreError.corruptedRecord("Колонка kind — неизвестный тип блока")
         }
         let textBaseClock: String? = row["textBaseClock"]
+        let color: String? = row["color"]
         self.init(
             id: try RowDecoding.uuid(row, "id"),
             pageId: try RowDecoding.uuid(row, "pageId"),
@@ -122,6 +132,9 @@ extension Block {
             isChecked: row["isChecked"],
             linkedPageId: RowDecoding.optionalUUID(row, "linkedPageId"),
             sortKey: try RowDecoding.sortKey(row),
+            containerId: RowDecoding.optionalUUID(row, "containerId"),
+            color: try color.map { try JSONDecoder().decode(BlockColor.self, from: Data($0.utf8)) } ?? .none,
+            props: try RowDecoding.json(BlockProps.self, row, "props"),
             fieldClocks: try RowDecoding.json(BlockFieldClocks.self, row, "fieldClocks"),
             textBaseClock: textBaseClock.flatMap(HybridTimestamp.init)
         )
@@ -131,12 +144,13 @@ extension Block {
         try db.cachedStatement(
             sql: """
                 INSERT INTO block (id, pageId, kind, text, textStyles, indent, isChecked, linkedPageId,
-                    sortKey, isDeleted, fieldClocks, textBaseClock)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+                    sortKey, containerId, color, props, isDeleted, fieldClocks, textBaseClock)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
                 """
         ).execute(arguments: [id.databaseText, pageId.databaseText, kind.rawValue, text.string,
                         try JSONColumn.encodeRuns(text.runs), indent, isChecked, linkedPageId?.databaseText,
-                        sortKey.rawValue, fieldClocks.databaseJSON, textBaseClock?.description]
+                        sortKey.rawValue, containerId?.databaseText, try JSONColumn.encodeColor(color), try JSONColumn.encodeProps(props),
+                        fieldClocks.databaseJSON, textBaseClock?.description]
         )
     }
 
@@ -144,12 +158,12 @@ extension Block {
         try db.cachedStatement(
             sql: """
                 UPDATE block SET kind = ?, text = ?, textStyles = ?, indent = ?, isChecked = ?, linkedPageId = ?,
-                    sortKey = ?, fieldClocks = ?, textBaseClock = ?
+                    sortKey = ?, containerId = ?, color = ?, props = ?, fieldClocks = ?, textBaseClock = ?
                 WHERE id = ?
                 """
         ).execute(arguments: [kind.rawValue, text.string, try JSONColumn.encodeRuns(text.runs), indent, isChecked,
-                        linkedPageId?.databaseText, sortKey.rawValue, fieldClocks.databaseJSON,
-                        textBaseClock?.description, id.databaseText]
+                        linkedPageId?.databaseText, sortKey.rawValue, containerId?.databaseText, try JSONColumn.encodeColor(color),
+                        try JSONColumn.encodeProps(props), fieldClocks.databaseJSON, textBaseClock?.description, id.databaseText]
         )
     }
 }
@@ -212,5 +226,12 @@ extension WindowState {
             arguments: [windowId.databaseText, openPageId?.databaseText, try JSONColumn.encode(collapsed), sidebarWidth,
                         isSidebarCollapsed]
         )
+    }
+}
+
+extension ReminderState {
+    init?(row: Row) {
+        guard let mentionId = RowDecoding.optionalUUID(row, "mentionId"), let clock = HybridTimestamp(row["doneClock"] as String) else { return nil }
+        self.init(mentionId: mentionId, doneAt: row["doneAt"], doneClock: clock)
     }
 }
