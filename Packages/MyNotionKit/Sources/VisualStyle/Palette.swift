@@ -95,6 +95,50 @@ public enum Palette {
     }
 }
 
+/// Цвета Notion: девять оттенков (по умолчанию — отсутствие оттенка). Имена те же, что у `NotionColor` в модели.
+public enum NotionTone: String, Sendable, Hashable, CaseIterable {
+    case gray, brown, orange, yellow, green, blue, purple, pink, red
+}
+
+extension Palette {
+    /// Цвет текста Notion; `nil` — основной цвет текста страницы. Предварительные значения — contracts/blocks-and-keys.md,
+    /// сверка с живым Notion — этап 7 (FR-119).
+    public static func notionText(_ tone: NotionTone?) -> NSColor {
+        guard let tone else { return textPrimary }
+        return notionTextColors[tone] ?? textPrimary
+    }
+
+    /// Цвет подложки Notion (фон текста или блока); `nil` — без подложки.
+    public static func notionBackground(_ tone: NotionTone?) -> NSColor? {
+        guard let tone else { return nil }
+        return notionBackgroundColors[tone]
+    }
+
+    private static let notionTextColors: [NotionTone: NSColor] = [
+        .gray: themed(light: .hex(0x787774), dark: .hex(0x9B9B9B)),
+        .brown: themed(light: .hex(0x9F6B53), dark: .hex(0xBA856F)),
+        .orange: themed(light: .hex(0xD9730D), dark: .hex(0xC77D48)),
+        .yellow: themed(light: .hex(0xCB912F), dark: .hex(0xCA9849)),
+        .green: themed(light: .hex(0x448361), dark: .hex(0x529E72)),
+        .blue: themed(light: .hex(0x337EA9), dark: .hex(0x379AD3)),
+        .purple: themed(light: .hex(0x9065B0), dark: .hex(0x9D68D3)),
+        .pink: themed(light: .hex(0xC14C8A), dark: .hex(0xD15796)),
+        .red: themed(light: .hex(0xD44C47), dark: .hex(0xDF5452)),
+    ]
+
+    private static let notionBackgroundColors: [NotionTone: NSColor] = [
+        .gray: themed(light: .hex(0xF1F1EF), dark: .hex(0x2F2F2F)),
+        .brown: themed(light: .hex(0xF4EEEE), dark: .hex(0x4A3228)),
+        .orange: themed(light: .hex(0xFBECDD), dark: .hex(0x5C3B23)),
+        .yellow: themed(light: .hex(0xFBF3DB), dark: .hex(0x564328)),
+        .green: themed(light: .hex(0xEDF3EC), dark: .hex(0x243D30)),
+        .blue: themed(light: .hex(0xE7F3F8), dark: .hex(0x143A4E)),
+        .purple: themed(light: .hex(0xF6F3F9), dark: .hex(0x3C2D49)),
+        .pink: themed(light: .hex(0xFAF1F5), dark: .hex(0x4E2C3C)),
+        .red: themed(light: .hex(0xFDEBEC), dark: .hex(0x522E2A)),
+    ]
+}
+
 /// Один слой тени в духе CSS `box-shadow`.
 public struct ShadowLayer: Sendable {
     public let offsetY: CGFloat
