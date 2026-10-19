@@ -253,7 +253,7 @@ enum BuiltInBlockViews {
 
 extension PageTextView {
     /// Фокус в этот редактор: курсор в начало или в конец текста.
-    func focus(atEnd: Bool) {
+    public func focus(atEnd: Bool) {
         window?.makeFirstResponder(self)
         let length = max(0, (textStorage?.length ?? 1) - 1)
         setSelectedRange(NSRange(location: atEnd ? length : 0, length: 0))

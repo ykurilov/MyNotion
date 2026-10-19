@@ -33,6 +33,11 @@ enum TypingBenchmark {
         var richPageOpenMs: Double?
         var richPageTypingMs: [Double] = []
         var richPageTypingP95Ms: Double?
+        /// Набор в колонке и в ячейке таблицы «богатой» страницы (US6).
+        var columnTypingMs: [Double] = []
+        var cellTypingMs: [Double] = []
+        var columnTypingP95Ms: Double?
+        var cellTypingP95Ms: Double?
         var typingP95Ms: Double?
         var pageSwitchP95Ms: Double?
         var hugePageTypingP95Ms: Double?
@@ -45,6 +50,8 @@ enum TypingBenchmark {
             hugePageTypingP95Ms = TypingBenchmark.p95(hugePageTypingMs)
             hugePageScrollP95Ms = TypingBenchmark.p95(hugePageScrollMs)
             richPageTypingP95Ms = TypingBenchmark.p95(richPageTypingMs)
+            columnTypingP95Ms = TypingBenchmark.p95(columnTypingMs)
+            cellTypingP95Ms = TypingBenchmark.p95(cellTypingMs)
         }
 
         func write(to url: URL) {
@@ -134,7 +141,30 @@ enum TypingBenchmark {
         let richPageId = try RichPageGenerator(parts: BlockKinds.richPageParts).ensure(in: model.store)
         report.richPageOpenMs = try await switchPage(to: richPageId, model: model)
         report.richPageTypingMs = try await type(hugePageKeystrokes, in: try openTextView())
+
+        // Колонка и ячейка таблицы на той же странице: курсор — в конец первого блока колонки и в первую ячейку.
+        let page = try openTextView()
+        let document = page.document.pageDocument
+        guard let list = document.blocks.first(where: { $0.kind == .columnList }),
+              let column = document.flow(list.id).first, let inColumn = document.flow(column.id).first,
+              let table = document.blocks.first(where: { $0.kind == .table }),
+              let cell = document.tableGrid(table.id)?.cell(row: 1, column: 1) else {
+            throw BenchmarkFailure(description: "На «богатой» странице нет колонок или таблицы")
+        }
+        report.columnTypingMs = try await type(hugePageKeystrokes, in: try focusedEditor(revealing: inColumn.id, in: page))
+        report.cellTypingMs = try await type(hugePageKeystrokes, in: try focusedEditor(revealing: cell.id, in: page))
         return report
+    }
+
+    /// Перейти к блоку колонки или ячейке и вернуть редактор с курсором в конце его текста.
+    private static func focusedEditor(revealing blockId: UUID, in page: PageTextView) throws -> PageTextView {
+        page.revealBlock(blockId)
+        guard let window = page.window, let editor = window.firstResponder as? PageTextView, editor !== page else {
+            throw BenchmarkFailure(description: "Курсор не встал в колонку или ячейку")
+        }
+        editor.focus(atEnd: true)
+        window.displayIfNeeded()
+        return editor
     }
 
     /// Текст открытой страницы с курсором в конце абзаца посередине страницы.

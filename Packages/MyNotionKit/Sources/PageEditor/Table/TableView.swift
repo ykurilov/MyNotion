@@ -139,7 +139,16 @@ final class TableView: NSView {
     private var draftWidths: [CGFloat]?
     private var columnDrag: (column: Int, startX: CGFloat, startWidth: CGFloat)?
     private var cellDragStart: TableCellPosition?
-    private var isPointerInside = false { didSet { if isPointerInside != oldValue { needsDisplay = true } } }
+    private var isPointerInside = false {
+        didSet {
+            guard isPointerInside != oldValue else { return }
+            addRowButton.isShown = isPointerInside
+            addColumnButton.isShown = isPointerInside
+        }
+    }
+    /// «+» под таблицей — строка, справа — столбец; видны, пока мышь над таблицей.
+    private let addRowButton = TableAddButton(identifier: "table-add-row", label: "Добавить строку")
+    private let addColumnButton = TableAddButton(identifier: "table-add-column", label: "Добавить столбец")
 
     init(document: PageDocument, tableId: UUID, host: PageTextView) {
         self.document = document
@@ -152,6 +161,10 @@ final class TableView: NSView {
         for name in [PageDocument.didApplyLocalEdits, PageDocument.didApplyExternalChanges] {
             NotificationCenter.default.addObserver(self, selector: #selector(documentDidChange(_:)), name: name, object: document)
         }
+        addRowButton.onPress = { [weak self] in self?.addRow() }
+        addColumnButton.onPress = { [weak self] in self?.addColumn() }
+        addSubview(addRowButton)
+        addSubview(addColumnButton)
         reload()
     }
 
@@ -189,6 +202,8 @@ final class TableView: NSView {
             selectedCells = nil
         }
         positionEditor()
+        addRowButton.frame = addRowRect
+        addColumnButton.frame = addColumnRect
         needsDisplay = true
         host?.embeddedViewHeightDidChange(tableId, height: Self.height(of: tableLayout), width: bounds.width)
     }
@@ -248,7 +263,6 @@ final class TableView: NSView {
             path.lineWidth = 2
             path.stroke()
         }
-        if isPointerInside { drawAddButtons() }
     }
 
     private func drawBorders(_ grid: TableGrid) {
@@ -260,21 +274,6 @@ final class TableView: NSView {
         }
         for y in tableLayout.rowY + [size.height - line] {
             NSRect(x: 0, y: y, width: size.width, height: line).fill()
-        }
-    }
-
-    private func drawAddButtons() {
-        for rect in [addRowRect, addColumnRect] {
-            Palette.hoverBackground.setFill()
-            NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3).fill()
-            Palette.handleIcon.set()
-            let plus = NSBezierPath()
-            plus.move(to: NSPoint(x: rect.midX - 5, y: rect.midY))
-            plus.line(to: NSPoint(x: rect.midX + 5, y: rect.midY))
-            plus.move(to: NSPoint(x: rect.midX, y: rect.midY - 5))
-            plus.line(to: NSPoint(x: rect.midX, y: rect.midY + 5))
-            plus.lineWidth = 1.5
-            plus.stroke()
         }
     }
 
@@ -513,8 +512,6 @@ final class TableView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        if addRowRect.contains(point) { return addRow() }
-        if addColumnRect.contains(point) { return addColumn() }
         if point.y < tableLayout.gridSize.height, let column = tableLayout.columnBoundary(near: point.x) {
             columnDrag = (column, point.x, tableLayout.columnWidths[column])
             return
@@ -556,6 +553,52 @@ final class TableView: NSView {
     override func menu(for event: NSEvent) -> NSMenu? {
         guard let cell = tableLayout.cell(at: convert(event.locationInWindow, from: nil)), let grid else { return nil }
         return TableMenus.menu(for: cell, in: grid, table: self)
+    }
+}
+
+/// Кнопка «+» таблицы: полоса цвета hoverBackground с плюсом; видна, пока мышь над таблицей.
+@MainActor
+final class TableAddButton: NSView {
+    var onPress: (() -> Void)?
+    var isShown = false { didSet { needsDisplay = true } }
+
+    init(identifier: String, label: String) {
+        super.init(frame: .zero)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
+        setAccessibilityLabel(label)
+        setAccessibilityIdentifier(identifier)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
+
+    override var isFlipped: Bool { true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func mouseDown(with event: NSEvent) {}
+
+    override func mouseUp(with event: NSEvent) {
+        if bounds.contains(convert(event.locationInWindow, from: nil)) { onPress?() }
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        onPress?()
+        return true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard isShown else { return }
+        Palette.hoverBackground.setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: 3, yRadius: 3).fill()
+        Palette.handleIcon.set()
+        let plus = NSBezierPath()
+        plus.move(to: NSPoint(x: bounds.midX - 5, y: bounds.midY))
+        plus.line(to: NSPoint(x: bounds.midX + 5, y: bounds.midY))
+        plus.move(to: NSPoint(x: bounds.midX, y: bounds.midY - 5))
+        plus.line(to: NSPoint(x: bounds.midX, y: bounds.midY + 5))
+        plus.lineWidth = 1.5
+        plus.stroke()
     }
 }
 

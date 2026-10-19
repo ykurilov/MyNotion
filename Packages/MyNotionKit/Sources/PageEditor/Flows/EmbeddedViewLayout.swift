@@ -47,9 +47,11 @@ extension PageTextView {
             }
             textLayoutManager.ensureLayout(for: NSTextRange(location: location))
             guard let line = markerLine(ofBlockAt: index) else { continue }
-            let left = origin.x + line.caretX
+            // Редакторы колонок сами отступают поле строки: их текст встаёт вровень с текстом страницы.
+            let padding = block.kind == .columnList ? (textContainer?.lineFragmentPadding ?? 0) : 0
+            let left = origin.x + line.caretX - padding
             let attachment = textStorage.attribute(.attachment, at: start, effectiveRange: nil) as? BlockAttachment
-            let width = attachment?.layoutWidth
+            let width = (attachment?.layoutWidth).map { $0 + padding }
                 ?? max(0, origin.x + (textContainer?.size.width ?? 0) - (textContainer?.lineFragmentPadding ?? 0) - left)
             let frame = NSRect(x: left, y: origin.y + line.top, width: width, height: line.height)
             guard frame.intersects(visible) || focused else { continue }

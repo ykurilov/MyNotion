@@ -77,7 +77,8 @@ final class EmbeddedBlockViews {
     private let views = NSMapTable<NSUUID, NSView>.strongToStrongObjects()
 
     func height(of blockId: UUID, width: CGFloat) -> CGFloat? {
-        guard let entry = heights[blockId], abs(entry.width - width) < 0.5 else { return nil }
+        // Вид колонок шире знака на поля строки — та же ширина.
+        guard let entry = heights[blockId], abs(entry.width - width) < 4.5 else { return nil }
         return entry.height
     }
 
