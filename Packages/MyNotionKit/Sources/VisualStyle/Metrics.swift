@@ -50,6 +50,7 @@ public enum Metrics {
         case .heading1: BlockSpacing(height: 90, topSpacing: 38)
         case .heading2: BlockSpacing(height: 76.4, topSpacing: 33)
         case .heading3: BlockSpacing(height: 67, topSpacing: 30)
+        case .tableCell: BlockSpacing(height: Table.lineHeight, topSpacing: 0)
         }
     }
 

@@ -20,5 +20,5 @@ struct NotionBlockReading {
 enum NotionBlockReaders {
     static let all: [any NotionBlockReader] = [ToggleReader(), CalloutReader(), QuoteReader(), DividerReader(),
                                                MediaLinkReader(), ImageTagReader(), VideoTagReader(), EmbeddedVideoReader(),
-                                               BookmarkTagReader(), BareAddressReader()]
+                                               BookmarkTagReader(), BareAddressReader(), TableReader(), ColumnsReader()]
 }

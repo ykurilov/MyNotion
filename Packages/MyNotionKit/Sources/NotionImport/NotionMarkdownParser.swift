@@ -38,6 +38,8 @@ public struct ParsedBlock: Sendable, Hashable {
     public var props: BlockProps
     /// Блоки внутри контейнера (колонки, таблица): их `containerId` — этот блок.
     public var contained: [ParsedBlock]
+    /// id записи, если на блок ссылаются другие блоки разбора (столбец таблицы — из `columnId` ячеек); иначе новый.
+    public var id: UUID?
     /// Упоминания страниц в тексте: импорт найдёт их страницы (`NotionImporter.resolvingMentions`).
     var mentions: [NotionPageMention] = []
     /// Картинка, файл, видео-файл: путь файла в выгрузке от папки страницы, раскодированный. Импорт копирует файл
@@ -209,21 +211,6 @@ struct PageBuilder {
                     }
                 }
                 emit(ParsedBlock(kind: .paragraph, text: InlineText(formula.joined(separator: "\n"))), simplified: .equation)
-                continue
-            }
-            if trimmed.hasPrefix("|"), index < lines.endIndex, Self.isTableSeparator(lines[index]) {
-                closeOpenBlock()
-                let header = Self.tableCells(trimmed)
-                index += 1
-                var rows: [String] = []
-                while index < lines.endIndex, lines[index].trimmingCharacters(in: .whitespaces).hasPrefix("|") {
-                    let cells = Self.tableCells(lines[index].trimmingCharacters(in: .whitespaces))
-                    index += 1
-                    let pairs = zip(header, cells).filter { !$0.1.isEmpty }.map { "\($0.0): \($0.1)" }
-                    if !pairs.isEmpty { rows.append(pairs.joined(separator: "\n")) }
-                }
-                for row in rows { emit(ParsedBlock(kind: .paragraph, text: InlineText(row))) }
-                count(.table)
                 continue
             }
             if let html = Self.htmlBlock(trimmed) {
@@ -407,37 +394,6 @@ struct PageBuilder {
         guard let mark = trimmed.first, mark == "-" || mark == "*" || mark == "_" else { return false }
         let compact = trimmed.filter { $0 != " " && $0 != "\t" }
         return compact.count >= 3 && compact.allSatisfy { $0 == mark }
-    }
-
-    private static func isTableSeparator(_ line: String) -> Bool {
-        line.range(of: #"^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$"#, options: .regularExpression) != nil && line.contains("|")
-    }
-
-    /// Ячейки строки таблицы: `\|` внутри ячейки — сама черта; оформление ячеек упрощается до текста.
-    private static func tableCells(_ trimmed: String) -> [String] {
-        var row = Substring(trimmed)
-        if row.hasPrefix("|") { row.removeFirst() }
-        if row.hasSuffix("|"), !row.hasSuffix("\\|") { row.removeLast() }
-        var cells: [String] = []
-        var current = ""
-        var escaped = false
-        for character in row {
-            if escaped {
-                if character != "|" { current.append("\\") }
-                current.append(character)
-                escaped = false
-            } else if character == "\\" {
-                escaped = true
-            } else if character == "|" {
-                cells.append(current)
-                current = ""
-            } else {
-                current.append(character)
-            }
-        }
-        if escaped { current.append("\\") }
-        cells.append(current)
-        return cells.map { NotionInlineParser.parse($0.trimmingCharacters(in: .whitespaces)).text.string }
     }
 
     private static func quoteText(_ trimmed: String) -> String {

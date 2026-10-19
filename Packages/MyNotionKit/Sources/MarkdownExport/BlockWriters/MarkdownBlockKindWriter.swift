@@ -29,7 +29,8 @@ struct MarkdownWriteContext {
 enum MarkdownBlockWriters {
     /// Писатели типов 002; у кого писателя нет, тот пишется текстом абзаца — текст не теряется.
     static let all: [any MarkdownBlockKindWriter] = [ToggleWriter(), QuoteWriter(), CalloutWriter(), DividerWriter(),
-                                                     ImageWriter(), FileWriter(), VideoWriter(), BookmarkWriter()]
+                                                     ImageWriter(), FileWriter(), VideoWriter(), BookmarkWriter(),
+                                                     TableWriter(), ColumnsWriter()]
 
     private static let byKind: [BlockKind: any MarkdownBlockKindWriter] = Dictionary(
         all.flatMap { writer in writer.kinds.map { ($0, writer) } }, uniquingKeysWith: { first, _ in first })

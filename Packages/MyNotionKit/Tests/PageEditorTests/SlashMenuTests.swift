@@ -9,7 +9,7 @@ import VisualStyle
 struct SlashMenuTests {
     @Test("Поиск по названию и словам-подсказкам без учёта регистра")
     func filtersItems() {
-        #expect(PopupMenuItem.slashItems(matching: "").count == PopupMenuItem.blockKinds.count)
+        #expect(PopupMenuItem.slashItems(matching: "").count == PopupMenuItem.slashItems.count)
         #expect(PopupMenuItem.slashItems(matching: "Заго").map(\.action) == [.setKind(.heading1), .setKind(.heading2), .setKind(.heading3)])
         #expect(PopupMenuItem.slashItems(matching: "todo").map(\.action) == [.setKind(.checkbox)])
         #expect(PopupMenuItem.slashItems(matching: "h2").map(\.action) == [.setKind(.heading2)])

@@ -42,8 +42,9 @@ struct NotionImporterTests {
         try #require(tree.children(of: parentId).first { $0.title == title }, "Нет страницы «\(title)»")
     }
 
+    /// Блоки потока страницы по порядку; ячейки таблиц и блоки колонок — в своих потоках.
     private func blocks(of page: Page) throws -> [Block] {
-        try #require(try store.pageContent(page.id)).blocks
+        try #require(try store.pageContent(page.id)).blocks.filter { $0.containerId == nil }
     }
 
     private func texts(of page: Page) throws -> [String] {
@@ -152,15 +153,21 @@ struct NotionImporterTests {
         #expect(try texts(of: projects).contains("[файл: отчёт.pdf]"))
     }
 
-    @Test("Код, таблицы, формулы, встраивания — абзацы с исходным текстом; цитата, выноска, переключатель — блоками (US1)")
+    @Test("Код, формулы, встраивания — абзацы с исходным текстом; цитата, выноска, переключатель — блоками (US1), таблица — таблицей (US6)")
+    @MainActor
     func unsupportedBecomeParagraphs() throws {
         let report = try runImport()
         let projects = try blocks(of: child("Проекты", of: report.rootPageId))
         let paragraphs = projects.filter { $0.kind == .paragraph }.map(\.text.string)
-        for expected in ["let answer = 42\nprint(answer)", "Текст внутри", "Имя: Юрий\nРоль: автор", "Имя: Мишка\nРоль: тестировщик",
-                         "E = mc^2", "https://www.youtube.com/embed/xyz"] {
+        for expected in ["let answer = 42\nprint(answer)", "Текст внутри", "E = mc^2", "https://www.youtube.com/embed/xyz"] {
             #expect(paragraphs.contains(expected), "Нет абзаца «\(expected)»")
         }
+        let content = try #require(try store.pageContent(child("Проекты", of: report.rootPageId).id))
+        let document = PageDocument(content: content)
+        let table = try #require(document.blocks.first { $0.kind == .table })
+        let grid = try #require(document.tableGrid(table.id))
+        #expect((0..<grid.rowCount).map { row in (0..<grid.columnCount).map { grid.text(row: row, column: $0).string } }
+                == [["Имя", "Роль"], ["Юрий", "автор"], ["Мишка", "тестировщик"]])
         #expect(projects.contains { $0.kind == .quote && $0.text.string == "Цитата из книги" })
         let callout = try #require(projects.first { $0.kind == .callout })
         #expect(callout.text.string == "Выноска с советом")
@@ -181,9 +188,9 @@ struct NotionImporterTests {
         let blockCount = try stored.reduce(0) { $0 + (try store.pageContent($1.id)?.blocks.count ?? 0) }
         #expect(report.blockCount == blockCount)
         let projects = try #require(report.simplified.first { $0.pageTitle == "Проекты" })
-        // Цитаты, выноски, переключатели и разделители переносятся блоками (US1) и в отчёт не попадают.
+        // Цитаты, выноски, переключатели и разделители (US1) и таблицы (US6) переносятся блоками и в отчёт не попадают.
         #expect(projects.items == [
-            "таблицы — по строке на абзац", "картинки и файлы — вместо них их имена", "блоки кода",
+            "картинки и файлы — вместо них их имена", "блоки кода",
             "формулы — записаны как текст", "встроенные видео и сайты — вместо них их адреса",
         ])
         #expect(report.simplified.map(\.pageTitle).sorted() == ["Задачи", "Идеи", "Проекты"])

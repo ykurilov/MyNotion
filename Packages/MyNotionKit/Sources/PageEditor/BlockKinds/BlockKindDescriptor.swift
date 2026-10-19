@@ -33,6 +33,8 @@ struct BlockKindDescriptor: Sendable {
     var gallerySamples: [BlockGallerySample] = []
     /// Своя часть эталонной «богатой» страницы замеров (quickstart.md, `RichPageGenerator`).
     var richPageBlocks: [RichBlockSpec] = []
+    /// Строки только меню «/»: то, что вставляется, а не превращает блок (колонки, таблица).
+    var insertMenuItems: [PopupMenuItem] = []
 
     init(kind: BlockKind, menuItem: PopupMenuItem? = nil, markdownShortcuts: [String] = [], textStyle: BlockTextStyle = .paragraph,
          marker: BlockMarker = .none, leadingInset: CGFloat = 0, lineHeight: CGFloat? = nil, topSpacing: CGFloat? = nil,
@@ -113,15 +115,21 @@ public struct BlockGallerySample: Sendable, Hashable {
         public var props: BlockProps
         /// Переключатель свёрнут на этом Mac.
         public var isCollapsed: Bool
+        /// id записи: на него ссылаются ячейки таблицы образца (`columnId`).
+        public var id: UUID
+        /// Блоки внутри контейнера: колонки и их блоки, столбцы, строки и ячейки таблицы.
+        public var contained: [SampleBlock]
 
         public init(_ kind: BlockKind, _ text: String = "", indent: Int = 0, color: BlockColor = .none, props: BlockProps? = nil,
-                    isCollapsed: Bool = false) {
+                    isCollapsed: Bool = false, id: UUID = .timeOrdered(), contained: [SampleBlock] = []) {
             self.kind = kind
             self.text = InlineText(text)
             self.indent = indent
             self.color = color
             self.props = props ?? .defaults(for: kind)
             self.isCollapsed = isCollapsed
+            self.id = id
+            self.contained = contained
         }
     }
 

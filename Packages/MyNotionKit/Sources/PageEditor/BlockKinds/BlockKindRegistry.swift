@@ -18,6 +18,9 @@ enum BlockKindRegistry {
     /// Строки меню «/» и «Превратить в».
     static let menuItems: [PopupMenuItem] = all.compactMap(\.menuItem)
 
+    /// Строки только меню «/»: вставка колонок и таблицы.
+    static let insertMenuItems: [PopupMenuItem] = all.flatMap(\.insertMenuItems)
+
     /// Тип по быстрым символам.
     static let shortcutKinds: [String: BlockKind] = Dictionary(all.flatMap { descriptor in
         descriptor.markdownShortcuts.map { ($0, descriptor.kind) }
