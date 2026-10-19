@@ -277,9 +277,9 @@ private struct PagesWindow: View {
     }
 
     /// Упоминания и даты открытой страницы: названия, корзина, поиск для «@», разрешение на уведомления.
-    private var mentionSettings: MentionSettings {
+    private func mentionSettings(pages: [UUID: LinkedPage]) -> MentionSettings {
         let library = model.library
-        let directory = MentionDirectory(pages: linkedPages, trashedPageIds: library.trashedPageIds,
+        let directory = MentionDirectory(pages: pages, trashedPageIds: library.trashedPageIds,
                                          expectsMissingPages: library.sync.isEnabled,
                                          doneReminderIds: library.reminders.doneReminderIds)
         return MentionSettings(directory: directory, lookup: PageTitleLookup(search: PageSearch(store: library.store), tree: model.tree),
@@ -289,18 +289,20 @@ private struct PagesWindow: View {
     @ViewBuilder
     private var pageArea: some View {
         if let document = model.openDocument {
+            // Справочник всех страниц — один на подстраницы и упоминания: его сборка стоит каждому открытию страницы.
+            let pages = linkedPages
             PageEditorView(
                 document: document,
                 ancestorTitles: model.ancestorTitles(of: document.pageId),
                 initialFocus: model.initialFocus,
-                linkedPages: linkedPages,
+                linkedPages: pages,
                 onOpenPage: { model.select($0) },
                 onSetIcon: { model.setIcon(document.pageId, to: $0) },
                 onResolveConflict: { model.resolveConflict($0, in: document) },
                 blockViewState: model.blockViewState,
                 blockReveal: model.blockReveal,
                 onReady: onEditorReady,
-                mentions: mentionSettings
+                mentions: mentionSettings(pages: pages)
             )
             // Новый документ — новый редактор: страницу перечитали после операции с деревом.
             .id(ObjectIdentifier(document))

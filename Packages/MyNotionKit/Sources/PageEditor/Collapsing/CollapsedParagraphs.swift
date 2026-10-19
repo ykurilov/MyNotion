@@ -115,6 +115,9 @@ final class CollapsedParagraphs {
         adjustments = wanted
         guard let textStorage = textView.textStorage, !touched.isEmpty else { return }
         var changed = false
+        // Одна правка хранилища на все абзацы: открытие страницы с вложенными блоками — без правки на каждый.
+        textStorage.beginEditing()
+        defer { textStorage.endEditing() }
         for id in touched {
             guard let index = textView.document.index(ofBlock: id) else { continue }
             let block = textView.document.blocks[index]
@@ -127,7 +130,6 @@ final class CollapsedParagraphs {
             let current = textStorage.attribute(.paragraphStyle, at: range.location, effectiveRange: nil) as? NSParagraphStyle
             guard current?.paragraphSpacing != spacing || current?.headIndent != head || current?.firstLineHeadIndent != head else { continue }
             changed = true
-            textStorage.beginEditing()
             textStorage.enumerateAttribute(.paragraphStyle, in: range) { value, run, _ in
                 guard let style = (value as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle else { return }
                 style.paragraphSpacing = spacing
@@ -135,7 +137,6 @@ final class CollapsedParagraphs {
                 style.firstLineHeadIndent = head
                 textStorage.addAttribute(.paragraphStyle, value: style, range: run)
             }
-            textStorage.endEditing()
         }
         if changed { textView.needsDisplay = true }
     }

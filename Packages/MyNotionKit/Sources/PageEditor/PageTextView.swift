@@ -61,8 +61,12 @@ public class PageTextView: NSTextView {
     let inlineAtoms = InlineAtomsState()
     /// Виды блоков кода страницы и курсор между ними и текстом (US4).
     let codeBlocks = CodeBlockRegistry()
-    /// Окно правки формулы (US4).
-    let equationEditor = EquationEditorController()
+    /// Окно правки формулы (US4). Создаётся при первом открытии: его виды стоили бы каждому открытию страницы 1,5 мс.
+    private(set) lazy var equationEditor: EquationEditorController = {
+        let editor = EquationEditorController()
+        editor.textView = self
+        return editor
+    }()
     /// Виды оглавлений и слежение за заголовками (US4).
     let tableOfContentsViews = TableOfContentsViews()
     private(set) var tableOfContentsTracker: TableOfContentsTracker?
@@ -121,7 +125,6 @@ public class PageTextView: NSTextView {
         popups.textView = self
         formatBar.textView = self
         colorMenu.textView = self
-        equationEditor.textView = self
 
         configureTextBehaviour()
         BuiltInBlockViews.registerOnce()
