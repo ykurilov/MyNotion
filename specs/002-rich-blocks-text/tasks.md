@@ -161,11 +161,11 @@ description: "Задачи: новые блоки и оформление тек
 
 ### Код
 
-- [ ] T060 [US3] Справочник страниц `PK/Sources/PageEditor/Inline/MentionDirectory.swift` и вложение-картинка `MentionAttachment.swift`; поиск страниц для окна — протокол `PageLookup`, реализация через FTS5 в `App/`
+- [x] T060 [US3] Справочник страниц `PK/Sources/PageEditor/Inline/MentionDirectory.swift` и вложение-картинка `MentionAttachment.swift`; поиск страниц для окна — протокол `PageLookup`, реализация через FTS5 в `App/`
 - [x] T061 [US3] Окно «@»/«[[» `PK/Sources/PageEditor/Inline/MentionPicker.swift` (по образцу `SlashCommandMenu.swift`)
 - [x] T062 [US3] Даты `PK/Sources/PageEditor/Inline/DateQuery.swift`, `DateMentionAttachment.swift`, календарик `DatePickerPopover.swift` с «Напомнить» по contracts/blocks-and-keys.md
-- [ ] T063 [US3] Модуль `PK/Sources/Reminders/`: `ReminderIndexer.swift` (хук транзакции), `ReminderScheduler.swift` (обёртка `UNUserNotificationCenter` за протоколом), наблюдение `NSWorkspace.didWakeNotification`; перепланирование — после готовности редактора, не при запуске
-- [ ] T064 [US3] `App/Notifications/ReminderNotifications.swift`: делегат уведомлений, кнопка «Готово», открытие страницы у блока, запрос разрешения при первом «Напомнить», подсказка при отказе
+- [x] T063 [US3] Модуль `PK/Sources/Reminders/`: `ReminderIndexer.swift` (хук транзакции), `ReminderScheduler.swift` (обёртка `UNUserNotificationCenter` за протоколом), наблюдение `NSWorkspace.didWakeNotification`; перепланирование — после готовности редактора, не при запуске
+- [x] T064 [US3] `App/Notifications/ReminderNotifications.swift`: делегат уведомлений, кнопка «Готово», открытие страницы у блока, запрос разрешения при первом «Напомнить», подсказка при отказе
 - [x] T065 [US3] Применение `reminder` в `PK/Sources/Sync/ChangeMerger.swift` и `Outbox.swift`
 - [x] T066 [P] [US3] Выгрузка и импорт: `PK/Sources/MarkdownExport/InlineMarkdown.swift`, `PK/Sources/NotionImport/NotionInlineParser.swift`
 - [ ] T067 [US3] Галерея, опоздание напоминания ≤ 1 мин (SC-104) в виртуальном Mac; затронутые тесты зелёные; коммит

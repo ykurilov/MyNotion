@@ -158,6 +158,21 @@ final class UIGalleryRunner {
             guard let pageId = library.kindSamplePages[sample.id] else { return "нет страницы образца \(sample.id)" }
             await open(pageId)
 
+        case .mentionPicker(let query):
+            guard let pageId = library.kindSamplePages["mentions-and-dates"],
+                  let empty = try? model.store.pageContent(pageId)?.blocks.last?.id else { return "нет страницы упоминаний" }
+            await open(pageId)
+            PageEditorPreview.placeCaret(atEndOf: empty, in: window)
+            GalleryTarget.scrollToSelection(in: window)
+            PageEditorPreview.type("@" + query, in: window)
+            if !InlineAtomGallery.isMentionPickerOpen(in: window) { return "окно «@» не открылось" }
+            if let problem = GalleryTarget.popupsProblem("окно «@»", in: window) { return problem }
+
+        case .datePicker:
+            guard let pageId = library.kindSamplePages["mentions-and-dates"] else { return "нет страницы упоминаний" }
+            await open(pageId)
+            if !InlineAtomGallery.openFirstDatePicker(in: window) { return "календарик не открылся" }
+
         case .emptyPage:
             await open(library.emptyPage, keepingCaret: true)
 

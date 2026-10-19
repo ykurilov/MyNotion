@@ -18,12 +18,14 @@ public struct PageEditorView: View {
     /// Выбрана версия в «Двух версиях»: снять конфликт в базе.
     let onResolveConflict: @MainActor (Conflict) -> Void
     let onReady: @MainActor () -> Void
+    /// Упоминания и даты (US3): справочник страниц, поиск для окна «@», разрешение на уведомления.
+    let mentions: MentionSettings
 
     public init(document: PageDocument, ancestorTitles: [String] = [], initialFocus: PageTextView.InitialFocus,
                 linkedPages: [UUID: LinkedPage] = [:], onOpenPage: @escaping @MainActor (UUID) -> Void = { _ in },
                 onSetIcon: @escaping @MainActor (String?) -> Void = { _ in },
                 onResolveConflict: @escaping @MainActor (Conflict) -> Void = { _ in },
-                onReady: @escaping @MainActor () -> Void = {}) {
+                onReady: @escaping @MainActor () -> Void = {}, mentions: MentionSettings = MentionSettings()) {
         self.document = document
         self.ancestorTitles = ancestorTitles
         self.initialFocus = initialFocus
@@ -32,6 +34,7 @@ public struct PageEditorView: View {
         self.onSetIcon = onSetIcon
         self.onResolveConflict = onResolveConflict
         self.onReady = onReady
+        self.mentions = mentions
     }
 
     public var body: some View {
@@ -41,7 +44,8 @@ public struct PageEditorView: View {
                 SaveStatusBanner(reason: reason)
             }
             PageTextEditor(document: document, icon: document.page.icon, initialFocus: initialFocus, linkedPages: linkedPages,
-                           onOpenPage: onOpenPage, onSetIcon: onSetIcon, onResolveConflict: onResolveConflict, onReady: onReady)
+                           onOpenPage: onOpenPage, onSetIcon: onSetIcon, onResolveConflict: onResolveConflict, onReady: onReady,
+                           mentions: mentions)
                 .overlay(alignment: .top) { scrollEdgeFade }
         }
         .background(Color(nsColor: Palette.pageBackground))
@@ -85,6 +89,7 @@ struct PageTextEditor: NSViewRepresentable {
     let onSetIcon: @MainActor (String?) -> Void
     let onResolveConflict: @MainActor (Conflict) -> Void
     let onReady: @MainActor () -> Void
+    var mentions = MentionSettings()
 
     func makeNSView(context: Context) -> NSScrollView {
         let textView = PageTextView(document: document, initialFocus: initialFocus)
@@ -93,6 +98,7 @@ struct PageTextEditor: NSViewRepresentable {
         textView.onOpenPage = onOpenPage
         textView.onSetIcon = onSetIcon
         textView.onResolveConflict = onResolveConflict
+        mentions.apply(to: textView)
         return Self.makeScrollView(around: textView)
     }
 
@@ -114,6 +120,7 @@ struct PageTextEditor: NSViewRepresentable {
         textView.onOpenPage = onOpenPage
         textView.onSetIcon = onSetIcon
         textView.onResolveConflict = onResolveConflict
+        mentions.apply(to: textView)
         textView.showIcon(icon)
     }
 

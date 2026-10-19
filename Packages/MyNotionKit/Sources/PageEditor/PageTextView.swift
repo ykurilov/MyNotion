@@ -131,6 +131,7 @@ public final class PageTextView: NSTextView {
             self?.onSetIcon?(EmojiCatalog.shared.random(using: &generator).character)
         }
         header.onIconClick = { [weak self] in self?.openIconPicker() }
+        observeRevealRequests()
         _ = caret
         layoutColumn()
     }
@@ -910,6 +911,7 @@ public final class PageTextView: NSTextView {
             case .body: focusBody(at: 0)
             case .unchanged: break
             }
+            revealPendingBlock()
             onReady?()
         }
     }

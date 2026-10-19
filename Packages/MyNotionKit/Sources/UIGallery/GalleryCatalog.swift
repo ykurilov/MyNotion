@@ -11,6 +11,10 @@ public enum GalleryScene: Hashable, Sendable {
     case block(BlockKind, GalleryCaret)
     /// Страница из блоков образца типа 002 (`BlockKindDescriptor.gallerySamples`).
     case kindSample(BlockGallerySample)
+    /// Окно «@» под курсором в образце упоминаний; `query` — набранное после «@» (US3).
+    case mentionPicker(query: String)
+    /// Календарик даты в образце упоминаний (US3).
+    case datePicker
     /// Страница из одного пустого абзаца, курсор в нём.
     case emptyPage
     /// Страница без названия, курсор в названии.
@@ -175,8 +179,15 @@ public struct GalleryShot: Hashable, Sendable {
 
 public enum GalleryCatalog {
     /// Все состояния по порядку съёмки.
-    public static let states: [GalleryState] = pageStates + blockStates + kindSampleStates + editingStates + sidebarStates + trashStates
-        + importStates + exportStates + syncStates
+    public static let states: [GalleryState] = pageStates + blockStates + kindSampleStates + inlineAtomStates + editingStates + sidebarStates
+        + trashStates + importStates + exportStates + syncStates
+
+    /// Окно «@» и календарик даты (US3, contracts/blocks-and-keys.md, «Упоминания», «Даты и напоминания»).
+    static let inlineAtomStates: [GalleryState] = [
+        GalleryState("mention-picker", .mentionPicker(query: ""), "Окно «@»: страницы и даты", section: "Блоки 002"),
+        GalleryState("mention-picker-filtered", .mentionPicker(query: "план"), "Окно «@» с поиском «план»", section: "Блоки 002"),
+        GalleryState("date-picker", .datePicker, "Календарик даты: месяц, время, «Напомнить», «Удалить»", section: "Блоки 002"),
+    ]
 
     /// Снимки блоков 002 — из описателей типов: этап, вводящий тип, добавляет образец в описатель, а не сюда.
     static var kindSampleStates: [GalleryState] {
