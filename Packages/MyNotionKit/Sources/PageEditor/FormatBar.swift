@@ -10,6 +10,7 @@ public enum FormatBarButton: String, CaseIterable, Sendable {
     case strikethrough
     case code
     case link
+    case color
 
     var title: String {
         switch self {
@@ -19,6 +20,7 @@ public enum FormatBarButton: String, CaseIterable, Sendable {
         case .strikethrough: "Зачёркнутый"
         case .code: "Код"
         case .link: "Ссылка"
+        case .color: "Цвет"
         }
     }
 
@@ -30,6 +32,7 @@ public enum FormatBarButton: String, CaseIterable, Sendable {
         case .strikethrough: "strikethrough"
         case .code: "chevron.left.forwardslash.chevron.right"
         case .link: "link"
+        case .color: "textformat"
         }
     }
 
@@ -41,7 +44,7 @@ public enum FormatBarButton: String, CaseIterable, Sendable {
         case .underline: .underline
         case .strikethrough: .strikethrough
         case .code: .code
-        case .link: nil
+        case .link, .color: nil
         }
     }
 }
@@ -50,6 +53,8 @@ public enum FormatBarButton: String, CaseIterable, Sendable {
 struct FormatBarState: Equatable {
     var kind: BlockKind?
     var active: Set<FormatBarButton>
+    /// Последний применённый цвет: кнопка «A» подчёркнута им.
+    var lastColor: ColorChoice? = nil
 
     var kindItem: PopupMenuItem? {
         kind.flatMap { kind in PopupMenuItem.blockKinds.first { $0.action == .setKind(kind) } }
@@ -105,7 +110,10 @@ final class FormatBarView: NSView {
         didSet {
             guard state != oldValue else { return }
             kindRow.state = state
-            for button in buttons { button.isActive = state.active.contains(button.button) }
+            for button in buttons {
+                button.isActive = state.active.contains(button.button)
+                button.lastColor = state.lastColor
+            }
         }
     }
     var onKind: (() -> Void)? {
@@ -247,6 +255,8 @@ final class FormatBarButtonView: FormatBarControlView {
             needsDisplay = true
         }
     }
+    /// Последний цвет: подчёркивает кнопку «A».
+    var lastColor: ColorChoice? { didSet { if lastColor != oldValue, button == .color { needsDisplay = true } } }
     private let symbol: NSImage?
     /// Где в картинке значка сам рисунок: значок ставится по центру рисунка, а не картинки.
     private let ink: NSRect
@@ -275,6 +285,10 @@ final class FormatBarButtonView: FormatBarControlView {
             NSBezierPath(roundedRect: NSRect(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2, width: size.width, height: size.height),
                          xRadius: radius, yRadius: radius).fill()
         }
+        if button == .color {
+            drawColorGlyph()
+            return
+        }
         guard let symbol else { return }
         let color = isActive ? Palette.formatBarActiveIcon : Palette.textPrimary
         let tinted = symbol.withSymbolConfiguration(.init(paletteColors: [color])) ?? symbol
@@ -284,6 +298,23 @@ final class FormatBarButtonView: FormatBarControlView {
         let origin = NSPoint(x: (bounds.midX - ink.midX * scale).rounded(), y: (bounds.midY - ink.midY * scale).rounded())
         tinted.draw(in: NSRect(x: origin.x, y: origin.y, width: symbol.size.width * scale, height: symbol.size.height * scale),
                     from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+    }
+}
+
+extension FormatBarButtonView {
+    /// Кнопка цвета: буква «A» по центру места и под ней черта последнего цвета (текста или фона).
+    fileprivate func drawColorGlyph() {
+        let font = NSFont.systemFont(ofSize: Metrics.FormatBar.buttonGlyphSize, weight: .medium)
+        let glyph = NSAttributedString(string: "A", attributes: [.font: font, .foregroundColor: Palette.textPrimary])
+        let size = glyph.size()
+        glyph.draw(at: NSPoint(x: (bounds.midX - size.width / 2).rounded(), y: (bounds.midY - size.height / 2).rounded()))
+        guard let lastColor, let tone = lastColor.color?.tone else { return }
+        let fill = lastColor.target == .text ? Palette.notionText(tone) : Palette.notionBackground(tone)
+        let line = Metrics.ColorMenu.barUnderlineSize
+        fill?.setFill()
+        let y = (bounds.midY + font.capHeight / 2 + Metrics.ColorMenu.barUnderlineSpacing).rounded()
+        NSBezierPath(roundedRect: NSRect(x: bounds.midX - line.width / 2, y: y, width: line.width, height: line.height),
+                     xRadius: line.height / 2, yRadius: line.height / 2).fill()
     }
 }
 
@@ -327,6 +358,7 @@ final class FormatBarController {
 
     func hide() {
         closeKindMenu()
+        if textView?.colorMenu.target == .selection { textView?.colorMenu.close() }
         state = nil
         cardFrame = nil
         anchor = nil
@@ -337,7 +369,12 @@ final class FormatBarController {
 
     func press(_ button: FormatBarButton) {
         guard isShown, let textView else { return }
+        guard button != .color else {
+            toggleColorMenu()
+            return
+        }
         closeKindMenu()
+        textView.colorMenu.close()
         guard let format = button.format else {
             hide()
             textView.editLink(nil)
@@ -351,6 +388,7 @@ final class FormatBarController {
 
     func openKindMenu() {
         guard let state, let window, let parent = textView?.window else { return }
+        textView?.colorMenu.close()
         let menu = kindMenu ?? PopupMenuWindow(style: .kindPicker)
         kindMenu = menu
         menu.menuView.setItems(PopupMenuItem.blockKinds)
@@ -364,6 +402,19 @@ final class FormatBarController {
         let frame = FormatBarPlacement.kindMenu(size: menu.menuView.fittingMenuSize, card: card, row: rowOnScreen,
                                                 visible: parent.screen.map { $0.visibleFrame.intersection(parent.frame) } ?? parent.frame)
         menu.show(menuFrame: frame, parent: parent)
+    }
+
+    // MARK: Окно цветов
+
+    func toggleColorMenu() {
+        guard let textView else { return }
+        if textView.colorMenu.isOpen {
+            textView.colorMenu.close()
+            return
+        }
+        guard isShown, let card = cardFrame else { return }
+        closeKindMenu()
+        textView.colorMenu.open(.selection) { size, visible in FormatBarPlacement.colorMenu(size: size, card: card, visible: visible) }
     }
 
     func closeKindMenu() {
@@ -440,6 +491,19 @@ enum FormatBarPlacement {
     }
 }
 
+extension FormatBarPlacement {
+    /// Окно цветов, как список типов: сбоку от карточки (справа, а если там нет места, слева), заходит на неё на
+    /// `kindMenuOverlap`, верхним краем вровень с карточкой; в пределах `visible`. Координаты экрана.
+    static func colorMenu(size: NSSize, card: NSRect, visible: NSRect) -> NSRect {
+        let overlap = Metrics.FormatBar.kindMenuOverlap
+        var origin = NSPoint(x: (card.maxX - overlap).rounded(.up), y: card.maxY - size.height)
+        if origin.x + size.width > visible.maxX { origin.x = (card.minX + overlap).rounded(.down) - size.width }
+        origin.x = max(visible.minX, min(origin.x, visible.maxX - size.width))
+        origin.y = max(visible.minY, min(origin.y, visible.maxY - size.height))
+        return NSRect(origin: origin, size: size)
+    }
+}
+
 /// Где поставлена панель для выделения: у первой или последней строки, левым краем у `x` страницы.
 /// `x` — в координатах страницы, а не экрана: панель едет вместе с текстом при прокрутке и переносе окна,
 /// но не сдвигается, когда жирный или моноширинный текст меняет ширину букв.
@@ -490,6 +554,7 @@ extension PageTextView {
             for button in FormatBarButton.allCases {
                 let covered = pieces.allSatisfy { index, range in
                     let text = document.blocks[index].text
+                    if button == .color { return false }
                     guard let format = button.format else { return InlineFormatting.coversLink(text, in: range) }
                     return InlineFormatting.covers(text, with: format, in: range)
                 }
@@ -497,6 +562,6 @@ extension PageTextView {
             }
         }
         let kinds = Set(document.blocks[blocks].map(\.kind).filter { $0 != .pageLink })
-        return FormatBarState(kind: kinds.count == 1 ? kinds.first : nil, active: active)
+        return FormatBarState(kind: kinds.count == 1 ? kinds.first : nil, active: active, lastColor: recentColors.last)
     }
 }

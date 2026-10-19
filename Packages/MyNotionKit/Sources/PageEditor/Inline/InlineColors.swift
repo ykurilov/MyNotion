@@ -144,6 +144,9 @@ extension PageTextView {
                                                                  after: mapper.previousKind(ofBlockAt: position.index), inline: inline)
     }
 
+    /// Меню «Формат → Повторить последний цвет».
+    @objc public func repeatLastColorStyle(_ sender: Any?) { perform(.repeatLastColor) }
+
     /// ⌘⇧H: последний применённый цвет — на новое выделение.
     func repeatLastColor() {
         guard let choice = recentColors.last else { return }

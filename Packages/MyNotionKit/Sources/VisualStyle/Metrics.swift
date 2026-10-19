@@ -356,12 +356,12 @@ public enum Metrics {
     }
 
     /// Панель форматирования над выделенным текстом (FR-033), карточка как у Notion 7.38.1 (снимок 15.10.2026, ±1,2):
-    /// строка типа блока, разделитель, ряд из 6 кнопок по 36.
+    /// строка типа блока, разделитель, ряд из 7 кнопок по 36 (шесть как у Notion и цвет «A»).
     public enum FormatBar {
         public static let horizontalPadding: CGFloat = 6
         public static let verticalPadding: CGFloat = 6
         public static let buttonWidth: CGFloat = 36
-        public static let buttonCount = 6
+        public static let buttonCount = 7
         public static let width: CGFloat = 2 * horizontalPadding + CGFloat(buttonCount) * buttonWidth
         /// Строка типа: середина значка в 18 от края карточки, название с 42, середина стрелки «›» в 23 от правого края.
         public static let kindRowHeight: CGFloat = 32

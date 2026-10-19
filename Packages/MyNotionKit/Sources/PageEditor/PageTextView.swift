@@ -51,6 +51,7 @@ public final class PageTextView: NSTextView {
     let formatBar = FormatBarController()
     /// Последние цвета текста и фона: окно цветов и ⌘⇧H.
     var recentColors = RecentColors()
+    let colorMenu = ColorMenuController()
     /// Иконку выбрали в шапке (FR-034): «Добавить иконку», окно выбора; `nil` — убрать. Хозяин сохраняет её
     /// и возвращает через `showIcon`.
     public var onSetIcon: ((String?) -> Void)?
@@ -94,6 +95,7 @@ public final class PageTextView: NSTextView {
         contentStorage.delegate = hiddenParagraphs
         popups.textView = self
         formatBar.textView = self
+        colorMenu.textView = self
 
         configureTextBehaviour()
         mapper = PageTextStorageMapper(document: document, textStorage: textStorage!)
@@ -334,6 +336,7 @@ public final class PageTextView: NSTextView {
             return
         }
         if handlePopupCommand(selector) { return }
+        if colorMenu.handleCommand(selector) { return }
         if formatBar.handleCommand(selector) { return }
         if handleBlockSelectionCommand(selector) { return }
         super.doCommand(by: selector)

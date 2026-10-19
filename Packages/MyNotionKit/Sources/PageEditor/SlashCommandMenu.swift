@@ -7,6 +7,8 @@ import VisualStyle
 struct PopupMenuItem: Equatable {
     enum Action: Equatable {
         case setKind(BlockKind)
+        /// Окно цветов для блока.
+        case color
         case delete
     }
 
@@ -25,6 +27,7 @@ struct PopupMenuItem: Equatable {
     var identifier: String {
         switch action {
         case .setKind(let kind): kind.rawValue
+        case .color: "color"
         case .delete: "delete"
         }
     }
@@ -38,6 +41,7 @@ struct PopupMenuItem: Equatable {
     /// Типы блоков меню «/» и «Превратить в» — из описателей типов (`BlockKinds/`).
     static var blockKinds: [PopupMenuItem] { BlockKindRegistry.menuItems }
 
+    static let color = PopupMenuItem(title: "Цвет", icon: .symbol("paintpalette"), keywords: [], action: .color)
     static let delete = PopupMenuItem(title: "Удалить", icon: .symbol("trash"), keywords: [], action: .delete)
 
     /// Меню «/»: поиск по названию и словам-подсказкам без учёта регистра.
@@ -520,8 +524,9 @@ final class EditorPopupController {
 
     func choose(_ item: PopupMenuItem? = nil) {
         guard let session, let item = item ?? selectedItem else { return }
+        let frame = menuFrame
         close()
-        textView?.applyPopupItem(item, session: session)
+        textView?.applyPopupItem(item, session: session, menuFrame: frame)
     }
 
     func close() {
@@ -553,7 +558,7 @@ extension PageTextView {
 
     /// Открыть меню «⋮⋮» у блока: сменить тип или удалить.
     func openBlockMenu(forBlock id: UUID, below anchor: NSRect) {
-        popups.open(.block(blockId: id), items: PopupMenuItem.blockKinds + [.delete], below: anchor)
+        popups.open(.block(blockId: id), items: PopupMenuItem.blockKinds + [.color, .delete], below: anchor)
     }
 
     /// Щелчок по «⋮⋮», как в Notion: блок выделен целиком (режим блоков) и открыто его меню; Esc закрывает меню,
@@ -606,7 +611,7 @@ extension PageTextView {
     func closePopups() { if popups.isOpen { popups.close() } }
 
     /// Выбор в меню: из меню «/» убирается «/» с набранным поиском, затем меняется тип блока.
-    func applyPopupItem(_ item: PopupMenuItem, session: EditorPopupController.Session) {
+    func applyPopupItem(_ item: PopupMenuItem, session: EditorPopupController.Session, menuFrame: NSRect? = nil) {
         let blockId: UUID
         switch session {
         case .slash(let id, let slash):
@@ -620,6 +625,9 @@ extension PageTextView {
         switch item.action {
         case .setKind(let kind): setKind(kind, ofBlocksAt: index..<index + 1)
         case .delete: removeBlocks(at: index..<index + 1)
+        case .color:
+            openColorMenu(forBlock: blockId, replacing: menuFrame)
+            return
         }
         window?.makeFirstResponder(self)
     }
