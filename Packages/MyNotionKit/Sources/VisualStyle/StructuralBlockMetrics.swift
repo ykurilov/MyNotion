@@ -7,6 +7,8 @@ extension Metrics {
     public enum Toggle {
         public static let triangleWidth: CGFloat = 8
         public static let triangleHeight: CGFloat = 9
+        /// От строки раскрытого переключателя до текста первого ребёнка у Notion 7.39 — 34 при обычном шаге строк 30.
+        public static let childrenTopSpacing: CGFloat = 4
     }
 
     /// Черта слева во всю высоту цитаты и её детей, текст правее черты.
@@ -17,9 +19,10 @@ extension Metrics {
     }
 
     /// Подложка от первой строки до последнего ребёнка, иконка-эмодзи слева от текста (Notion: поля 16 16 16 12,
-    /// иконка в квадрате 24, текст на 8 правее).
+    /// иконка в квадрате 24, текст на 8 правее). Сверху и снизу — от строки текста: выноска в одну строку у Notion 7.39
+    /// 65,5 ± 1,3 (снимок 19.10.2026, «MyNotion — блоки 002»), у нас 24 + 2 × 21 = 66.
     public enum Callout {
-        public static let verticalPadding: CGFloat = 16
+        public static let verticalPadding: CGFloat = 21
         public static let leadingPadding: CGFloat = 12
         public static let iconColumnWidth: CGFloat = 24
         public static let iconFontSize: CGFloat = 20

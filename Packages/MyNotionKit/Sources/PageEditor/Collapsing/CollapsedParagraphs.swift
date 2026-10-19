@@ -45,7 +45,7 @@ final class CollapsedParagraphs {
     /// Поправки вида абзаца, которые зависят от соседей, а не только от самого блока (их не знает мэппер).
     struct Adjustment: Equatable {
         /// Добавочный отступ под абзацем: поля выноски снизу у её последнего видимого блока (у вложенных выносок —
-        /// по полю на каждую), строка подсказки под раскрытым пустым переключателем.
+        /// по полю на каждую), строка подсказки под раскрытым пустым переключателем, зазор над детьми раскрытого.
         var spacingAfter: CGFloat = 0
         /// Сдвиг абзаца вбок: дети цитаты и выноски — вровень с текстом родителя, как у Notion; слишком глубокий блок
         /// (после слияния правок двух Mac) — на допустимую глубину (`BlockNesting`).
@@ -87,8 +87,10 @@ final class CollapsedParagraphs {
             guard !isHidden(block.id) else { continue }
             let end = BlockMoveController.subtreeEnd(blocks, of: index)
             if block.kind == .toggle {
-                if end == index + 1, !collapsedIds.contains(block.id) {
-                    result[block.id, default: Adjustment()].spacingAfter += Metrics.block(.paragraph).height
+                if !collapsedIds.contains(block.id) {
+                    // Пустой раскрытый — строка подсказки; с детьми — первый ребёнок ниже на 4, как у Notion 7.39.
+                    result[block.id, default: Adjustment()].spacingAfter += end == index + 1 ? Metrics.block(.paragraph).height
+                        : Metrics.Toggle.childrenTopSpacing
                 }
                 continue
             }

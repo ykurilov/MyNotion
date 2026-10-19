@@ -18,6 +18,9 @@ extension Metrics {
         /// Поля текста в ячейке, как у Notion (≈ по снимку: 7 сверху и снизу, 9 по бокам).
         public static let cellVerticalPadding: CGFloat = 7
         public static let cellHorizontalPadding: CGFloat = 9
+        /// Строка 20 при шрифте 14: лишняя высота уходит над буквами, и текст стоял на 1,2 ниже середины ячейки
+        /// (до букв 13 сверху и 10,5 снизу). Notion делит её поровну — место текста поднято на 1,5.
+        public static let textRaise: CGFloat = 1.5
         /// Шрифт ячейки и высота строки текста.
         public static let fontSize: CGFloat = 14
         public static let lineHeight: CGFloat = 20

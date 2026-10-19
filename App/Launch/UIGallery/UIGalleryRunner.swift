@@ -162,10 +162,10 @@ final class UIGalleryRunner {
             guard let pageId = library.kindSamplePages["mentions-and-dates"],
                   let empty = try? model.store.pageContent(pageId)?.blocks.last?.id else { return "нет страницы упоминаний" }
             await open(pageId)
-            PageEditorPreview.placeCaret(atEndOf: empty, in: window)
+            // Прошлая сцена (та же страница в другой теме) оставила свой «@» в этом блоке: набор заменяет его.
+            PageEditorPreview.selectAllText(ofBlock: empty, in: window)
             GalleryTarget.scrollToSelection(in: window)
-            // Каждая сцена — с нового абзаца: прошлая оставила свой «@» в пустом блоке.
-            PageEditorPreview.type("\n@" + query, in: window)
+            PageEditorPreview.type("@" + query, in: window)
             if !InlineAtomGallery.isMentionPickerOpen(in: window) { return "окно «@» не открылось" }
             if let problem = GalleryTarget.popupsProblem("окно «@»", in: window) { return problem }
 

@@ -97,7 +97,7 @@ struct MediaBlocksTests {
 
     // MARK: Файл
 
-    @Test("Блок-файл: значок типа, имя и размер «2,4 МБ»")
+    @Test("Блок-файл: значок листа цветом вторичного текста (виден в светлой теме), имя и размер «2,4 МБ»")
     func fileRow() throws {
         let (_, services) = try fixture()
         services.availability = .ready(URL(fileURLWithPath: "/tmp/отчёт.pdf"))
@@ -107,6 +107,7 @@ struct MediaBlocksTests {
         #expect(view.nameText == "отчёт.pdf")
         #expect(view.sizeText == "2,4 МБ")
         #expect(view.iconImage != nil)
+        #expect(view.iconTint == Palette.textSecondary)
         let factory = MediaBlockViewFactory(kind: .file)
         #expect(factory.height(for: view.block, width: 700) == Metrics.Media.fileRowHeight + 2 * Metrics.Media.verticalPadding)
     }

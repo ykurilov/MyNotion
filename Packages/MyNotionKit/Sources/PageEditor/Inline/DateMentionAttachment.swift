@@ -18,7 +18,8 @@ final class DateMentionAttachment: InlineAtomAttachment, @unchecked Sendable {
             ? Palette.destructiveText : Palette.textSecondary
         var result: [AtomPiece] = [.text(date.shownText(now: now, calendar: calendar), font: font, color: color)]
         if date.reminder != nil, let alarm = NSImage(systemSymbolName: "alarm", accessibilityDescription: "Напоминание") {
-            let size = font.pointSize * 0.85
+            // Будильник — с размер текста, как у Notion: место значка во весь кегль (рисунок внутри чуть меньше).
+            let size = font.pointSize
             result.append(AtomPiece(content: .space(font.pointSize * 0.25)))
             result.append(AtomPiece(content: .image(alarm, size: size, color: color)))
         }

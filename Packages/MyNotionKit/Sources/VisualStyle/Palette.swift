@@ -20,6 +20,8 @@ public enum Palette {
     public static let breadcrumbSeparator = themed(light: .rgba(55, 53, 47, 0.15), dark: .rgba(255, 255, 255, 0.1))
     public static let sidebarBackground = themed(light: .hex(0xF9F8F7), dark: .hex(0x202020))
     public static let border = themed(light: .hex(0xE6E5E3), dark: .hex(0x2F2F2F))
+    /// Линия разделителя на странице: в тёмной теме Notion 7.39 светлее рамок — ≈ rgb(55, 55, 53) по снимку 19.10.2026.
+    public static let dividerLine = themed(light: .hex(0xE6E5E3), dark: .hex(0x373735))
     /// Строка дерева под мышью или выбранная, кнопки при наведении.
     public static let hoverBackground = themed(light: .rgba(33, 27, 23, 0.05), dark: .rgba(255, 255, 255, 0.055))
     public static let inlineCodeText = themed(light: .hex(0xCF5148), dark: .hex(0xCF5148))

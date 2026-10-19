@@ -49,6 +49,13 @@ public enum PageEditorPreview {
         return true
     }
 
+    /// Выделить весь текст блока: следующий набор заменит его.
+    @discardableResult
+    public static func selectAllText(ofBlock blockId: UUID, in window: NSWindow) -> Bool {
+        guard let textView = textView(in: window), let index = textView.document.index(ofBlock: blockId) else { return false }
+        return select(NSRange(location: 0, length: textView.document.blocks[index].pageTextLength), inBlock: blockId, in: window)
+    }
+
     /// Выделить `range` в тексте блока.
     @discardableResult
     public static func select(_ range: NSRange, inBlock blockId: UUID, in window: NSWindow) -> Bool {
