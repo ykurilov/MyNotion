@@ -1,7 +1,9 @@
 import AppKit
+import Attachments
 import Foundation
 import NotesCore
 import Observation
+import PageEditor
 import PageSearch
 import PageTree
 
@@ -12,12 +14,18 @@ import PageTree
 @Observable
 final class PagesLibrary {
     let store: NotesStore
+    /// Копии файлов блоков (US5): рядом с базой, в `Attachments/`.
+    @ObservationIgnored let attachments: AttachmentStore
     @ObservationIgnored let openDocuments: OpenDocuments
     /// Дерево без корзины.
     private(set) var tree = PageTreeSnapshot(allPages: [])
     /// Меняется при каждом перечитывании дерева.
     private(set) var treeRevision = 0
     private(set) var trashEntries: [Page] = []
+    /// Страницы корзины вместе с подстраницами — для упоминаний «Удалённая страница».
+    private(set) var trashedPageIds: Set<UUID> = []
+    /// Напоминания (US3): индекс, уведомления системы, «Готово».
+    @ObservationIgnored let reminders: ReminderNotifications
     /// Синхронизация между Mac (US5); выключена — ничего не делает.
     @ObservationIgnored private(set) var sync: SyncController!
     /// Окно, открытое при запуске: его ждут замеры, галерея и снимки окна.
@@ -31,13 +39,26 @@ final class PagesLibrary {
         weak var model: MainWindowModel?
     }
 
-    init(store: NotesStore, startsSync: Bool = true) {
+    init(store: NotesStore, startsSync: Bool = true, reminders: ReminderNotifications) {
         self.store = store
+        self.reminders = reminders
+        attachments = AttachmentStore(store: store, folder: AttachmentStore.folder(forDatabaseAt: store.database.url))
+        try? attachments.abandonInterruptedCopies()
         openDocuments = OpenDocuments(store: store)
+        MediaBlocks.install(AppMediaServices(attachments: attachments, openDocuments: openDocuments))
         reloadTree()
-        sync = SyncController(store: store, openDocuments: openDocuments, startsEngine: startsSync)
+        sync = SyncController(store: store, openDocuments: openDocuments, attachments: attachments, startsEngine: startsSync)
         sync.onRemoteChange = { [weak self] _ in self?.remoteChangesApplied() }
         firstWindow = MainWindowModel(library: self, opening: nil)
+        reminders.openBlock = { [weak self] pageId, blockId in self?.openBlock(blockId, inPage: pageId) }
+    }
+
+    /// Щелчок по уведомлению: страница в окне, где работают, курсор — у блока с датой; свёрнутые предки раскрываются.
+    func openBlock(_ blockId: UUID, inPage pageId: UUID) {
+        guard tree.page(pageId) != nil else { return }
+        let window = activeWindow ?? firstWindow
+        window?.select(pageId, revealing: blockId)
+        window?.window?.makeKeyAndOrderFront(nil)
     }
 
     /// Модель для нового окна: первому — созданная при запуске, следующим — новая с той же страницей,
@@ -78,6 +99,7 @@ final class PagesLibrary {
         let all = (try? store.pageOutline()) ?? []
         tree = PageTreeSnapshot(allPages: all)
         trashEntries = NotesStore.trashEntries(in: all)
+        trashedPageIds = Set(all.lazy.map(\.id).filter { self.tree.page($0) == nil })
         treeRevision += 1
     }
 

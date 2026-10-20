@@ -36,6 +36,15 @@ CREATE TABLE IF NOT EXISTS snapshot (
   ciphertext  TEXT NOT NULL,
   created_at  INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS files (
+  id          TEXT PRIMARY KEY,
+  part_count  INTEGER NOT NULL,
+  bytes       INTEGER NOT NULL DEFAULT 0,
+  complete_at INTEGER,
+  deleted_at  INTEGER,
+  created_at  INTEGER NOT NULL,
+  updated_at  INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS meta (
   key    TEXT PRIMARY KEY,
   value  INTEGER NOT NULL

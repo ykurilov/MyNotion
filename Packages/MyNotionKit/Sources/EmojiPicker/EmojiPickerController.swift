@@ -11,7 +11,13 @@ public final class EmojiPickerController: NSObject, NSWindowDelegate {
     private(set) var view: EmojiPickerView?
     private var window: EmojiPickerWindow?
     private var onChoose: ((String?) -> Void)?
-    private var observers: [NSObjectProtocol] = []
+    /// Подписка снимается в `deinit` — он не привязан к главному потоку.
+    nonisolated(unsafe) private var observers: [NSObjectProtocol] = []
+
+    deinit {
+        observers.forEach(NotificationCenter.default.removeObserver)
+    }
+
     /// Место карточки без тени, в координатах экрана; `nil` — окно закрыто.
     public private(set) var cardFrame: NSRect?
 
@@ -29,10 +35,12 @@ public final class EmojiPickerController: NSObject, NSWindowDelegate {
     }
 
     /// Открыть под `anchor` (иконка, координаты экрана) над окном `parent`. Невидимый `parent` — окно на экран не выходит.
-    public func show(below anchor: NSRect, in parent: NSWindow, onChoose: @escaping (String?) -> Void) {
+    /// `allowsRemoving: false` — без «Убрать»: иконка обязательна (выноска).
+    public func show(below anchor: NSRect, in parent: NSWindow, allowsRemoving: Bool = true, onChoose: @escaping (String?) -> Void) {
         close()
         self.onChoose = onChoose
         let view = EmojiPickerView(catalog: catalog, recents: recents.emojis)
+        view.removeButton.isHidden = !allowsRemoving
         view.onChoose = { [weak self] emoji, closes in self?.choose(emoji, closes: closes) }
         view.onCancel = { [weak self] in self?.close() }
         let size = NSSize(width: Metrics.EmojiPicker.width, height: Metrics.EmojiPicker.height)

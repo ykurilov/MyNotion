@@ -5,6 +5,12 @@ import NotesCore
 /// Каждое действие идёт тем же путём, что и у пользователя: показ ручек, набор «/», щелчок по «⋮⋮».
 @MainActor
 public enum PageEditorPreview {
+    /// Заглушка «Копируется… N %» у файла образца: как будто он копируется прямо сейчас.
+    public static func showCopyProgress(_ fraction: Double, ofAttachment id: UUID) {
+        MediaBlocks.beginCopy(id)
+        MediaBlocks.setCopyProgress(fraction, of: id)
+    }
+
     /// Открыть окно сравнения «Двух версий» у блока, как по щелчку на метке.
     @discardableResult
     public static func openConflictComparison(forBlock blockId: UUID, in window: NSWindow) -> Bool {
@@ -38,9 +44,16 @@ public enum PageEditorPreview {
     @discardableResult
     public static func placeCaret(atEndOf blockId: UUID, in window: NSWindow) -> Bool {
         guard let textView = textView(in: window), let index = textView.document.index(ofBlock: blockId) else { return false }
-        let length = (textView.document.blocks[index].text.string as NSString).length
+        let length = textView.document.blocks[index].pageTextLength
         textView.focusBody(at: textView.mapper.paragraphStart(ofBlockAt: index) + length)
         return true
+    }
+
+    /// Выделить весь текст блока: следующий набор заменит его.
+    @discardableResult
+    public static func selectAllText(ofBlock blockId: UUID, in window: NSWindow) -> Bool {
+        guard let textView = textView(in: window), let index = textView.document.index(ofBlock: blockId) else { return false }
+        return select(NSRange(location: 0, length: textView.document.blocks[index].pageTextLength), inBlock: blockId, in: window)
     }
 
     /// Выделить `range` в тексте блока.
@@ -72,7 +85,7 @@ public enum PageEditorPreview {
               let lastIndex = textView.document.index(ofBlock: last) else { return false }
         window.makeFirstResponder(textView)
         let start = textView.mapper.paragraphStart(ofBlockAt: firstIndex)
-        let end = textView.mapper.paragraphStart(ofBlockAt: lastIndex) + (textView.document.blocks[lastIndex].text.string as NSString).length
+        let end = textView.mapper.paragraphStart(ofBlockAt: lastIndex) + textView.document.blocks[lastIndex].pageTextLength
         textView.setSelectedRange(NSRange(location: start, length: end - start))
         return true
     }
@@ -91,6 +104,22 @@ public enum PageEditorPreview {
         guard let bar = textView(in: window)?.formatBar, bar.isShown else { return false }
         bar.openKindMenu()
         return bar.isKindMenuOpen
+    }
+
+    /// Открыть окно цветов панели форматирования, как щелчком по кнопке «A»; `false` — панели нет.
+    @discardableResult
+    public static func openFormatBarColorMenu(in window: NSWindow) -> Bool {
+        guard let textView = textView(in: window), textView.formatBar.isShown else { return false }
+        textView.formatBar.toggleColorMenu()
+        return textView.colorMenu.isOpen
+    }
+
+    /// Окно цветов от меню блока, как выбором пункта «Цвет»; `false` — меню блока не открылось.
+    @discardableResult
+    public static func openBlockColorMenu(forBlock blockId: UUID, in window: NSWindow) -> Bool {
+        guard openBlockMenu(forBlock: blockId, in: window), let textView = textView(in: window) else { return false }
+        textView.popups.choose(.color)
+        return textView.colorMenu.isOpen
     }
 
     /// Мышь над шапкой страницы, как при наведении; `false` — «Добавить иконку» не видна (у страницы есть иконка).
@@ -121,6 +150,14 @@ public enum PageEditorPreview {
         let handleOnScreen = window.convertToScreen(dragHandle.convert(dragHandle.bounds, to: nil))
         textView.selectBlockAndOpenMenu(blockId, below: handleOnScreen)
         return true
+    }
+
+    /// В открытом меню блока — подменю «Преобразовать в», как стрелкой →; `false` — меню блока не открыто.
+    @discardableResult
+    public static func openBlockMenuTurnInto(in window: NSWindow) -> Bool {
+        guard let textView = textView(in: window), textView.popups.isOpen else { return false }
+        textView.popups.openSubmenu(for: .turnInto, focus: true)
+        return textView.popups.submenu == .turnInto
     }
 
     /// Взять блок за «⋮⋮» и сдвинуть мышь на `offset` (вниз — плюс), не отпуская кнопку: идёт перетаскивание.

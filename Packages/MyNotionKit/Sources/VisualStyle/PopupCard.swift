@@ -7,7 +7,13 @@ import AppKit
 public final class PopupCard {
     private var panel: PopupCardPanel?
     private var monitor: Any?
-    private var deactivationObserver: NSObjectProtocol?
+    /// Подписка снимается в `deinit` — он не привязан к главному потоку.
+    nonisolated(unsafe) private var deactivationObserver: NSObjectProtocol?
+
+    deinit {
+        if let deactivationObserver { NotificationCenter.default.removeObserver(deactivationObserver) }
+    }
+
     /// Карточка закрылась (в том числе щелчком мимо).
     public var onClose: (() -> Void)?
 
@@ -115,7 +121,7 @@ private final class PopupCardPanel: NSPanel {
         }
 
         override func draw(_ dirtyRect: NSRect) {
-            PopupSurface.draw(card: cardRect)
+            PopupSurface.draw(card: cardRect, shadow: Palette.popupCardShadow)
         }
     }
 }

@@ -144,9 +144,13 @@ struct NotionMarkdownParserTests {
         ])
     }
 
-    @Test("Ссылка на страницу внутри текста — просто текст; строка из одной ссылки на адрес — абзац с пометкой адреса")
-    func pageLinksInText() {
-        #expect(blocks("См. [Дневник](%D0%94%D0%BD%D0%B5%D0%B2%D0%BD%D0%B8%D0%BA.md) тут\n") == [block(.paragraph, "См. Дневник тут")])
+    @Test("Ссылка на страницу внутри текста — упоминание (002); строка из одной ссылки на адрес — абзац с пометкой адреса")
+    func pageLinksInText() throws {
+        let mentioned = try #require(blocks("См. [Дневник](%D0%94%D0%BD%D0%B5%D0%B2%D0%BD%D0%B8%D0%BA.md) тут\n").first)
+        let mention = try #require(mentioned.mentions.first)
+        #expect(mentioned.kind == .paragraph)
+        #expect(mentioned.text == InlineText("См. \u{FFFC} тут", runs: [StyledRun(start: 4, length: 1, style: .mention(mention.placeholder))]))
+        #expect(mention.path == "Дневник.md" && mention.title == "Дневник")
         let url = URL(string: "https://www.notion.so/MyNotion-2a3b4c5d6e7f8091a2b3c4d5e6f70812?pvs=21")!
         #expect(blocks("[MyNotion](https://www.notion.so/MyNotion-2a3b4c5d6e7f8091a2b3c4d5e6f70812?pvs=21)\n") == [
             ParsedBlock(kind: .paragraph, text: styled("MyNotion", [(0, 8, .link(url))]), standaloneURL: url),
@@ -155,14 +159,17 @@ struct NotionMarkdownParserTests {
 
     // MARK: Упрощение до текста (FR-026)
 
-    @Test("Картинки и вложения — «[файл: имя]»")
+    @Test("Вложение внутри текста — «[файл: имя]»; картинка на своей строке — блок-картинка (002, contracts/markdown-and-notion.md)")
     func files() {
         let page = parser.parse("# С\n\n![schema.png](%D0%98%D0%B4%D0%B5%D0%B8/schema.png)\n\nОтчёт: [отчёт.pdf](%D0%9F/%D0%BE%D1%82%D1%87%D1%91%D1%82.pdf)\n")
-        #expect(page.blocks == [block(.paragraph, "[файл: schema.png]"), block(.paragraph, "Отчёт: [файл: отчёт.pdf]")])
-        #expect(page.simplifications == [.file: 2])
+        // Подпись, равная имени файла, — так Notion пишет картинку без подписи.
+        var image = block(.image, "")
+        image.attachmentPath = "Идеи/schema.png"
+        #expect(page.blocks == [image, block(.paragraph, "Отчёт: [файл: отчёт.pdf]")])
+        #expect(page.simplifications == [.file: 1])
     }
 
-    @Test("Цитата, выноска, код, переключатель, разделитель, формула, встраивание — абзацы с исходным текстом")
+    @Test("Встраивание — абзац с исходным текстом; цитата, выноска, переключатель, разделитель (US1), код и формула (US4) — блоками")
     func simplifiedBlocks() {
         let markdown = """
             # С
@@ -197,26 +204,29 @@ struct NotionMarkdownParserTests {
             <figure><img src="x.png">Подпись</figure>
             """
         let page = parser.parse(markdown)
+        var callout = ParsedBlock(kind: .callout, text: InlineText("Выноска"), color: .defaults(for: .callout), props: .defaults(for: .callout))
+        callout.props.icon = "💡"
+        var code = ParsedBlock(kind: .code, text: InlineText("let a = **1**\n  print(a)"), props: .defaults(for: .code))
+        code.props.language = "swift"
         #expect(page.blocks == [
-            block(.paragraph, "Цитата\nв две строки"),
-            block(.paragraph, "💡 Выноска"),
-            block(.paragraph, "let a = **1**\n  print(a)"),
-            block(.paragraph, "Переключатель"),
-            block(.paragraph, "Внутри"),
-            block(.paragraph, "E = mc^2"),
+            block(.quote, "Цитата\nв две строки"),
+            callout,
+            code,
+            block(.toggle, "Переключатель"),
+            block(.paragraph, "Внутри", indent: 1),
+            block(.divider, ""),
+            block(.equation, "E = mc^2"),
             block(.paragraph, "https://www.youtube.com/embed/xyz"),
             block(.paragraph, "Подпись"),
         ])
-        #expect(page.simplifications == [.quote: 1, .callout: 1, .code: 1, .toggle: 1, .divider: 1, .equation: 1, .embed: 2])
+        #expect(page.simplifications == [.embed: 2])
     }
 
-    @Test("Таблица Markdown — абзац на строку: «Колонка: значение» через перенос, пустые ячейки пропущены")
+    @Test("Таблица Markdown — блок-таблица (002, US6), а не абзацы; подробности — TablesImportTests")
     func markdownTable() {
-        let page = parser.parse("# С\n\n| Имя | Роль |\n| --- | :-: |\n| Юрий | автор |\n| Мишка |  |\n| a \\| b | `x` |\n")
-        #expect(page.blocks == [
-            block(.paragraph, "Имя: Юрий\nРоль: автор"), block(.paragraph, "Имя: Мишка"), block(.paragraph, "Имя: a | b\nРоль: x"),
-        ])
-        #expect(page.simplifications == [.table: 1])
+        let page = parser.parse("# С\n\n| Имя | Роль |\n| --- | :-: |\n| Юрий | автор |\n")
+        #expect(page.blocks.map(\.kind) == [.table])
+        #expect(page.simplifications.isEmpty)
     }
 
     @Test("Строка с | без строки-разделителя — обычный абзац")

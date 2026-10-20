@@ -6,6 +6,8 @@ export interface Config {
   databasePath: string;
   backupDir: string;
   backupKeep: number;
+  filesDir: string;
+  filesLimitBytes: number;
 }
 
 export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -16,5 +18,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     databasePath: join(dataDir, 'mynotion-sync.db'),
     backupDir: join(dataDir, 'backups'),
     backupKeep: Number(env.BACKUP_KEEP ?? 14),
+    filesDir: join(dataDir, 'files'),
+    filesLimitBytes: Math.round(Number(env.FILES_LIMIT_GB ?? 50) * 1024 ** 3),
   };
 }

@@ -40,9 +40,11 @@ public struct SearchIndexer: NotesWriteHook {
         let id = SQLValue.text(block.id.searchIndexText)
         try transaction.execute(sql: "DELETE FROM search_index WHERE rowid = (SELECT rowid FROM block WHERE id = ?)", arguments: [id])
         guard !block.text.string.isEmpty else { return }
+        // Упоминание — названием страницы на момент записи, дата — словами (data-model.md, «Поиск»).
+        let text = block.text.plainText(pageTitle: { try? transaction.page($0)?.title })
         try transaction.execute(sql: """
             INSERT INTO search_index (rowid, pageId, blockId, content) SELECT rowid, pageId, id, ? FROM block WHERE id = ?
-            """, arguments: [.text(SearchText.indexed(block.text.string)), id])
+            """, arguments: [.text(SearchText.indexed(text)), id])
     }
 
     private func delete(column: String, ids: [UUID], in transaction: NotesTransaction) throws {

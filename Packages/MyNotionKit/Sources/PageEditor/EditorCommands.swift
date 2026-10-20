@@ -27,8 +27,19 @@ public enum EditorCommand: Sendable, Hashable {
     case moveBlocksUp
     case moveBlocksDown
     case toggleChecked
+    /// ⌘⌥T: свернуть или раскрыть все переключатели страницы.
+    case toggleAllCollapsed
     case toggleInline(InlineFormat)
+    /// «Tx» панели форматирования: снять с выделения оформление, ссылки и цвета.
+    case clearInlineFormatting
     case setKind(BlockKind)
+    case applyColor(ColorChoice)
+    case applyBlockColor(ColorChoice)
+    case repeatLastColor
+    /// ⌃⇧E: выделенный текст — формула в строке (у Notion ⌘⇧E, но здесь она занята выгрузкой).
+    case insertInlineEquation
+    /// ⌘D: копия блоков со всем вложенным сразу под ними, как у Notion.
+    case duplicateBlocks
 }
 
 /// Какие клавиши какое действие запускают. ⌘K свободна: ссылка — вставкой адреса или «Формат → Ссылка».
@@ -40,8 +51,12 @@ public enum EditorKeyBindings {
         case ("i", [.command]): return .toggleInline(.italic)
         case ("x", [.command, .shift]): return .toggleInline(.strikethrough)
         case ("e", [.command]): return .toggleInline(.code)
+        case ("e", [.control, .shift]): return .insertInlineEquation
         case ("u", [.command]): return .toggleInline(.underline)
+        case ("h", [.command, .shift]): return .repeatLastColor
         case ("\r", [.command]), ("\u{3}", [.command]): return .toggleChecked
+        case ("t", [.command, .option]): return .toggleAllCollapsed
+        case ("d", [.command]): return .duplicateBlocks
         case ("\u{F700}", [.option, .shift]): return .moveBlocksUp
         case ("\u{F701}", [.option, .shift]): return .moveBlocksDown
         default: return nil
@@ -62,7 +77,7 @@ public enum EditorKeyBindings {
         return command(characters: latin, modifiers: event.modifierFlags)
     }
 
-    /// Клавиши B, I, X, E, U на месте букв латинской раскладки.
+    /// Клавиши B, I, X, E, U, H, T, D на месте букв латинской раскладки.
     private static func latinLetter(forKeyCode keyCode: UInt16) -> String? {
         switch keyCode {
         case 11: "b"
@@ -70,6 +85,9 @@ public enum EditorKeyBindings {
         case 7: "x"
         case 14: "e"
         case 32: "u"
+        case 4: "h"
+        case 17: "t"
+        case 2: "d"
         default: nil
         }
     }

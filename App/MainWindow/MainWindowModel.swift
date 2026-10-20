@@ -24,6 +24,9 @@ final class MainWindowModel {
     /// Куда поставить курсор в только что открытой странице.
     private(set) var initialFocus: PageTextView.InitialFocus = .body
     private(set) var loadError: String?
+    /// Перейти к блоку открытой страницы (найденное поиском страниц): редактор раскрывает свёрнутых предков.
+    /// Новый запрос — новый `token`, даже к тому же блоку.
+    private(set) var blockReveal: BlockReveal?
     /// Поле поиска вверху боковой панели и его выдача (FR-018).
     @ObservationIgnored private(set) var search: PageSearchController!
 
@@ -42,6 +45,7 @@ final class MainWindowModel {
         }
         search = PageSearchController(store: library.store, tree: { [weak library] in library?.tree ?? PageTreeSnapshot(allPages: []) },
                                       open: { [weak self] in self?.select($0) })
+        search.openResult = { [weak self] result in self?.select(result.pageId, revealing: result.blockId) }
         library.register(self)
         let tree = library.tree
         let lastOpen = (pageId ?? windowState?.openPageId).flatMap { tree.page($0)?.id }
@@ -90,6 +94,16 @@ final class MainWindowModel {
         open(pageId, focus: focus, remember: true)
     }
 
+    /// Открыть страницу и перейти к блоку (поиск страниц, US1): свёрнутые предки блока раскрываются.
+    func select(_ pageId: UUID, revealing blockId: UUID?) {
+        select(pageId)
+        guard let blockId, openPageId == pageId else { return }
+        blockReveal = BlockReveal(blockId: blockId, token: (blockReveal?.token ?? 0) + 1)
+    }
+
+    /// Вид блоков этого Mac — свёрнутые переключатели.
+    var blockViewState: BlockViewStateStore { BlockViewStateStore(database: store.database) }
+
     /// ⌘N: новая страница рядом с текущей, курсор в названии (contracts/editor-interactions.md).
     func createPage() {
         do {
@@ -118,6 +132,22 @@ final class MainWindowModel {
         }
         if let subpage = performTreeOperation({ try treeOperations.createSubpage(in: parentId) }) {
             open(subpage.id, focus: .title, remember: true)
+        }
+    }
+
+    /// «Страница» в меню «/» или «Преобразовать в» открытой страницы, как в Notion 7.39: подстраница со ссылкой
+    /// у блока. Из «/» — сразу открыть её с курсором в названии; ⌘Z на исходной странице отменяет одним шагом.
+    func handleSubpageRequest(_ request: SubpageRequest, inPage pageId: UUID) {
+        if collapsedPageIds.remove(pageId) != nil {
+            saveWindowState { $0.collapsedPageIds = collapsedPageIds }
+        }
+        switch request {
+        case .createAndOpen(let placement):
+            if let subpage = performTreeOperation({ try treeOperations.createSubpage(in: pageId, linkAt: placement) }) {
+                open(subpage.id, focus: .title, remember: true)
+            }
+        case .turnInto(let blockId):
+            performTreeOperation { try treeOperations.turnIntoSubpage(blockId, in: pageId) }
         }
     }
 
@@ -244,10 +274,18 @@ final class MainWindowModel {
     private func open(_ pageId: UUID, focus: PageTextView.InitialFocus, remember: Bool) {
         do {
             let document = try openDocuments.open(pageId)
-            if let previous = openDocument { openDocuments.release(previous.pageId) }
+            if let previous = openDocument {
+                let renamed = tree.page(previous.pageId).map { $0.title != previous.page.title || $0.icon != previous.page.icon } ?? false
+                openDocuments.release(previous.pageId)
+                // Название меняли в шапке: упоминания и подстраницы на других страницах берут его из дерева.
+                if renamed { library.reloadTree() }
+            }
             initialFocus = focus
+            blockReveal = nil
             openDocument = document
             loadError = nil
+            // Файлы открытой страницы — первыми в очереди скачивания (FR-120).
+            library.sync.prioritizeFiles(onPage: pageId)
             if remember { saveWindowState { $0.openPageId = pageId } }
         } catch {
             loadError = "Не удалось открыть страницу: \(SaveStatus.reason(for: error))"

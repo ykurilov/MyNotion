@@ -11,7 +11,9 @@ public struct SyncBatch: Sendable, Hashable, Codable {
     public var deviceName: String
     public var changes: [SyncChange]
 
-    public static let currentFormatVersion = 1
+    /// 2 — блоки 002: поля `placement`, `color`, `props`, новые типы и оформления, сущность `reminder`
+    /// (contracts/sync-and-files-api.md). Пачки версии 1 читаются.
+    public static let currentFormatVersion = 2
 
     public init(formatVersion: Int = SyncBatch.currentFormatVersion, deviceId: String, deviceName: String,
                 changes: [SyncChange]) {
@@ -27,6 +29,8 @@ public struct SyncChange: Sendable, Hashable, Codable {
     public enum Entity: String, Sendable, Hashable, Codable {
         case page
         case block
+        /// Отметка «сделано» напоминания; `id` — id упоминания даты (research R11).
+        case reminder
     }
 
     public var entity: Entity
@@ -64,10 +68,17 @@ public struct SyncChange: Sendable, Hashable, Codable {
         case text(InlineText)
         case kindAndIndent(kind: BlockKind, indent: Int, linkedPageId: UUID?)
         case isChecked(Bool)
+        /// Место блока: контейнер и порядок одной меткой.
+        case blockPlacement(containerId: UUID?, sortKey: String)
+        case color(BlockColor)
+        case props(BlockProps)
+        /// Только из пачек версии 1: порядок без контейнера — контейнер остаётся прежним.
         case sortKey(String)
         case deleted
         /// Юрий выбрал версию: снять «Две версии» с этими вариантами текста на других Mac.
         case conflictResolved(versions: [InlineText])
+        // Напоминание
+        case doneAt(Date?)
 
         public var field: String {
             switch self {
@@ -79,15 +90,20 @@ public struct SyncChange: Sendable, Hashable, Codable {
             case .text: "text"
             case .kindAndIndent: "kindAndIndent"
             case .isChecked: "isChecked"
+            case .blockPlacement: "placement"
+            case .color: "color"
+            case .props: "props"
             case .sortKey: "sortKey"
             case .deleted: "deleted"
             case .conflictResolved: "conflictResolved"
+            case .doneAt: "doneAt"
             }
         }
     }
 
     private enum CodingKeys: String, CodingKey { case entity, id, pageId, field, value, hlc, baseHlc, known }
     private enum PlacementKeys: String, CodingKey { case parentId, sortKey }
+    private enum BlockPlacementKeys: String, CodingKey { case containerId, sortKey }
     private enum KindKeys: String, CodingKey { case kind, indent, linkedPageId }
 
     public init(from decoder: any Decoder) throws {
@@ -101,10 +117,17 @@ public struct SyncChange: Sendable, Hashable, Codable {
         switch try container.decode(String.self, forKey: .field) {
         case "title": value = .title(try container.decode(String.self, forKey: .value))
         case "icon": value = .icon(try container.decodeIfPresent(String.self, forKey: .value))
+        case "placement" where entity == .block:
+            let placement = try container.nestedContainer(keyedBy: BlockPlacementKeys.self, forKey: .value)
+            value = .blockPlacement(containerId: try placement.decodeIfPresent(UUID.self, forKey: .containerId),
+                                    sortKey: try placement.decode(String.self, forKey: .sortKey))
         case "placement":
             let placement = try container.nestedContainer(keyedBy: PlacementKeys.self, forKey: .value)
             value = .placement(parentId: try placement.decodeIfPresent(UUID.self, forKey: .parentId),
                                sortKey: try placement.decode(String.self, forKey: .sortKey))
+        case "color": value = .color(try container.decode(BlockColor.self, forKey: .value))
+        case "props": value = .props(try container.decode(BlockProps.self, forKey: .value))
+        case "doneAt": value = .doneAt(try container.decodeIfPresent(Date.self, forKey: .value))
         case "trashedAt": value = .trashedAt(try container.decodeIfPresent(Date.self, forKey: .value))
         case "erased": value = .erased
         case "text": value = .text(try container.decode(InlineText.self, forKey: .value))
@@ -147,6 +170,13 @@ public struct SyncChange: Sendable, Hashable, Codable {
             try nested.encode(indent, forKey: .indent)
             try nested.encode(linkedPageId, forKey: .linkedPageId)
         case .isChecked(let checked): try container.encode(checked, forKey: .value)
+        case .blockPlacement(let containerId, let sortKey):
+            var placement = container.nestedContainer(keyedBy: BlockPlacementKeys.self, forKey: .value)
+            try placement.encode(containerId, forKey: .containerId)
+            try placement.encode(sortKey, forKey: .sortKey)
+        case .color(let color): try container.encode(color, forKey: .value)
+        case .props(let props): try container.encode(props, forKey: .value)
+        case .doneAt(let date): try container.encode(date, forKey: .value)
         case .sortKey(let key): try container.encode(key, forKey: .value)
         case .conflictResolved(let versions): try container.encode(versions, forKey: .value)
         }

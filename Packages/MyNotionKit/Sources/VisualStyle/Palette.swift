@@ -20,6 +20,8 @@ public enum Palette {
     public static let breadcrumbSeparator = themed(light: .rgba(55, 53, 47, 0.15), dark: .rgba(255, 255, 255, 0.1))
     public static let sidebarBackground = themed(light: .hex(0xF9F8F7), dark: .hex(0x202020))
     public static let border = themed(light: .hex(0xE6E5E3), dark: .hex(0x2F2F2F))
+    /// Линия разделителя на странице: в тёмной теме Notion 7.39 светлее рамок — ≈ rgb(55, 55, 53) по снимку 19.10.2026.
+    public static let dividerLine = themed(light: .hex(0xE6E5E3), dark: .hex(0x373735))
     /// Строка дерева под мышью или выбранная, кнопки при наведении.
     public static let hoverBackground = themed(light: .rgba(33, 27, 23, 0.05), dark: .rgba(255, 255, 255, 0.055))
     public static let inlineCodeText = themed(light: .hex(0xCF5148), dark: .hex(0xCF5148))
@@ -80,12 +82,21 @@ public enum Palette {
 
     /// Тень всплывающих панелей: четыре слоя, последний — тонкая рамка. В тёмной теме тень гуще, а рамка светлая:
     /// тёмная тень на тёмной странице не видна (≈ по Notion).
-    public static let popupMenuShadow: [ShadowLayer] = [
+    /// Тень окон-карточек над страницей (корзина, подтверждение, выдача поиска): со всех сторон, верхний край поверх
+    /// текста не выглядит срезом строки (ui-review № 26).
+    public static let popupCardShadow: [ShadowLayer] = [
         ShadowLayer(offsetY: 20, blurRadius: 24, spread: 0, color: themed(light: .rgba(25, 25, 25, 0.05), dark: .rgba(0, 0, 0, 0.4))),
         ShadowLayer(offsetY: 5, blurRadius: 8, spread: 0, color: themed(light: .rgba(25, 25, 25, 0.027), dark: .rgba(0, 0, 0, 0.2))),
-        // Мягкая тень со всех сторон: верхний край не выглядит срезом строки страницы.
         ShadowLayer(offsetY: 0, blurRadius: 8, spread: 0, color: themed(light: .rgba(15, 15, 15, 0.1), dark: .rgba(0, 0, 0, 0.6))),
         ShadowLayer(offsetY: 0, blurRadius: 0, spread: 1, color: themed(light: .rgba(42, 28, 0, 0.07), dark: .rgba(255, 255, 255, 0.094))),
+    ]
+
+    /// Тень всплывающих меню. Подобрано по снимкам меню Notion 7.39 (19.10.2026): в светлой теме у края светлее, а вниз тянется на ≈ 42;
+    /// в тёмной снаружи тени нет — только светлая рамка.
+    public static let popupMenuShadow: [ShadowLayer] = [
+        ShadowLayer(offsetY: 12, blurRadius: 32, spread: 0, color: themed(light: .rgba(15, 15, 15, 0.06), dark: .rgba(0, 0, 0, 0))),
+        ShadowLayer(offsetY: 3, blurRadius: 6, spread: 0, color: themed(light: .rgba(15, 15, 15, 0.03), dark: .rgba(0, 0, 0, 0))),
+        ShadowLayer(offsetY: 0, blurRadius: 0, spread: 1, color: themed(light: .rgba(15, 15, 15, 0.05), dark: .rgba(255, 255, 255, 0.13))),
     ]
 
     private static func themed(light: NSColor, dark: NSColor) -> NSColor {
@@ -93,6 +104,50 @@ public enum Palette {
             appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
         }
     }
+}
+
+/// Цвета Notion: девять оттенков (по умолчанию — отсутствие оттенка). Имена те же, что у `NotionColor` в модели.
+public enum NotionTone: String, Sendable, Hashable, CaseIterable {
+    case gray, brown, orange, yellow, green, blue, purple, pink, red
+}
+
+extension Palette {
+    /// Цвет текста Notion; `nil` — основной цвет текста страницы. Значения сняты с живого Notion 7.39.0 (пиксели
+    /// заголовков в обеих темах): текст у Notion в обеих темах один и тот же.
+    public static func notionText(_ tone: NotionTone?) -> NSColor {
+        guard let tone else { return textPrimary }
+        return notionTextColors[tone] ?? textPrimary
+    }
+
+    /// Цвет подложки Notion (фон текста или блока); `nil` — без подложки. Фон слова и фон блока у Notion одного цвета.
+    public static func notionBackground(_ tone: NotionTone?) -> NSColor? {
+        guard let tone else { return nil }
+        return notionBackgroundColors[tone]
+    }
+
+    private static let notionTextColors: [NotionTone: NSColor] = [
+        .gray: .hex(0x7D7A75),
+        .brown: .hex(0x9F765A),
+        .orange: .hex(0xD27B2D),
+        .yellow: .hex(0xCB9434),
+        .green: .hex(0x50946E),
+        .blue: .hex(0x387DC9),
+        .purple: .hex(0x9A6BB4),
+        .pink: .hex(0xC14C8A),
+        .red: .hex(0xCF5148),
+    ]
+
+    private static let notionBackgroundColors: [NotionTone: NSColor] = [
+        .gray: themed(light: .hex(0xF0EFED), dark: .hex(0x383836)),
+        .brown: themed(light: .hex(0xF5EDE9), dark: .hex(0x45362D)),
+        .orange: themed(light: .hex(0xFBEBDE), dark: .hex(0x53361F)),
+        .yellow: themed(light: .hex(0xF9F3DC), dark: .hex(0x504425)),
+        .green: themed(light: .hex(0xE8F1EC), dark: .hex(0x263D30)),
+        .blue: themed(light: .hex(0xE5F2FC), dark: .hex(0x233850)),
+        .purple: themed(light: .hex(0xF3EBF9), dark: .hex(0x3C2D47)),
+        .pink: themed(light: .hex(0xFAE9F1), dark: .hex(0x4E2B3C)),
+        .red: themed(light: .hex(0xFCE9E7), dark: .hex(0x502C29)),
+    ]
 }
 
 /// Один слой тени в духе CSS `box-shadow`.

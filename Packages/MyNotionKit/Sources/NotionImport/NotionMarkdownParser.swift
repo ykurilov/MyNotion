@@ -33,15 +33,36 @@ public struct ParsedBlock: Sendable, Hashable {
     public var pagePath: String?
     /// Абзац — одна ссылка на адрес и ничего больше (например, на notion.so): импорт может узнать в нём страницу выгрузки.
     public var standaloneURL: URL?
+    /// Цвет и свойства блоков 002.
+    public var color: BlockColor
+    public var props: BlockProps
+    /// Блоки внутри контейнера (колонки, таблица): их `containerId` — этот блок.
+    public var contained: [ParsedBlock]
+    /// id записи, если на блок ссылаются другие блоки разбора (столбец таблицы — из `columnId` ячеек); иначе новый.
+    public var id: UUID?
+    /// Упоминания страниц в тексте: импорт найдёт их страницы (`NotionImporter.resolvingMentions`).
+    var mentions: [NotionPageMention] = []
+    /// Картинка, файл, видео-файл: путь файла в выгрузке от папки страницы, раскодированный. Импорт копирует файл
+    /// во вложения; файла нет или он больше 100 МБ — абзац «[файл: имя]».
+    public var attachmentPath: String?
+    /// Обложка ролика, картинка и значок закладки из нашей выгрузки: пути файлов, как у `attachmentPath`.
+    /// Нет файла — блок остаётся, без картинки («Обновить» скачает её заново).
+    public var decorationPaths: [DecorationFile: String] = [:]
+
+    public enum DecorationFile: Sendable, Hashable, CaseIterable { case poster, image, icon }
 
     public init(kind: BlockKind, text: InlineText = .empty, indent: Int = 0, isChecked: Bool = false,
-                pagePath: String? = nil, standaloneURL: URL? = nil) {
+                pagePath: String? = nil, standaloneURL: URL? = nil, color: BlockColor = .none, props: BlockProps = .empty,
+                contained: [ParsedBlock] = []) {
         self.kind = kind
         self.text = text
         self.indent = indent
         self.isChecked = isChecked
         self.pagePath = pagePath
         self.standaloneURL = standaloneURL
+        self.color = color
+        self.props = props
+        self.contained = contained
     }
 }
 
@@ -51,6 +72,8 @@ public struct ParsedNotionPage: Sendable, Hashable {
     public var icon: String?
     public var blocks: [ParsedBlock]
     public var simplifications: [NotionSimplification: Int]
+    /// Языки кода, которых MyNotion не знает (код стал «Простым текстом»), — для отчёта.
+    public var unknownCodeLanguages: [String] = []
 }
 
 /// Разбор подмножества Markdown, которое пишет Notion (и наша выгрузка), в блоки MyNotion по таблице
@@ -74,7 +97,15 @@ public struct NotionMarkdownParser: Sendable {
         }
         var builder = PageBuilder()
         builder.consume(lines[index...])
-        return ParsedNotionPage(title: title, icon: icon, blocks: builder.blocks, simplifications: builder.simplifications)
+        return ParsedNotionPage(title: title, icon: icon, blocks: builder.blocks, simplifications: builder.simplifications,
+                                unknownCodeLanguages: builder.unknownCodeLanguages)
+    }
+
+    /// Блоки куска Markdown без строки названия — то, что внутри переключателя, выноски, цитаты.
+    static func blocks(in lines: [String]) -> (blocks: [ParsedBlock], simplifications: [NotionSimplification: Int]) {
+        var builder = PageBuilder()
+        builder.consume(lines[...])
+        return (builder.blocks, builder.simplifications)
     }
 
     // MARK: Строки
@@ -111,9 +142,10 @@ public struct NotionMarkdownParser: Sendable {
 }
 
 /// Сборка блоков страницы строка за строкой.
-private struct PageBuilder {
+struct PageBuilder {
     private(set) var blocks: [ParsedBlock] = []
     private(set) var simplifications: [NotionSimplification: Int] = [:]
+    private(set) var unknownCodeLanguages: [String] = []
 
     /// Абзац или пункт списка, строки которого ещё собираются.
     private struct OpenBlock {
@@ -124,6 +156,8 @@ private struct PageBuilder {
     }
 
     private var open: OpenBlock?
+    /// Цвет из комментария нашей выгрузки: достаётся следующему блоку.
+    private var pendingColor: NotionColorComment?
     /// Пустые строки после последнего блока: лишняя — пустой абзац.
     private var blankLines = 0
     /// Колонки текста открытых пунктов списка: по ним считается вложенность.
@@ -137,57 +171,23 @@ private struct PageBuilder {
             index += 1
             if NotionMarkdownParser.isBlank(line) {
                 closeOpenBlock()
-                blankLines += 1
+                // Строка из пробелов под пунктом списка — Notion так отделяет текст внутри пункта (и переключателя):
+                // это не лишняя пустая строка.
+                if listColumns.isEmpty || NotionMarkdownParser.leadingSpaces(line) == 0 { blankLines += 1 }
                 continue
             }
-            if let fence = Self.fence(trimmed) {
+            if let comment = NotionColorComment.parse(trimmed) {
                 closeOpenBlock()
-                let indentation = NotionMarkdownParser.leadingSpaces(line)
-                var code: [String] = []
-                while index < lines.endIndex {
-                    let candidate = lines[index]
-                    index += 1
-                    if candidate.trimmingCharacters(in: .whitespaces).hasPrefix(fence) { break }
-                    code.append(String(candidate.dropFirst(min(indentation, NotionMarkdownParser.leadingSpaces(candidate)))))
-                }
-                emit(ParsedBlock(kind: .paragraph, text: InlineText(code.joined(separator: "\n"))), simplified: .code)
+                pendingColor = comment
                 continue
             }
-            if trimmed.hasPrefix("$$") {
+            if let reading = NotionBlockReaders.all.lazy.compactMap({ $0.read(lines, at: index - 1) }).first {
                 closeOpenBlock()
-                var formula: [String] = []
-                if trimmed.count > 4, trimmed.hasSuffix("$$") {
-                    formula = [String(trimmed.dropFirst(2).dropLast(2)).trimmingCharacters(in: .whitespaces)]
-                } else {
-                    let first = trimmed.dropFirst(2).trimmingCharacters(in: .whitespaces)
-                    if !first.isEmpty { formula.append(first) }
-                    while index < lines.endIndex {
-                        let candidate = lines[index].trimmingCharacters(in: .whitespaces)
-                        index += 1
-                        if candidate.hasSuffix("$$") {
-                            let last = candidate.dropLast(2).trimmingCharacters(in: .whitespaces)
-                            if !last.isEmpty { formula.append(last) }
-                            break
-                        }
-                        formula.append(candidate)
-                    }
-                }
-                emit(ParsedBlock(kind: .paragraph, text: InlineText(formula.joined(separator: "\n"))), simplified: .equation)
-                continue
-            }
-            if trimmed.hasPrefix("|"), index < lines.endIndex, Self.isTableSeparator(lines[index]) {
-                closeOpenBlock()
-                let header = Self.tableCells(trimmed)
-                index += 1
-                var rows: [String] = []
-                while index < lines.endIndex, lines[index].trimmingCharacters(in: .whitespaces).hasPrefix("|") {
-                    let cells = Self.tableCells(lines[index].trimmingCharacters(in: .whitespaces))
-                    index += 1
-                    let pairs = zip(header, cells).filter { !$0.1.isEmpty }.map { "\($0.0): \($0.1)" }
-                    if !pairs.isEmpty { rows.append(pairs.joined(separator: "\n")) }
-                }
-                for row in rows { emit(ParsedBlock(kind: .paragraph, text: InlineText(row))) }
-                count(.table)
+                listColumns = []
+                for block in reading.blocks { emit(block) }
+                simplifications.merge(reading.simplifications, uniquingKeysWith: +)
+                unknownCodeLanguages += reading.unknownCodeLanguages
+                index = max(reading.nextIndex, index)
                 continue
             }
             if let html = Self.htmlBlock(trimmed) {
@@ -211,7 +211,9 @@ private struct PageBuilder {
                 let level: BlockKind = heading.level == 1 ? .heading1 : heading.level == 2 ? .heading2 : .heading3
                 let parsed = NotionInlineParser.parse(heading.text)
                 note(files: parsed.files)
-                emit(ParsedBlock(kind: level, text: parsed.text))
+                var headingBlock = ParsedBlock(kind: level, text: parsed.text)
+                headingBlock.mentions = parsed.pageMentions
+                emit(headingBlock)
                 continue
             }
             if trimmed.hasPrefix(">") {
@@ -244,8 +246,10 @@ private struct PageBuilder {
                 continue
             }
             closeOpenBlock()
-            if NotionMarkdownParser.leadingSpaces(line) == 0 { listColumns = [] }
-            open = OpenBlock(kind: .paragraph, lines: [trimmed])
+            // Абзац с отступом под пунктом списка, после пустой строки, — текст внутри пункта: вложен в него.
+            let spaces = NotionMarkdownParser.leadingSpaces(line)
+            listColumns = listColumns.filter { $0 <= spaces }
+            open = OpenBlock(kind: .paragraph, indent: min(listColumns.count, Block.indentRange.upperBound), lines: [trimmed])
         }
         closeOpenBlock()
     }
@@ -253,6 +257,11 @@ private struct PageBuilder {
     // MARK: Блоки
 
     private mutating func emit(_ block: ParsedBlock, simplified: NotionSimplification? = nil) {
+        var block = block
+        if let comment = pendingColor {
+            block.color = comment.resolved(for: block.kind)
+            pendingColor = nil
+        }
         if !blocks.isEmpty, blankLines > 1 {
             blocks += Array(repeating: ParsedBlock(kind: .paragraph), count: blankLines - 1)
         }
@@ -265,11 +274,15 @@ private struct PageBuilder {
         guard let block = open else { return }
         open = nil
         if block.kind == .paragraph {
-            emit(paragraph(from: block.lines))
+            var parsed = paragraph(from: block.lines)
+            parsed.indent = block.indent
+            emit(parsed)
         } else {
             let parsed = NotionInlineParser.parse(Self.joined(block.lines))
             note(files: parsed.files)
-            emit(ParsedBlock(kind: block.kind, text: parsed.text, indent: block.indent, isChecked: block.isChecked))
+            var parsedBlock = ParsedBlock(kind: block.kind, text: parsed.text, indent: block.indent, isChecked: block.isChecked)
+            parsedBlock.mentions = parsed.pageMentions
+            emit(parsedBlock)
         }
     }
 
@@ -280,7 +293,10 @@ private struct PageBuilder {
         switch parsed.soleLink {
         case .page(let path)?: return ParsedBlock(kind: .pageLink, text: InlineText(parsed.text.string), pagePath: path)
         case .url(let url)?: return ParsedBlock(kind: .paragraph, text: parsed.text, standaloneURL: url)
-        default: return ParsedBlock(kind: .paragraph, text: parsed.text)
+        default:
+            var block = ParsedBlock(kind: .paragraph, text: parsed.text)
+            block.mentions = parsed.pageMentions
+            return block
         }
     }
 
@@ -344,52 +360,10 @@ private struct PageBuilder {
         return ListItem(kind: kind, isChecked: isChecked, start: start, contentColumn: start + markerLength + 1, text: String(text))
     }
 
-    private static func fence(_ trimmed: String) -> String? {
-        for marker in ["```", "~~~"] where trimmed.hasPrefix(marker) {
-            let length = trimmed.prefix { $0 == marker.first }.count
-            let fence = String(repeating: marker.first!, count: length)
-            // У «```» в строке открытия не бывает обратных кавычек дальше: иначе это код в строке.
-            if marker == "```", trimmed.dropFirst(length).contains("`") { return nil }
-            return fence
-        }
-        return nil
-    }
-
-    private static func isThematicBreak(_ trimmed: String) -> Bool {
+    static func isThematicBreak(_ trimmed: String) -> Bool {
         guard let mark = trimmed.first, mark == "-" || mark == "*" || mark == "_" else { return false }
         let compact = trimmed.filter { $0 != " " && $0 != "\t" }
         return compact.count >= 3 && compact.allSatisfy { $0 == mark }
-    }
-
-    private static func isTableSeparator(_ line: String) -> Bool {
-        line.range(of: #"^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$"#, options: .regularExpression) != nil && line.contains("|")
-    }
-
-    /// Ячейки строки таблицы: `\|` внутри ячейки — сама черта; оформление ячеек упрощается до текста.
-    private static func tableCells(_ trimmed: String) -> [String] {
-        var row = Substring(trimmed)
-        if row.hasPrefix("|") { row.removeFirst() }
-        if row.hasSuffix("|"), !row.hasSuffix("\\|") { row.removeLast() }
-        var cells: [String] = []
-        var current = ""
-        var escaped = false
-        for character in row {
-            if escaped {
-                if character != "|" { current.append("\\") }
-                current.append(character)
-                escaped = false
-            } else if character == "\\" {
-                escaped = true
-            } else if character == "|" {
-                cells.append(current)
-                current = ""
-            } else {
-                current.append(character)
-            }
-        }
-        if escaped { current.append("\\") }
-        cells.append(current)
-        return cells.map { NotionInlineParser.parse($0.trimmingCharacters(in: .whitespaces)).text.string }
     }
 
     private static func quoteText(_ trimmed: String) -> String {

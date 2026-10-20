@@ -17,6 +17,8 @@ struct NotionImporterTests {
     static let synthetic = fixtures.appendingPathComponent("synthetic", isDirectory: true)
     static let syntheticZip = fixtures.appendingPathComponent("synthetic-nested.zip")
     static let liveZip = fixtures.appendingPathComponent("live-mynotion-comparison.zip")
+    /// Выгрузка Notion 7.39 «MyNotion — сравнение» с подстраницей «MyNotion — блоки 002» (T116, 19.10.2026).
+    static let live002Zip = fixtures.appendingPathComponent("live-mynotion-002-blocks.zip")
 
     init() throws {
         workFolder = FileManager.default.temporaryDirectory.appendingPathComponent("MyNotionImportTests-\(UUID().uuidString)", isDirectory: true)
@@ -42,8 +44,9 @@ struct NotionImporterTests {
         try #require(tree.children(of: parentId).first { $0.title == title }, "Нет страницы «\(title)»")
     }
 
+    /// Блоки потока страницы по порядку; ячейки таблиц и блоки колонок — в своих потоках.
     private func blocks(of page: Page) throws -> [Block] {
-        try #require(try store.pageContent(page.id)).blocks
+        try #require(try store.pageContent(page.id)).blocks.filter { $0.containerId == nil }
     }
 
     private func texts(of page: Page) throws -> [String] {
@@ -101,13 +104,15 @@ struct NotionImporterTests {
         #expect(try texts(of: projects).contains("Удалённая страница"))
     }
 
-    @Test("Ссылка notion.so на страницу выгрузки в строке текста остаётся ссылкой; одна в строке — блок pageLink")
+    @Test("Ссылка на страницу выгрузки в строке текста — упоминание её (002); ссылка notion.so остаётся ссылкой")
     func notionURLLinks() throws {
         let report = try runImport()
         let projects = try child("Проекты", of: report.rootPageId)
-        let mixed = try #require(try blocks(of: projects).first { $0.text.string.hasPrefix("Ссылка на Дневник") })
-        #expect(mixed.text.string == "Ссылка на Дневник внутри текста и на MyNotion.")
-        #expect(mixed.text.runs.map(\.style) == [.link(URL(string: "https://www.notion.so/MyNotion-2a3b4c5d6e7f8091a2b3c4d5e6f70812?pvs=21")!)])
+        let diary = try #require(tree.pagesInTreeOrder.first { $0.title == "Дневник" })
+        let mixed = try #require(try blocks(of: projects).first { $0.text.string.hasPrefix("Ссылка на ") })
+        #expect(mixed.text.string == "Ссылка на \u{FFFC} внутри текста и на MyNotion.")
+        #expect(mixed.text.runs.map(\.style) == [.mention(diary.id),
+                                                 .link(URL(string: "https://www.notion.so/MyNotion-2a3b4c5d6e7f8091a2b3c4d5e6f70812?pvs=21")!)])
     }
 
     // MARK: Содержимое
@@ -150,16 +155,31 @@ struct NotionImporterTests {
         #expect(try texts(of: projects).contains("[файл: отчёт.pdf]"))
     }
 
-    @Test("Цитаты, выноски, код, переключатели, таблицы, формулы, встраивания — абзацы с исходным текстом")
+    @Test("Встраивания — абзацы с исходным текстом; цитата, выноска, переключатель (US1), код и формула (US4), таблица (US6) — блоками")
+    @MainActor
     func unsupportedBecomeParagraphs() throws {
         let report = try runImport()
         let projects = try blocks(of: child("Проекты", of: report.rootPageId))
         let paragraphs = projects.filter { $0.kind == .paragraph }.map(\.text.string)
-        for expected in ["Цитата из книги", "💡 Выноска с советом", "let answer = 42\nprint(answer)", "Ещё переключатель",
-                         "Текст внутри", "Имя: Юрий\nРоль: автор", "Имя: Мишка\nРоль: тестировщик", "E = mc^2",
-                         "https://www.youtube.com/embed/xyz"] {
+        for expected in ["Текст внутри", "https://www.youtube.com/embed/xyz"] {
             #expect(paragraphs.contains(expected), "Нет абзаца «\(expected)»")
         }
+        #expect(projects.contains { $0.kind == .code && $0.text.string == "let answer = 42\nprint(answer)" })
+        #expect(projects.contains { $0.kind == .equation && $0.text.string == "E = mc^2" })
+        let content = try #require(try store.pageContent(child("Проекты", of: report.rootPageId).id))
+        let document = PageDocument(content: content)
+        let table = try #require(document.blocks.first { $0.kind == .table })
+        let grid = try #require(document.tableGrid(table.id))
+        #expect((0..<grid.rowCount).map { row in (0..<grid.columnCount).map { grid.text(row: row, column: $0).string } }
+                == [["Имя", "Роль"], ["Юрий", "автор"], ["Мишка", "тестировщик"]])
+        #expect(projects.contains { $0.kind == .quote && $0.text.string == "Цитата из книги" })
+        let callout = try #require(projects.first { $0.kind == .callout })
+        #expect(callout.text.string == "Выноска с советом")
+        #expect(callout.props.icon == "💡")
+        #expect(callout.color.background == .gray)
+        let toggle = try #require(projects.firstIndex { $0.kind == .toggle && $0.text.string == "Ещё переключатель" })
+        #expect(projects[toggle + 1].text.string == "Текст внутри" && projects[toggle + 1].indent == 1)
+        #expect(projects.contains { $0.kind == .divider })
     }
 
     // MARK: Отчёт и журнал
@@ -172,14 +192,16 @@ struct NotionImporterTests {
         let blockCount = try stored.reduce(0) { $0 + (try store.pageContent($1.id)?.blocks.count ?? 0) }
         #expect(report.blockCount == blockCount)
         let projects = try #require(report.simplified.first { $0.pageTitle == "Проекты" })
+        // Цитаты, выноски, переключатели и разделители (US1), код и формулы (US4), таблицы (US6) переносятся блоками
+        // и в отчёт не попадают.
         #expect(projects.items == [
-            "таблицы — по строке на абзац", "картинки и файлы — вместо них их имена", "цитаты",
-            "выделенные блоки со значком", "блоки кода", "раскрывающиеся списки — текст внутри показан сразу",
-            "разделительные линии — убраны", "формулы — записаны как текст", "встроенные видео и сайты — вместо них их адреса",
+            "картинки и файлы — вместо них их имена", "встроенные видео и сайты — вместо них их адреса",
         ])
         #expect(report.simplified.map(\.pageTitle).sorted() == ["Задачи", "Идеи", "Проекты"])
         #expect(report.simplified.first { $0.pageTitle == "Задачи" }?.items == ["таблицы — по строке на абзац"])
         #expect(NotionSimplification.quote.title(count: 12) == "цитаты (12)")
+        // Чего в Markdown Notion нет, отчёт называет всегда, даже если упрощать было нечего (research R14).
+        #expect(report.notices == ["Цвета и колонки Notion в Markdown не выгружает — они не перенесены"])
 
         let run = try #require(try importer().runs().first)
         #expect(run.status == .finished)
@@ -318,6 +340,39 @@ struct NotionImporterTests {
         #expect(content.contains { $0.kind == .checkbox && $0.indent == 1 && $0.text.string == "Вложенная задача" })
         #expect(content.contains { $0.text.string == "Первая строка блока\nВторая строка после переноса\nТретья строка после переноса" })
         #expect(report.simplified.isEmpty)
+        #expect(report.notices == [NotionImportReport.markdownLossNotice])
+    }
+
+    @Test("Живая выгрузка Notion 7.39 с блоками 002: всё, что Notion пишет в Markdown, — нужными блоками (T116)")
+    func live002Export() throws {
+        let report = try runImport(Self.live002Zip)
+        #expect(report.pageCount == 4)
+        let comparison = try child("MyNotion — сравнение", of: report.rootPageId)
+        #expect(tree.children(of: comparison.id).map(\.title) == ["Подстраница первая", "Подстраница без иконки", "MyNotion — блоки 002"])
+        let page = try child("MyNotion — блоки 002", of: comparison.id)
+        let shape = try blocks(of: page).map { "\($0.indent) \($0.kind.rawValue) \($0.text.string)" }
+        #expect(shape == [
+            // Переключатель Notion пишет пунктом списка с текстом внутри — от пункта его не отличить.
+            "0 bulletItem Переключатель", "1 paragraph Внутри переключателя",
+            "0 quote Цитата из книги", "0 paragraph Абзац после разделителя", "0 divider ", "0 callout Совет в выноске",
+            "0 code let x = 1", "0 equation E = mc^2",
+            // Дату Notion пишет простым текстом, без «@».
+            "0 paragraph Формула в строке \u{FFFC} и дата October 20, 2026",
+            // Цвет Notion не выгружает.
+            "0 paragraph Красный абзац",
+            "0 table ", "0 bookmark ",
+            // Колонки Notion пишет подряд.
+            "0 paragraph Левая колонка", "0 paragraph Правая колонка",
+            "0 video ",
+        ])
+        let content = try blocks(of: page)
+        #expect(content.first { $0.kind == .callout }?.props.icon == "💡")
+        #expect(content.first { $0.kind == .code }?.props.language == "jsx")
+        #expect(content.first { $0.text.string.hasPrefix("Формула") }?.text.runs.map(\.style) == [.equation("a^2+b^2")])
+        #expect(content.first { $0.kind == .bookmark }?.props.title == "Help, Support, and Documentation for Notion")
+        #expect(content.first { $0.kind == .video }?.props.videoSource == .youtube)
+        #expect(report.simplified.isEmpty)
+        #expect(report.notices == [NotionImportReport.markdownLossNotice])
     }
 }
 

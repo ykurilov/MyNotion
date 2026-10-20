@@ -1,7 +1,10 @@
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
+import { createReadStream } from 'node:fs';
+import { Readable } from 'node:stream';
 import { ApiError } from './errors.js';
 import type { Devices } from './devices.js';
+import { PART_MAX_BYTES, type Files } from './files.js';
 import {
   JournalRangeError,
   MAX_BATCH_BYTES,
@@ -13,6 +16,7 @@ import {
 export interface AppOptions {
   devices: Devices;
   journal: Journal;
+  files: Files;
   limits?: { maxBatchBytes?: number; maxSnapshotBytes?: number };
 }
 
@@ -50,6 +54,11 @@ function readNonNegativeInt(value: unknown, field: string): number {
   return value;
 }
 
+function readPathNumber(value: string | undefined, what: string): number {
+  if (value === undefined || !DIGITS.test(value)) throw badRequest(`${what} должен быть целым числом от 0`);
+  return Number(value);
+}
+
 /** Проверяет base64 и считает размер до кодирования, не раскодируя сам шифротекст. */
 function readCiphertext(value: unknown, maxBytes: number, what: string): string {
   if (typeof value !== 'string' || value.length === 0 || value.length % 4 !== 0 || !BASE64.test(value)) {
@@ -65,7 +74,7 @@ function base64Chars(bytes: number): number {
   return Math.ceil(bytes / 3) * 4 + 4096;
 }
 
-export function createApp({ devices, journal, limits = {} }: AppOptions): Hono<Env> {
+export function createApp({ devices, journal, files, limits = {} }: AppOptions): Hono<Env> {
   const maxBatchBytes = limits.maxBatchBytes ?? MAX_BATCH_BYTES;
   const maxSnapshotBytes = limits.maxSnapshotBytes ?? MAX_SNAPSHOT_BYTES;
   const app = new Hono<Env>();
@@ -177,6 +186,44 @@ export function createApp({ devices, journal, limits = {} }: AppOptions): Hono<E
     const snapshot = journal.getSnapshot();
     if (!snapshot) throw new ApiError(404, 'not_found', 'Снимка пока нет');
     return c.json(snapshot);
+  });
+
+  app.get('/files/usage', (c) => c.json(files.usage()));
+
+  app.get('/files/:fileId', (c) => {
+    const status = files.status(c.req.param('fileId'));
+    if (!status) throw new ApiError(404, 'not_found', 'Такого файла на сервере нет');
+    return c.json(status);
+  });
+
+  app.put(
+    '/files/:fileId/parts/:index',
+    bodyLimit({ maxSize: PART_MAX_BYTES, onError: () => errorResponse(tooLarge('Часть файла', 8)) }),
+    async (c) => {
+      const index = readPathNumber(c.req.param('index'), 'Номер части');
+      const count = readPathNumber(c.req.query('count'), 'Параметр count');
+      const result = await files.putPart(c.req.param('fileId'), index, count, c.req.raw.body);
+      return c.json({ index }, result === 'created' ? 201 : 200);
+    },
+  );
+
+  app.post('/files/:fileId/complete', async (c) => {
+    const body = await readJson(c);
+    const partCount = readNonNegativeInt(body.partCount, 'partCount');
+    return c.json(files.complete(c.req.param('fileId'), partCount));
+  });
+
+  app.get('/files/:fileId/parts/:index', (c) => {
+    const index = readPathNumber(c.req.param('index'), 'Номер части');
+    const { path, size } = files.readPart(c.req.param('fileId'), index);
+    return new Response(Readable.toWeb(createReadStream(path)) as ReadableStream, {
+      headers: { 'content-type': 'application/octet-stream', 'content-length': String(size) },
+    });
+  });
+
+  app.delete('/files/:fileId', (c) => {
+    files.remove(c.req.param('fileId'));
+    return c.body(null, 204);
   });
 
   return app;

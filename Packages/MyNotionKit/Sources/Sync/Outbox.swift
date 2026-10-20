@@ -97,6 +97,7 @@ public struct Outbox: Sendable {
                 changes += ChangeEncoding.fullBlock(block, baseHlc: nil)
             }
         }
+        changes += try transaction.allReminderStates().map(ChangeEncoding.reminderChange)
         for row in try Row.fetchAll(transaction.database, sql: "SELECT pageId FROM page_tombstone") {
             guard let pageId = UUID(uuidString: row["pageId"]),
                   let tombstone = try transaction.tombstone(ofPage: pageId) else { continue }
@@ -155,6 +156,9 @@ enum ChangeEncoding {
             guard let tombstone = try transaction.tombstone(ofPage: pageId), isMine(tombstone.erasedAt) else { continue }
             result.append(SyncChange(entity: .page, id: pageId, value: .erased, hlc: tombstone.erasedAt, known: tombstone.known))
         }
+        for state in changes.reminderStates where isMine(state.doneClock) {
+            result.append(reminderChange(state))
+        }
         for conflict in changes.resolvedConflicts {
             result.append(SyncChange(entity: .block, id: conflict.blockId,
                                      value: .conflictResolved(versions: [conflict.localVersion, conflict.remoteVersion]),
@@ -175,6 +179,11 @@ enum ChangeEncoding {
         }
     }
 
+    /// Отметка «сделано» напоминания (contracts/sync-and-files-api.md, «Новая сущность reminder»).
+    static func reminderChange(_ state: ReminderState) -> SyncChange {
+        SyncChange(entity: .reminder, id: state.mentionId, value: .doneAt(state.doneAt), hlc: state.doneClock)
+    }
+
     static func pageChange(_ page: Page, field: Page.Field, hlc: HybridTimestamp) -> SyncChange {
         let value: SyncChange.Value = switch field {
         case .title: .title(page.title)
@@ -190,7 +199,9 @@ enum ChangeEncoding {
         case .kindAndIndent: .kindAndIndent(kind: block.kind, indent: block.indent, linkedPageId: block.linkedPageId)
         case .text: .text(block.text)
         case .isChecked: .isChecked(block.isChecked)
-        case .sortKey: .sortKey(block.sortKey.rawValue)
+        case .placement: .blockPlacement(containerId: block.containerId, sortKey: block.sortKey.rawValue)
+        case .color: .color(block.color)
+        case .props: .props(block.props)
         case .deleted: .deleted
         }
         return SyncChange(entity: .block, id: block.id, pageId: block.pageId, value: value, hlc: hlc, baseHlc: baseHlc)
@@ -206,7 +217,7 @@ enum ChangeEncoding {
     }
 
     static func fullBlock(_ block: Block, baseHlc: HybridTimestamp?) -> [SyncChange] {
-        [Block.Field.kindAndIndent, .text, .isChecked, .sortKey].map { field in
+        [Block.Field.kindAndIndent, .text, .isChecked, .placement, .color, .props].map { field in
             blockChange(block, field: field, hlc: block.fieldClocks[field] ?? .distantPast, baseHlc: field == .text ? baseHlc : nil)
         }
     }
@@ -229,7 +240,9 @@ extension BlockFieldClocks {
         case .kindAndIndent: kindAndIndent
         case .text: text
         case .isChecked: isChecked
-        case .sortKey: sortKey
+        case .placement: placement
+        case .color: color
+        case .props: props
         case .deleted: deleted
         }
     }

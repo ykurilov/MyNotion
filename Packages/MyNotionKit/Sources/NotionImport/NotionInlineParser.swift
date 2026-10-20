@@ -31,6 +31,15 @@ struct NotionInlineResult {
     var files = 0
     /// Вся строка — одна ссылка и ничего больше: куда она ведёт.
     var soleLink: NotionLinkTarget?
+    /// Ссылки на страницы выгрузки внутри текста — упоминания с временным id; импорт заменит его id страницы.
+    var pageMentions: [NotionPageMention] = []
+}
+
+/// Упоминание страницы выгрузки до импорта: временный id в тексте, путь файла и название из ссылки.
+struct NotionPageMention: Hashable, Sendable {
+    var placeholder: UUID
+    var path: String
+    var title: String
 }
 
 /// Оформление в строке по правилам CommonMark и GFM: обратная косая черта, код в обратных кавычках, серии `*`, `_`, `~`
@@ -58,6 +67,11 @@ struct NotionInlineParser {
             case bracket(isImage: Bool)
             case linkOpen(NotionLinkTarget)
             case linkClose
+            /// `<span data-color>` (текст) или `<mark data-color>` (фон); без распознанного цвета тег только держит пару для закрывающего.
+            case openColor(isBackground: Bool, NotionColor?)
+            case closeColor(isBackground: Bool)
+            /// Знак U+FFFC с атомом: дата из `<time>`.
+            case atom(InlineStyle)
         }
 
         var kind: Kind
@@ -105,6 +119,7 @@ struct NotionInlineParser {
                 position += 1
             case "]": scanClosingBracket()
             case "<": scanAngleBracket()
+            case "$": scanDollar()
             case "&": scanEntity()
             default:
                 pendingText.append(character)
@@ -318,6 +333,20 @@ struct NotionInlineParser {
             position += rest[match].count
             return
         }
+        if let match = rest.range(of: #"^<time\s[^<>]*>[^<]*</time>"#, options: .regularExpression),
+           let date = NotionDates.date(fromTimeTag: String(rest[match])) {
+            append(Node(.atom(.date(date))))
+            position += rest[match].count
+            return
+        }
+        if let match = rest.range(of: #"^<span\s+data-equation(?:\s[^<>]*)?>[^<]*</span>"#, options: .regularExpression) {
+            // Формула в строке, которую нельзя записать `$…$` (рядом цифра, `$` в записи).
+            let tag = String(rest[match])
+            let inner = tag.drop { $0 != ">" }.dropFirst().dropLast("</span>".count)
+            append(Node(.atom(.equation(Self.unescapedHTML(String(inner))))))
+            position += tag.count
+            return
+        }
         if let match = rest.range(of: #"^</?([A-Za-z][A-Za-z0-9\-]*)(?:\s[^<>]*)?/?>"#, options: .regularExpression) {
             let tag = String(rest[match])
             let isClosing = tag.hasPrefix("</")
@@ -325,6 +354,15 @@ struct NotionInlineParser {
             position += tag.count
             if name == "br" {
                 pendingText.append("\n")
+            } else if name == "span" || name == "mark" {
+                let isBackground = name == "mark"
+                if isClosing {
+                    append(Node(.closeColor(isBackground: isBackground)))
+                } else if !tag.hasSuffix("/>") {
+                    let color = tag.range(of: #"data-color\s*=\s*["']([a-z]+)["']"#, options: .regularExpression)
+                        .flatMap { NotionColor(rawValue: String(tag[$0].split(whereSeparator: { $0 == "\"" || $0 == "'" })[1])) }
+                    append(Node(.openColor(isBackground: isBackground, color)))
+                }
             } else if let style = Self.tagStyles[name] {
                 append(Node(isClosing ? .close(style) : .open(style)))
             }
@@ -332,6 +370,40 @@ struct NotionInlineParser {
         }
         pendingText.append("<")
         position += 1
+    }
+
+    /// `$запись$` — формула в строке, как у Notion и pandoc: после открывающего `$` не пробел, перед закрывающим не пробел,
+    /// за ним не цифра. Иначе `$` — просто знак: «от $5 до $10» остаётся текстом.
+    private mutating func scanDollar() {
+        guard let next = peek(1), next != "$", !next.isWhitespace else {
+            pendingText.append("$")
+            position += 1
+            return
+        }
+        var index = position + 1
+        while index < characters.count {
+            let character = characters[index]
+            if character == "\\" {
+                index += 2
+                continue
+            }
+            if character == "$" {
+                let after = index + 1 < characters.count ? characters[index + 1] : nil
+                if !characters[index - 1].isWhitespace, !(after?.isNumber ?? false) {
+                    append(Node(.atom(.equation(String(characters[(position + 1)..<index])))))
+                    position = index + 1
+                    return
+                }
+            }
+            index += 1
+        }
+        pendingText.append("$")
+        position += 1
+    }
+
+    private static func unescapedHTML(_ text: String) -> String {
+        text.replacingOccurrences(of: "&lt;", with: "<").replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&quot;", with: "\"").replacingOccurrences(of: "&amp;", with: "&")
     }
 
     private static let tagStyles: [String: Style] = [
@@ -433,6 +505,32 @@ struct NotionInlineParser {
         var starts: [Style: Int] = [:]
         var links: [(NotionLinkTarget, Int)] = []
         var runs: [StyledRun] = []
+        // Цвета: стопка открытых тегов; на участке действует ближайший распознанный. Внутренний перекрывает внешний.
+        var colorStacks: [Bool: [NotionColor?]] = [false: [], true: []]
+        var colorRuns: [Bool: (color: NotionColor, start: Int)] = [:]
+        var pageMentions: [NotionPageMention] = []
+        // Строка целиком из одной ссылки на страницу — блок-подстраница, а не упоминание.
+        let sole = soleLink()
+        let mentionsPages: Bool = if case .page? = sole { false } else { true }
+        var skipUntil: Int?
+
+        func currentColor(_ isBackground: Bool) -> NotionColor? { colorStacks[isBackground]?.reversed().compactMap { $0 }.first }
+        func flushColor(_ isBackground: Bool) {
+            guard let (color, start) = colorRuns[isBackground] else { return }
+            colorRuns[isBackground] = nil
+            guard units.count > start else { return }
+            runs.append(StyledRun(start: start, length: units.count - start, style: isBackground ? .backgroundColor(color) : .textColor(color)))
+        }
+        func refreshColor(_ isBackground: Bool) {
+            let color = currentColor(isBackground)
+            if colorRuns[isBackground]?.color == color { return }
+            flushColor(isBackground)
+            if let color { colorRuns[isBackground] = (color, units.count) }
+        }
+        func appendAtom(_ style: InlineStyle) {
+            runs.append(StyledRun(start: units.count, length: 1, style: style))
+            units.append(InlineText.objectReplacementCharacter)
+        }
 
         func open(_ style: Style) {
             depth[style, default: 0] += 1
@@ -446,9 +544,28 @@ struct NotionInlineParser {
             }
         }
 
-        for node in nodes {
+        for (index, node) in nodes.enumerated() {
+            if let end = skipUntil {
+                if index < end { continue }
+                skipUntil = nil
+                if index == end { continue }
+            }
             switch node.kind {
-            case .text(let text): units += text.utf16
+            case .linkOpen(.page(let path)) where mentionsPages:
+                // Ссылка на страницу внутри текста — упоминание: текст ссылки становится названием.
+                guard let close = Self.matchingClose(of: index, in: nodes) else { links.append((.page(path), units.count)); continue }
+                let mention = NotionPageMention(placeholder: UUID(), path: path, title: Self.plainText(of: nodes[(index + 1)..<close]))
+                pageMentions.append(mention)
+                appendAtom(.mention(mention.placeholder))
+                skipUntil = close
+            case .text(let text):
+                for piece in NotionDates.split(text) {
+                    switch piece {
+                    case .text(let plain): units += plain.utf16
+                    case .date(let date): appendAtom(.date(date))
+                    }
+                }
+            case .atom(let style): appendAtom(style)
             case .code(let code):
                 open(.code)
                 units += code.utf16
@@ -458,6 +575,13 @@ struct NotionInlineParser {
             case .close(let style): close(style)
             case .bracket(let isImage): units += (isImage ? "![" : "[").utf16
             case .linkOpen(let target): links.append((target, units.count))
+            case .openColor(let isBackground, let color):
+                colorStacks[isBackground, default: []].append(color)
+                refreshColor(isBackground)
+            case .closeColor(let isBackground):
+                guard colorStacks[isBackground]?.isEmpty == false else { continue }
+                colorStacks[isBackground]?.removeLast()
+                refreshColor(isBackground)
             case .linkClose:
                 guard let (target, start) = links.popLast() else { continue }
                 if case .url(let url) = target, units.count > start {
@@ -465,12 +589,29 @@ struct NotionInlineParser {
                 }
             }
         }
+        flushColor(false)
+        flushColor(true)
         for style in Style.allCases where depth[style, default: 0] > 0 {
             depth[style] = 1
             close(style)
         }
         return NotionInlineResult(text: InlineText(String(decoding: units, as: UTF16.self), runs: runs).normalized(),
-                                  files: files, soleLink: soleLink())
+                                  files: files, soleLink: sole, pageMentions: pageMentions)
+    }
+
+    /// Закрытие ссылки, открытой узлом `index`.
+    private static func matchingClose(of index: Int, in nodes: [Node]) -> Int? {
+        var depth = 0
+        for position in (index + 1)..<nodes.count {
+            switch nodes[position].kind {
+            case .linkOpen: depth += 1
+            case .linkClose:
+                if depth == 0 { return position }
+                depth -= 1
+            default: break
+            }
+        }
+        return nil
     }
 
     /// Ссылка, которая и есть вся строка (пробелы по краям не в счёт).

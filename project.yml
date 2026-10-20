@@ -49,6 +49,18 @@ targets:
         product: UIGallery
       - package: MyNotionKit
         product: ServiceLaunch
+      - package: MyNotionKit
+        product: CodeHighlighting
+      - package: MyNotionKit
+        product: MathRendering
+      - package: MyNotionKit
+        product: Attachments
+      - package: MyNotionKit
+        product: LinkPreview
+      - package: MyNotionKit
+        product: Reminders
+      - package: MyNotionKit
+        product: EmbeddedMedia
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion
@@ -95,6 +107,9 @@ targets:
         product: NotionImport
       - package: MyNotionKit
         product: PageSearch
+      # Пробы TextKit 2 этапа 0 (research R16) открывают настоящий редактор страницы.
+      - package: MyNotionKit
+        product: PageEditor
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion.performancetests
@@ -134,6 +149,12 @@ schemes:
         - package: MyNotionKit/MarkdownExportTests
         - package: MyNotionKit/NotionImportTests
         - package: MyNotionKit/SyncTests
+        - package: MyNotionKit/CodeHighlightingTests
+        - package: MyNotionKit/MathRenderingTests
+        - package: MyNotionKit/AttachmentsTests
+        - package: MyNotionKit/LinkPreviewTests
+        - package: MyNotionKit/RemindersTests
+        - package: MyNotionKit/EmbeddedMediaTests
         - UITests
     profile:
       config: Release

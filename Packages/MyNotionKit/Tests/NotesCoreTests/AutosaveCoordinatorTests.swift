@@ -137,7 +137,7 @@ struct AutosaveCoordinatorTests {
         #expect(after[1].fieldClocks.text?.wallMillis == 50_000)
         #expect(after[1].fieldClocks.kindAndIndent == before[1].fieldClocks.kindAndIndent)
         #expect(after[1].fieldClocks.isChecked == before[1].fieldClocks.isChecked)
-        #expect(after[1].fieldClocks.sortKey == before[1].fieldClocks.sortKey)
+        #expect(after[1].fieldClocks.placement == before[1].fieldClocks.placement)
         #expect(try store.pageContent(pageId)?.page == pageBefore, "Название не трогали — страница не перезаписана")
     }
 

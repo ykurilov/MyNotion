@@ -28,8 +28,13 @@ public final class AppDatabase: Sendable {
         let pool = try DatabasePool(path: url.path, configuration: configuration)
 
         let migrator = migrations.migrator
-        let (isUpToDate, appliedVersions) = try pool.read { db in
-            (try migrator.hasCompletedMigrations(db), try migrator.appliedMigrations(db))
+        let (isUpToDate, appliedVersions, isSuperseded) = try pool.read { db in
+            (try migrator.hasCompletedMigrations(db), try migrator.appliedMigrations(db), try migrator.hasBeenSuperseded(db))
+        }
+        // Базу записала более новая версия: её схему эта не знает — ни миграций, ни записи (data-model.md, «Схема v6»).
+        guard !isSuperseded else {
+            try? pool.close()
+            throw AppDatabaseError.newerVersion
         }
         if !isUpToDate, let currentVersion = appliedVersions.last {
             try backUp(pool, to: backupURL(for: url, version: currentVersion))
@@ -76,5 +81,16 @@ public final class AppDatabase: Sendable {
         let copy = try DatabaseQueue(path: backupURL.path)
         try pool.backup(to: copy)
         try copy.close()
+    }
+}
+
+public enum AppDatabaseError: Error, Equatable, LocalizedError {
+    /// База от более новой версии MyNotion.
+    case newerVersion
+
+    public var errorDescription: String? {
+        switch self {
+        case .newerVersion: "База от новой версии MyNotion — обновите приложение"
+        }
     }
 }

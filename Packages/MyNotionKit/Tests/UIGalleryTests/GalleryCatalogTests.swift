@@ -1,5 +1,6 @@
 import NotesCore
 import Testing
+import PageEditor
 import UIGallery
 
 @Suite("Список состояний галереи интерфейса")
@@ -36,9 +37,18 @@ struct GalleryCatalogTests {
         for scene in required { #expect(scenes.contains(scene), "\(scene)") }
     }
 
-    @Test("Каждый тип блока: с текстом, пустой в середине и в конце, с курсором и без")
+    @Test("Снимки блоков 002 собираются из описателей типов: по состоянию на каждый образец")
+    func kindSamplesFromDescriptors() {
+        let samples = BlockKinds.gallerySamples
+        let states = GalleryCatalog.states.filter { if case .kindSample = $0.scene { true } else { false } }
+        #expect(states.map(\.id) == samples.map { "kind-\($0.id)" })
+        #expect(states.map(\.scene) == samples.map { .kindSample($0) })
+    }
+
+    @Test("Каждый тип блока с текстом из 001: с текстом, пустой в середине и в конце, с курсором и без")
     func everyBlockKindPresent() {
-        for kind in BlockKind.allCases where kind != .pageLink {
+        // Блоки 002 снимаются своими состояниями из описателей типов (`BlockKindDescriptor.gallerySamples`).
+        for kind in [BlockKind.paragraph, .heading1, .heading2, .heading3, .bulletItem, .numberedItem, .checkbox] {
             for caret in GalleryCaret.allCases {
                 #expect(scenes.contains(.block(kind, caret)), "\(kind) \(caret)")
             }
@@ -49,7 +59,7 @@ struct GalleryCatalogTests {
     func editingStatesPresent() {
         let required: [GalleryScene] = [
             .blockHover(.paragraph), .blockHover(.heading1), .blockHover(.bulletItem), .blockHover(.checkbox),
-            .slashMenu(filter: ""), .blockMenu, .formattedSelection, .selectionAcrossBlocks, .blockSelection, .softLineBreaks, .selectionAcrossSoftBreaks,
+            .slashMenu(filter: ""), .blockMenu(turnInto: false), .blockMenu(turnInto: true), .formattedSelection, .selectionAcrossBlocks, .blockSelection, .softLineBreaks, .selectionAcrossSoftBreaks,
             .formatBar(kindMenu: false), .formatBar(kindMenu: true),
         ]
         for scene in required { #expect(scenes.contains(scene), "\(scene)") }

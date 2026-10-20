@@ -62,6 +62,17 @@ struct PageSearchTests {
         #expect(results[1].snippet != nil)
     }
 
+    @Test("Найденное в тексте знает свой блок: переход к нему раскрывает свёрнутых предков (US1); в названии — без блока")
+    func resultKnowsMatchedBlock() throws {
+        let inText = try library.page("Дневник", blocks: ["Первый абзац", "Сегодня кот спал"])
+        let inTitle = try library.page("Кот Барсик")
+
+        let results = try library.search("кот")
+        #expect(results.first { $0.pageId == inTitle.id }?.blockId == nil)
+        let blocks = try #require(try library.store.pageContent(inText.id)).blocks
+        #expect(results.first { $0.pageId == inText.id }?.blockId == blocks.first { $0.text.string == "Сегодня кот спал" }?.id)
+    }
+
     @Test("Страница с совпадением и в названии, и в тексте — одна строка выдачи")
     func onePageOneResult() throws {
         let page = try library.page("Кот", blocks: ["Кот спит", "Кот ест"])
@@ -208,12 +219,14 @@ struct SearchIndexMigrationTests {
         let beforeSearch = SchemaMigrations(steps: Array(SchemaMigrations.current.steps.prefix { $0.version != "v4" }))
 
         let old = try AppDatabase.open(at: folder.databaseURL, migrations: beforeSearch)
-        let page = try NotesStore(database: old, clock: clock).write { transaction in
-            let page = try transaction.createPage(title: "Старая ёлка")
-            var block = try #require(try transaction.blocks(ofPage: page.id).first)
-            block.text = InlineText("Записано до поиска")
-            try transaction.updateBlock(block)
-            return page
+        // Записи — так, как их пишет 001: в базу старой схемы текущий код писать не может.
+        let pageId = UUID.timeOrdered()
+        try old.dbWriter.write { db in
+            try db.execute(sql: "INSERT INTO page (id, title, sortKey, createdAt, updatedAt, fieldClocks) VALUES (?, 'Старая ёлка', 'm', ?, ?, '{}')",
+                           arguments: [pageId.uuidString.lowercased(), Date(), Date()])
+            try db.execute(sql: """
+                INSERT INTO block (id, pageId, kind, text, sortKey, fieldClocks) VALUES (?, ?, 'paragraph', 'Записано до поиска', 'm', '{}')
+                """, arguments: [UUID.timeOrdered().uuidString.lowercased(), pageId.uuidString.lowercased()])
         }
         let versionBefore = try #require(try old.appliedSchemaVersion())
         old.close()
@@ -221,8 +234,8 @@ struct SearchIndexMigrationTests {
         let migrated = try AppDatabase.open(at: folder.databaseURL)
         defer { migrated.close() }
         let library = SearchLibrary(store: NotesStore(database: migrated, clock: clock))
-        #expect(try library.foundPageIds("елк") == [page.id])
-        #expect(try library.foundPageIds("записано") == [page.id])
+        #expect(try library.foundPageIds("елк") == [pageId])
+        #expect(try library.foundPageIds("записано") == [pageId])
         let backup = AppDatabase.backupURL(for: folder.databaseURL, version: versionBefore)
         #expect(FileManager.default.fileExists(atPath: backup.path))
     }

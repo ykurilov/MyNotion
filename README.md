@@ -1,7 +1,9 @@
 # MyNotion
 
-Личное приложение заметок для macOS: дерево страниц, блоки текста, автосохранение.
-Требования, план и задачи — в [specs/001-core-pages-editor/](specs/001-core-pages-editor/).
+Личное приложение заметок для macOS: дерево страниц, блоки текста, автосохранение, синхронизация двух Mac.
+Требования, план и задачи — в [specs/001-core-pages-editor/](specs/001-core-pages-editor/) (страницы и текст) и
+[specs/002-rich-blocks-text/](specs/002-rich-blocks-text/) (богатые блоки: переключатели, выноски, код, формулы,
+картинки и файлы, видео, закладки, таблицы, колонки, цвета, упоминания, даты и напоминания).
 Правила проекта — в [.specify/memory/constitution.md](.specify/memory/constitution.md).
 
 ## Что нужно
@@ -19,18 +21,42 @@ xcodegen generate
 xcodebuild build -scheme MyNotion -destination 'platform=macOS,arch=arm64'
 ```
 
+## Модули
+
+Код приложения — в пакете `Packages/MyNotionKit`, у каждого модуля свои тесты в `Tests/<Модуль>Tests`.
+
+| Модуль | Что делает |
+|--------|------------|
+| `NotesCore` | модель страниц и блоков, база SQLite (схема v6), запись правок, эталонные базы для замеров |
+| `PageEditor` | редактор страницы; каждый тип блока — свой описатель в `BlockKinds/` (меню «/», вид, клавиши, образцы галереи, часть «богатой» страницы) |
+| `PageTree`, `PageSearch` | дерево страниц в боковой панели, поиск по всем страницам |
+| `VisualStyle` | цвета, шрифты и размеры под Notion, светлая и тёмная тема |
+| `CodeHighlighting` | подсветка блоков кода по строкам |
+| `MathRendering` | формулы LaTeX (SwiftMath, шрифт Latin Modern Math) |
+| `Attachments` | копии картинок и файлов на Mac, отправка на сервер частями с шифрованием, уборка ненужных |
+| `EmbeddedMedia` | видеофайлы и ролики YouTube и Vimeo на странице |
+| `LinkPreview` | данные карточки закладки: заголовок, описание, картинка и значок сайта |
+| `Reminders` | даты в тексте и уведомления напоминаний |
+| `EmojiPicker` | окно выбора эмодзи для иконок страниц и выносок |
+| `Sync` | зашифрованные пачки правок между Mac через сервер |
+| `MarkdownExport`, `NotionImport` | выгрузка в Markdown и импорт выгрузки Notion или своей выгрузки |
+| `UIGallery`, `ServiceLaunch` | галерея снимков интерфейса и служебные режимы запуска без фокуса |
+
 ## Тесты
 
 ```sh
 # Модули (Swift Testing) — быстро, без Xcode-проекта
 cd Packages/MyNotionKit && swift test
 
-# Все модули и сценарии XCUITest
-xcodebuild test -scheme MyNotion -destination 'platform=macOS,arch=arm64'
+# Сценарии XCUITest — только в виртуальном Mac (см. ниже): сборка здесь, прогон там
+scripts/vm/run-in-vm.sh uitest [-only-testing:UITests/<Класс>]
 
-# Замеры бюджета (запуск ≤ 1 с, память ≤ 200 МБ) — сборка Release на эталонной базе.
+# Замеры бюджета (quickstart.md 002) — сборка Release, схема MyNotionPerformance.
 # PerformanceTests запускает приложение через систему, как Dock; PerformanceUITests — замеры через XCUITest.
-xcodebuild test -scheme MyNotionPerformance -configuration Release -destination 'platform=macOS,arch=arm64'
+scripts/vm/run-in-vm.sh uitest --release [-only-testing:PerformanceTests/<Класс>]
+
+# Сервер
+cd server && pnpm test
 ```
 
 ## Флаги запуска
@@ -40,6 +66,7 @@ xcodebuild test -scheme MyNotionPerformance -configuration Release -destination 
 | `--database <путь>` | открыть базу из указанного файла вместо `~/Library/Application Support/MyNotion/MyNotion.sqlite` |
 | `--generate-reference-library <путь>` | создать эталонную базу (1 000 страниц, 100 000 блоков) и выйти |
 | `--generate-visual-sample` | добавить в открытую базу страницу «MyNotion — образец» для сверки с Notion и открыть её |
+| `--generate-rich-sample` | добавить в открытую базу «богатую» страницу на 1 000 блоков (замеры 002, quickstart.md) и открыть её; части блоков дают описатели типов |
 | `--launch-report <путь>` | записать в файл время запуска и память в покое (для замеров) |
 | `--window-snapshot <путь>` | когда страница готова, снять окно в PNG и выйти (работает и при заблокированном экране) |
 | `--ui-gallery <папка>` | на своей временной базе снять все состояния интерфейса (светлая и тёмная тема, 1440×900, ключевые ещё 900×700), положить рядом `index.html` и `manifest.json` и выйти |
@@ -55,13 +82,20 @@ xcodebuild test -scheme MyNotionPerformance -configuration Release -destination 
 | `--export-markdown <папка>` | выгрузить все записи в Markdown в `<папка>/MyNotion-выгрузка-<дата>/` без окна выбора папки, напечатать путь и выйти (код 0 — готово, 1 — ошибка, частичной папки не остаётся) |
 | `--import-notion <путь>` | импортировать выгрузку Notion (ZIP «Export → Markdown & CSV» или распакованную папку) в ветку «Импорт из Notion — <дата>» без окна выбора, напечатать отчёт и выйти (код 0 — готово, 1 — ошибка, ветка откачена, 2 — эта выгрузка уже импортирована, повтор не начат) |
 
-**Служебные режимы не берут фокус.** Галерея, снимки окна, замеры и эталонная база (`--ui-gallery`, `--ui-gallery-only`, `--window-snapshot`, `--hover-sidebar-row`, `--generate-reference-library`, `--launch-report`, `--typing-benchmark`, `--search-benchmark`, `--export-markdown`, `--import-notion`, а также `--generate-visual-sample` вместе с ними) идут, пока человек работает в других программах. Приложение не становится активным, не стоит в Dock, его окна лежат под всеми окнами. Нигде в этих режимах нет `activate`, `makeKeyAndOrderFront` и `orderFrontRegardless`. Новый служебный флаг обязан работать так же: он добавляется в `LaunchPresence.serviceFlags` (модуль `ServiceLaunch`) и в его тест. Запуск без служебных флагов — обычное приложение.
+**Служебные режимы не берут фокус.** Галерея, снимки окна, замеры и эталонная база (`--ui-gallery`, `--ui-gallery-only`, `--window-snapshot`, `--hover-sidebar-row`, `--generate-reference-library`, `--launch-report`, `--typing-benchmark`, `--search-benchmark`, `--export-markdown`, `--import-notion`, а также `--generate-visual-sample` и `--generate-rich-sample` вместе с ними) идут, пока человек работает в других программах. Приложение не становится активным, не стоит в Dock, его окна лежат под всеми окнами. Нигде в этих режимах нет `activate`, `makeKeyAndOrderFront` и `orderFrontRegardless`. Новый служебный флаг обязан работать так же: он добавляется в `LaunchPresence.serviceFlags` (модуль `ServiceLaunch`) и в его тест. Запуск без служебных флагов — обычное приложение.
 
-## Сервер синхронизации (появится в этапе 7)
+## Сервер синхронизации и файлов
+
+Сервер в `server/` — почтовый ящик зашифрованных пачек правок и частей файлов: содержимого заметок и файлов он не видит.
+API — в [contracts/sync-and-files-api.md](specs/002-rich-blocks-text/contracts/sync-and-files-api.md).
 
 ```sh
-cd server && pnpm install && pnpm dev   # http://localhost:8787/health → ok
+cd server && pnpm install && pnpm test
+pnpm build && pnpm start   # http://localhost:3000/health → {"status":"ok"}
 ```
+
+Настройки — переменными окружения: `PORT` (3000), `DATA_DIR` (`./data`: база, резервные копии, файлы в `files/`),
+`BACKUP_KEEP` (14 копий), `FILES_LIMIT_GB` (50 ГБ на файлы). Развёртывание — `server/Dockerfile` и `docker-compose.yml`.
 
 ## Запуск только в виртуальном Mac
 
@@ -70,6 +104,8 @@ cd server && pnpm install && pnpm dev   # http://localhost:8787/health → ok
 ```sh
 scripts/vm/run-in-vm.sh gallery [--only <слово>] [--out <папка>]   # галерея состояний, снимки копируются сюда
 scripts/vm/run-in-vm.sh run <флаги приложения>                       # любой служебный режим
+scripts/vm/run-in-vm.sh uitest [--release] [-only-testing:…]          # UI-тесты и замеры Xcode внутри
+scripts/vm/run-in-vm.sh lock -- <команда>                            # своё действие с машиной под общим замком
 scripts/vm/run-in-vm.sh ssh <команда>                                # команда внутри
 scripts/vm/run-in-vm.sh status
 ```

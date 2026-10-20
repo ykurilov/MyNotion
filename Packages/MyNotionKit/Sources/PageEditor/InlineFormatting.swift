@@ -30,6 +30,12 @@ public enum InlineFormatting {
         return InlineText(text.string, runs: runs).normalized()
     }
 
+    /// Текст без оформления, ссылок и цветов на отрезке `range`; упоминания, даты и формулы остаются.
+    static func text(_ text: InlineText, clearingFormatsIn range: Range<Int>) -> InlineText {
+        let runs = text.runs.flatMap { run in run.style.isAtom ? [run] : subtract(range, from: run) }
+        return InlineText(text.string, runs: runs).normalized()
+    }
+
     /// Текст со ссылкой `url` на отрезке `range`; `nil` — ссылку убрать.
     static func text(_ text: InlineText, settingLink url: URL?, in range: Range<Int>) -> InlineText {
         var runs = text.runs.flatMap { run -> [StyledRun] in
@@ -40,7 +46,7 @@ public enum InlineFormatting {
         return InlineText(text.string, runs: runs).normalized()
     }
 
-    private static func subtract(_ range: Range<Int>, from run: StyledRun) -> [StyledRun] {
+    static func subtract(_ range: Range<Int>, from run: StyledRun) -> [StyledRun] {
         let runRange = run.start..<run.start + run.length
         guard runRange.overlaps(range) else { return [run] }
         var parts: [StyledRun] = []
@@ -67,6 +73,13 @@ public enum InlineFormatting {
         }
         guard let host = trimmed.split(separator: "/").first, host.contains("."), !host.hasPrefix("."), !host.hasSuffix(".") else { return nil }
         return URL(string: "https://" + trimmed)
+    }
+
+    /// Можно ли открыть адрес: http и https с сайтом или mailto. Ссылки с другого Mac и из импорта не проверялись при
+    /// вводе, а smb, ssh, vnc, file и подобные подключают диски, запускают программы или открывают файлы Mac.
+    public static func isOpenable(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased(), linkSchemes.contains(scheme) else { return false }
+        return scheme == "mailto" || url.host()?.isEmpty == false
     }
 
     /// Вставленный текст, который делает выделение ссылкой: только адрес со схемой, без других слов.
@@ -138,6 +151,20 @@ extension PageTextView {
         changeBlocks(blocks, to: drafts, actionName: "Оформление")
     }
 
+    /// «Tx»: снять с выделения оформление, ссылки и цвета одним шагом ⌘Z.
+    func clearInlineFormatting() {
+        commitEdits()
+        let selection = selectedRange()
+        guard selection.length > 0, let blocks = selectedBlockRange() else { return }
+        let drafts = blocks.map { index in
+            var draft = BlockDraft(document.blocks[index])
+            let range = localRange(of: selection, inBlockAt: index)
+            if !range.isEmpty { draft.text = InlineFormatting.text(draft.text, clearingFormatsIn: range) }
+            return draft
+        }
+        changeBlocks(blocks, to: drafts, actionName: "Убрать оформление")
+    }
+
     /// Без выделения ⌘B и т. п. включают оформление для набираемого текста.
     private func toggleTypingStyle(_ format: InlineFormat) {
         guard let position = mapper.blockPosition(at: selectedRange().location) else { return }
@@ -171,7 +198,7 @@ extension PageTextView {
     /// ⌘-щелчок по тексту ссылки открывает её адрес, как в Notion. Простой щелчок ставит курсор.
     func openLink(at point: NSPoint, modifiers: NSEvent.ModifierFlags) -> Bool {
         guard modifiers.contains(.command), let url = link(at: point) else { return false }
-        openURL(url)
+        if InlineFormatting.isOpenable(url) { openURL(url) } else { NSSound.beep() }
         return true
     }
 
@@ -196,8 +223,10 @@ extension PageTextView {
 
     /// Часть выделения внутри текста блока, в смещениях от начала его текста.
     func localRange(of selection: NSRange, inBlockAt index: Int) -> Range<Int> {
+        // У блока без своего текста на странице оформлять нечего.
+        guard !document.blocks[index].kind.rendersAsAttachment else { return 0..<0 }
         let start = mapper.paragraphStart(ofBlockAt: index)
-        let length = (document.blocks[index].text.string as NSString).length
+        let length = document.blocks[index].pageTextLength
         let lower = max(selection.location, start), upper = min(NSMaxRange(selection), start + length)
         return lower < upper ? lower - start..<upper - start : 0..<0
     }
@@ -249,6 +278,12 @@ extension PageTextView {
     public func paste(from pasteboard: NSPasteboard) {
         commitEdits()
         let selection = selectedRange()
+        if pasteInlineText(from: pasteboard, replacing: selection) { return }
+        // Файлы из Finder и картинка из буфера — блоками (US5).
+        if Self.pasteboardHasAttachments(pasteboard) {
+            Task { await pasteAttachments(from: pasteboard) }
+            return
+        }
         let plain = pasteboard.string(forType: .string)
         if selection.length > 0, let plain, let url = InlineFormatting.pastedLinkURL(from: plain) {
             setLink(url)
@@ -264,6 +299,8 @@ extension PageTextView {
         }
         guard let plain else { return }
         insertPasted(NSAttributedString(string: InlineFormatting.normalizedNewlines(plain)), replacing: selection)
+        // Адрес ролика в пустой строке — меню «Встроить видео / Закладка / Ссылка».
+        if selection.length == 0 { offerPastedVideoLink(InlineFormatting.normalizedNewlines(plain), at: selection.location) }
     }
 
     private static func richText(from pasteboard: NSPasteboard) -> NSAttributedString? {

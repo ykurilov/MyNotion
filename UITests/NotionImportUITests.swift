@@ -29,6 +29,7 @@ final class NotionImportUITests: XCTestCase {
         XCTAssertTrue(summary.contains("Перенесено страниц: 6"), "Отчёт: \(summary)")
         XCTAssertTrue(summary.contains("Импорт из Notion — "), "Нет названия ветки: \(summary)")
         XCTAssertTrue(app.descendants(matching: .any)["notion-import-simplified"].exists, "Нет списка упрощённого")
+        XCTAssertTrue(app.staticTexts["notion-import-notice-line"].exists, "Нет строки «Цвета и колонки Notion в Markdown не выгружает»")
         app.buttons["notion-import-done"].click()
         XCTAssertTrue(waitForAbsence(report), "Отчёт не закрылся")
 

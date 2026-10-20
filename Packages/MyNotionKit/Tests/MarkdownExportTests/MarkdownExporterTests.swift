@@ -178,6 +178,29 @@ struct MarkdownExporterTests {
         #expect(try read("Проекты/MyNotion/Идеи.md").contains("[Проекты](../../Проекты.md)"))
     }
 
+    @Test("Подстраница из «/» выгружается ссылкой на своём месте среди абзацев")
+    @MainActor
+    func inlineSubpageLink() throws {
+        let (projects, middle) = try store.write { tx -> (Page, Block) in
+            let projects = try tx.createPage(title: "Проекты")
+            var first = try #require(try tx.blocks(ofPage: projects.id).first)
+            first.text = InlineText("до")
+            try tx.updateBlock(first)
+            let middle = try tx.insertBlock(Block(pageId: projects.id, sortKey: .between(first.sortKey, nil)))
+            try tx.insertBlock(Block(pageId: projects.id, text: InlineText("после"), sortKey: .between(middle.sortKey, nil)))
+            return (projects, middle)
+        }
+        try PageTreeOperations(store: store).createSubpage(in: projects.id, title: "План", linkAt: .replacing(blockId: middle.id))
+
+        try runExport()
+
+        let text = try read("Проекты.md")
+        let link = try #require(text.range(of: "[План](Проекты/План.md)"))
+        #expect(try #require(text.range(of: "до")).upperBound < link.lowerBound)
+        #expect(link.upperBound < (try #require(text.range(of: "после"))).lowerBound)
+        #expect(FileManager.default.fileExists(atPath: exportFolder.appendingPathComponent("Проекты/План.md").path))
+    }
+
     // MARK: Имена
 
     @Test("Слэш и двоеточие в названии заменяются на дефис")

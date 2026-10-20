@@ -1,4 +1,5 @@
 import NotesCore
+import PageEditor
 
 /// Что показать в окне на одном снимке галереи (флаг `--ui-gallery`, plan.md, «Проверка интерфейса»).
 /// Приложение приводит окно в каждую сцену по очереди; `switch` по сцене там полный, поэтому новая сцена
@@ -8,6 +9,12 @@ public enum GalleryScene: Hashable, Sendable {
     case samplePage(scrolledToBottom: Bool)
     /// Страница одного типа блока: заполненный блок, пустой в середине и пустой в конце.
     case block(BlockKind, GalleryCaret)
+    /// Страница из блоков образца типа 002 (`BlockKindDescriptor.gallerySamples`).
+    case kindSample(BlockGallerySample)
+    /// Окно «@» под курсором в образце упоминаний; `query` — набранное после «@» (US3).
+    case mentionPicker(query: String)
+    /// Календарик даты в образце упоминаний (US3).
+    case datePicker
     /// Страница из одного пустого абзаца, курсор в нём.
     case emptyPage
     /// Страница без названия, курсор в названии.
@@ -18,8 +25,8 @@ public enum GalleryScene: Hashable, Sendable {
     case blockHover(BlockKind)
     /// Меню «/» в пустом абзаце; `filter` — набранное после «/».
     case slashMenu(filter: String)
-    /// Меню блока по щелчку на «⋮⋮».
-    case blockMenu
+    /// Меню блока по щелчку на «⋮⋮»; `turnInto` — открыто подменю «Преобразовать в».
+    case blockMenu(turnInto: Bool)
     /// Последний пустой блок страницы списка стал пунктом от «- »: маркер и подсказка там же, где у пункта выше.
     case bulletByShortcutAtEnd
     /// Пункт с вложенными тянут за «⋮⋮»: копия едет за мышью, линия показывает место сброса.
@@ -32,6 +39,10 @@ public enum GalleryScene: Hashable, Sendable {
     case blockSelection
     /// Панель форматирования над выделенным жирным словом; `kindMenu` — открыт список типов.
     case formatBar(kindMenu: Bool)
+    /// Страница с цветным текстом, цветным фоном строки и цветными блоками (US2, FR-112).
+    case colorsOnPage
+    /// Окно цветов: `fromBlockMenu` — открыто пунктом «Цвет» меню блока, иначе кнопкой «A» панели форматирования.
+    case colorMenu(fromBlockMenu: Bool)
     /// Блоки с переносами строк (Shift+Enter); курсор во второй строке пункта.
     case softLineBreaks
     /// Выделение через блоки с переносами строк: одна подложка на все строки.
@@ -172,8 +183,22 @@ public struct GalleryShot: Hashable, Sendable {
 
 public enum GalleryCatalog {
     /// Все состояния по порядку съёмки.
-    public static let states: [GalleryState] = pageStates + blockStates + editingStates + sidebarStates + trashStates + importStates + exportStates
-        + syncStates
+    public static let states: [GalleryState] = pageStates + blockStates + kindSampleStates + inlineAtomStates + editingStates + sidebarStates
+        + trashStates + importStates + exportStates + syncStates
+
+    /// Окно «@» и календарик даты (US3, contracts/blocks-and-keys.md, «Упоминания», «Даты и напоминания»).
+    static let inlineAtomStates: [GalleryState] = [
+        GalleryState("mention-picker", .mentionPicker(query: ""), "Окно «@»: страницы и даты", section: "Блоки 002"),
+        GalleryState("mention-picker-filtered", .mentionPicker(query: "план"), "Окно «@» с поиском «план»", section: "Блоки 002"),
+        GalleryState("date-picker", .datePicker, "Календарик даты: месяц, время, «Напомнить», «Удалить»", section: "Блоки 002"),
+    ]
+
+    /// Снимки блоков 002 — из описателей типов: этап, вводящий тип, добавляет образец в описатель, а не сюда.
+    static var kindSampleStates: [GalleryState] {
+        BlockKinds.gallerySamples.map { sample in
+            GalleryState("kind-\(sample.id)", .kindSample(sample), sample.summary, section: "Блоки 002", narrowToo: sample.narrowToo)
+        }
+    }
 
     /// Все снимки: каждое состояние в каждом размере, светлая и тёмная тема подряд.
     public static var shots: [GalleryShot] {
@@ -195,6 +220,23 @@ public enum GalleryCatalog {
         case .numberedItem: "нумерованный пункт"
         case .checkbox: "чекбокс"
         case .pageLink: "подстраница"
+        case .toggle: "раскрывающийся список"
+        case .quote: "цитата"
+        case .callout: "выноска"
+        case .divider: "разделитель"
+        case .code: "код"
+        case .equation: "формула"
+        case .tableOfContents: "оглавление"
+        case .image: "картинка"
+        case .file: "файл"
+        case .video: "видео"
+        case .bookmark: "закладка"
+        case .table: "таблица"
+        case .tableRow: "строка таблицы"
+        case .tableColumn: "столбец таблицы"
+        case .tableCell: "ячейка таблицы"
+        case .columnList: "колонки"
+        case .column: "колонка"
         }
     }
 
@@ -234,7 +276,12 @@ public enum GalleryCatalog {
     } + [
         GalleryState("slash-menu", .slashMenu(filter: ""), "Меню «/» в пустом абзаце, все типы", section: "Правка", narrowToo: true),
         GalleryState("slash-menu-filtered", .slashMenu(filter: "заг"), "Меню «/» с фильтром «заг»", section: "Правка"),
-        GalleryState("block-menu", .blockMenu, "Меню блока по щелчку на «⋮⋮»", section: "Правка"),
+        GalleryState("block-menu", .blockMenu(turnInto: false),
+                     "Меню блока по щелчку на «⋮⋮», как у Notion: тип блока, «Преобразовать в ▸», «Цвет ▸», черта, «Дублировать ⌘D», «Удалить Del»",
+                     section: "Правка", narrowToo: true),
+        GalleryState("block-menu-turn-into", .blockMenu(turnInto: true),
+                     "Подменю «Преобразовать в» справа от меню блока: текущий тип с галочкой, список по высоте окна с прокруткой",
+                     section: "Правка", narrowToo: true),
         GalleryState("bullet-shortcut-at-end", .bulletByShortcutAtEnd,
                      "Последний пустой блок стал пунктом от «- »: маркер с отступом, «Список» там, где начнётся текст", section: "Правка"),
         GalleryState("block-dragging", .blockDragging,
@@ -250,6 +297,13 @@ public enum GalleryCatalog {
                      "Панель форматирования под выделенным словом, у его конца, как у Notion: тип блока «Текст», кнопки, «Жирный» нажат (синий)", section: "Правка"),
         GalleryState("format-bar-type-menu", .formatBar(kindMenu: true),
                      "Панель форматирования с открытым списком типов: те же типы, что в меню «/», текущий отмечен галочкой", section: "Правка"),
+        GalleryState("colors-on-page", .colorsOnPage,
+                     "Цвета как у Notion: девять цветов текста и фона в строке, цветные блоки, подложка цитаты и выноски", section: "Правка"),
+        GalleryState("color-menu-format-bar", .colorMenu(fromBlockMenu: false),
+                     "Окно цветов под панелью форматирования: «Недавние», «Цвет текста» и «Цвет фона», у каждого цвета образец «A»",
+                     section: "Правка"),
+        GalleryState("color-menu-block", .colorMenu(fromBlockMenu: true),
+                     "Окно цветов — подменю пункта «Цвет» меню блока, справа от меню, верх вровень со строкой", section: "Правка"),
         GalleryState("page-icon-add-hover", .pageIcon(.addIconHover),
                      "Мышь над шапкой страницы без иконки: серая «Добавить иконку» со значком над названием, как у Notion", section: "Правка"),
         GalleryState("page-icon-picker", .pageIcon(.picker),

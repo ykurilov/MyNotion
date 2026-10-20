@@ -17,6 +17,12 @@ let package = Package(
         .library(name: "Sync", targets: ["Sync"]),
         .library(name: "UIGallery", targets: ["UIGallery"]),
         .library(name: "ServiceLaunch", targets: ["ServiceLaunch"]),
+        .library(name: "CodeHighlighting", targets: ["CodeHighlighting"]),
+        .library(name: "MathRendering", targets: ["MathRendering"]),
+        .library(name: "Attachments", targets: ["Attachments"]),
+        .library(name: "LinkPreview", targets: ["LinkPreview"]),
+        .library(name: "Reminders", targets: ["Reminders"]),
+        .library(name: "EmbeddedMedia", targets: ["EmbeddedMedia"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.11.1"),
@@ -25,16 +31,34 @@ let package = Package(
         .target(name: "VisualStyle"),
         .target(name: "NotesCore", dependencies: [.product(name: "GRDB", package: "GRDB.swift")]),
         .target(name: "PageTree", dependencies: ["NotesCore", "VisualStyle"]),
-        .target(name: "PageEditor", dependencies: ["NotesCore", "VisualStyle", "EmojiPicker"]),
+        // Тяжёлые модули (вложения, видео, напоминания, закладки) редактор видит только через протоколы фабрик
+        // видов `BlockViewFactories`, которые передаёт приложение (plan.md, Structure Decision).
+        .target(name: "PageEditor", dependencies: ["NotesCore", "VisualStyle", "EmojiPicker", "CodeHighlighting", "MathRendering"]),
         // Окно выбора эмодзи (FR-034): список и названия — из Unicode и CLDR (scripts/emoji/build-emoji-data.py).
         .target(name: "EmojiPicker", dependencies: ["VisualStyle"], resources: [.copy("Resources/emoji.tsv")]),
         .target(name: "PageSearch", dependencies: ["NotesCore", "VisualStyle", .product(name: "GRDB", package: "GRDB.swift")]),
-        .target(name: "MarkdownExport", dependencies: ["NotesCore"]),
+        .target(name: "MarkdownExport", dependencies: ["NotesCore", "LinkPreview"]),
         // Импорт из Notion (US6): записи и журнал импортов (`import_run`) пишет прямо через GRDB, как поиск свой индекс.
-        .target(name: "NotionImport", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
+        .target(name: "NotionImport", dependencies: ["NotesCore", "CodeHighlighting", "LinkPreview", .product(name: "GRDB", package: "GRDB.swift")]),
         .target(name: "Sync", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
-        .target(name: "UIGallery", dependencies: ["NotesCore"]),
+        // Состояния галереи для блоков 002 — из описателей типов редактора (`BlockKinds.gallerySamples`).
+        .target(name: "UIGallery", dependencies: ["NotesCore", "PageEditor"]),
         .target(name: "ServiceLaunch"),
+        // Подсветка кода (research R5): свой разборщик, без зависимостей.
+        .target(name: "CodeHighlighting"),
+        // Формулы (research R6): исходники SwiftMath 1.7.3 (MIT, `SwiftMath/LICENSE`) с одним шрифтом Latin Modern Math.
+        // Код SwiftMath писан до Swift 6: режим языка 5, чтобы не переписывать чужие исходники.
+        .target(name: "MathRendering", dependencies: ["VisualStyle"], exclude: ["SwiftMath/LICENSE"],
+                resources: [.copy("SwiftMath/mathFonts.bundle")],
+                swiftSettings: [.swiftLanguageMode(.v5)]),
+        // Копии файлов на Mac, шифрование частей, отправка и докачка (research R9–R10).
+        .target(name: "Attachments", dependencies: ["NotesCore", "Sync", .product(name: "GRDB", package: "GRDB.swift")]),
+        // Закладки и обложки YouTube и Vimeo: один запрос при вставке (research R15, R8).
+        .target(name: "LinkPreview"),
+        // Индекс напоминаний и уведомления системы (research R11).
+        .target(name: "Reminders", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
+        // Проигрыватель видеофайла и веб-проигрыватель YouTube и Vimeo по нажатию (research R8).
+        .target(name: "EmbeddedMedia", dependencies: ["VisualStyle"]),
 
         .testTarget(name: "VisualStyleTests", dependencies: ["VisualStyle"]),
         .testTarget(name: "NotesCoreTests", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
@@ -43,11 +67,17 @@ let package = Package(
         .testTarget(name: "EmojiPickerTests", dependencies: ["EmojiPicker", "NotesCore"]),
         .testTarget(name: "PageSearchTests", dependencies: ["PageSearch", "NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "MarkdownExportTests", dependencies: ["MarkdownExport", "NotesCore"]),
-        .testTarget(name: "NotionImportTests", dependencies: ["NotionImport", "NotesCore", "MarkdownExport", .product(name: "GRDB", package: "GRDB.swift")],
+        .testTarget(name: "NotionImportTests", dependencies: ["NotionImport", "NotesCore", "MarkdownExport", "PageEditor", .product(name: "GRDB", package: "GRDB.swift")],
                     resources: [.copy("Fixtures")]),
-        .testTarget(name: "SyncTests", dependencies: ["Sync", "NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
-        .testTarget(name: "UIGalleryTests", dependencies: ["UIGallery", "NotesCore"]),
+        .testTarget(name: "SyncTests", dependencies: ["Sync", "NotesCore", "Reminders", .product(name: "GRDB", package: "GRDB.swift")]),
+        .testTarget(name: "UIGalleryTests", dependencies: ["UIGallery", "NotesCore", "PageEditor"]),
         .testTarget(name: "ServiceLaunchTests", dependencies: ["ServiceLaunch"]),
+        .testTarget(name: "CodeHighlightingTests", dependencies: ["CodeHighlighting"]),
+        .testTarget(name: "MathRenderingTests", dependencies: ["MathRendering"]),
+        .testTarget(name: "AttachmentsTests", dependencies: ["Attachments", "NotesCore", "Sync", .product(name: "GRDB", package: "GRDB.swift")]),
+        .testTarget(name: "LinkPreviewTests", dependencies: ["LinkPreview"]),
+        .testTarget(name: "RemindersTests", dependencies: ["Reminders", "NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
+        .testTarget(name: "EmbeddedMediaTests", dependencies: ["EmbeddedMedia"]),
     ],
     swiftLanguageModes: [.v6]
 )

@@ -108,9 +108,38 @@ struct FormatBarTests {
         #expect(editor.textView.formatBar.state?.active == [], "Жирное и ссылка — только часть выделения")
     }
 
-    @Test("Кнопки по порядку: жирный, курсив, подчёркнутый, зачёркнутый, код, ссылка")
+    @Test("Кнопки, как у Notion 7.39, два ряда по 5: цвет, жирный, курсив, подчёркнутый, «Tx»; ссылка, зачёркнутый, код, «√x», «⋯»")
     func buttonOrder() {
-        #expect(FormatBarButton.allCases == [.bold, .italic, .underline, .strikethrough, .code, .link])
+        #expect(FormatBarButton.allCases == [.color, .bold, .italic, .underline, .clearFormatting,
+                                             .link, .strikethrough, .code, .equation, .more])
+        #expect(Metrics.FormatBar.buttonColumns == 5)
+    }
+
+    @Test("«Tx» снимает с выделения всё оформление и цвета, упоминания и формулы остаются; один шаг ⌘Z")
+    func clearFormatting() throws {
+        let editor = try EditorFixture([.paragraph("один два три")])
+        editor.select(inBlock: 0, "один два три")
+        editor.perform(.toggleInline(.bold))
+        editor.select(inBlock: 0, "два")
+        editor.perform(.toggleInline(.italic))
+        editor.step { editor.textView.setLink(URL(string: "https://kurilov.cloud")) }
+        editor.perform(.applyColor(ColorChoice(target: .background, color: .yellow)))
+        editor.select(inBlock: 0, "два три")
+        editor.step { editor.textView.formatBar.press(.clearFormatting) }
+        #expect(editor.document.blocks[0].text.runs == [StyledRun(start: 0, length: 5, style: .bold)])
+        #expect(editor.textView.formatBar.isShown, "Панель остаётся")
+        editor.undo()
+        #expect(editor.document.blocks[0].text.runs.count > 1)
+    }
+
+    @Test("«⋯» открывает меню блока выделенного текста, как у Notion; панель прячется")
+    func moreOpensBlockMenu() throws {
+        let editor = try EditorFixture([.paragraph("один"), .paragraph("два")])
+        editor.select(inBlock: 1, "два")
+        editor.textView.formatBar.press(.more)
+        #expect(editor.textView.popups.isOpen)
+        #expect(editor.textView.popups.visibleItems.map(\.title).contains("Цвет"))
+        #expect(!editor.textView.formatBar.isShown)
     }
 
     // MARK: Тип блока
@@ -304,15 +333,15 @@ struct FormatBarTests {
         return view
     }
 
-    @Test("Размер карточки как у Notion: ширина 6 кнопок по 36 и поля 6, строка типа 32, разделитель, ряд кнопок 31")
+    @Test("Размер карточки, как у Notion 7.39: 5 мест по 36 и поля 7 (194), строка типа 32, два ряда кнопок по 32")
     func cardSize() {
-        #expect(Metrics.FormatBar.width == 228)
-        let height: CGFloat = 6 + 32 + 6 + 31 + 6
+        #expect(Metrics.FormatBar.width == 194)
+        let height: CGFloat = 6 + 32 + 6 + 2 * 32 + 6
         #expect(Metrics.FormatBar.height == height, "Высота \(Metrics.FormatBar.height)")
     }
 
-    @Test("Карточка видна на странице, разделитель цвета popupDivider под строкой типа", arguments: Self.themes)
-    func cardAndDivider(theme: NSAppearance.Name) throws {
+    @Test("Карточка видна на странице; между строкой типа и кнопками разделителя нет, как у Notion 7.39", arguments: Self.themes)
+    func cardWithoutDivider(theme: NSAppearance.Name) throws {
         let view = Self.bar(FormatBarState(kind: .paragraph, active: []))
         let pixels = try ViewPixels(view, appearance: theme)
         let page = Palette.pageBackground.resolved(in: theme)
@@ -321,57 +350,71 @@ struct FormatBarTests {
         for edge in [NSPoint(x: card.minX - 0.5, y: card.midY), NSPoint(x: card.maxX + 0.5, y: card.midY)] {
             #expect(colorDistance(pixels.color(at: edge, over: page), page) >= 0.05, "\(theme.rawValue): край карточки сливается со страницей")
         }
-        // У Notion линия ≈ 40,5 ниже верха карточки, с 16 от краёв.
-        let lineY = card.minY + Metrics.FormatBar.verticalPadding + Metrics.FormatBar.kindRowHeight + Metrics.FormatBar.dividerOffset
-            + Metrics.FormatBar.dividerWidth / 2
-        #expect(abs(lineY - card.minY - 40.5) <= 1.2)
-        let divider = pixels.color(at: NSPoint(x: card.midX, y: lineY), over: page)
-        #expect(colorDistance(divider, Palette.popupDivider.resolved(in: theme)) <= 0.04, "\(theme.rawValue): разделитель \(divider)")
-        let beforeInset = pixels.color(at: NSPoint(x: card.minX + Metrics.FormatBar.dividerInset - 2, y: lineY), over: page)
-        #expect(colorDistance(beforeInset, Palette.popupMenuBackground.resolved(in: theme)) <= 0.02, "Разделитель не доходит до края карточки")
+        let gapY = card.minY + Metrics.FormatBar.verticalPadding + Metrics.FormatBar.kindRowHeight + Metrics.FormatBar.kindToButtonsSpacing / 2
+        let gap = pixels.color(at: NSPoint(x: card.midX, y: gapY), over: page)
+        #expect(colorDistance(gap, Palette.popupMenuBackground.resolved(in: theme)) <= 0.02, "\(theme.rawValue): под строкой типа \(gap)")
     }
 
-    /// Рисунок кнопки `index` в ряду значков.
-    static func buttonInk(_ index: Int, in view: FormatBarView, pixels: ViewPixels) -> NSRect? {
+    /// Место кнопки `index`: два ряда по `buttonColumns`.
+    static func buttonCell(_ index: Int) -> NSRect {
         let margin = FormatBarWindow.shadowMargin
-        let rowTop = margin + Metrics.FormatBar.verticalPadding + Metrics.FormatBar.kindRowHeight + Metrics.FormatBar.dividerBandHeight
-        let cell = NSRect(x: margin + Metrics.FormatBar.horizontalPadding + CGFloat(index) * Metrics.FormatBar.buttonWidth, y: rowTop,
-                          width: Metrics.FormatBar.buttonWidth, height: Metrics.FormatBar.buttonRowHeight)
-        return pixels.inkBounds(in: cell.insetBy(dx: 2, dy: 2), over: Palette.popupMenuBackground.resolved(in: .aqua))
+        let columns = Metrics.FormatBar.buttonColumns
+        let rowTop = margin + Metrics.FormatBar.verticalPadding + Metrics.FormatBar.kindRowHeight + Metrics.FormatBar.kindToButtonsSpacing
+            + CGFloat(index / columns) * Metrics.FormatBar.buttonRowHeight
+        return NSRect(x: margin + Metrics.FormatBar.horizontalPadding + CGFloat(index % columns) * Metrics.FormatBar.buttonWidth, y: rowTop,
+                      width: Metrics.FormatBar.buttonWidth, height: Metrics.FormatBar.buttonRowHeight)
     }
 
-    @Test("Значки кнопок по центру своих мест шириной 36 (у Notion первый — в 24 от края), размером как у Notion")
+    /// Рисунок кнопки `index` в рядах значков.
+    static func buttonInk(_ index: Int, in view: FormatBarView, pixels: ViewPixels) -> NSRect? {
+        pixels.inkBounds(in: buttonCell(index).insetBy(dx: 2, dy: 2), over: Palette.popupMenuBackground.resolved(in: .aqua))
+    }
+
+    @Test("Значки кнопок по центру своих мест 36 × 32 (у Notion 7.39 первый — в 24,6 от края, ряды — в 60 и 92 от верха)")
     func buttonIcons() throws {
         let view = Self.bar(FormatBarState(kind: .paragraph, active: []))
         let pixels = try ViewPixels(view, appearance: .aqua)
         let margin = FormatBarWindow.shadowMargin
-        let rowMid = margin + Metrics.FormatBar.verticalPadding + Metrics.FormatBar.kindRowHeight + Metrics.FormatBar.dividerBandHeight
-            + Metrics.FormatBar.buttonRowHeight / 2
-        #expect(abs(rowMid - margin - 59.4) <= 1.2, "Середина ряда кнопок \(rowMid - margin), у Notion 59,4")
+        #expect(abs(Self.buttonCell(0).midY - margin - 60) <= 1.2, "Середина первого ряда \(Self.buttonCell(0).midY - margin)")
+        #expect(abs(Self.buttonCell(5).midY - margin - 92) <= 1.2, "Середина второго ряда \(Self.buttonCell(5).midY - margin)")
         for (index, button) in FormatBarButton.allCases.enumerated() {
             let ink = try #require(Self.buttonInk(index, in: view, pixels: pixels), "\(button): значка нет")
-            let center = margin + 24 + CGFloat(index) * 36
-            #expect(abs(ink.midX - center) <= 1.5, "\(button): значок в \(ink.midX - margin), место в \(center - margin)")
-            #expect(abs(ink.midY - rowMid) <= 2, "\(button): значок не по середине ряда")
-            // У Notion: «B» ≈ 11 высотой, «</>» ≈ 17,5 × 12,7, ссылка ≈ 15 × 15; сглаживание краёв — до 0,5 с боков.
-            #expect(ink.height >= 8 && ink.height <= 15.5, "\(button): значок \(ink.size)")
-            #expect(ink.width <= 19, "\(button): значок \(ink.size)")
+            let cell = Self.buttonCell(index)
+            #expect(abs(ink.midX - cell.midX) <= 1.5, "\(button): значок в \(ink.midX - margin), место в \(cell.midX - margin)")
+            #expect(abs(ink.midY - cell.midY) <= 2, "\(button): значок не по середине ряда")
+            #expect(abs(Self.buttonCell(index % 5).midX - margin - (25 + CGFloat(index % 5) * 36)) <= 0.5)
+            // У Notion: «B» ≈ 11 высотой, «</>» ≈ 17,5 × 12,7, ссылка ≈ 15 × 15; у «A» — рамка 20.
+            let limit: CGFloat = button == .color ? 21 : 19
+            #expect(ink.height >= 2 && ink.height <= max(15.5, limit), "\(button): значок \(ink.size)")
+            #expect(ink.width <= limit, "\(button): значок \(ink.size)")
         }
+    }
+
+    @Test("«A» — буква текущего цвета текста выделения в рамке 20, как у Notion 7.39", arguments: Self.themes)
+    func colorButtonShowsCurrentColor(theme: NSAppearance.Name) throws {
+        let red = ColorChoice(target: .text, color: .red)
+        let view = Self.bar(FormatBarState(kind: .paragraph, active: [], currentColors: [red, ColorChoice(target: .background, color: nil)]))
+        let pixels = try ViewPixels(view, appearance: theme)
+        let cell = Self.buttonCell(0)
+        let letter = NSRect(x: cell.midX - 5, y: cell.midY - 6, width: 10, height: 12)
+        let color = try #require(pixels.strongestInkColor(in: letter, over: Palette.popupMenuBackground.resolved(in: theme)))
+        #expect(colorDistance(color, Palette.notionText(.red).resolved(in: theme)) <= 0.15, "\(theme.rawValue): «A» \(color)")
     }
 
     @Test("Нажатая кнопка — значок синий, как у Notion; ненажатая — цвета текста", arguments: Self.themes)
     func activeButtonIsBlue(theme: NSAppearance.Name) throws {
         let view = Self.bar(FormatBarState(kind: .paragraph, active: [.bold]))
         let pixels = try ViewPixels(view, appearance: theme)
-        let bold = try #require(Self.buttonInk(0, in: view, pixels: pixels))
-        let italic = try #require(Self.buttonInk(1, in: view, pixels: pixels))
+        let bold = try #require(Self.buttonInk(1, in: view, pixels: pixels))
+        let italic = try #require(Self.buttonInk(2, in: view, pixels: pixels))
         let blue = try #require(pixels.strongestInkColor(in: bold, over: Palette.popupMenuBackground.resolved(in: theme)))
         #expect(colorDistance(blue, Palette.formatBarActiveIcon.resolved(in: theme)) <= 0.12, "\(theme.rawValue): нажатая \(blue)")
         let plain = try #require(pixels.strongestInkColor(in: italic, over: Palette.popupMenuBackground.resolved(in: theme)))
         #expect(colorDistance(plain, Palette.textPrimary.resolved(in: theme)) <= 0.15, "\(theme.rawValue): ненажатая \(plain)")
     }
 
-    @Test("Строка типа: значок по центру в 18 от края, название с 42, справа серая стрелка в 23 от края", arguments: ["Текст", "Разные типы"])
+    @Test("Строка типа, как у Notion 7.39: значок по центру в 24 от края (над столбцом кнопок), название с 44, справа серая стрелка в 23 от края",
+          arguments: ["Текст", "Разные типы"])
     func kindRow(title: String) throws {
         let state = FormatBarState(kind: title == "Текст" ? .paragraph : nil, active: [])
         #expect(state.kindTitle == title)
@@ -380,11 +423,11 @@ struct FormatBarTests {
         let margin = FormatBarWindow.shadowMargin
         let background = Palette.popupMenuBackground.resolved(in: .aqua)
         let row = NSRect(x: margin + 4, y: margin + Metrics.FormatBar.verticalPadding, width: Metrics.FormatBar.width - 8, height: Metrics.FormatBar.kindRowHeight)
-        let icon = try #require(pixels.inkBounds(in: NSRect(x: row.minX, y: row.minY, width: 26, height: row.height), over: background))
-        #expect(abs(icon.midX - margin - 18) <= 1.5, "Значок в \(icon.midX - margin)")
+        let icon = try #require(pixels.inkBounds(in: NSRect(x: row.minX, y: row.minY, width: 32, height: row.height), over: background))
+        #expect(abs(icon.midX - margin - 24) <= 1.5, "Значок в \(icon.midX - margin)")
         #expect(abs(icon.midY - margin - 22) <= 2, "Середина строки типа \(icon.midY - margin), у Notion 22")
-        let text = try #require(pixels.inkBounds(in: NSRect(x: margin + 38, y: row.minY, width: 140, height: row.height), over: background))
-        #expect(abs(text.minX - margin - 42) <= 1.5, "Название с \(text.minX - margin)")
+        let text = try #require(pixels.inkBounds(in: NSRect(x: margin + 40, y: row.minY, width: 110, height: row.height), over: background))
+        #expect(abs(text.minX - margin - 44) <= 1.5, "Название с \(text.minX - margin)")
         let chevron = try #require(pixels.inkBounds(in: NSRect(x: row.maxX - 30, y: row.minY, width: 30, height: row.height), over: background))
         #expect(abs(margin + Metrics.FormatBar.width - chevron.midX - 23) <= 1.5, "Стрелка в \(margin + Metrics.FormatBar.width - chevron.midX) от края")
         let color = try #require(pixels.strongestInkColor(in: chevron, over: background))
@@ -402,8 +445,9 @@ struct FormatBarTests {
         view.layoutSubtreeIfNeeded()
         let pixels = try ViewPixels(view, appearance: .aqua)
         let rows = view.subviews.compactMap { $0 as? PopupMenuRowView }
-        for (index, row) in rows.enumerated() {
-            let right = NSRect(x: row.frame.maxX - 30, y: row.frame.minY + 2, width: 30, height: row.frame.height - 4)
+        for (index, row) in rows.enumerated() where !row.isHidden {
+            // Место галочки: длинное название («Раскрывающийся список») доходит почти до него.
+            let right = NSRect(x: row.frame.maxX - 22, y: row.frame.minY + 2, width: 22, height: row.frame.height - 4)
             let ink = pixels.inkBounds(in: right, over: Palette.popupMenuBackground.resolved(in: .aqua))
             #expect((ink != nil) == (index == 2), "\(row.item.title): галочка \(ink == nil ? "нет" : "есть")")
         }

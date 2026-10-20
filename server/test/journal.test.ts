@@ -288,7 +288,7 @@ describe('живой случай: настоящий HTTP и настоящее
   beforeEach(async () => {
     const server = createTestServer();
     token = server.firstDevice.token;
-    const app = createApp({ devices: server.devices, journal: server.journal });
+    const app = createApp({ devices: server.devices, journal: server.journal, files: server.files });
     http = serve({ fetch: app.fetch, port: 0, hostname: '127.0.0.1' });
     await new Promise<void>((resolve) => http.once('listening', () => resolve()));
     baseUrl = `http://127.0.0.1:${(http.address() as AddressInfo).port}`;

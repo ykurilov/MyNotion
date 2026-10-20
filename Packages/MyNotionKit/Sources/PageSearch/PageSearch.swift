@@ -63,7 +63,8 @@ public struct PageSearch: Sendable {
                 icon: page.icon,
                 path: tree.ancestors(of: pageId).map { $0.title.isEmpty ? Page.untitledTitle : $0.title },
                 titleHighlights: SearchText.highlights(of: words, in: page.title),
-                snippet: snippet
+                snippet: snippet,
+                blockId: titleMatchSet.contains(pageId) ? nil : bestBlockByPage[pageId]
             )
         }
     }
@@ -110,6 +111,8 @@ public struct PageSearchResult: Sendable, Hashable, Identifiable {
     public let titleHighlights: [NSRange]
     /// `nil` — слово нашлось только в названии.
     public let snippet: SearchSnippet?
+    /// Блок, где нашлись слова; переход к нему раскрывает свёрнутых предков (US1). `nil` — нашлось в названии.
+    public var blockId: UUID? = nil
 
     public var id: UUID { pageId }
 }

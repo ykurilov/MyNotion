@@ -25,3 +25,16 @@ public struct Conflict: Sendable, Hashable, Identifiable {
         self.resolvedAt = resolvedAt
     }
 }
+
+/// Отметка «сделано» напоминания (data-model.md, «Напоминания»): синхронизируется, позднее побеждает.
+public struct ReminderState: Sendable, Hashable {
+    public var mentionId: UUID
+    public var doneAt: Date?
+    public var doneClock: HybridTimestamp
+
+    public init(mentionId: UUID, doneAt: Date?, doneClock: HybridTimestamp) {
+        self.mentionId = mentionId
+        self.doneAt = doneAt
+        self.doneClock = doneClock
+    }
+}

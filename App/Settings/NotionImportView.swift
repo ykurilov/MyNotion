@@ -1,4 +1,5 @@
 import AppKit
+import Attachments
 import NotesCore
 import NotionImport
 import Observation
@@ -36,6 +37,8 @@ final class NotionImportController {
 
     private(set) var state = State.idle
     @ObservationIgnored private let store: NotesStore
+    /// Картинки и файлы выгрузки копируются во вложения.
+    @ObservationIgnored private let attachments: AttachmentStore?
     /// Записать правки открытых страниц: импорт пишет в ту же базу. `false` — не записалось.
     @ObservationIgnored private let saveOpenPages: @MainActor () -> Bool
     /// Ветка импорта появилась: перечитать дерево и открыть её.
@@ -43,7 +46,9 @@ final class NotionImportController {
     @ObservationIgnored private var prepared: PreparedNotionExport?
     @ObservationIgnored private var task: Task<Void, Never>?
 
-    init(store: NotesStore, saveOpenPages: @escaping @MainActor () -> Bool, showBranch: @escaping @MainActor (UUID) -> Void) {
+    init(store: NotesStore, attachments: AttachmentStore? = nil, saveOpenPages: @escaping @MainActor () -> Bool,
+         showBranch: @escaping @MainActor (UUID) -> Void) {
+        self.attachments = attachments
         self.store = store
         self.saveOpenPages = saveOpenPages
         self.showBranch = showBranch
@@ -124,7 +129,7 @@ final class NotionImportController {
             return
         }
         state = .running(NotionImportProgress(phase: .reading, done: 0, total: 0))
-        let importer = NotionImporter(store: store)
+        let importer = NotionImporter(store: store, attachments: attachments)
         task = Task { [weak self] in
             let detached = Task.detached(priority: .userInitiated) { () -> Result<NotionImportReport, any Error> in
                 Result {
@@ -255,8 +260,14 @@ struct NotionImportReportView: View {
             Text(verbatim: "Перенесено страниц: \(number(report.pageCount)). Они лежат на новой странице «\(report.rootTitle)» в списке слева.")
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("notion-import-summary")
+            ForEach(report.notices, id: \.self) { notice in
+                Text(verbatim: notice + ".")
+                    .foregroundStyle(Color(nsColor: Palette.textSecondary))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("notion-import-notice-line")
+            }
             if report.simplified.isEmpty {
-                Text("Всё перенесено как было.")
+                Text(report.notices.isEmpty ? "Всё перенесено как было." : "Остальное перенесено как было.")
                     .foregroundStyle(Color(nsColor: Palette.textSecondary))
             } else {
                 Text("Кое-что из Notion здесь выглядеть так же не может. Текст сохранён, но обычными абзацами:")

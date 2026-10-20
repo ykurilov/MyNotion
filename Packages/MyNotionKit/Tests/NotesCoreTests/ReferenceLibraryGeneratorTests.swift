@@ -41,7 +41,8 @@ struct ReferenceLibraryGeneratorTests {
             )
         }
         #expect(stats.blocks == 100_000)
-        #expect(stats.kinds == Set(BlockKind.allCases.map(\.rawValue)))
+        // Эталон 001 — блоки 001; блоки 002 — на «богатой» странице (RichPageGenerator).
+        #expect(stats.kinds == ["paragraph", "heading1", "heading2", "heading3", "bulletItem", "numberedItem", "checkbox", "pageLink"])
         #expect(stats.blocksPerPage.first == 1_000)
         #expect(stats.blocksPerPage.dropFirst().allSatisfy { $0 < 1_000 })
         #expect(stats.blocksPerPage.count == 1_000)

@@ -50,6 +50,7 @@ public enum Metrics {
         case .heading1: BlockSpacing(height: 90, topSpacing: 38)
         case .heading2: BlockSpacing(height: 76.4, topSpacing: 33)
         case .heading3: BlockSpacing(height: 67, topSpacing: 30)
+        case .tableCell: BlockSpacing(height: Table.lineHeight, topSpacing: 0)
         }
     }
 
@@ -261,7 +262,18 @@ public enum Metrics {
     public enum PopupMenu {
         public static let cornerRadius: CGFloat = 10
         public static let slashMenuWidth: CGFloat = 324
-        public static let blockMenuWidth: CGFloat = 240
+        /// Меню блока «⋮⋮» и подменю «Преобразовать в», как у Notion 7.39 (дерево доступности, 19.10.2026): ширины 265 и 220,
+        /// строки 28 с шагом 29, черта между группами добавляет 8, подменю заходит на меню на 4. Список типов у Notion 220,
+        /// у нас 248: «Раскрывающийся список» длиннее «Toggle list».
+        public static let blockMenuWidth: CGFloat = 265
+        public static let kindListWidth: CGFloat = 248
+        public static let listMenuWidth: CGFloat = 240
+        public static let compactRowHeight: CGFloat = 29
+        public static let groupSeparatorHeight: CGFloat = 8
+        public static let submenuOverlap: CGFloat = 4
+        /// Полоса прокрутки длинного списка: ширина 4, в 4 от правого края карточки.
+        public static let scrollIndicatorWidth: CGFloat = 4
+        public static let scrollIndicatorInset: CGFloat = 4
         /// Шаг строк; подсветка выбранной строки — на 1 меньше сверху и снизу, скругление 6.
         public static let rowHeight: CGFloat = 33
         public static let rowHighlightInset: CGFloat = 1
@@ -356,25 +368,26 @@ public enum Metrics {
     }
 
     /// Панель форматирования над выделенным текстом (FR-033), карточка как у Notion 7.38.1 (снимок 15.10.2026, ±1,2):
-    /// строка типа блока, разделитель, ряд из 6 кнопок по 36.
+    /// строка типа блока, разделитель, ряд из 7 кнопок по 36 (шесть как у Notion и цвет «A»).
+    /// Панель форматирования, как у Notion 7.39 (снимки 19.10.2026, ±1,3): строка типа и два ряда по 5 кнопок,
+    /// без разделителя между ними. Отсчёт — от левого верхнего угла карточки.
     public enum FormatBar {
-        public static let horizontalPadding: CGFloat = 6
+        public static let horizontalPadding: CGFloat = 7
         public static let verticalPadding: CGFloat = 6
         public static let buttonWidth: CGFloat = 36
-        public static let buttonCount = 6
-        public static let width: CGFloat = 2 * horizontalPadding + CGFloat(buttonCount) * buttonWidth
-        /// Строка типа: середина значка в 18 от края карточки, название с 42, середина стрелки «›» в 23 от правого края.
+        public static let buttonColumns = 5
+        public static let buttonRows = 2
+        public static let width: CGFloat = 2 * horizontalPadding + CGFloat(buttonColumns) * buttonWidth
+        /// Строка типа: середина значка в 24 от края карточки (над первым столбцом кнопок), название с 44,
+        /// середина стрелки «›» в 23 от правого края.
         public static let kindRowHeight: CGFloat = 32
-        public static let kindIconCenterX: CGFloat = 18
-        public static let kindTitleX: CGFloat = 42
+        public static let kindIconCenterX: CGFloat = 24
+        public static let kindTitleX: CGFloat = 44
         public static let kindChevronCenterFromRight: CGFloat = 23
         public static let kindChevronGlyphSize: CGFloat = 11
-        /// Полоса разделителя 6: линия 1 на 2 ниже строки типа (середина в 40,5 от верха карточки), с 16 от краёв.
-        public static let dividerBandHeight: CGFloat = 6
-        public static let dividerOffset: CGFloat = 2
-        public static let dividerInset: CGFloat = 16
-        public static let dividerWidth: CGFloat = 1
-        public static let buttonRowHeight: CGFloat = 31
+        /// Между строкой типа и первым рядом кнопок; ряды — с серединами в 60 и 92 от верха карточки.
+        public static let kindToButtonsSpacing: CGFloat = 6
+        public static let buttonRowHeight: CGFloat = 32
         /// Размер шрифта системных значков кнопок: рисунок «B» ≈ 11 высотой, как у Notion.
         public static let buttonGlyphSize: CGFloat = 15
         /// Рамка, в которую вписан рисунок значка: у Notion «</>» ≈ 17,5 × 12,7, ссылка ≈ 15 × 15.
@@ -382,10 +395,18 @@ public enum Metrics {
         /// Подсветка кнопки под мышью.
         public static let buttonHighlightSize = CGSize(width: 32, height: 28)
         public static let buttonCornerRadius: CGFloat = 6
-        public static let height: CGFloat = 2 * verticalPadding + kindRowHeight + dividerBandHeight + buttonRowHeight
+        /// Кнопка цвета: «A» в рамке 20 со скруглением 4, буква — шрифтом 12.
+        public static let colorButtonBoxSize: CGFloat = 20
+        public static let colorButtonBoxCornerRadius: CGFloat = 4
+        public static let colorButtonGlyphSize: CGFloat = 12
+        /// «Tx»: «T» шрифтом значков и «x» мельче, ниже строки.
+        public static let clearFormattingSubscriptSize: CGFloat = 10
+        public static let height: CGFloat = 2 * verticalPadding + kindRowHeight + kindToButtonsSpacing + CGFloat(buttonRows) * buttonRowHeight
         /// Список типов — сбоку от карточки (Notion, сверено 18.10.2026: ≈ 8,8 ± 1,3) и заходит на неё до подсветки
-        /// последней кнопки: поле карточки 6 + половина зазора между местом кнопки 36 и подсветкой 32.
+        /// последней кнопки: поле карточки + половина зазора между местом кнопки 36 и подсветкой 32.
         public static let kindMenuOverlap: CGFloat = horizontalPadding + (buttonWidth - buttonHighlightSize.width) / 2
+        /// Окно цветов — под местом кнопки «A», поверх панели: у Notion 7.39 его верх на ≈ 1 ниже первого ряда кнопок.
+        public static let colorMenuGap: CGFloat = 1
         /// Между строкой выделения и карточкой (под строкой, а если внизу нет места — над ней).
         public static let selectionSpacing: CGFloat = 8
         /// Левый край карточки правее указателя мыши (или конца выделения, если указатель не над страницей).

@@ -7,8 +7,9 @@ import VisualStyle
 /// Системное поведение текста — выделение, ⌘Z, проверка орфографии, ввод с IME, ⌘F — от `NSTextView`;
 /// правки уходят в `PageDocument` через `PageTextStorageMapper`. Над текстом — шапка с иконкой и названием.
 @MainActor
-public final class PageTextView: NSTextView {
-    public let document: PageDocument
+public class PageTextView: NSTextView {
+    /// Блоки, которые правит этот редактор: поток страницы, колонки или ячейка таблицы (`FlowDocument`).
+    public let document: FlowDocument
     public let header: PageHeaderView
     private(set) var mapper: PageTextStorageMapper!
     let emptyParagraphHint = NSTextField(labelWithString: "Введите «/» для выбора блока")
@@ -42,11 +43,41 @@ public final class PageTextView: NSTextView {
     private(set) lazy var conflictMarks = ConflictMarksOverlay(textView: self)
     /// Щелчок по блоку-подстранице: открыть страницу.
     public var onOpenPage: (@MainActor (UUID) -> Void)?
+    /// «Страница» в меню «/» и «Преобразовать в»: подстраницу со ссылкой у блока создаёт владелец дерева.
+    public var onSubpageRequest: (@MainActor (SubpageRequest) -> Void)?
     /// ⌘-щелчок по ссылке: открыть адрес (по умолчанию — в браузере по умолчанию).
     public var openURL: @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) }
     let layoutDelegate = BlockLayoutDelegate()
+    /// Виды колонок и таблиц в тексте и их высоты (`Flows/`).
+    let embeddedViews = EmbeddedBlockViews()
+    /// ⌘F по всей странице; у редакторов колонок и ячеек — не используется, поиск у страницы (`PageFind/`).
+    private(set) lazy var pageFind = PageFind(root: self)
+    /// Абзацы детей свёрнутых переключателей: не раскладываются (research R1).
+    let hiddenParagraphs = HiddenParagraphs()
+    /// Свёрнутые переключатели этого Mac и отступы по поддеревьям (`Collapsing/`).
+    let collapsedParagraphs = CollapsedParagraphs()
     let popups = EditorPopupController()
+    /// Вставка картинок, файлов, видео и закладок: меню вставленной ссылки, окно «Выбрать файл…» (US5).
+    let mediaInsertion = MediaInsertionState()
+    /// Упоминания, даты и окно «@» (US3).
+    let inlineAtoms = InlineAtomsState()
+    /// Виды блоков кода страницы и курсор между ними и текстом (US4).
+    let codeBlocks = CodeBlockRegistry()
+    /// Окно правки формулы (US4). Создаётся при первом открытии: его виды стоили бы каждому открытию страницы 1,5 мс.
+    private(set) lazy var equationEditor: EquationEditorController = {
+        let editor = EquationEditorController()
+        editor.textView = self
+        return editor
+    }()
+    /// Виды оглавлений и слежение за заголовками (US4).
+    let tableOfContentsViews = TableOfContentsViews()
+    private(set) var tableOfContentsTracker: TableOfContentsTracker?
+    /// Виды блоков без своего текста на экране: их ставит страница, TextKit 2 этого не делает (US4).
+    private(set) lazy var blockViews = BlockViewHosting(textView: self)
     let formatBar = FormatBarController()
+    /// Последние цвета текста и фона: окно цветов и ⌘⇧H.
+    var recentColors = RecentColors()
+    let colorMenu = ColorMenuController()
     /// Иконку выбрали в шапке (FR-034): «Добавить иконку», окно выбора; `nil` — убрать. Хозяин сохраняет её
     /// и возвращает через `showIcon`.
     public var onSetIcon: ((String?) -> Void)?
@@ -70,7 +101,11 @@ public final class PageTextView: NSTextView {
     /// Протяжка мышью с поля: где нажали и сдвинулась ли мышь.
     var marginDrag: (start: NSPoint, moved: Bool)?
 
-    public init(document: PageDocument, initialFocus: InitialFocus) {
+    public convenience init(document: PageDocument, initialFocus: InitialFocus) {
+        self.init(flow: FlowDocument(document), initialFocus: initialFocus)
+    }
+
+    init(flow document: FlowDocument, initialFocus: InitialFocus) {
         self.document = document
         header = PageHeaderView(page: document.page)
         pendingFocus = initialFocus
@@ -86,16 +121,23 @@ public final class PageTextView: NSTextView {
         super.init(frame: NSRect(x: 0, y: 0, width: Metrics.Page.columnWidth, height: 0), textContainer: container)
         layoutDelegate.textView = self
         layoutManager.delegate = layoutDelegate
+        hiddenParagraphs.textView = self
+        contentStorage.delegate = hiddenParagraphs
+        collapsedParagraphs.textView = self
         popups.textView = self
         formatBar.textView = self
+        colorMenu.textView = self
 
         configureTextBehaviour()
-        mapper = PageTextStorageMapper(document: document, textStorage: textStorage!)
+        BuiltInBlockViews.registerOnce()
+        tableOfContentsTracker = TableOfContentsTracker(textView: self)
+        mapper = PageTextStorageMapper(flow: document, textStorage: textStorage!)
         // После загрузки текста система ставит выделение в конец, и место курсора там считалось бы раскладкой
         // всей страницы (на 10 000 блоках — секунды). Пока текст загружается, вид выделения не обновляется;
         // курсор — в начало, куда его потом и ставит открытие страницы.
         isLoadingText = true
         mapper.load()
+        refreshBlockStructure()
         isLoadingText = false
         setSelectedRange(NSRange(location: 0, length: 0))
         // Отмена правки текста не зовёт didChangeText: забрать её в документ сразу после ⌘Z и ⇧⌘Z.
@@ -103,9 +145,10 @@ public final class PageTextView: NSTextView {
             NotificationCenter.default.addObserver(self, selector: #selector(undoManagerDidRestore(_:)), name: name, object: nil)
         }
         NotificationCenter.default.addObserver(self, selector: #selector(documentDidApplyExternalChanges(_:)),
-                                               name: PageDocument.didApplyExternalChanges, object: document)
+                                               name: PageDocument.didApplyExternalChanges, object: document.pageDocument)
         NotificationCenter.default.addObserver(self, selector: #selector(documentDidApplyLocalEdits(_:)),
-                                               name: PageDocument.didApplyLocalEdits, object: document)
+                                               name: PageDocument.didApplyLocalEdits, object: document.pageDocument)
+        Self.liveEditors.add(self)
 
         addSubview(header)
         slashQueryHighlight.wantsLayer = true
@@ -136,8 +179,9 @@ public final class PageTextView: NSTextView {
         isRichText = true
         importsGraphics = false
         allowsUndo = true
-        usesFindBar = true
-        isIncrementalSearchingEnabled = true
+        // ⌘F — одна полоса поиска на всю страницу, с колонками и ячейками (`PageFind/`), а не поиск этого текста.
+        usesFindBar = false
+        isIncrementalSearchingEnabled = false
         isContinuousSpellCheckingEnabled = spellCheckingWanted
         isGrammarCheckingEnabled = false
         drawsBackground = true
@@ -163,6 +207,7 @@ public final class PageTextView: NSTextView {
         guard notification.object as? UndoManager === undoManager, mapper.hasPendingEdits else { return }
         let blockCount = document.blocks.count
         mapper.commitPendingEdits()
+        refreshBlockStructure()
         if document.blocks.count != blockCount { redrawBlockDecorations() }
         updateEmptyParagraphHint()
     }
@@ -171,19 +216,28 @@ public final class PageTextView: NSTextView {
     /// в своём блоке на том же месте. Прежние шаги ⌘Z относятся к старому тексту — их больше нет.
     @objc private func documentDidApplyExternalChanges(_ notification: Notification) {
         guard let change = notification.userInfo?[PageDocument.externalChangeKey] as? PageDocument.ExternalChange else { return }
-        render(change)
+        render(change, keepsUndo: false)
     }
 
     /// Ту же страницу правят в другом окне (FR-029): показать их правку так же, как пришедшую с другого Mac.
     /// Свою правку этот редактор уже показывает — её он не перерисовывает, и его ⌘Z цела.
     @objc private func documentDidApplyLocalEdits(_ notification: Notification) {
+        let origin = notification.userInfo?[PageDocument.editOriginKey] as? ObjectIdentifier
         guard let change = notification.userInfo?[PageDocument.externalChangeKey] as? PageDocument.ExternalChange,
-              let textStorage, notification.userInfo?[PageDocument.editOriginKey] as? ObjectIdentifier != ObjectIdentifier(textStorage)
+              let textStorage, origin != ObjectIdentifier(textStorage)
         else { return }
-        render(change)
+        render(change, keepsUndo: sharesUndo(withEditOrigin: origin))
     }
 
-    private func render(_ change: PageDocument.ExternalChange) {
+    /// `keepsUndo` — правку сделал редактор с той же отменой (колонка, ячейка, этот же редактор через документ):
+    /// её шаг лежит в общей отмене окна, и прежние шаги остаются верны.
+    private func render(_ change: PageDocument.ExternalChange, keepsUndo: Bool) {
+        // Правка чужого потока (колонки, ячейки) этот текст не трогает.
+        if change.touchesBlocks, !change.changedFlowIds.contains(document.flowKey),
+           !change.changedBlockIds.contains(where: { document.index(ofBlock: $0) != nil }) {
+            if change.conflictsChanged { conflictMarks.update() }
+            return
+        }
         if change.titleChanged, header.titleField.currentEditor() == nil {
             header.titleField.stringValue = document.page.title
             layoutColumn()
@@ -192,7 +246,8 @@ public final class PageTextView: NSTextView {
         if change.touchesBlocks {
             let anchors = selectionAnchors()
             mapper.renderExternalChanges(change)
-            undoManager?.removeAllActions()
+            refreshBlockStructure()
+            if !keepsUndo { undoManager?.removeAllActions() }
             restoreSelection(anchors, fallbackBlock: 0)
             redrawBlockDecorations()
             updateEmptyParagraphHint()
@@ -206,11 +261,19 @@ public final class PageTextView: NSTextView {
         guard !hasMarkedText() else { return }
         let blockCount = document.blocks.count
         mapper.commitPendingEdits()
-        if document.blocks.count != blockCount { redrawBlockDecorations() }
+        if document.blocks.count != blockCount {
+            refreshBlockStructure()
+            redrawBlockDecorations()
+        } else if let position = mapper.blockPosition(at: selectedRange().location) {
+            // Набор внутри блока: поддеревья те же, поправки нужны только перерисованным абзацам.
+            reapplyAdjustments(aroundBlockAt: position.index)
+        }
         updateEmptyParagraphHint()
         textDidChangeForPopups()
+        refreshMentionPicker()
         updateSelectionLook()
         if !document.pendingConflicts.isEmpty { conflictMarks.update() }
+        blockViews.update()
     }
 
     /// Вставка: адрес поверх выделения — ссылка, текст других программ — с поддерживаемым оформлением.
@@ -224,10 +287,15 @@ public final class PageTextView: NSTextView {
 
     /// Копирование: в простом тексте для других программ перенос строки внутри блока — обычный перевод строки.
     public override func writeSelection(to pboard: NSPasteboard, type: NSPasteboard.PasteboardType) -> Bool {
+        if type == Self.inlineTextPasteboardType { return writeInlineText(to: pboard) }
         guard type == .string else { return super.writeSelection(to: pboard, type: type) }
-        let text = selectedRanges.map { (string as NSString).substring(with: $0.rangeValue) }.joined(separator: "\n")
+        let text = selectedRanges.map { plainText(of: $0.rangeValue) }.joined(separator: "\n")
         guard !text.isEmpty else { return false }
         return pboard.setString(PageTextStorageMapper.blockString(ofPageText: text), forType: .string)
+    }
+
+    public override var writablePasteboardTypes: [NSPasteboard.PasteboardType] {
+        [Self.inlineTextPasteboardType] + super.writablePasteboardTypes
     }
 
     public override func writeSelection(to pboard: NSPasteboard, types: [NSPasteboard.PasteboardType]) -> Bool {
@@ -240,14 +308,25 @@ public final class PageTextView: NSTextView {
         // В режиме блоков набор букв блоки не заменяет, как в Notion.
         if isBlockSelection, replacementRange.location == NSNotFound, !hasMarkedText() { return }
         hideBlockHandles()
-        if typed == " ", replacementRange.location == NSNotFound, !hasMarkedText(), applyMarkdownShortcut() { return }
+        if allowsBlockStructure, typed == " ", replacementRange.location == NSNotFound, !hasMarkedText(), applyMarkdownShortcut() { return }
+        if allowsBlockStructure, typed == "-", replacementRange.location == NSNotFound, !hasMarkedText(), isCaretAfterTwoDashes {
+            super.insertText(string, replacementRange: replacementRange)
+            convertDashesToDivider()
+            return
+        }
+        if typed == "`", replacementRange.location == NSNotFound, !hasMarkedText(), isCaretAfterTwoBackticks {
+            super.insertText(string, replacementRange: replacementRange)
+            convertBackticksToCode()
+            return
+        }
         if replacementRange.location == NSNotFound, !hasMarkedText(), !typed.isEmpty, !typed.hasPrefix("\n"), isCaretInPageLink {
             // В блоке-подстранице текста нет: набранное уходит в новый абзац под ним.
             super.insertText("\n" + typed, replacementRange: replacementRange)
             return
         }
         super.insertText(string, replacementRange: replacementRange)
-        if typed == "/" { openSlashMenuAfterTypedSlash() }
+        if allowsBlockStructure, typed == "/" { openSlashMenuAfterTypedSlash() }
+        openMentionPicker(afterTyping: typed)
     }
 
     /// Курсор стоит в блоке-подстранице (у него свой абзац без символов).
@@ -264,12 +343,26 @@ public final class PageTextView: NSTextView {
     }
 
     public override func deleteBackward(_ sender: Any?) {
-        if !hasMarkedText(), handleBackspaceAtBlockStart() { return }
+        if !hasMarkedText(), handleBackspaceUnderCollapsedToggle() || handleBackspaceAtContainerStart() || handleBackspaceAtBlockStart() {
+            return
+        }
         super.deleteBackward(sender)
     }
 
+    /// ⌦ в конце блока перед блоком без текста не склеивает их, а выделяет тот блок.
+    public override func deleteForward(_ sender: Any?) {
+        let selection = selectedRange()
+        if !hasMarkedText(), selection.length == 0, let position = mapper.blockPosition(at: selection.location),
+           position.offset == document.blocks[position.index].pageTextLength,
+           position.index + 1 < document.blocks.count, document.blocks[position.index + 1].kind.rendersAsAttachment {
+            selectBlocks(position.index + 1..<position.index + 2)
+            return
+        }
+        super.deleteForward(sender)
+    }
+
     public override func insertNewline(_ sender: Any?) {
-        if !hasMarkedText(), handleNewlineInEmptyItem() { return }
+        if !hasMarkedText(), handleNewlineInContainer() || handleNewlineInEmptyChild() || handleNewlineInEmptyItem() { return }
         super.insertNewline(sender)
     }
 
@@ -315,9 +408,12 @@ public final class PageTextView: NSTextView {
             blockHandles.cancelDrag()
             return
         }
+        if handleMentionPickerCommand(selector) { return }
         if handlePopupCommand(selector) { return }
+        if colorMenu.handleCommand(selector) { return }
         if formatBar.handleCommand(selector) { return }
         if handleBlockSelectionCommand(selector) { return }
+        if handleArrowIntoCode(selector) { return }
         super.doCommand(by: selector)
     }
 
@@ -331,7 +427,7 @@ public final class PageTextView: NSTextView {
         // В абзац блока-подстраницы символы не попадают, кроме перевода строки в его начале.
         if let replacement = replacementString, !replacement.isEmpty, !replacement.hasPrefix("\n"), affectedCharRange.length == 0,
            !mapper.hasPendingEdits, let position = mapper.blockPosition(at: affectedCharRange.location),
-           document.blocks[position.index].kind == .pageLink {
+           document.blocks[position.index].kind == .pageLink || document.blocks[position.index].kind.rendersAsAttachment {
             return false
         }
         return super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
@@ -371,10 +467,18 @@ public final class PageTextView: NSTextView {
         case .moveBlocksUp: moveSelectedBlocks(by: -1)
         case .moveBlocksDown: moveSelectedBlocks(by: 1)
         case .toggleChecked: toggleCheckedSelectedBlocks()
+        case .toggleAllCollapsed: toggleAllCollapsed()
         case .toggleInline(let format): toggleInline(format)
+        case .clearInlineFormatting: clearInlineFormatting()
         case .setKind(let kind):
             commitEdits()
             if let selected = selectedBlockRange() { setKind(kind, ofBlocksAt: selected) }
+        case .applyColor(let choice): applyColor(choice)
+        case .applyBlockColor(let choice): applyBlockColor(choice)
+        case .repeatLastColor: repeatLastColor()
+        case .insertInlineEquation: insertInlineEquation()
+        case .duplicateBlocks:
+            if let selected = selectedBlockRange() { duplicateBlocks(at: selected) }
         }
     }
 
@@ -391,14 +495,36 @@ public final class PageTextView: NSTextView {
     }
 
     func setKind(_ kind: BlockKind, ofBlocksAt range: Range<Int>) {
-        guard kind != .pageLink else { return }
-        let drafts = document.blocks[range].map { block in
+        if kind == .pageLink { return turnIntoSubpage(blockAt: range) }
+        if kind == .divider, range.count == 1 { return insertDivider(at: range.lowerBound) }
+        if kind == .code, range.count == 1, document.blocks[range.lowerBound].kind != .code { return insertCode(at: range.lowerBound) }
+        if kind == .equation, range.count == 1, document.blocks[range.lowerBound].kind != .equation {
+            return insertEquation(at: range.lowerBound)
+        }
+        if kind == .tableOfContents, range.count == 1 { return insertTableOfContents(at: range.lowerBound) }
+        if BlockKind.withAttachments.contains(kind) { return beginAttachmentInsertion(kind, at: range.lowerBound) }
+        let blocks = document.blocks
+        let drafts = range.map { index in
+            let block = blocks[index]
             var draft = BlockDraft(block)
             draft.kind = kind
             if kind != .checkbox { draft.isChecked = false }
+            if kind != block.kind { draft.adoptDefaults(of: kind, from: block) }
+            // Заголовок вкладывается только внутрь переключателя, выноски, цитаты.
+            if kind.isHeading { draft.indent = BlockMoveController.headingIndent(block.indent, at: index, in: blocks) }
             return draft
         }
         changeBlocks(range, to: drafts, actionName: "Тип блока")
+    }
+
+    /// «Преобразовать в → Страница», как в Notion: текстовый блок становится ссылкой на подстраницу с этим текстом
+    /// в названии, вложенные под ним блоки переезжают внутрь (`PageTreeOperations.turnIntoSubpage`). Только один блок.
+    private func turnIntoSubpage(blockAt range: Range<Int>) {
+        guard range.count == 1, let index = range.first else { return }
+        let block = document.blocks[index]
+        guard block.kind != .pageLink, !block.kind.rendersAsAttachment, !block.kind.isContainer else { return }
+        commitEdits()
+        onSubpageRequest?(.turnInto(blockId: block.id))
     }
 
     func removeBlocks(at range: Range<Int>) {
@@ -416,7 +542,8 @@ public final class PageTextView: NSTextView {
         commitEdits()
         guard let selected = selectedBlockRange() else { return }
         let checkboxes = selected.filter { document.blocks[$0].kind == .checkbox }
-        guard let first = checkboxes.first, let last = checkboxes.last else { return }
+        // Без чекбоксов ⌘Enter сворачивает и раскрывает переключатели.
+        guard let first = checkboxes.first, let last = checkboxes.last else { return toggleCollapsedSelectedBlocks() }
         let checked = !checkboxes.allSatisfy { document.blocks[$0].isChecked }
         let range = first..<last + 1
         let drafts = document.blocks[range].map { block in
@@ -458,9 +585,11 @@ public final class PageTextView: NSTextView {
         let ids = document.replaceBlocks(after: previousId, before: nextId, with: drafts, movedBlockIds: moved, origin: textStorage)
         let changed = range.lowerBound..<range.lowerBound + ids.count
         mapper.renderBlocks(changed, replacing: characters)
+        refreshBlockStructure()
 
         restoreSelection(anchors, fallbackBlock: min(range.lowerBound, document.blocks.count - 1))
         redrawBlockDecorations()
+        blockViews.update()
         updateEmptyParagraphHint()
         closePopups()
 
@@ -484,7 +613,7 @@ public final class PageTextView: NSTextView {
     private func restoreSelection(_ anchors: (start: (UUID, Int), end: (UUID, Int))?, fallbackBlock: Int) {
         func location(_ anchor: (UUID, Int)) -> Int? {
             guard let index = document.index(ofBlock: anchor.0) else { return nil }
-            let length = (document.blocks[index].text.string as NSString).length
+            let length = document.blocks[index].pageTextLength
             return mapper.paragraphStart(ofBlockAt: index) + min(anchor.1, length)
         }
         let fallback = mapper.paragraphStart(ofBlockAt: max(0, fallbackBlock))
@@ -495,7 +624,19 @@ public final class PageTextView: NSTextView {
 
     public override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
         if !isApplyingBlockSelection { blockSelectionEnds = nil }
-        super.setSelectedRanges(ranges.map(keepingBeforeFinalNewline), affinity: affinity, stillSelecting: stillSelecting)
+        var ranges = ranges.map(keepingBeforeFinalNewline)
+        // Курсор в абзац блока без текста не встаёт — перешагивает его (research R2).
+        if ranges.count == 1, ranges[0].rangeValue.length == 0, !isLoadingText {
+            let location = ranges[0].rangeValue.location
+            let skipped = caretSkippingAttachments(location, from: selectedRange().location)
+            if skipped != location { ranges = [NSValue(range: NSRange(location: skipped, length: 0))] }
+        }
+        // Курсор и выделение у детей свёрнутого переключателя (research R1).
+        if ranges.count == 1, !isLoadingText {
+            let adjusted = selectionRespectingCollapsed(ranges[0].rangeValue, from: selectedRange())
+            if adjusted != ranges[0].rangeValue { ranges = [NSValue(range: adjusted)] }
+        }
+        super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
         guard !isLoadingText else { return }
         updateSelectionLook()
         guard !stillSelecting else {
@@ -505,6 +646,7 @@ public final class PageTextView: NSTextView {
         applyEmptyParagraphTypingAttributes()
         updateEmptyParagraphHint()
         selectionDidChangeForPopups()
+        refreshMentionPicker()
         updateFormatBar()
     }
 
@@ -541,10 +683,12 @@ public final class PageTextView: NSTextView {
             toggleCheckbox(ofBlock: id)
             return
         }
+        if handleStructuralBlockClick(at: point) { return }
         if let pageId = linkedPage(at: point) {
             onOpenPage?(pageId)
             return
         }
+        if openAtom(at: point) { return }
         if openLink(at: point, modifiers: event.modifierFlags) { return }
         if isMarginPoint(point) {
             beginMarginDrag(at: point)
@@ -668,22 +812,15 @@ public final class PageTextView: NSTextView {
     var slashQueryHighlightFrame: NSRect? { slashQueryHighlight.isHidden ? nil : slashQueryHighlight.frame }
 
     static func emptyBlockHint(for kind: BlockKind) -> String? {
-        switch kind {
-        case .paragraph: "Введите «/» для выбора блока"
-        case .bulletItem, .numberedItem: "Список"
-        case .checkbox: "Задача"
-        case .heading1: "Заголовок 1"
-        case .heading2: "Заголовок 2"
-        case .heading3: "Заголовок 3"
-        case .pageLink: nil
-        }
+        kind.descriptor.emptyHint
     }
 
     // MARK: Колонка и шапка
 
     /// Колонка 720 по центру всей прокрутки, в узком окне — поля не меньше `minimumSideInset`.
     /// Центр — по ширине вместе с полосой прокрутки: длинная страница с полосой не сдвигается (раунд 2, № 23).
-    private var column: (left: CGFloat, width: CGFloat) {
+    /// У редактора колонки (`FlowTextView`) — вся его ширина.
+    var column: (left: CGFloat, width: CGFloat) {
         let pageWidth = enclosingScrollView?.frame.width ?? bounds.width
         let left = max(Metrics.Page.minimumSideInset, (pageWidth - Metrics.Page.columnWidth) / 2)
         return (left, max(0, min(Metrics.Page.columnWidth, bounds.width - left - Metrics.Page.minimumSideInset)))
@@ -691,6 +828,17 @@ public final class PageTextView: NSTextView {
 
     public override var textContainerOrigin: NSPoint {
         NSPoint(x: column.left, y: header.frame.maxY)
+    }
+
+    /// После раскладки видимой области — виды блоков на свои абзацы.
+    public override func layout() {
+        super.layout()
+        blockViews.update()
+    }
+
+    public override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        blockViews.observeScrolling()
     }
 
     public override func setFrameSize(_ newSize: NSSize) {
@@ -714,16 +862,24 @@ public final class PageTextView: NSTextView {
         iconPicker.show(below: anchor, in: window) { [weak self] in self?.onSetIcon?($0) }
     }
 
-    private func layoutColumn() {
+    /// Над текстом — шапка с иконкой и названием; у редакторов колонок и ячеек её нет.
+    var showsPageHeader: Bool { true }
+    /// Блоки можно делать и менять: меню «/», быстрые символы, «---». В ячейке таблицы — нельзя.
+    var allowsBlockStructure: Bool { true }
+    /// У блоков под мышью — ручки «+ ⋮⋮». В ячейке таблицы их нет.
+    var showsBlockHandles: Bool { true }
+
+    func layoutColumn() {
         let (left, columnWidth) = column
         if let container = textContainer, container.size.width != columnWidth {
             container.size = NSSize(width: columnWidth, height: container.size.height)
         }
-        let headerHeight = header.height(forWidth: columnWidth)
+        header.isHidden = !showsPageHeader
+        let headerHeight = showsPageHeader ? header.height(forWidth: columnWidth) : 0
         header.frame = NSRect(x: left, y: 0, width: columnWidth, height: headerHeight)
         // Отступ текста сверху — шапка, снизу — пустое место; NSTextView делит высоту поровну, а начало текста
         // задаёт `textContainerOrigin`.
-        let inset = NSSize(width: left, height: (headerHeight + Metrics.Page.bottomPadding) / 2)
+        let inset = NSSize(width: left, height: showsPageHeader ? (headerHeight + Metrics.Page.bottomPadding) / 2 : 0)
         if textContainerInset != inset {
             textContainerInset = inset
         }
@@ -798,7 +954,7 @@ public final class PageTextView: NSTextView {
             guard let first = lines.first, let last = lines.last else { continue }
             let top = lineBox(first, in: fragment, startingAt: fragmentStart).minY - Metrics.BlockSelection.verticalOutset
             let bottom = lineBox(last, in: fragment, startingAt: fragmentStart).maxY + Metrics.BlockSelection.verticalOutset
-            let left = origin.x + CGFloat(document.blocks[index].indent) * Metrics.Page.indentPerLevel - outset
+            let left = origin.x + blockLeft(ofBlockAt: index) - outset
             let right = origin.x + container.size.width + outset
             rects.append(NSRect(x: left, y: top, width: right - left, height: bottom - top))
         }
@@ -865,8 +1021,10 @@ public final class PageTextView: NSTextView {
     }
 
     /// Текст блоков без служебного перевода строки в конце: строка после него — не блок.
+    /// Упоминания и даты читаются названием и словами, а не знаком-вложением.
     public override func accessibilityValue() -> String? {
-        string.hasSuffix("\n") ? String(string.dropLast()) : string
+        let text = plainText(of: NSRange(location: 0, length: (string as NSString).length))
+        return text.hasSuffix("\n") ? String(text.dropLast()) : text
     }
 
     // MARK: Фокус

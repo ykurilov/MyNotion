@@ -5,7 +5,7 @@ import PageEditor
 
 /// Замер отклика (T048, research R13): по флагу `--typing-benchmark <путь>` приложение само печатает
 /// в открытой странице на 1 000 блоков, переходит между страницами, печатает и листает страницу
-/// на 10 000 блоков, пишет время каждого действия и p95 в файл и выходит.
+/// на 10 000 блоков, затем печатает в «богатой» странице 002 (quickstart.md), пишет время каждого действия и p95 в файл и выходит.
 /// Каждое действие — интервал signpost (`Keystroke`, `PageSwitch`, `Scroll`) для Instruments.
 /// Нажатие считается от отправки события окну до конца перерисовки окна.
 @MainActor
@@ -23,6 +23,7 @@ enum TypingBenchmark {
     private static let typedCharacters = Array("быстрый набор text ")
     private static var hasStarted = false
     private static var readyWaiter: CheckedContinuation<Bool, Never>?
+    private static var readyTimeout: Task<Void, Never>?
 
     struct Report: Encodable {
         var typingMs: [Double] = []
@@ -30,6 +31,17 @@ enum TypingBenchmark {
         var hugePageOpenMs: Double?
         var hugePageTypingMs: [Double] = []
         var hugePageScrollMs: [Double] = []
+        var richPageOpenMs: Double?
+        var richPageTypingMs: [Double] = []
+        var richPageTypingP95Ms: Double?
+        /// Прокрутка «богатой» страницы с видами картинок, файлов, видео, закладок, кода и таблиц (US5, T098).
+        var richPageScrollMs: [Double] = []
+        var richPageScrollP95Ms: Double?
+        /// Набор в колонке и в ячейке таблицы «богатой» страницы (US6).
+        var columnTypingMs: [Double] = []
+        var cellTypingMs: [Double] = []
+        var columnTypingP95Ms: Double?
+        var cellTypingP95Ms: Double?
         var typingP95Ms: Double?
         var pageSwitchP95Ms: Double?
         var hugePageTypingP95Ms: Double?
@@ -41,6 +53,10 @@ enum TypingBenchmark {
             pageSwitchP95Ms = TypingBenchmark.p95(pageSwitchMs)
             hugePageTypingP95Ms = TypingBenchmark.p95(hugePageTypingMs)
             hugePageScrollP95Ms = TypingBenchmark.p95(hugePageScrollMs)
+            richPageTypingP95Ms = TypingBenchmark.p95(richPageTypingMs)
+            richPageScrollP95Ms = TypingBenchmark.p95(richPageScrollMs)
+            columnTypingP95Ms = TypingBenchmark.p95(columnTypingMs)
+            cellTypingP95Ms = TypingBenchmark.p95(cellTypingMs)
         }
 
         func write(to url: URL) {
@@ -125,7 +141,38 @@ enum TypingBenchmark {
         let hugePage = try openTextView()
         report.hugePageScrollMs = try await scroll(hugePage, steps: scrollSteps)
         report.hugePageTypingMs = try await type(hugePageKeystrokes, in: hugePage)
+
+        // «Богатая» страница 002: переключатели (один свёрнут с 200 детьми), выноски, цитаты, разделители, цвета.
+        let richPageId = try RichPageGenerator(parts: BlockKinds.richPageParts).ensure(in: model.store)
+        // Картинки и файлы образцов — настоящими файлами: прокрутка уменьшает и рисует картинки, как у Юрия.
+        SampleMedia.materialize(in: model.store, attachments: model.library.attachments, pageIds: [richPageId])
+        report.richPageOpenMs = try await switchPage(to: richPageId, model: model)
+        report.richPageTypingMs = try await type(hugePageKeystrokes, in: try openTextView())
+        report.richPageScrollMs = try await scroll(try openTextView(), steps: scrollSteps)
+
+        // Колонка и ячейка таблицы на той же странице: курсор — в конец первого блока колонки и в первую ячейку.
+        let page = try openTextView()
+        let document = page.document.pageDocument
+        guard let list = document.blocks.first(where: { $0.kind == .columnList }),
+              let column = document.flow(list.id).first, let inColumn = document.flow(column.id).first,
+              let table = document.blocks.first(where: { $0.kind == .table }),
+              let cell = document.tableGrid(table.id)?.cell(row: 1, column: 1) else {
+            throw BenchmarkFailure(description: "На «богатой» странице нет колонок или таблицы")
+        }
+        report.columnTypingMs = try await type(hugePageKeystrokes, in: try focusedEditor(revealing: inColumn.id, in: page))
+        report.cellTypingMs = try await type(hugePageKeystrokes, in: try focusedEditor(revealing: cell.id, in: page))
         return report
+    }
+
+    /// Перейти к блоку колонки или ячейке и вернуть редактор с курсором в конце его текста.
+    private static func focusedEditor(revealing blockId: UUID, in page: PageTextView) throws -> PageTextView {
+        page.revealBlock(blockId)
+        guard let window = page.window, let editor = window.firstResponder as? PageTextView, editor !== page else {
+            throw BenchmarkFailure(description: "Курсор не встал в колонку или ячейку")
+        }
+        editor.focus(atEnd: true)
+        window.displayIfNeeded()
+        return editor
     }
 
     /// Текст открытой страницы с курсором в конце абзаца посередине страницы.
@@ -174,14 +221,14 @@ enum TypingBenchmark {
         let ready = await withCheckedContinuation { continuation in
             readyWaiter = continuation
             model.select(pageId)
-            Task {
-                try? await Task.sleep(for: .seconds(10))
-                if let waiter = readyWaiter {
-                    readyWaiter = nil
-                    waiter.resume(returning: false)
-                }
+            // Сторож этого перехода. Не отменённый, он через 10 с оборвал бы один из следующих переходов.
+            readyTimeout = Task {
+                guard (try? await Task.sleep(for: .seconds(10))) != nil, let waiter = readyWaiter else { return }
+                readyWaiter = nil
+                waiter.resume(returning: false)
             }
         }
+        readyTimeout?.cancel()
         NSApp.windows.forEach { $0.displayIfNeeded() }
         let elapsed = milliseconds(ContinuousClock.now - start)
         signposter.endInterval("PageSwitch", state)

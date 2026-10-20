@@ -7,10 +7,13 @@ public struct PageLinkTarget: Sendable, Hashable {
     /// Путь с `/`, как есть: пробелы и скобки кодируются при записи. Пути нет — страницы нет в выгрузке
     /// (она в корзине): в Markdown остаётся только название.
     public var path: String?
+    /// Иконка страницы — перед названием в упоминании.
+    public var icon: String?
 
-    public init(title: String, path: String?) {
+    public init(title: String, path: String?, icon: String? = nil) {
         self.title = title
         self.path = path
+        self.icon = icon
     }
 }
 
@@ -19,11 +22,61 @@ public struct PageLinkTarget: Sendable, Hashable {
 public struct MarkdownBlockWriter: Sendable {
     public init() {}
 
-    public func markdown(for blocks: [Block], resolveLink: (UUID) -> PageLinkTarget?) -> String {
+    /// `blocks` — блоки страницы всех потоков. Пишется поток страницы; колонки и таблицы пишут свои потоки сами
+    /// (`BlockWriters/`). Блок, чьего контейнера нет, пишется в конце страницы.
+    /// `resolveAttachment` — путь копии файла от файла страницы; `nil` — файла на этом Mac нет.
+    public func markdown(for blocks: [Block], resolveLink: (UUID) -> PageLinkTarget?,
+                         resolveAttachment: (AttachmentRef) -> String? = { _ in nil }) -> String {
+        let ids = Set(blocks.map(\.id))
+        var flows: [UUID: [Block]] = [:]
+        var pageFlow: [Block] = []
+        var orphans: [Block] = []
+        for block in blocks {
+            guard let containerId = block.containerId else { pageFlow.append(block); continue }
+            if ids.contains(containerId) { flows[containerId, default: []].append(block) } else { orphans.append(block) }
+        }
+        return withoutActuallyEscaping(resolveLink) { resolveLink in
+            withoutActuallyEscaping(resolveAttachment) { resolveAttachment in
+                func render(_ flow: [Block]) -> String {
+                    write(flow, context: MarkdownWriteContext(flow: { flows[$0] ?? [] }, render: render, resolveLink: resolveLink,
+                                                              resolveAttachment: resolveAttachment))
+                }
+                return render(pageFlow + orphans)
+            }
+        }
+    }
+
+    private func write(_ blocks: [Block], context: MarkdownWriteContext) -> String {
+        let resolveLink = context.resolveLink
         var lines: [String] = []
         var list = ListState()
         var previousWasListItem = false
-        for block in blocks {
+        var position = 0
+        while position < blocks.count {
+            let block = blocks[position]
+            position += 1
+            if let writer = MarkdownBlockWriters.writer(for: block.kind) {
+                var children: [String] = []
+                if writer.writesChildren {
+                    var end = position
+                    while end < blocks.count, blocks[end].indent > block.indent { end += 1 }
+                    let nested = blocks[position..<end].map { child -> Block in
+                        var child = child
+                        child.indent -= block.indent + 1
+                        return child
+                    }
+                    let text = write(Array(nested), context: context)
+                    children = text.isEmpty ? [] : Array(text.components(separatedBy: "\n").dropLast())
+                    position = end
+                }
+                guard let content = writer.lines(for: block, children: children, context: context) else { continue }
+                if !lines.isEmpty { lines.append("") }
+                if let comment = ColorWriter.commentLine(for: block) { lines.append(comment) }
+                lines.append(contentsOf: content)
+                list.record(kind: block.kind, atIndent: 0, markerWidth: 0)
+                previousWasListItem = false
+                continue
+            }
             let isListItem = Self.family(of: block.kind) != nil
             let indent = isListItem ? block.indent : 0
             let ordinal = list.nextOrdinal(atIndent: indent)
@@ -31,6 +84,9 @@ public struct MarkdownBlockWriter: Sendable {
             else { continue }
             let continuesList = isListItem && previousWasListItem && !list.startsNewList(kind: block.kind, atIndent: indent)
             if !lines.isEmpty, !continuesList { lines.append("") }
+            if let comment = ColorWriter.commentLine(for: block) {
+                lines.append(String(repeating: " ", count: content.first?.prefix { $0 == " " }.count ?? 0) + comment)
+            }
             lines.append(contentsOf: content)
             list.record(kind: block.kind, atIndent: indent, markerWidth: Self.nestingStep(of: block, ordinal: ordinal))
             previousWasListItem = isListItem
@@ -51,19 +107,22 @@ public struct MarkdownBlockWriter: Sendable {
     private func blockLines(_ block: Block, ordinal: Int, nesting: Int, resolveLink: (UUID) -> PageLinkTarget?) -> [String]? {
         switch block.kind {
         case .paragraph:
-            return Self.splitLines(InlineMarkdown.render(block.text), firstPrefix: "", continuation: "")
+            return Self.splitLines(InlineMarkdown.render(block.text, resolveLink: resolveLink), firstPrefix: "", continuation: "")
         case .heading1, .heading2, .heading3:
             let level = block.kind == .heading1 ? 1 : block.kind == .heading2 ? 2 : 3
             // В заголовке Markdown строки одна: перенос заменяется пробелом той же длины, смещения оформления не сдвигаются.
             let flattened = InlineText(block.text.string.replacingOccurrences(of: "\n", with: " "), runs: block.text.runs)
-            return ["\(String(repeating: "#", count: level)) \(InlineMarkdown.render(flattened))"]
+            return ["\(String(repeating: "#", count: level)) \(InlineMarkdown.render(flattened, resolveLink: resolveLink))"]
         case .bulletItem, .checkbox, .numberedItem:
-            return listLines(block, marker: Self.marker(for: block, ordinal: ordinal) ?? "", nesting: nesting)
+            return listLines(block, marker: Self.marker(for: block, ordinal: ordinal) ?? "", nesting: nesting, resolveLink: resolveLink)
         case .pageLink:
             guard let target = block.linkedPageId.flatMap(resolveLink) else { return nil }
             let title = escapedTitle(target.title)
             guard let path = target.path else { return [title] }
             return ["[\(title)](\(InlineMarkdown.encodedPath(path)))"]
+        default:
+            // Блок 002, у которого ещё нет своей записи: текст не теряется — абзацем.
+            return Self.splitLines(InlineMarkdown.render(block.text, resolveLink: resolveLink), firstPrefix: "", continuation: "")
         }
     }
 
@@ -82,9 +141,9 @@ public struct MarkdownBlockWriter: Sendable {
         block.kind == .checkbox ? 2 : marker(for: block, ordinal: ordinal)?.count ?? 0
     }
 
-    private func listLines(_ block: Block, marker: String, nesting: Int) -> [String] {
+    private func listLines(_ block: Block, marker: String, nesting: Int, resolveLink: (UUID) -> PageLinkTarget?) -> [String] {
         let indentation = String(repeating: " ", count: nesting)
-        return Self.splitLines(InlineMarkdown.render(block.text), firstPrefix: indentation + marker,
+        return Self.splitLines(InlineMarkdown.render(block.text, resolveLink: resolveLink), firstPrefix: indentation + marker,
                                continuation: String(repeating: " ", count: nesting + marker.count))
     }
 

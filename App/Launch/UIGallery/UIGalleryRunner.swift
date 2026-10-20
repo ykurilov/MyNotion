@@ -154,6 +154,26 @@ final class UIGalleryRunner {
                 if let problem = GalleryTarget.selectionProblem("курсор", in: window) { return problem }
             }
 
+        case .kindSample(let sample):
+            guard let pageId = library.kindSamplePages[sample.id] else { return "нет страницы образца \(sample.id)" }
+            await open(pageId)
+
+        case .mentionPicker(let query):
+            guard let pageId = library.kindSamplePages["mentions-and-dates"],
+                  let empty = try? model.store.pageContent(pageId)?.blocks.last?.id else { return "нет страницы упоминаний" }
+            await open(pageId)
+            // Прошлая сцена (та же страница в другой теме) оставила свой «@» в этом блоке: набор заменяет его.
+            PageEditorPreview.selectAllText(ofBlock: empty, in: window)
+            GalleryTarget.scrollToSelection(in: window)
+            PageEditorPreview.type("@" + query, in: window)
+            if !InlineAtomGallery.isMentionPickerOpen(in: window) { return "окно «@» не открылось" }
+            if let problem = GalleryTarget.popupsProblem("окно «@»", in: window) { return problem }
+
+        case .datePicker:
+            guard let pageId = library.kindSamplePages["mentions-and-dates"] else { return "нет страницы упоминаний" }
+            await open(pageId)
+            if !InlineAtomGallery.openFirstDatePicker(in: window) { return "календарик не открылся" }
+
         case .emptyPage:
             await open(library.emptyPage, keepingCaret: true)
 
@@ -197,12 +217,13 @@ final class UIGalleryRunner {
                 return "перетаскивание не началось"
             }
 
-        case .blockMenu:
+        case .blockMenu(let turnInto):
             await open(library.sample.page.id)
             guard let block = library.sampleBlock(.heading1), GalleryTarget.scrollToBlock(block.id, in: window),
                   PageEditorPreview.openBlockMenu(forBlock: block.id, in: window) else {
                 return "меню блока не открылось"
             }
+            if turnInto, !PageEditorPreview.openBlockMenuTurnInto(in: window) { return "подменю «Преобразовать в» не открылось" }
             if let problem = GalleryTarget.handlesProblem("ручки блока", in: window) ?? GalleryTarget.popupsProblem("меню блока", in: window) {
                 return problem
             }
@@ -226,6 +247,29 @@ final class UIGalleryRunner {
             GalleryTarget.scrollToSelection(in: window)
             if kindMenu, !PageEditorPreview.openFormatBarKindMenu(in: window) { return "список типов не открылся" }
             if let problem = GalleryTarget.popupsProblem("панель форматирования", in: window) { return problem }
+
+        case .colorsOnPage:
+            await open(library.colorsPage)
+            guard let first = library.colorsBlocks.first else { return "нет блоков страницы цветов" }
+            _ = GalleryTarget.scrollToBlock(first, in: window)
+
+        case .colorMenu(let fromBlockMenu):
+            if fromBlockMenu {
+                await open(library.colorsPage)
+                guard let block = library.colorsBlocks.first, GalleryTarget.scrollToBlock(block, in: window),
+                      PageEditorPreview.openBlockColorMenu(forBlock: block, in: window) else {
+                    return "окно цветов от меню блока не открылось"
+                }
+            } else {
+                await open(library.sample.page.id)
+                guard let block = library.sample.blocks.first else { return "образец пуст" }
+                let bold = (block.text.string as NSString).range(of: "жирный")
+                guard bold.location != NSNotFound else { return "в первом абзаце нет слова «жирный»" }
+                PageEditorPreview.select(bold, inBlock: block.id, in: window)
+                GalleryTarget.scrollToSelection(in: window)
+                guard PageEditorPreview.openFormatBarColorMenu(in: window) else { return "окно цветов панели не открылось" }
+            }
+            if let problem = GalleryTarget.popupsProblem("окно цветов", in: window) { return problem }
 
         case .pageIcon(let state):
             switch state {

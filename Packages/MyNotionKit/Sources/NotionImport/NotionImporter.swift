@@ -1,4 +1,5 @@
 import Foundation
+import LinkPreview
 import NotesCore
 
 /// Ход импорта: сначала чтение страниц выгрузки, потом запись в базу.
@@ -26,20 +27,27 @@ public struct SimplifiedPage: Sendable, Hashable, Codable {
     }
 }
 
-/// Отчёт после импорта (FR-026): сколько перенесено и что упрощено.
+/// Отчёт после импорта (FR-026): сколько перенесено, что упрощено и чего выгрузка не содержит вовсе.
 public struct NotionImportReport: Sendable, Equatable {
+    /// Цветов и колонок в выгрузке Notion «Markdown & CSV» нет: отчёт называет потерю всегда (research R14, решение Юрия).
+    public static let markdownLossNotice = "Цвета и колонки Notion в Markdown не выгружает — они не перенесены"
+
     public var rootPageId: UUID
     public var rootTitle: String
     public var pageCount: Int
     public var blockCount: Int
     public var simplified: [SimplifiedPage]
+    /// Потери самого формата выгрузки — не по страницам.
+    public var notices: [String]
 
-    public init(rootPageId: UUID, rootTitle: String, pageCount: Int, blockCount: Int, simplified: [SimplifiedPage]) {
+    public init(rootPageId: UUID, rootTitle: String, pageCount: Int, blockCount: Int, simplified: [SimplifiedPage],
+                notices: [String] = [Self.markdownLossNotice]) {
         self.rootPageId = rootPageId
         self.rootTitle = rootTitle
         self.pageCount = pageCount
         self.blockCount = blockCount
         self.simplified = simplified
+        self.notices = notices
     }
 }
 
@@ -68,6 +76,12 @@ public struct NotionImportRun: Sendable, Equatable {
     }
 }
 
+/// Куда импорт копирует картинки и файлы выгрузки: хранилище вложений приложения (`Attachments`).
+public protocol NotionAttachmentImporting: Sendable {
+    /// Скопировать файл; больше 100 МБ или не читается — ошибка, блок станет абзацем «[файл: имя]».
+    func importFile(at url: URL) throws -> AttachmentRef
+}
+
 /// Импорт выгрузки Notion в новую ветку «Импорт из Notion — <дата>» (FR-025…FR-027, T089).
 ///
 /// Сначала вся выгрузка читается и разбирается в память, потом пишется в базу короткими транзакциями по несколько
@@ -79,15 +93,18 @@ public struct NotionImportRun: Sendable, Equatable {
 public struct NotionImporter: Sendable {
     private let store: NotesStore
     private let now: @Sendable () -> Date
+    /// Хранилище вложений; без него картинки и файлы — абзацы «[файл: имя]», как в 001.
+    private let attachments: (any NotionAttachmentImporting)?
     /// Откатывать ли ветку при ошибке; в тестах выключается, чтобы изобразить падение приложения посреди импорта.
     var rollsBackOnFailure = true
     /// Сколько блоков пишется одной транзакцией: короткие транзакции не держат базу, и правка открытой страницы
     /// не ждёт конца импорта. Страница целиком всегда в одной транзакции.
     var maxBlocksPerTransaction = 1_000
 
-    public init(store: NotesStore, now: @escaping @Sendable () -> Date = { Date() }) {
+    public init(store: NotesStore, now: @escaping @Sendable () -> Date = { Date() }, attachments: (any NotionAttachmentImporting)? = nil) {
         self.store = store
         self.now = now
+        self.attachments = attachments
     }
 
     /// Удачный импорт той же выгрузки, если он уже был (FR-027): предупредить до начала.
@@ -103,9 +120,10 @@ public struct NotionImporter: Sendable {
     public func importExport(_ export: PreparedNotionExport,
                              progress: (@Sendable (NotionImportProgress) -> Void)? = nil) throws -> NotionImportReport {
         try Task.checkCancellation()
-        let plan = try NotionExportReader().read(export.contentRoot) { done, total in
+        var plan = try NotionExportReader().read(export.contentRoot) { done, total in
             progress?(NotionImportProgress(phase: .reading, done: done, total: total))
         }
+        try copyAttachments(in: &plan)
         let log = ImportRunLog(store: store)
         let startedAt = now()
         let rootTitle = "Импорт из Notion — " + Self.dateTitle(startedAt)
@@ -160,6 +178,53 @@ public struct NotionImporter: Sendable {
             try store.write { try log.markFailed(id: run.id, at: now(), in: $0) }
         }
         return interrupted.count
+    }
+
+    // MARK: Файлы
+
+    /// Картинки и файлы выгрузки — копиями во вложения (contracts/markdown-and-notion.md). Файла нет, он больше 100 МБ
+    /// или хранилища нет — абзац «[файл: имя]», как в 001, и строка в отчёте.
+    private func copyAttachments(in plan: inout NotionExportPlan) throws {
+        for index in plan.pages.indices {
+            let folder = plan.pages[index].file.deletingLastPathComponent()
+            var missing = 0
+            func copy(_ path: String) -> (URL, AttachmentRef)? {
+                let url = path.split(separator: "/").reduce(folder) { $0.appendingPathComponent(String($1)) }
+                let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize
+                guard let size, size <= AttachmentRef.maximumByteCount, let ref = try? attachments?.importFile(at: url) else { return nil }
+                return (url, ref)
+            }
+            func attach(_ blocks: inout [ParsedBlock]) throws {
+                for position in blocks.indices {
+                    try attach(&blocks[position].contained)
+                    for (file, path) in blocks[position].decorationPaths {
+                        try Task.checkCancellation()
+                        guard let (_, ref) = copy(path) else { continue }
+                        switch file {
+                        case .poster: blocks[position].props.poster = ref
+                        case .image: blocks[position].props.image = ref
+                        case .icon: blocks[position].props.iconAttachment = ref
+                        }
+                    }
+                    blocks[position].decorationPaths = [:]
+                    guard let path = blocks[position].attachmentPath else { continue }
+                    try Task.checkCancellation()
+                    blocks[position].attachmentPath = nil
+                    if let (url, ref) = copy(path) {
+                        blocks[position].props.attachment = ref
+                        // Размер картинки — из файла: вид знает высоту блока до загрузки картинки (как при вставке).
+                        if blocks[position].kind == .image, let size = PixelSize(ofImageAt: url) { blocks[position].props.pixelSize = size }
+                    } else {
+                        let name = (path as NSString).lastPathComponent
+                        blocks[position] = ParsedBlock(kind: .paragraph, text: InlineText("[файл: \(name)]"),
+                                                       indent: blocks[position].indent)
+                        missing += 1
+                    }
+                }
+            }
+            try attach(&plan.pages[index].blocks)
+            if missing > 0 { plan.pages[index].simplifications[.file, default: 0] += missing }
+        }
     }
 
     // MARK: Запись
@@ -225,15 +290,49 @@ public struct NotionImporter: Sendable {
         var linkedChildren: Set<Int> = []
         func append(_ kind: BlockKind, _ text: InlineText = .empty, indent: Int = 0, checked: Bool = false, link: UUID? = nil) {
             sortKey = .between(sortKey, nil)
-            result.append(Block(pageId: pageId, kind: kind, text: text, indent: kind.isHeading ? 0 : indent,
+            // Заголовок бывает вложен в переключатель, выноску, цитату (research R1).
+            result.append(Block(pageId: pageId, kind: kind, text: text, indent: indent,
                                 isChecked: kind == .checkbox && checked, linkedPageId: link, sortKey: sortKey!))
         }
-        for block in page.blocks {
+        /// Блок 002 с цветом, свойствами и потоками внутри (колонки, таблица).
+        func appendRich(_ parsed: ParsedBlock) {
+            sortKey = .between(sortKey, nil)
+            let block = Block(id: parsed.id ?? .timeOrdered(), pageId: pageId, kind: parsed.kind, text: parsed.text, indent: parsed.indent,
+                              isChecked: parsed.kind == .checkbox && parsed.isChecked, sortKey: sortKey!,
+                              color: parsed.color, props: parsed.props)
+            result.append(block)
+            func appendContained(_ children: [ParsedBlock], in containerId: UUID) {
+                var key: FractionalSortKey?
+                for child in children {
+                    key = .between(key, nil)
+                    // Упоминания в ячейках таблицы и блоках колонок — на страницы выгрузки, как в потоке страницы.
+                    let text = child.mentions.isEmpty ? child.text : resolvingMentions(in: child.text, mentions: child.mentions) { path in
+                        plan.page(atPath: path, from: index).map { ids[$0] }
+                    }
+                    let inner = Block(id: child.id ?? .timeOrdered(), pageId: pageId, kind: child.kind, text: text, indent: child.indent,
+                                      isChecked: child.kind == .checkbox && child.isChecked, sortKey: key!, containerId: containerId,
+                                      color: child.color, props: child.props)
+                    result.append(inner)
+                    appendContained(child.contained, in: inner.id)
+                }
+            }
+            appendContained(parsed.contained, in: block.id)
+        }
+        for var block in page.blocks {
+            if !block.mentions.isEmpty {
+                block.text = resolvingMentions(in: block.text, mentions: block.mentions) { path in
+                    plan.page(atPath: path, from: index).map { ids[$0] }
+                }
+            }
             if let target = NotionExportReader.linkedPage(block, from: index, in: plan) {
                 if page.children.contains(target) { linkedChildren.insert(target) }
                 append(.pageLink, link: ids[target])
             } else if block.kind == .pageLink {
                 append(.paragraph, block.text)
+            } else if let url = block.standaloneURL, block.kind == .paragraph, ["http", "https"].contains(url.scheme?.lowercased()) {
+                appendRich(Self.linkCard(for: url, text: block.text, indent: block.indent))
+            } else if !block.color.isNone || !block.props.isEmpty || !block.contained.isEmpty {
+                appendRich(block)
             } else {
                 append(block.kind, block.text, indent: block.indent, checked: block.isChecked)
             }
@@ -243,6 +342,46 @@ public struct NotionImporter: Sendable {
         }
         if result.isEmpty { append(.paragraph) }
         return result
+    }
+
+    /// Ссылка на своей строке, не на страницу выгрузки: YouTube и Vimeo — видео, прочее — закладка с адресом
+    /// (данные карточки не запрашиваются, «Обновить» — по желанию). Текст ссылки, отличный от адреса, — заголовок.
+    static func linkCard(for url: URL, text: InlineText, indent: Int) -> ParsedBlock {
+        var props = BlockProps()
+        props.url = url
+        if let link = VideoLink(url: url) {
+            props.videoSource = link.sourceName == "vimeo" ? .vimeo : .youtube
+            return ParsedBlock(kind: .video, indent: indent, props: props)
+        }
+        let title = text.string.trimmingCharacters(in: .whitespaces)
+        if !title.isEmpty, title != url.absoluteString { props.title = title }
+        return ParsedBlock(kind: .bookmark, indent: indent, props: props)
+    }
+
+    /// Упоминания с временным id — на страницы выгрузки; страницы нет — название ссылки простым текстом.
+    static func resolvingMentions(in text: InlineText, mentions: [NotionPageMention], pageId: (String) -> UUID?) -> InlineText {
+        let byPlaceholder = Dictionary(mentions.map { ($0.placeholder, $0) }) { first, _ in first }
+        var units = Array(text.string.utf16)
+        var runs = text.runs
+        for run in text.runs.sorted(by: { $0.start > $1.start }) {
+            guard case .mention(let placeholder) = run.style, let mention = byPlaceholder[placeholder],
+                  let position = runs.firstIndex(of: run) else { continue }
+            if let target = pageId(mention.path) {
+                runs[position].style = .mention(target)
+                continue
+            }
+            // Название вместо знака: оформление правее сдвигается на разницу длин.
+            runs.remove(at: position)
+            let title = Array(mention.title.utf16)
+            units.replaceSubrange(run.start..<run.start + 1, with: title)
+            let shift = title.count - 1
+            runs = runs.map { other in
+                var other = other
+                if other.start > run.start { other.start += shift } else if other.start + other.length > run.start { other.length += shift }
+                return other
+            }
+        }
+        return InlineText(String(decoding: units, as: UTF16.self), runs: runs).normalized()
     }
 
     /// Стереть ветку импорта: корень и все страницы под ним, включая убранные в корзину.
@@ -267,10 +406,11 @@ public struct NotionImporter: Sendable {
         func visit(_ indices: [Int]) {
             for index in indices {
                 let page = plan.pages[index]
-                let items = NotionSimplification.allCases.compactMap { kind -> String? in
+                var items = NotionSimplification.allCases.compactMap { kind -> String? in
                     guard let count = page.simplifications[kind], count > 0 else { return nil }
                     return kind.title(count: count)
                 }
+                if !page.unknownCodeLanguages.isEmpty { items.append(NotionSimplification.unknownCodeLanguagesTitle(page.unknownCodeLanguages)) }
                 if !items.isEmpty { result.append(SimplifiedPage(pageTitle: page.title.isEmpty ? Page.untitledTitle : page.title, items: items)) }
                 visit(page.children)
             }

@@ -9,7 +9,7 @@ import VisualStyle
 struct SlashMenuTests {
     @Test("Поиск по названию и словам-подсказкам без учёта регистра")
     func filtersItems() {
-        #expect(PopupMenuItem.slashItems(matching: "").count == PopupMenuItem.blockKinds.count)
+        #expect(PopupMenuItem.slashItems(matching: "").count == PopupMenuItem.slashItems.count)
         #expect(PopupMenuItem.slashItems(matching: "Заго").map(\.action) == [.setKind(.heading1), .setKind(.heading2), .setKind(.heading3)])
         #expect(PopupMenuItem.slashItems(matching: "todo").map(\.action) == [.setKind(.checkbox)])
         #expect(PopupMenuItem.slashItems(matching: "h2").map(\.action) == [.setKind(.heading2)])
@@ -126,5 +126,108 @@ struct SlashMenuPlacementTests {
 
         editor.press(#selector(NSResponder.cancelOperation(_:)))
         #expect(textView.slashQueryHighlightFrame == nil, "Меню закрыто — подсветки нет")
+    }
+}
+
+/// «/» → «Страница» и «Преобразовать в → Страница», как в Notion 7.39: редактор просит владельца дерева
+/// создать подстраницу со ссылкой у этого блока (`onSubpageRequest`).
+@MainActor
+@Suite("Меню «/»: страница")
+struct SlashPageTests {
+    private func choosePage(_ editor: EditorFixture) {
+        let item = editor.textView.popups.visibleItems.first { $0.action == .setKind(.pageLink) }
+        editor.textView.popups.choose(item)
+    }
+
+    @Test("«Страница» находится по «стр», «page», «подстр»; в списке — сразу за переключателем, как у Notion")
+    func pageItemInMenu() throws {
+        for query in ["стр", "page", "подстр", "Стра"] {
+            #expect(PopupMenuItem.slashItems(matching: query).contains { $0.action == .setKind(.pageLink) }, "\(query)")
+        }
+        let titles = PopupMenuItem.blockKinds.map(\.title)
+        let page = try #require(titles.firstIndex(of: "Страница"))
+        #expect(titles[page - 1] == "Раскрывающийся список")
+        #expect(PopupMenuItem.blockKinds[page].icon == .document)
+    }
+
+    @Test("В пустом абзаце: «/стр» стёрт, редактор просит подстраницу на месте блока и открыть её")
+    func emptyParagraphAsksForSubpageInPlace() throws {
+        let editor = try EditorFixture([.paragraph("до"), .paragraph(), .paragraph("после")])
+        var requests: [SubpageRequest] = []
+        editor.textView.onSubpageRequest = { requests.append($0) }
+        editor.placeCaret(inBlock: 1)
+        editor.type("/стр")
+        choosePage(editor)
+
+        #expect(requests == [.createAndOpen(.replacing(blockId: editor.document.blocks[1].id))])
+        #expect(editor.texts == ["до", "", "после"])
+        #expect(editor.kinds == [.paragraph, .paragraph, .paragraph], "Ссылку ставит владелец дерева, не редактор")
+    }
+
+    @Test("В блоке с текстом: текст остаётся без «/стр», подстраница — следующим блоком")
+    func textBlockAsksForSubpageAfter() throws {
+        let editor = try EditorFixture([.paragraph("дело")])
+        var requests: [SubpageRequest] = []
+        editor.textView.onSubpageRequest = { requests.append($0) }
+        editor.placeCaret(inBlock: 0, at: nil)
+        editor.type(" /page")
+        choosePage(editor)
+
+        #expect(requests == [.createAndOpen(.after(blockId: editor.document.blocks[0].id))])
+        #expect(editor.texts == ["дело "])
+    }
+
+    @Test("Стирание «/стр» — не отдельный шаг ⌘Z: отмену создания делает владелец дерева одним шагом")
+    func queryRemovalIsNotUndoStep() throws {
+        let editor = try EditorFixture([.paragraph()])
+        editor.textView.onSubpageRequest = { _ in }
+        editor.placeCaret(inBlock: 0)
+        editor.type("/стр")
+        editor.undoManager.removeAllActions()
+        choosePage(editor)
+
+        #expect(!editor.undoManager.canUndo)
+        #expect(editor.texts == [""])
+    }
+
+    @Test("«Преобразовать в → Страница» в меню блока: просьба превратить блок в подстраницу, без перехода")
+    func turnIntoPage() throws {
+        let editor = try EditorFixture([.paragraph("Мой план")])
+        var requests: [SubpageRequest] = []
+        editor.textView.onSubpageRequest = { requests.append($0) }
+        let id = editor.document.blocks[0].id
+        editor.textView.openBlockMenu(forBlock: id, below: NSRect(x: 100, y: 500, width: 20, height: 20))
+        let popups = editor.textView.popups
+        editor.press(#selector(NSResponder.moveRight(_:)))
+        for _ in popups.submenuItems where popups.submenuSelectedItem?.action != .setKind(.pageLink) {
+            editor.press(#selector(NSResponder.moveDown(_:)))
+        }
+        try #require(popups.submenuSelectedItem?.action == .setKind(.pageLink))
+        editor.press(#selector(NSResponder.insertNewline(_:)))
+
+        #expect(requests == [.turnInto(blockId: id)])
+        #expect(editor.texts == ["Мой план"])
+    }
+
+    @Test("Блок с вложенными тоже превращается в страницу: дети переедут внутрь у владельца дерева")
+    func turnIntoPageWithChildren() throws {
+        let editor = try EditorFixture([EditorFixture.Spec(kind: .toggle, text: "Раздел"), .bullet("пункт", indent: 1)])
+        var requests: [SubpageRequest] = []
+        editor.textView.onSubpageRequest = { requests.append($0) }
+        editor.textView.setKind(.pageLink, ofBlocksAt: 0..<1)
+
+        #expect(requests == [.turnInto(blockId: editor.document.blocks[0].id)])
+    }
+
+    @Test("Ссылка на подстраницу в «Страницу» не превращается; несколько блоков разом — тоже нет")
+    func turnIntoPageOnlyForOneTextBlock() throws {
+        let link = UUID()
+        let editor = try EditorFixture([.paragraph("один"), .paragraph("два"), EditorFixture.Spec(kind: .pageLink, link: link)])
+        var requests: [SubpageRequest] = []
+        editor.textView.onSubpageRequest = { requests.append($0) }
+        editor.textView.setKind(.pageLink, ofBlocksAt: 0..<2)
+        editor.textView.setKind(.pageLink, ofBlocksAt: 2..<3)
+
+        #expect(requests.isEmpty)
     }
 }

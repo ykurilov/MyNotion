@@ -51,6 +51,18 @@ public final class NotesTransaction {
         ).map(Block.init(row:))
     }
 
+    /// Контейнеры страницы под пометкой «удалён» и их контейнер.
+    static func fetchRemovedContainers(ofPage pageId: UUID, in db: Database) throws -> [UUID: UUID?] {
+        let kinds = BlockKind.allCases.filter(\.isContainer).map { "'\($0.rawValue)'" }.joined(separator: ", ")
+        var result: [UUID: UUID?] = [:]
+        for row in try Row.fetchAll(db, sql: "SELECT id, containerId FROM block WHERE pageId = ? AND isDeleted = 1 AND kind IN (\(kinds))",
+                                    arguments: [pageId.databaseText]) {
+            guard let id = RowDecoding.optionalUUID(row, "id") else { continue }
+            result[id] = .some(RowDecoding.optionalUUID(row, "containerId"))
+        }
+        return result
+    }
+
     // MARK: Страницы
 
     /// Новая страница с одним пустым абзацем. Без `after` и `before` встаёт последней среди соседей.
@@ -361,6 +373,35 @@ public final class NotesTransaction {
         try db.execute(sql: "DELETE FROM block WHERE isDeleted = 1; DELETE FROM page_tombstone;")
     }
 
+    // MARK: Напоминания
+
+    package func reminderState(_ mentionId: UUID) throws -> ReminderState? {
+        try Row.fetchOne(db, sql: "SELECT * FROM reminder_state WHERE mentionId = ?", arguments: [mentionId.databaseText])
+            .flatMap(ReminderState.init(row:))
+    }
+
+    package func allReminderStates() throws -> [ReminderState] {
+        try Row.fetchAll(db, sql: "SELECT * FROM reminder_state ORDER BY mentionId").compactMap(ReminderState.init(row:))
+    }
+
+    /// Записать отметку ровно такой, какой она пришла с другого Mac.
+    package func writeReplicatedReminderState(_ state: ReminderState) throws {
+        try saveReminderState(state)
+    }
+
+    /// Отметить напоминание сделанным (`doneAt`) или снова несделанным (`nil`) — на всех Mac (research R11).
+    public func setReminderDone(_ mentionId: UUID, at doneAt: Date?) throws {
+        try saveReminderState(ReminderState(mentionId: mentionId, doneAt: doneAt, doneClock: clock.now()))
+    }
+
+    private func saveReminderState(_ state: ReminderState) throws {
+        try db.execute(sql: """
+            INSERT INTO reminder_state (mentionId, doneAt, doneClock) VALUES (?, ?, ?)
+            ON CONFLICT(mentionId) DO UPDATE SET doneAt = excluded.doneAt, doneClock = excluded.doneClock
+            """, arguments: [state.mentionId.databaseText, state.doneAt, state.doneClock.description])
+        changes.reminderStates.append(state)
+    }
+
     // MARK: Подписчики
 
     /// Запрос подписчика в этой же транзакции (например, обновить индекс поиска).
@@ -421,11 +462,9 @@ public final class NotesTransaction {
     }
 
     private func validate(_ block: Block) throws {
+        // Допустимая глубина зависит от соседей и решается при показе (`BlockNesting`); здесь — только пределы.
         guard Block.indentRange.contains(block.indent) else {
             throw NotesStoreError.invalidBlock("отступ — целое от 0 до 8")
-        }
-        if block.kind.isHeading, block.indent != 0 {
-            throw NotesStoreError.invalidBlock("у заголовка отступа нет")
         }
         if block.isChecked, block.kind != .checkbox {
             throw NotesStoreError.invalidBlock("отметка бывает только у чекбокса")
