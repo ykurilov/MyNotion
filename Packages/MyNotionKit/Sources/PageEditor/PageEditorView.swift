@@ -30,6 +30,8 @@ public struct PageEditorView: View {
     let pageMenuItems: [PageMenuItem]
     /// Место слева от «•••» (US2: «☆»).
     let topBarAccessory: AnyView?
+    /// Добавки шапки (US1: обложка); создаются один раз на редактор.
+    let headerAddons: [PageHeaderAddonFactory]
 
     public init(document: PageDocument, ancestorTitles: [String] = [], initialFocus: PageTextView.InitialFocus,
                 linkedPages: [UUID: LinkedPage] = [:], onOpenPage: @escaping @MainActor (UUID) -> Void = { _ in },
@@ -38,7 +40,7 @@ public struct PageEditorView: View {
                 onResolveConflict: @escaping @MainActor (Conflict) -> Void = { _ in },
                 blockViewState: BlockViewStateStore? = nil, blockReveal: BlockReveal? = nil,
                 onReady: @escaping @MainActor () -> Void = {}, mentions: MentionSettings = MentionSettings(),
-                pageMenuItems: [PageMenuItem] = [], topBarAccessory: AnyView? = nil) {
+                pageMenuItems: [PageMenuItem] = [], topBarAccessory: AnyView? = nil, headerAddons: [PageHeaderAddonFactory] = []) {
         self.document = document
         self.ancestorTitles = ancestorTitles
         self.initialFocus = initialFocus
@@ -53,6 +55,7 @@ public struct PageEditorView: View {
         self.mentions = mentions
         self.pageMenuItems = pageMenuItems
         self.topBarAccessory = topBarAccessory
+        self.headerAddons = headerAddons
     }
 
     public var body: some View {
@@ -64,7 +67,7 @@ public struct PageEditorView: View {
             PageTextEditor(document: document, icon: document.page.icon, initialFocus: initialFocus, linkedPages: linkedPages,
                            onOpenPage: onOpenPage, onSubpageRequest: onSubpageRequest, onSetIcon: onSetIcon, onResolveConflict: onResolveConflict,
                            blockViewState: blockViewState, blockReveal: blockReveal, onReady: onReady,
-                           mentions: mentions)
+                           mentions: mentions, headerAddons: headerAddons)
                 .overlay(alignment: .top) { scrollEdgeFade }
         }
         .background(Color(nsColor: Palette.pageBackground))
@@ -122,6 +125,7 @@ struct PageTextEditor: NSViewRepresentable {
     let blockReveal: BlockReveal?
     let onReady: @MainActor () -> Void
     var mentions = MentionSettings()
+    var headerAddons: [PageHeaderAddonFactory] = []
 
     /// Какой запрос перехода к блоку редактор уже выполнил.
     final class Coordinator {
@@ -145,7 +149,9 @@ struct PageTextEditor: NSViewRepresentable {
         textView.onSetIcon = onSetIcon
         textView.onResolveConflict = onResolveConflict
         mentions.apply(to: textView)
-        return Self.makeScrollView(around: textView)
+        let scrollView = Self.makeScrollView(around: textView)
+        textView.installHeaderAddons(headerAddons.map { $0(document) })
+        return scrollView
     }
 
     /// Прокрутка страницы: полоса только у длинной страницы.
@@ -169,6 +175,7 @@ struct PageTextEditor: NSViewRepresentable {
         textView.onResolveConflict = onResolveConflict
         mentions.apply(to: textView)
         textView.showIcon(icon)
+        textView.showAppearance(of: document.page)
         if let blockReveal, blockReveal.token != context.coordinator.revealToken {
             context.coordinator.revealToken = blockReveal.token
             textView.revealBlock(blockReveal.blockId)

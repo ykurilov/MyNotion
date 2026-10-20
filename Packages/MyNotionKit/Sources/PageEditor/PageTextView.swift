@@ -104,6 +104,8 @@ public class PageTextView: NSTextView {
     public internal(set) var layoutSettings = PageLayoutSettings()
     /// Место обложки над шапкой (`PageLayout/`).
     let coverSlot = CoverSlot()
+    /// Добавки шапки от хозяина редактора (US1: обложка); живут, пока жив редактор.
+    public internal(set) var headerAddons: [any PageHeaderAddon] = []
 
     public convenience init(document: PageDocument, initialFocus: InitialFocus) {
         self.init(flow: FlowDocument(document), initialFocus: initialFocus)
@@ -136,6 +138,10 @@ public class PageTextView: NSTextView {
         BuiltInBlockViews.registerOnce()
         tableOfContentsTracker = TableOfContentsTracker(textView: self)
         mapper = PageTextStorageMapper(flow: document, textStorage: textStorage!)
+        // Вид страницы — до загрузки текста: страница с мелким шрифтом сразу пишется мелкой.
+        layoutSettings = PageLayoutSettings(isFullWidth: document.page.isFullWidth, isSmallText: document.page.isSmallText)
+        mapper.fontScale = layoutSettings.fontScale
+        coverSlot.shownAppearance = PageAppearance(document.page)
         // После загрузки текста система ставит выделение в конец, и место курсора там считалось бы раскладкой
         // всей страницы (на 10 000 блоках — секунды). Пока текст загружается, вид выделения не обновляется;
         // курсор — в начало, куда его потом и ставит открытие страницы.
@@ -828,6 +834,12 @@ public class PageTextView: NSTextView {
         layoutSettings.column(pageWidth: enclosingScrollView?.frame.width ?? bounds.width, textWidth: bounds.width)
     }
 
+    /// Набор — в шкале шрифта страницы, откуда бы ни пришли атрибуты (описатель блока, оформление в строке).
+    public override var typingAttributes: [NSAttributedString.Key: Any] {
+        get { super.typingAttributes }
+        set { super.typingAttributes = PageFontScaling.scaled(newValue, to: layoutSettings.fontScale) }
+    }
+
     public override var textContainerOrigin: NSPoint {
         NSPoint(x: column.left, y: header.frame.maxY)
     }
@@ -880,10 +892,12 @@ public class PageTextView: NSTextView {
         let headerHeight = showsPageHeader ? header.height(forWidth: columnWidth) : 0
         let coverHeight = showsPageHeader ? coverSlot.height : 0
         coverSlot.view?.frame = NSRect(x: 0, y: 0, width: bounds.width, height: coverHeight)
-        header.frame = NSRect(x: left, y: coverHeight, width: columnWidth, height: headerHeight)
+        let headerTop = coverHeight - (coverHeight > 0 ? header.coverOverlap : 0)
+        header.frame = NSRect(x: left, y: headerTop, width: columnWidth, height: headerHeight)
+        coverSlot.columnDidChange?(left, columnWidth)
         // Отступ текста сверху — обложка и шапка, снизу — пустое место; NSTextView делит высоту поровну, а начало текста
         // задаёт `textContainerOrigin`.
-        let inset = NSSize(width: left, height: showsPageHeader ? (coverHeight + headerHeight + Metrics.Page.bottomPadding) / 2 : 0)
+        let inset = NSSize(width: left, height: showsPageHeader ? (headerTop + headerHeight + Metrics.Page.bottomPadding) / 2 : 0)
         if textContainerInset != inset {
             textContainerInset = inset
         }

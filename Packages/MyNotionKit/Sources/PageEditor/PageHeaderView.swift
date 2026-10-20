@@ -28,6 +28,10 @@ public final class PageHeaderView: NSView, NSTextFieldDelegate {
     private(set) var buttons: [PageHeaderButton] = []
     /// Место «под названием» и его высота.
     private(set) var underTitle: (view: NSView, height: CGFloat)?
+    /// Над шапкой обложка: иконка заходит на неё серединой, без иконки название ближе к обложке (как у Notion).
+    var hasCover = false {
+        didSet { if hasCover != oldValue { needsLayout = true } }
+    }
 
     init(page: Page) {
         super.init(frame: .zero)
@@ -103,10 +107,15 @@ public final class PageHeaderView: NSView, NSTextFieldDelegate {
         needsLayout = true
     }
 
+    /// Верх иконки: с обложкой шапка начинается на половину иконки выше нижнего края обложки (`coverOverlap`).
+    private var iconTop: CGFloat { hasCover ? 0 : Metrics.Page.headerTopPadding }
+
+    /// Насколько шапка заходит на обложку.
+    var coverOverlap: CGFloat { hasCover && hasIcon ? Metrics.Page.iconSize / 2 : 0 }
+
     private var titleTop: CGFloat {
-        hasIcon
-            ? Metrics.Page.headerTopPadding + Metrics.Page.iconSize + Metrics.Page.iconToTitleSpacing
-            : Metrics.Page.headerTopPaddingWithoutIcon
+        if hasIcon { return iconTop + Metrics.Page.iconSize + Metrics.Page.iconToTitleSpacing }
+        return hasCover ? Metrics.Page.headerTopPaddingWithCover : Metrics.Page.headerTopPaddingWithoutIcon
     }
 
     private func titleHeight(forWidth width: CGFloat) -> CGFloat {
@@ -120,7 +129,7 @@ public final class PageHeaderView: NSView, NSTextFieldDelegate {
 
     public override func layout() {
         super.layout()
-        iconView.frame = NSRect(x: 0, y: Metrics.Page.headerTopPadding, width: Metrics.Page.iconSize, height: Metrics.Page.iconSize)
+        iconView.frame = NSRect(x: 0, y: iconTop, width: Metrics.Page.iconSize, height: Metrics.Page.iconSize)
         titleField.frame = NSRect(x: 0, y: titleTop, width: bounds.width, height: titleHeight(forWidth: bounds.width))
         // Как у Notion: подложка первой кнопки выступает левее начала названия на поле кнопки; скрытые места не занимают.
         let metrics = Metrics.PageHeaderButton.self

@@ -31,6 +31,8 @@ public struct SimplifiedPage: Sendable, Hashable, Codable {
 public struct NotionImportReport: Sendable, Equatable {
     /// Цветов и колонок в выгрузке Notion «Markdown & CSV» нет: отчёт называет потерю всегда (research R14, решение Юрия).
     public static let markdownLossNotice = "Цвета и колонки Notion в Markdown не выгружает — они не перенесены"
+    /// Обложек в выгрузке Notion «Markdown & CSV» нет (research R13); своя выгрузка MyNotion их возвращает.
+    public static let coverLossNotice = "Обложки страниц Notion в выгрузку не попадают"
 
     public var rootPageId: UUID
     public var rootTitle: String
@@ -41,7 +43,7 @@ public struct NotionImportReport: Sendable, Equatable {
     public var notices: [String]
 
     public init(rootPageId: UUID, rootTitle: String, pageCount: Int, blockCount: Int, simplified: [SimplifiedPage],
-                notices: [String] = [Self.markdownLossNotice]) {
+                notices: [String] = [Self.markdownLossNotice, Self.coverLossNotice]) {
         self.rootPageId = rootPageId
         self.rootTitle = rootTitle
         self.pageCount = pageCount
@@ -223,6 +225,11 @@ public struct NotionImporter: Sendable {
                 }
             }
             try attach(&plan.pages[index].blocks)
+            if case .file(let name)? = plan.pages[index].cover?.source {
+                let stem = plan.pages[index].file.deletingPathExtension().lastPathComponent
+                // Картинки нет или она не копируется — страница без обложки, как у импорта Notion.
+                plan.pages[index].coverFile = copy(stem + "/" + name)?.1
+            }
             if missing > 0 { plan.pages[index].simplifications[.file, default: 0] += missing }
         }
     }
@@ -270,7 +277,8 @@ public struct NotionImporter: Sendable {
                     let planned = plan.pages[index]
                     try transaction.insertPage(Page(id: ids[index], title: planned.title, icon: planned.icon,
                                                     parentId: planned.parent.map { ids[$0] } ?? rootId,
-                                                    sortKey: sortKeys[index]!, createdAt: startedAt, updatedAt: startedAt))
+                                                    sortKey: sortKeys[index]!, createdAt: startedAt, updatedAt: startedAt,
+                                                    cover: Self.cover(of: planned)))
                     for block in blocks { try transaction.insertBlock(block) }
                 }
             }
@@ -278,6 +286,15 @@ public struct NotionImporter: Sendable {
             progress?(NotionImportProgress(phase: .writing, done: position, total: order.count))
         }
         return written
+    }
+
+    /// Обложка страницы из комментария своей выгрузки; картинка — только скопированная.
+    private static func cover(of page: PlannedPage) -> PageCover? {
+        switch page.cover?.source {
+        case .gallery(let id)?: PageCover(source: .gallery(id), offset: page.cover!.offset)
+        case .file?: page.coverFile.map { PageCover(source: .file($0), offset: page.cover!.offset) }
+        case nil: nil
+        }
     }
 
     /// Блоки страницы для базы: ссылки на найденные страницы — pageLink, на ненайденные — абзац с названием;

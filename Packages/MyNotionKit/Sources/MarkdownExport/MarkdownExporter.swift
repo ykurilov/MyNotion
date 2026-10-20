@@ -1,5 +1,6 @@
 import Foundation
 import NotesCore
+import UniformTypeIdentifiers
 
 /// Сколько страниц уже записано (для полосы хода работы).
 public struct MarkdownExportProgress: Sendable, Equatable {
@@ -103,10 +104,10 @@ public struct MarkdownExporter: Sendable {
             let content: PageContent?
             do { content = try store.pageContent(page.id) } catch { throw MarkdownExportError.cannotRead(error.localizedDescription) }
             if let content, let location = plan.location(of: page.id) {
-                let (attachmentPaths, missing) = try copyAttachments(of: content, at: location, in: plan, into: draft,
-                                                                     createFolder: createFolder)
+                let (attachmentPaths, coverName, missing) = try copyAttachments(of: content, at: location, in: plan, into: draft,
+                                                                                createFolder: createFolder)
                 missingFiles += missing
-                let text = markdown(for: content, at: location, in: plan, attachmentPaths: attachmentPaths)
+                let text = markdown(for: content, at: location, in: plan, attachmentPaths: attachmentPaths, coverFileName: coverName)
                 try createFolder(location.folder)
                 let file = (location.folder + [location.fileName]).reduce(draft) { $0.appendingPathComponent($1) }
                 try writeFile(Data(text.utf8), file)
@@ -118,9 +119,10 @@ public struct MarkdownExporter: Sendable {
     }
 
     /// Копии файлов страницы — в её папку `Название/`, рядом с подстраницами; совпадающие имена — с « (2)».
-    /// Возвращает пути копий от файла страницы и сколько файлов ещё не скачано.
+    /// Своя картинка обложки — последней, под именем «Обложка.<расширение>».
+    /// Возвращает пути копий от файла страницы, имя копии обложки и сколько файлов ещё не скачано.
     private func copyAttachments(of content: PageContent, at location: ExportPlan.Location, in plan: ExportPlan, into draft: URL,
-                                 createFolder: ([String]) throws -> Void) throws -> (paths: [UUID: String], missing: Int) {
+                                 createFolder: ([String]) throws -> Void) throws -> (paths: [UUID: String], coverName: String?, missing: Int) {
         let refs = content.blocks.compactMap { block -> AttachmentRef? in
             [.image, .file, .video].contains(block.kind) ? block.props.attachment : nil
         }
@@ -133,7 +135,8 @@ public struct MarkdownExporter: Sendable {
             default: []
             }
         }
-        guard !refs.isEmpty || !decorations.isEmpty else { return ([:], 0) }
+        let cover = content.page.cover?.attachment
+        guard !refs.isEmpty || !decorations.isEmpty || cover != nil else { return ([:], nil, 0) }
         let pageFolder = location.folder + [location.stem]
         var taken = plan.entryNames(inFolder: pageFolder)
         var paths: [UUID: String] = [:]
@@ -150,13 +153,32 @@ public struct MarkdownExporter: Sendable {
             try FileManager.default.copyItem(at: source, to: destination)
             paths[ref.id] = location.stem + "/" + name
         }
-        return (paths, missing)
+        var coverName: String?
+        if let cover {
+            if let source = attachmentFile(cover.id) {
+                coverName = ExportFileNames.coverFileName(extension: Self.fileExtension(of: cover), taken: &taken)
+                try createFolder(pageFolder)
+                let destination = pageFolder.reduce(draft) { $0.appendingPathComponent($1, isDirectory: true) }.appendingPathComponent(coverName!)
+                try FileManager.default.copyItem(at: source, to: destination)
+            } else {
+                missing += 1
+            }
+        }
+        return (paths, coverName, missing)
+    }
+
+    /// Расширение копии обложки: как у исходного файла, без него — по типу файла.
+    private static func fileExtension(of ref: AttachmentRef) -> String {
+        let own = (ref.name as NSString).pathExtension
+        if !own.isEmpty { return own }
+        return UTType(ref.contentType)?.preferredFilenameExtension ?? ""
     }
 
     private func markdown(for content: PageContent, at location: ExportPlan.Location, in plan: ExportPlan,
-                          attachmentPaths: [UUID: String]) -> String {
-        let titleLine = "# " + ([content.page.icon].compactMap { $0 } + [blockWriter.escapedTitle(content.page.displayTitle)])
+                          attachmentPaths: [UUID: String], coverFileName: String?) -> String {
+        var titleLine = "# " + ([content.page.icon].compactMap { $0 } + [blockWriter.escapedTitle(content.page.displayTitle)])
             .joined(separator: " ")
+        if let cover = CoverComment.line(for: content.page.cover, fileName: coverFileName) { titleLine += "\n" + cover }
         let body = blockWriter.markdown(for: content.blocks, resolveLink: { plan.linkTarget(for: $0, from: location) },
                                         resolveAttachment: { attachmentPaths[$0.id] })
         return body.isEmpty ? titleLine + "\n" : titleLine + "\n\n" + body

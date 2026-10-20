@@ -127,7 +127,7 @@ final class CollapsedParagraphs {
             guard range.length > 0 else { continue }
             let adjustment = wanted[id] ?? Adjustment()
             let base = PageTextStorageMapper.baseAttributes(for: block)[.paragraphStyle] as? NSParagraphStyle
-            let spacing = (base?.paragraphSpacing ?? 0) + adjustment.spacingAfter
+            let spacing = (base?.paragraphSpacing ?? 0) * textView.mapper.fontScale + adjustment.spacingAfter
             let head = (base?.headIndent ?? 0) + adjustment.shift
             let current = textStorage.attribute(.paragraphStyle, at: range.location, effectiveRange: nil) as? NSParagraphStyle
             guard current?.paragraphSpacing != spacing || current?.headIndent != head || current?.firstLineHeadIndent != head else { continue }

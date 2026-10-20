@@ -79,6 +79,13 @@ public enum Palette {
     public static let emojiSectionBarDivider = themed(light: .hex(0xF0EFED), dark: .hex(0x2C2C2B))
     /// «Добавить иконку» в шапке страницы: серая надпись и значок (тёмная — по снимку Notion 16.10.2026, светлая ≈).
     public static let pageHeaderButton = themed(light: .hex(0x9B9A97), dark: .hex(0x7D7A75))
+    /// Заглушка обложки, чья картинка ещё не пришла с другого Mac, и неизвестной обложки галереи (≈ по Notion).
+    public static let placeholder = themed(light: .hex(0xF1F1EF), dark: .hex(0x2F2F2F))
+    /// Кнопки на обложке «Сменить обложку», «Переместить» (≈ по Notion: светлая подложка с тенью-рамкой, тёмная — серая).
+    public static let coverButtonBackground = themed(light: .rgba(255, 255, 255, 0.9), dark: .rgba(37, 37, 37, 0.9))
+    public static let coverButtonHover = themed(light: .rgba(239, 239, 238, 0.95), dark: .rgba(55, 55, 55, 0.95))
+    public static let coverButtonText = themed(light: .rgba(55, 53, 47, 0.65), dark: .rgba(255, 255, 255, 0.81))
+    public static let coverButtonBorder = themed(light: .rgba(15, 15, 15, 0.1), dark: .rgba(255, 255, 255, 0.094))
 
     /// Тень всплывающих панелей: четыре слоя, последний — тонкая рамка. В тёмной теме тень гуще, а рамка светлая:
     /// тёмная тень на тёмной странице не видна (≈ по Notion).
