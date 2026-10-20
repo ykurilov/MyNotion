@@ -8,6 +8,8 @@ extension DateMention {
                 reminder choice: ReminderChoice? = nil) -> DateMention {
         let keptChoice = choice ?? ReminderChoice.current(for: self)
         var result = self
+        // Дату или время поправили руками: «сегодня» шаблона больше не про день создания копии.
+        if day != nil || includesTime != nil || time != nil { result.templateRelative = nil }
         var components = startComponents ?? DateComponents()
         if let day {
             components.year = day.year

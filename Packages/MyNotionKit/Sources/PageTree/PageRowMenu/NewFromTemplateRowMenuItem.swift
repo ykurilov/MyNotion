@@ -1,4 +1,6 @@
 extension PageRowMenuItem {
-    /// «Новая страница по шаблону» — US7: заготовка этапа 0, история заменяет этот файл своим пунктом.
-    static let newFromTemplate: PageRowMenuItem? = nil
+    /// «Новая страница по шаблону» — только у строки шаблона, первым пунктом.
+    static let newFromTemplate: PageRowMenuItem? = PageRowMenuItem(slot: .newFromTemplate) {
+        $0.isTemplate ? "Новая страница по шаблону" : nil
+    }
 }

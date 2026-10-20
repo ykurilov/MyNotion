@@ -15,9 +15,12 @@ public enum PageBranchCopier {
 
     /// `title`, `parentId`, `sortKey` — для корня копии. `now` — момент создания для дат шаблона «@сегодня» и «@сейчас»;
     /// `resolvesTemplateDates: false` — копия шаблона-шаблоном, даты остаются относительными (по умолчанию — так, если
-    /// копируется шаблон).
+    /// копируется шаблон). `rootIsTemplate` — отметка «шаблон» у корня копии (по умолчанию — как у оригинала).
+    /// `fillingPage` — вместо новой страницы корень копии пишется в эту уже существующую пустую страницу: её поля
+    /// заменяются полями оригинала, блоки добавляются, `parentId` и `sortKey` не используются (шаблоны, US7).
     public static func copy(_ rootId: UUID, in transaction: NotesTransaction, title: String, parentId: UUID?, sortKey: FractionalSortKey,
-                            now: Date = Date(), resolvesTemplateDates: Bool? = nil) throws -> Result {
+                            now: Date = Date(), resolvesTemplateDates: Bool? = nil, rootIsTemplate: Bool? = nil,
+                            fillingPage existingRootId: UUID? = nil) throws -> Result {
         let all = try transaction.allPages()
         guard let root = all.first(where: { $0.id == rootId }) else { throw NotesStoreError.pageNotFound(rootId) }
         let children = Dictionary(grouping: all.filter { $0.trashedAt == nil }, by: \.parentId)
@@ -28,18 +31,30 @@ public enum PageBranchCopier {
         }
         collect(root)
         var pageIds: [UUID: UUID] = [:]
-        for page in branch { pageIds[page.id] = .timeOrdered() }
+        for page in branch { pageIds[page.id] = (page.id == rootId ? existingRootId : nil) ?? .timeOrdered() }
         let trashedInBranch = Set(all.filter { $0.trashedAt != nil && $0.parentId.map { pageIds[$0] != nil } == true }.map(\.id))
         let resolvesDates = resolvesTemplateDates ?? !root.isTemplate
 
         var blockIds: [UUID: UUID] = [:]
         for page in branch {
             let isRoot = page.id == rootId
-            let copy = Page(id: pageIds[page.id]!, title: isRoot ? title : page.title, icon: page.icon,
+            var copy = Page(id: pageIds[page.id]!, title: isRoot ? title : page.title, icon: page.icon,
                             parentId: isRoot ? parentId : page.parentId.flatMap { pageIds[$0] },
                             sortKey: isRoot ? sortKey : page.sortKey, createdAt: now, updatedAt: now, cover: page.cover,
-                            isFullWidth: page.isFullWidth, isSmallText: page.isSmallText, isTemplate: page.isTemplate)
-            try transaction.insertPage(copy)
+                            isFullWidth: page.isFullWidth, isSmallText: page.isSmallText,
+                            isTemplate: isRoot ? rootIsTemplate ?? page.isTemplate : page.isTemplate)
+            if isRoot, existingRootId != nil {
+                guard var existing = try transaction.page(copy.id) else { throw NotesStoreError.pageNotFound(copy.id) }
+                existing.title = copy.title
+                existing.icon = copy.icon
+                existing.cover = copy.cover
+                existing.isFullWidth = copy.isFullWidth
+                existing.isSmallText = copy.isSmallText
+                existing.isTemplate = copy.isTemplate
+                copy = try transaction.updatePage(existing)
+            } else {
+                try transaction.insertPage(copy)
+            }
             let blocks = try transaction.blocks(ofPage: page.id)
                 .filter { !($0.kind == .pageLink && $0.linkedPageId.map(trashedInBranch.contains) == true) }
             let flow = blocks.filter { $0.containerId == nil }.sorted(by: BlockCopier.flowOrder)

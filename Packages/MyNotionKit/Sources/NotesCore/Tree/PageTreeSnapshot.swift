@@ -28,6 +28,23 @@ public struct PageTreeSnapshot: Sendable {
 
     public var visiblePageCount: Int { pagesById.count }
 
+    /// Шаблоны (страницы с отметкой) по порядку дерева, без корзины. Шаблон с родителем после слияния правок
+    /// двух Mac тоже здесь (data-model.md).
+    public var templates: [Page] { pagesInTreeOrder.filter(\.isTemplate) }
+
+    /// Дерево без шаблонов и их подстраниц: в «Страницах» шаблонов нет (US7, раздел «Шаблоны»).
+    public func withoutTemplates() -> PageTreeSnapshot {
+        guard pagesById.values.contains(where: \.isTemplate) else { return self }
+        var kept: [Page] = []
+        func appendBranch(_ page: Page) {
+            guard !page.isTemplate else { return }
+            kept.append(page)
+            children(of: page.id).forEach(appendBranch)
+        }
+        children(of: nil).forEach(appendBranch)
+        return PageTreeSnapshot(allPages: kept)
+    }
+
     /// Родитель в дереве: `nil` у корня и у страницы, чей родитель исчез.
     public func parentId(of pageId: UUID) -> UUID? {
         pagesById[pageId]?.parentId.flatMap { pagesById[$0] == nil ? nil : $0 }

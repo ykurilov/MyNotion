@@ -21,6 +21,12 @@ public class PageTextView: NSTextView {
     static let hintLabelTextInset: CGFloat = 2
     /// Проверка орфографии при наборе включена в меню «Правописание» (FR-013).
     private var spellCheckingWanted = true
+    /// Шаблоны, которые предлагает пустая страница (US7), и что делать при выборе; строки появляются, только когда они нужны.
+    var templateChoices: [TemplateChoice] = [] {
+        didSet { if templateChoices != oldValue { updateTemplateRows() } }
+    }
+    var onChooseTemplate: (@MainActor (UUID) -> Void)?
+    var templateRows: TemplateRowsController?
     /// Подложка под «/» с поиском, пока открыто меню «/».
     let slashQueryHighlight = NSView()
 
@@ -421,6 +427,7 @@ public class PageTextView: NSTextView {
             blockHandles.cancelDrag()
             return
         }
+        if handleTemplateRowsCommand(selector) { return }
         if handleMentionPickerCommand(selector) { return }
         if handlePopupCommand(selector) { return }
         if colorMenu.handleCommand(selector) { return }
@@ -797,6 +804,11 @@ public class PageTextView: NSTextView {
 
     /// Подсказка у курсора в пустом блоке: своя для каждого типа (contracts/visual-style.md, «Пустые строки»).
     func updateEmptyParagraphHint() {
+        updateEmptyParagraphHintLabel()
+        updateTemplateRows()
+    }
+
+    private func updateEmptyParagraphHintLabel() {
         let selection = selectedRange()
         guard window?.firstResponder === self, selection.length == 0, !hasMarkedText(), let window,
               let position = mapper.blockPosition(at: selection.location) else {

@@ -91,6 +91,8 @@ public enum GalleryScene: Hashable, Sendable {
     case movePicker(GalleryMovePicker)
     /// История версий (US6).
     case versionHistory(GalleryVersionHistory)
+    /// Шаблоны (US7): раздел «Шаблоны» в панели, строки на пустой странице, поиск «Ещё шаблоны…».
+    case templates(GalleryTemplates)
 }
 
 public enum GalleryMarkdownExport: String, Hashable, Sendable, CaseIterable {
@@ -182,6 +184,16 @@ public enum GalleryTheme: String, Hashable, Sendable, CaseIterable, Codable {
     public var title: String { self == .light ? "светлая" : "тёмная" }
 }
 
+/// Шаблоны страниц (US7; в Notion 7.39 «Шаблоны» — отдельный раздел панели и строки на пустой странице).
+public enum GalleryTemplates: CaseIterable, Sendable {
+    /// Раздел «Шаблоны» под деревом «Страниц»: три шаблона, у одного — подстраницы.
+    case sidebarSection
+    /// Пустая новая страница: серый «Шаблоны» и строки шаблонов под первой строкой.
+    case emptyPageRows
+    /// Строк больше пяти: «Ещё шаблоны…» открыло поиск по шаблонам.
+    case searchPopover
+}
+
 /// История версий (US6; сверка — `notion-version-*.png`).
 public enum GalleryVersionHistory: CaseIterable, Sendable {
     /// Список «1 минута», выбрана прошлая версия: справа она с подсветкой отличий.
@@ -246,7 +258,7 @@ public struct GalleryShot: Hashable, Sendable {
 public enum GalleryCatalog {
     /// Все состояния по порядку съёмки.
     public static let states: [GalleryState] = pageStates + blockStates + kindSampleStates + inlineAtomStates + editingStates + sidebarStates
-        + trashStates + importStates + exportStates + syncStates + tabsStates + copiesStates + versionHistoryStates
+        + trashStates + importStates + exportStates + syncStates + tabsStates + copiesStates + versionHistoryStates + templatesStates
 
     /// Копии (US4, contracts/pages-ui.md, «Окно «Переместить в»»; сверка — снимок Notion 7.39 `notion-move-to.png`).
     /// Пункт «Переместить в» меню блока — в снимке `block-menu`.
@@ -266,6 +278,15 @@ public enum GalleryCatalog {
                      section: "История версий"),
         GalleryState("version-restored-banner", .versionHistory(.restoredBanner), "После восстановления: полоса «Страница восстановлена»",
                      section: "История версий"),
+    ]
+
+    /// Шаблоны (US7, contracts/pages-ui.md, «Шаблоны на пустой странице»). Снимаются последними: образец шаблонов
+    /// после съёмки снимается, чтобы строки шаблонов не попали на другие пустые страницы.
+    static let templatesStates: [GalleryState] = [
+        GalleryState("templates-sidebar", .templates(.sidebarSection), "Раздел «Шаблоны» в панели: три шаблона", section: "Шаблоны"),
+        GalleryState("templates-empty-page", .templates(.emptyPageRows), "Пустая страница: заголовок «Шаблоны» и строки шаблонов",
+                     section: "Шаблоны", narrowToo: true),
+        GalleryState("templates-search", .templates(.searchPopover), "Больше пяти шаблонов: «Ещё шаблоны…» открыло поиск", section: "Шаблоны"),
     ]
 
     /// Вкладки окна (US3, contracts/pages-ui.md, «Верхняя полоса окна»; сверка — снимок Notion 7.39 `notion-sidebar-tabs-topbar.png`).

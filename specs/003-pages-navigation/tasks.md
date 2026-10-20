@@ -243,17 +243,17 @@ description: "Задачи: страницы и навигация"
 
 ### Tests for User Story 7
 
-- [ ] T089 [P] [US7] `PK/Tests/NotesCoreTests/TemplateOperationsTests.swift` по contracts/page-operations.md, «Шаблоны»: сделать (в корень, ссылка у прежнего родителя убрана) и перестать, ⌘Z; шаблон в корзине не предлагается
-- [ ] T090 [P] [US7] `PK/Tests/NotesCoreTests/TemplateInstantiationTests.swift`: заполнение пустой страницы (поля, блоки, подстраницы-копии), одна правка с ⌘Z; «Новая страница по шаблону» — в корне; `templateRelative` → момент создания (часы подменены); правка шаблона не меняет прежние копии; «@сегодня» в шаблоне ставит `templateRelative`, вне шаблона — нет
-- [ ] T091 [P] [US7] XCUITest `UITests/TemplatesTests.swift`: «Сделать шаблоном» у страницы с подстраницей и «@сегодня» — раздел «Шаблоны»; ⌘N → строка шаблона → копия с подстраницей, курсор в названии, дата — сегодня; меню шаблона → «Новая страница по шаблону»; «Перестать быть шаблоном»
+- [x] T089 [P] [US7] `PK/Tests/NotesCoreTests/TemplateOperationsTests.swift` по contracts/page-operations.md, «Шаблоны»: сделать (в корень, ссылка у прежнего родителя убрана) и перестать, ⌘Z; шаблон в корзине не предлагается
+- [x] T090 [P] [US7] `PK/Tests/NotesCoreTests/TemplateInstantiationTests.swift`: заполнение пустой страницы (поля, блоки, подстраницы-копии), одна правка с ⌘Z; «Новая страница по шаблону» — в корне; `templateRelative` → момент создания (часы подменены); правка шаблона не меняет прежние копии; «@сегодня» в шаблоне ставит `templateRelative`, вне шаблона — нет
+- [x] T091 [P] [US7] XCUITest `UITests/TemplatesTests.swift`: «Сделать шаблоном» у страницы с подстраницей и «@сегодня» — раздел «Шаблоны»; ⌘N → строка шаблона → копия с подстраницей, курсор в названии, дата — сегодня; меню шаблона → «Новая страница по шаблону»; «Перестать быть шаблоном»
 
 ### Implementation for User Story 7
 
-- [ ] T092 [US7] Операции `PK/Sources/NotesCore/Tree/PageTreeOperations+Templates.swift` на `PageBranchCopier` (T089, T090)
-- [ ] T093 [US7] Раздел `PK/Sources/PageTree/SidebarSections/TemplatesSection.swift`, шаблоны скрыты из «Страниц»; пункты меню «•••» и строки панели (`MakeTemplate*`, `NewFromTemplateRowMenuItem.swift`)
-- [ ] T094 [US7] Строки шаблонов на пустой странице `PK/Sources/PageEditor/TemplateRows/` (до 5, «Ещё шаблоны…» с поиском, ↑↓ Enter); «@сегодня» / «@сейчас» в шаблоне ставят `templateRelative` (`PK/Sources/PageEditor/Inline/`)
-- [ ] T095 [US7] Состояния галереи: раздел «Шаблоны», пустая страница со строками шаблонов, «Ещё шаблоны…» — в обеих темах
-- [ ] T096 [US7] Затронутые тесты зелёные; замер перехода и запуска; запись в quickstart.md; коммит
+- [x] T092 [US7] Операции `PK/Sources/NotesCore/Tree/PageTreeOperations+Templates.swift` на `PageBranchCopier` (T089, T090)
+- [x] T093 [US7] Раздел `PK/Sources/PageTree/SidebarSections/TemplatesSection.swift`, шаблоны скрыты из «Страниц»; пункты меню «•••» и строки панели (`MakeTemplate*`, `NewFromTemplateRowMenuItem.swift`)
+- [x] T094 [US7] Строки шаблонов на пустой странице `PK/Sources/PageEditor/TemplateRows/` (до 5, «Ещё шаблоны…» с поиском, ↑↓ Enter); «@сегодня» / «@сейчас» в шаблоне ставят `templateRelative` (`PK/Sources/PageEditor/Inline/`)
+- [x] T095 [US7] Состояния галереи: раздел «Шаблоны», пустая страница со строками шаблонов, «Ещё шаблоны…» — в обеих темах
+- [x] T096 [US7] Затронутые тесты зелёные; замер перехода и запуска; запись в quickstart.md; коммит
 
 **Checkpoint**: все истории готовы.
 
