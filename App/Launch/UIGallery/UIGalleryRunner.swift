@@ -27,6 +27,8 @@ final class UIGalleryRunner {
     private var window: NSWindow!
     private var isTrashShown = false
     private var missing: [String: String] = [:]
+    /// Снимок, снятый, пока на экране системное меню: после его закрытия окно снова без меню.
+    private var capturedWhileShowing: Data?
 
     private let filter: String?
 
@@ -58,6 +60,7 @@ final class UIGalleryRunner {
             NSApp.terminate(nil)
             return
         }
+        model.recordsVisits = false
         let runner = UIGalleryRunner(model: model, library: library, failingWrites: failingWrites, folder: folder, filter: filter)
         current = runner
         Task { await runner.run() }
@@ -111,13 +114,16 @@ final class UIGalleryRunner {
             window.setContentSize(contentSize)
         }
         await reset()
+        capturedWhileShowing = nil
         if let problem = await show(shot.state.scene) {
             missing[shot.fileName] = problem
+            await tearDown(shot.state.scene)
             return
         }
         try? await Task.sleep(for: Self.settleDelay)
         do {
-            try CompositeWindowSnapshot.png(of: window).write(to: folder.appending(path: shot.fileName), options: .atomic)
+            let png = try capturedWhileShowing ?? CompositeWindowSnapshot.png(of: window)
+            try png.write(to: folder.appending(path: shot.fileName), options: .atomic)
         } catch {
             missing[shot.fileName] = error.localizedDescription
         }
@@ -384,6 +390,24 @@ final class UIGalleryRunner {
         case .pageTopBar:
             await open(library.sample.page.id)
 
+        case .favoriteStar(let isFavorite):
+            await open(library.sample.page.id)
+            if isFavorite { await setSections(favorites: [library.sample.page.id], recents: []) }
+
+        case .sidebarSections(let state):
+            await open(library.sample.page.id)
+            await setSections(favorites: sectionPages.favorites, recents: sectionPages.recents)
+            switch state {
+            case .recentAndFavorites: break
+            case .favoritesCollapsed: model.toggleSection(.favorites)
+            case .favoriteRowMenu:
+                await settle()
+                guard PageTreePreview.showFavoriteRowMenu(ofPage: sectionPages.favorites[1], in: window, whileOpen: { [self] in
+                    capturedWhileShowing = try? CompositeWindowSnapshot.png(of: window)
+                }) else { return "строки в «Избранном» нет" }
+                if capturedWhileShowing == nil { return "меню строки не снялось" }
+            }
+
         case .pageMenu:
             await open(library.sample.page.id)
             guard let button = Self.view(identified: "page-menu", in: window) as? NSButton else { return "нет кнопки «•••»" }
@@ -486,6 +510,9 @@ final class UIGalleryRunner {
         case .sidebarHidden:
             model.toggleSidebar()
             await settle()
+        case .favoriteStar, .sidebarSections:
+            if model.collapsedSections.contains(.favorites) { model.toggleSection(.favorites) }
+            await setSections(favorites: [], recents: [])
         case .search:
             model.search.dismiss()
         case .notionImport:
@@ -531,6 +558,38 @@ final class UIGalleryRunner {
         SimplifiedPage(pageTitle: title, items: NotionSimplification.allCases.compactMap { kind in
             counts[kind].map { kind.title(count: $0) }
         })
+    }
+
+    /// Страницы для «Избранного» и «Недавних» на снимках: открытая страница — в недавних сверху.
+    private var sectionPages: (favorites: [UUID], recents: [UUID]) {
+        ([library.projects, library.notesPage, library.deepPage, library.nestedLists, library.longTitlePage, library.archive],
+         [library.sample.page.id, library.notesPage, library.projects, library.deepPage, library.longTitlePage])
+    }
+
+    /// Поставить избранное и недавние на страницы базы (пустые списки снимают прежние) и перечитать панель.
+    private func setSections(favorites: [UUID], recents: [UUID]) async {
+        let now = Date()
+        try? model.store.write { transaction in
+            var lastKey: FractionalSortKey?
+            for var page in try transaction.allPages() where page.favorite != nil || page.visitedAt != nil {
+                page.favorite = nil
+                page.visitedAt = nil
+                try transaction.updatePage(page)
+            }
+            for pageId in favorites {
+                guard var page = try transaction.page(pageId) else { continue }
+                lastKey = .between(lastKey, nil)
+                page.favorite = lastKey
+                try transaction.updatePage(page)
+            }
+            for (index, pageId) in recents.enumerated() {
+                guard var page = try transaction.page(pageId) else { continue }
+                page.visitedAt = now.addingTimeInterval(-Double(index) * 60)
+                try transaction.updatePage(page)
+            }
+        }
+        model.library.reloadTree()
+        await settle()
     }
 
     /// Открыть страницу заново (свой редактор) и снять курсор, который новая страница ставит в начало.
