@@ -175,20 +175,27 @@ struct HighlighterTests {
             default: "}"
             }
         }.joined(separator: "\n")
-        // Лучший из пяти замеров: тесты идут параллельно, и вытеснение другим потоком только добавляет время к работе.
-        let clock = ContinuousClock()
+        // Время процессора этого потока, лучшее из пяти: тесты идут параллельно, и под нагрузкой поток подолгу ждёт
+        // своей очереди — по часам на стене правка строки (1,5 мс работы) доходила до 13 мс, хотя работы не прибавилось.
         var highlighter: IncrementalHighlighter?
-        let full = (0..<5).map { _ in clock.measure { highlighter = IncrementalHighlighter(language: .swift, text: text) } }.min()!
+        let full = (0..<5).map { _ in Self.threadCPUTime { highlighter = IncrementalHighlighter(language: .swift, text: text) } }.min()!
         let at = (text as NSString).range(of: "строка 251").upperBound
         let edited = (text as NSString).replacingCharacters(in: NSRange(location: at, length: 0), with: "x")
         let line = (0..<5).map { _ in
             var editable = highlighter!
-            return clock.measure { editable.apply(text: edited, editedRange: NSRange(location: at, length: 1), changeInLength: 1) }
+            return Self.threadCPUTime { editable.apply(text: edited, editedRange: NSRange(location: at, length: 1), changeInLength: 1) }
         }.min()!
         print("Подсветка: полный разбор 500 строк — \(full), правка строки — \(line)")
         #expect(highlighter?.lines.count == 500)
         #expect(full < .milliseconds(50))
         #expect(line < .milliseconds(10))
+    }
+
+    /// Сколько процессорного времени ушло у этого потока на `work` (ожидание очереди не считается).
+    private static func threadCPUTime(_ work: () -> Void) -> Duration {
+        let start = clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID)
+        work()
+        return .nanoseconds(Int64(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - start))
     }
 }
 
