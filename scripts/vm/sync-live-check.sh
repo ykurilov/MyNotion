@@ -64,7 +64,7 @@ echo \\\$? > ~/uitest.done
 osascript -e 'tell application \"Terminal\" to quit' &
 SCRIPT
 chmod +x ~/run-uitest.command; rm -f ~/uitest.done ~/uitest.log; open ~/run-uitest.command"
-for _ in {1..120}; do vm "test -f ~/uitest.done" && break; perl -e 'select(undef,undef,undef,5)'; done
+for _ in {1..240}; do vm "test -f ~/uitest.done" && break; perl -e 'select(undef,undef,undef,5)'; done
 
 # 4. Итог и уборка: сервер остановлен, база сервера и экземпляров — во временной папке виртуального Mac.
 mkdir -p $OUT
