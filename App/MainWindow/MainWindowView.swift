@@ -69,6 +69,9 @@ struct MainWindowView: View {
         if let tabsURL = options.tabsBenchmarkURL, case .success(let library) = library {
             TabsBenchmark.editorReady(model: model ?? library.firstWindow, reportTo: tabsURL)
         }
+        if let memoryURL = options.richMemoryCheckURL, case .success(let library) = library {
+            RichPagesMemoryCheck.editorReady(model: model ?? library.firstWindow, reportTo: memoryURL)
+        }
         if let latencyURL = options.reminderLatencyURL, case .success(let library) = library {
             ReminderLatencyCheck.start(library: library, reportTo: latencyURL)
         }
@@ -335,9 +338,7 @@ private struct PagesWindow: View {
     }
 
     /// Что показать в блоках-подстраницах открытой страницы.
-    private var linkedPages: [UUID: LinkedPage] {
-        Dictionary(model.tree.pagesInTreeOrder.map { ($0.id, LinkedPage(title: $0.title, icon: $0.icon)) }) { first, _ in first }
-    }
+    private var linkedPages: [UUID: LinkedPage] { model.linkedPages }
 
     /// Упоминания и даты открытой страницы: названия, корзина, поиск для «@», разрешение на уведомления.
     private func mentionSettings(pages: [UUID: LinkedPage]) -> MentionSettings {

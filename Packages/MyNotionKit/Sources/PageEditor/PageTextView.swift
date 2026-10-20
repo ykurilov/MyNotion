@@ -28,6 +28,9 @@ public class PageTextView: NSTextView {
     /// страницу открыли из дерева, и стрелки, Enter и ⌘⌫ дальше работают в дереве.
     public enum InitialFocus { case title, body, unchanged }
     private var pendingFocus: InitialFocus?
+    /// Место прокрутки вкладки, на которое встать при показе (US3); возвращается до первой отрисовки.
+    var pendingScrollPlace: TabScroll?
+    private var didRestoreScrollPlace = false
     /// Страница показана и принимает ввод.
     public var onReady: (@MainActor () -> Void)?
     /// Отмена, когда окна нет или оно своей не даёт (проверки без приложения).
@@ -1050,16 +1053,31 @@ public class PageTextView: NSTextView {
         super.viewDidMoveToWindow()
         guard window != nil, let focus = pendingFocus else { return }
         pendingFocus = nil
+        // Место прокрутки вкладки — до первой отрисовки: страница сразу на месте, без лишнего кадра сверху.
+        if pendingScrollPlace != nil, (enclosingScrollView?.contentSize.width ?? 0) > 0 { restorePendingScrollPlace() }
         // Следующий оборот цикла событий: окно уже на экране и принимает ввод.
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
+            let restored = restorePendingScrollPlace()
             switch focus {
             case .title: header.focusTitle()
+            case .body where restored: window?.makeFirstResponder(self)
             case .body: focusBody(at: 0)
             case .unchanged: break
             }
             onReady?()
         }
+    }
+
+    /// Вернуть место прокрутки вкладки, если оно ждёт; `true` — место вернули (сейчас или раньше).
+    @discardableResult
+    private func restorePendingScrollPlace() -> Bool {
+        guard let place = pendingScrollPlace else { return didRestoreScrollPlace }
+        pendingScrollPlace = nil
+        layoutSubtreeIfNeeded()
+        restoreScrollPlace(place)
+        didRestoreScrollPlace = true
+        return true
     }
 
     public func focusBody(at location: Int) {

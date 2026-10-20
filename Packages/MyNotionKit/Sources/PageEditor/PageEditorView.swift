@@ -150,9 +150,9 @@ struct PageTextEditor: NSViewRepresentable {
         let reveal = blockReveal
         context.coordinator.revealToken = reveal?.token
         scrollPlace?.attach(textView)
-        textView.onReady = { [weak textView, onReady, restoringScroll] in
+        textView.pendingScrollPlace = restoringScroll
+        textView.onReady = { [weak textView, onReady] in
             onReady()
-            if let restoringScroll { textView?.restoreScrollPlace(restoringScroll) }
             if let reveal { textView?.revealBlock(reveal.blockId) }
         }
         textView.linkedPages = linkedPages
@@ -195,7 +195,42 @@ struct PageTextEditor: NSViewRepresentable {
     }
 
     static func dismantleNSView(_ scrollView: NSScrollView, coordinator: Coordinator) {
-        (scrollView.documentView as? PageTextView)?.commitEdits()
+        guard let textView = scrollView.documentView as? PageTextView else { return }
+        textView.commitEdits()
+        // Раскладка закрытой страницы отцепляется от её текста и контейнера: виды абзацев TextKit, которые AppKit
+        // держит дольше страницы, не держат с собой раскладку, абзацы и вложения.
+        if let layoutManager = textView.textLayoutManager {
+            layoutManager.textViewportLayoutController.delegate = nil
+            // Строки абзацев видимой части — их фрагменты остаются у видов абзацев.
+            if let viewport = layoutManager.textViewportLayoutController.viewportRange {
+                layoutManager.enumerateTextLayoutFragments(from: viewport.location) { fragment in
+                    fragment.invalidateLayout()
+                    return fragment.rangeInElement.endLocation.compare(viewport.endLocation) == .orderedAscending
+                }
+            }
+            layoutManager.textContentManager?.removeTextLayoutManager(layoutManager)
+            layoutManager.textContainer = nil
+        }
+        detachSubviews(of: textView)
+    }
+
+    /// Нарисованное слоями закрытой страницы.
+    private static func clearContents(of layer: CALayer?) {
+        guard let layer else { return }
+        layer.contents = nil
+        layer.sublayers?.forEach(clearContents)
+    }
+
+    /// Виды закрытой страницы снимаются по одному, от глубоких к верхним, без нарисованного. AppKit подписывает виды
+    /// на системные уведомления блоком, который держит вид, и отписывает при снятии вида с родителя: вид, отпущенный
+    /// вместе с родителем, оставался подписанным. У окна вне экрана (служебные запуски) виды абзацев TextKit живут
+    /// дольше страницы — без раскладки и рисунка они почти ничего не весят.
+    static func detachSubviews(of view: NSView) {
+        for subview in view.subviews.reversed() {
+            detachSubviews(of: subview)
+            clearContents(of: subview.layer)
+            subview.removeFromSuperview()
+        }
     }
 }
 

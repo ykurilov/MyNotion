@@ -9,15 +9,18 @@ public enum LaunchPresence: Equatable, Sendable {
     /// Служебный запуск: без значка в Dock, приложение нельзя активировать, окна за всеми окнами.
     case background
 
-    /// Флаги служебных режимов. Новый служебный флаг — сюда же.
+    /// Флаги служебных режимов. Новый служебный флаг — сюда же. Кроме замеров вкладок и памяти (`--tabs-benchmark`,
+    /// `--rich-memory-check`, только в виртуальном Mac): у окна за всеми окнами AppKit не освобождает закрытые виды
+    /// абзацев TextKit, и рост памяти мерился бы не тот, что у человека с окном на экране.
     public static let serviceFlags: Set<String> = [
         "--ui-gallery", "--ui-gallery-only", "--window-snapshot", "--hover-sidebar-row",
         "--generate-reference-library", "--launch-report", "--typing-benchmark", "--search-benchmark", "--export-markdown",
-        "--import-notion", "--tabs-benchmark",
+        "--import-notion",
     ]
     /// Флаги, за которыми идёт значение: значение — не флаг, даже если похоже.
     static let flagsWithValue: Set<String> = [
         "--database", "--generate-reference-library", "--launch-report", "--window-snapshot", "--typing-benchmark",
+        "--rich-memory-check",
         "--search-benchmark",
         "--ui-gallery", "--ui-gallery-only", "--hover-sidebar-row", "--appearance", "--export-markdown", "--import-notion",
         "--tabs-benchmark",

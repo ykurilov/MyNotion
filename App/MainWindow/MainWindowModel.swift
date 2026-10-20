@@ -52,6 +52,8 @@ final class MainWindowModel {
     @ObservationIgnored private let restoresTabs: Bool
     /// Страницу перечитали после операции с деревом: встать на прежнее место.
     @ObservationIgnored private var scrollBeforeReload: TabScroll?
+    @ObservationIgnored private var isTabsSavePending = false
+    @ObservationIgnored private var linkedPagesCache: (revision: Int, pages: [UUID: LinkedPage])?
     /// Запись открытий для «Недавних»: страница, пробывшая в активной вкладке 2 секунды или с правкой.
     @ObservationIgnored private var visits: VisitRecorder!
     /// Галерея снимков не засоряет «Недавние» открытиями, которых никто не делал.
@@ -468,7 +470,23 @@ final class MainWindowModel {
 
     private func tabsDidChange() {
         tabsRevision += 1
-        if restoresTabs { saveWindowState { $0.tabs = tabs.savedState } }
+        guard restoresTabs, !isTabsSavePending else { return }
+        // Запись — после показа страницы: на пути переключения вкладки она не нужна.
+        isTabsSavePending = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            isTabsSavePending = false
+            saveWindowState { $0.tabs = self.tabs.savedState }
+        }
+    }
+
+    /// Справочник страниц для блоков-подстраниц и упоминаний: собирается заново только после смены дерева,
+    /// а не при каждой перерисовке окна (переход и переключение вкладки).
+    var linkedPages: [UUID: LinkedPage] {
+        if let cache = linkedPagesCache, cache.revision == treeRevision { return cache.pages }
+        let pages = Dictionary(tree.pagesInTreeOrder.map { ($0.id, LinkedPage(title: $0.title, icon: $0.icon)) }) { first, _ in first }
+        linkedPagesCache = (treeRevision, pages)
+        return pages
     }
 
     /// Место прокрутки открытой страницы — в базу вместе с вкладками (уход в фон, выход, закрытие окна).
