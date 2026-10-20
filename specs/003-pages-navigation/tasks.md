@@ -121,7 +121,7 @@ description: "Задачи: страницы и навигация"
 - [x] T041 [US2] Запись открытий `PK/Sources/Navigation/VisitRecorder.swift` по событию «страница открыта / ушли» из T021; правка в странице — сразу (T038)
 - [x] T042 [US2] Разделы `PK/Sources/PageTree/SidebarSections/RecentSection.swift` (5 строк и «Показать все» — действие панели `showAllRecent`, его открывает US3) и `FavoritesSection.swift` (строки дерева с раскрытием подстраниц, перетаскивание); свёртывание разделов с хранением в `window_state.collapsedSidebarSections`
 - [x] T043 [US2] ☆ в верхней полосе (`App/MainWindow/PageMenu/FavoriteStarButton.swift`) и пункт `PK/Sources/PageTree/PageRowMenu/FavoriteRowMenuItem.swift`
-- [ ] T044 [US2] Состояния галереи: панель с «Недавними» и «Избранным», свёрнутый раздел, ☆ закрашенная и пустая, меню строки — в обеих темах; сверка с `notion-sidebar-tabs-topbar.png`
+- [x] T044 [US2] Состояния галереи: панель с «Недавними» и «Избранным», свёрнутый раздел, ☆ закрашенная и пустая, меню строки — в обеих темах; сверка с `notion-sidebar-tabs-topbar.png`
 - [ ] T045 [US2] Затронутые тесты зелёные; замеры перехода (запись открытия вне пути перехода) и запуска; запись в quickstart.md; коммит
 
 **Checkpoint**: US2 работает и проверяется сама.
