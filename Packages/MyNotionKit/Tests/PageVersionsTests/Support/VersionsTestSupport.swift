@@ -98,6 +98,14 @@ final class VersionsTestMac {
         return try action()
     }
 
+    func undoable<T>(_ action: () async throws -> T) async rethrows -> T {
+        undoManager.groupsByEvent = false
+        tree.undoManager = undoManager
+        undoManager.beginUndoGrouping()
+        defer { undoManager.endUndoGrouping() }
+        return try await action()
+    }
+
     /// Страница с абзацами `texts`.
     @discardableResult
     func page(_ title: String, texts: [String]) throws -> Page {

@@ -62,6 +62,18 @@ struct VersionPruningTests {
         #expect(kept([dayOld, dayOldTwin, now]).count == 2, "Старше суток — по одной в час")
     }
 
+    @Test("Версия «до восстановления» прореживается отдельно: «после» в том же часе или дне её не вытесняет")
+    func beforeRestoreSurvivesPruning() {
+        let before = VersionStamp(id: UUID(), createdAt: at(day: 11, hour: 10, minute: 5), isBeforeRestore: true)
+        let after = VersionStamp(id: UUID(), createdAt: at(day: 11, hour: 10, minute: 6))
+        let older = VersionStamp(id: UUID(), createdAt: at(day: 11, hour: 10, minute: 1))
+        let removed = VersionPruning.versionsToRemove([older, before, after], now: now, calendar: calendar)
+        #expect(removed == [older.id])
+        let monthAgo = [VersionStamp(id: UUID(), createdAt: at(day: 1, hour: 9) - 40 * 86_400, isBeforeRestore: true),
+                        VersionStamp(id: UUID(), createdAt: at(day: 1, hour: 10) - 40 * 86_400)]
+        #expect(VersionPruning.versionsToRemove(monthAgo + [after], now: now, calendar: calendar).isEmpty)
+    }
+
     @Test("Последняя версия страницы остаётся всегда, сколько бы ей ни было")
     func latestAlwaysKept() {
         let ancient = calendar.date(byAdding: .day, value: -400, to: now)!
@@ -152,5 +164,22 @@ struct VersionPruningTests {
         try mac.tree.moveToTrash(page.id)
         try mac.tree.deleteForever(page.id)
         #expect(try versionFiles(mac).isEmpty, "Стёртая навсегда страница держит файлы версиями")
+    }
+
+    @Test("Пометка «до восстановления» хранится в базе и доходит до прореживания")
+    func beforeRestoreMarkIsStored() throws {
+        let clock = ManualVersionClock()
+        let mac = try VersionsTestMac(clock: clock)
+        let page = try mac.page("Восстановленная", texts: ["а"])
+        let content = try #require(try mac.store.pageContent(page.id))
+        let snapshot = PageSnapshot(page: content.page, blocks: content.blocks)
+        let base = clock.now.addingTimeInterval(-10 * 86_400)
+        let before = try mac.versions.save(snapshot, pageId: page.id, createdAt: base, deviceName: "Mac A", summary: VersionSummary())
+        try mac.versions.save(snapshot, pageId: page.id, createdAt: base.addingTimeInterval(60), deviceName: "Mac A", summary: VersionSummary())
+        try mac.versions.markBeforeRestore(before.id)
+        #expect(try mac.versions.allVersionStamps()[page.id]?.first { $0.id == before.id }?.isBeforeRestore == true)
+        let pruner = VersionPruner(versions: mac.versions, store: mac.store, now: clock.reading, calendar: calendar)
+        #expect(try pruner.pruneIfDue() == true)
+        #expect(try mac.versionList(page.id).count == 2)
     }
 }

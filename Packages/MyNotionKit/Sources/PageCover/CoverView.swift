@@ -24,6 +24,17 @@ public final class CoverView: NSView {
     let saveButton = CoverButton(title: "Сохранить положение", identifier: "save-cover-position")
     let cancelButton = CoverButton(title: "Отмена", identifier: "cancel-cover-position")
     let repositionHint = CoverHintLabel(text: "Перетащите картинку, чтобы сдвинуть")
+    let copyHint = CoverHintLabel(text: "", identifier: "cover-copy-progress")
+
+    /// Своя картинка копируется (доля 0…1): вместо обложки — заглушка с ходом копирования, как у файла 002;
+    /// `nil` — не копируется.
+    public var copyProgress: Double? {
+        didSet {
+            guard copyProgress != oldValue else { return }
+            updateButtons()
+            needsDisplay = true
+        }
+    }
 
     public private(set) var repositioning: CoverRepositionMode?
     public var isHovered = false {
@@ -50,6 +61,7 @@ public final class CoverView: NSView {
         setAccessibilityLabel("Обложка")
         setAccessibilityIdentifier("page-cover")
         addSubview(repositionHint)
+        addSubview(copyHint)
         addSubview(buttons)
         changeButton.onPress = { [weak self] in self?.changeCover() }
         repositionButton.onPress = { [weak self] in self?.beginReposition() }
@@ -149,7 +161,7 @@ public final class CoverView: NSView {
     private var shownOffset: Double { repositioning?.offset ?? cover.offset }
 
     public override func draw(_ dirtyRect: NSRect) {
-        guard let image, let context = NSGraphicsContext.current?.cgContext else {
+        guard copyProgress == nil, let image, let context = NSGraphicsContext.current?.cgContext else {
             Palette.placeholder.setFill()
             bounds.fill()
             return
@@ -176,8 +188,10 @@ public final class CoverView: NSView {
     private func updateButtons() {
         let inMode = repositioning != nil
         buttons.setButtons(inMode ? [saveButton, cancelButton] : [changeButton, repositionButton])
-        buttons.isHidden = !inMode && !isHovered
+        buttons.isHidden = copyProgress != nil || (!inMode && !isHovered)
         repositionHint.isHidden = !inMode
+        copyHint.isHidden = copyProgress == nil
+        if let copyProgress { copyHint.string = "Копируется… \(Int((copyProgress * 100).rounded(.down))) %" }
         needsLayout = true
     }
 
@@ -189,6 +203,9 @@ public final class CoverView: NSView {
         let hint = repositionHint.fittingSize
         repositionHint.frame = NSRect(x: (bounds.midX - hint.width / 2).rounded(), y: (bounds.midY - hint.height / 2).rounded(),
                                       width: hint.width, height: hint.height)
+        let copy = copyHint.fittingSize
+        copyHint.frame = NSRect(x: (bounds.midX - copy.width / 2).rounded(), y: (bounds.midY - copy.height / 2).rounded(),
+                                width: copy.width, height: copy.height)
     }
 
     public override func updateTrackingAreas() {
@@ -389,17 +406,31 @@ final class CoverButton: NSView {
 /// Подсказка режима «Переместить» по центру обложки: белая надпись на тёмной полупрозрачной подложке (≈ по Notion).
 @MainActor
 final class CoverHintLabel: NSView {
-    private let text: NSAttributedString
+    private var text: NSAttributedString
 
-    init(text: String) {
-        self.text = NSAttributedString(string: text, attributes: [
-            .font: NSFont.systemFont(ofSize: Metrics.PageCover.buttonFontSize, weight: .medium), .foregroundColor: NSColor.white,
-        ])
+    init(text: String, identifier: String = "cover-reposition-hint") {
+        self.text = Self.attributed(text)
         super.init(frame: .zero)
         setAccessibilityElement(true)
         setAccessibilityRole(.staticText)
         setAccessibilityLabel(text)
-        setAccessibilityIdentifier("cover-reposition-hint")
+        setAccessibilityIdentifier(identifier)
+    }
+
+    var string: String {
+        get { text.string }
+        set {
+            guard newValue != text.string else { return }
+            text = Self.attributed(newValue)
+            setAccessibilityLabel(newValue)
+            needsDisplay = true
+        }
+    }
+
+    private static func attributed(_ text: String) -> NSAttributedString {
+        NSAttributedString(string: text, attributes: [
+            .font: NSFont.systemFont(ofSize: Metrics.PageCover.buttonFontSize, weight: .medium), .foregroundColor: NSColor.white,
+        ])
     }
 
     @available(*, unavailable)

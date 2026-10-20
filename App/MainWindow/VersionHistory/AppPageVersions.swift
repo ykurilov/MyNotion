@@ -34,9 +34,15 @@ final class AppPageVersions {
         recorder.pageOpened(pageId)
     }
 
-    /// Закрытие окна и выход: открытые страницы уже записаны.
+    /// Закрытие окна: открытые страницы уже записаны; снимки — на очереди записывателя, окно не ждёт.
     func recordAllDue() {
-        recorder.recordAllDue()
+        let recorder = recorder
+        Task { await recorder.recordAllDue() }
+    }
+
+    /// Выход: снимки всего отмеченного до того, как приложение закроется.
+    func recordAllDueBeforeQuit() {
+        recorder.recordAllDueBeforeQuit()
     }
 
     private func prune() {

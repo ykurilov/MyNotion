@@ -11,9 +11,9 @@ import Testing
 @Suite("Версии: восстановление")
 struct VersionRestoreTests {
     /// Версия страницы «как сейчас» (снимок по запросу).
-    private func versionNow(_ mac: VersionsTestMac, _ pageId: UUID) throws -> PageVersionInfo {
+    private func versionNow(_ mac: VersionsTestMac, _ pageId: UUID) async throws -> PageVersionInfo {
         mac.clock.advance(by: 61)
-        return try #require(try mac.recorder.recordPending(pageId) ?? mac.versionList(pageId).first)
+        return try #require(try await mac.recorder.recordPending(pageId) ?? mac.versionList(pageId).first)
     }
 
     private func restorer(_ mac: VersionsTestMac) -> VersionRestorer {
@@ -39,12 +39,12 @@ struct VersionRestoreTests {
     }
 
     @Test("Поля страницы и блоки — как в версии; блоки с прежними id")
-    func fieldsAndBlocksAsInVersion() throws {
+    func fieldsAndBlocksAsInVersion() async throws {
         let mac = try VersionsTestMac()
         mac.recorder.start()
         let page = try mac.page("Было", texts: ["один", "два", "три"])
         let before = try mac.blocks(page.id)
-        let version = try versionNow(mac, page.id)
+        let version = try await versionNow(mac, page.id)
         try mac.updatePage(page.id) {
             $0.title = "Стало"
             $0.icon = "🔥"
@@ -57,7 +57,7 @@ struct VersionRestoreTests {
             try tx.deleteBlock(before[1].id)
             try tx.insertBlock(Block(pageId: page.id, text: InlineText("лишний"), sortKey: .between(before[2].sortKey, nil)))
         }
-        try restorer(mac).restore(versionId: version.id, ofPage: page.id)
+        try await restorer(mac).restore(versionId: version.id, ofPage: page.id)
         let restored = try #require(try mac.store.pageContent(page.id))
         #expect(restored.page.title == "Было")
         #expect(restored.page.icon == nil && restored.page.cover == nil)
@@ -67,31 +67,31 @@ struct VersionRestoreTests {
     }
 
     @Test("Удалённые с тех пор блоки возвращаются с прежними id — и с пометками синхронизации, и без")
-    func deletedBlocksReturn() throws {
+    func deletedBlocksReturn() async throws {
         for syncs in [false, true] {
             let mac = try VersionsTestMac(syncs: syncs)
             mac.store.keepsDeletionMarks = syncs
             let page = try mac.page("Удаления", texts: ["а", "б", "в"])
             let blocks = try mac.blocks(page.id)
-            let version = try versionNow(mac, page.id)
+            let version = try await versionNow(mac, page.id)
             try mac.store.write { tx in for block in blocks { try tx.deleteBlock(block.id) } }
             #expect(try mac.texts(page.id) == [""], "Страница без блоков получает пустой абзац")
-            try restorer(mac).restore(versionId: version.id, ofPage: page.id)
+            try await restorer(mac).restore(versionId: version.id, ofPage: page.id)
             #expect(try mac.blocks(page.id).map(\.id) == blocks.map(\.id), "синхронизация: \(syncs)")
             #expect(try mac.texts(page.id) == ["а", "б", "в"])
         }
     }
 
     @Test("Блоки, унесённые «Переместить в» на другую страницу, возвращаются; копии там удалены")
-    func movedBlocksReturn() throws {
+    func movedBlocksReturn() async throws {
         let mac = try VersionsTestMac()
         let source = try mac.page("Откуда", texts: ["остаётся", "уедет 1", "уедет 2"])
         let target = try mac.page("Куда", texts: ["своё"])
         let blocks = try mac.blocks(source.id)
-        let version = try versionNow(mac, source.id)
+        let version = try await versionNow(mac, source.id)
         try moveBlocks([blocks[1].id, blocks[2].id], from: source.id, to: target.id, mac)
         #expect(try mac.texts(target.id) == ["своё", "уедет 1", "уедет 2"])
-        try restorer(mac).restore(versionId: version.id, ofPage: source.id)
+        try await restorer(mac).restore(versionId: version.id, ofPage: source.id)
         #expect(try mac.blocks(source.id).map(\.id) == blocks.map(\.id))
         #expect(try mac.texts(target.id) == ["своё"], "Копии на другой странице не удалены")
     }
@@ -102,58 +102,60 @@ struct VersionRestoreTests {
         let source = try mac.page("Откуда", texts: ["остаётся", "уедет"])
         let target = try mac.page("Куда", texts: ["своё"])
         let blocks = try mac.blocks(source.id)
-        let version = try versionNow(mac, source.id)
+        let version = try await versionNow(mac, source.id)
         try moveBlocks([blocks[1].id], from: source.id, to: target.id, mac)
         let copy = try await mac.tree.duplicate(target.id)
         #expect(try mac.texts(copy.id) == ["своё", "уедет"])
-        try restorer(mac).restore(versionId: version.id, ofPage: source.id)
+        try await restorer(mac).restore(versionId: version.id, ofPage: source.id)
         #expect(try mac.texts(target.id) == ["своё"])
         #expect(try mac.texts(copy.id) == ["своё", "уедет"], "Восстановление удалило блоки дубликата")
     }
 
     @Test("Унесённая ссылка на подстраницу возвращается, подстраница — снова под исходной страницей")
-    func movedSubpageReturns() throws {
+    func movedSubpageReturns() async throws {
         let mac = try VersionsTestMac()
         let source = try mac.page("Родитель", texts: ["текст"])
         let target = try mac.page("Другая", texts: ["своё"])
         let subpage = try mac.tree.createSubpage(in: source.id, title: "Подстраница")
         let link = try #require(try mac.blocks(source.id).first { $0.linkedPageId == subpage.id })
-        let version = try versionNow(mac, source.id)
+        let version = try await versionNow(mac, source.id)
         try moveBlocks([link.id], from: source.id, to: target.id, mac)
         #expect(try mac.store.pageOutline().first { $0.id == subpage.id }?.parentId == target.id)
-        try restorer(mac).restore(versionId: version.id, ofPage: source.id)
+        try await restorer(mac).restore(versionId: version.id, ofPage: source.id)
         #expect(try mac.store.pageOutline().first { $0.id == subpage.id }?.parentId == source.id)
         #expect(try mac.blocks(source.id).contains { $0.id == link.id && $0.linkedPageId == subpage.id })
         #expect(try !mac.blocks(target.id).contains { $0.linkedPageId == subpage.id })
     }
 
     @Test("Снимок «до восстановления» и новая версия после; прошлые версии на месте")
-    func snapshotsAroundRestore() throws {
+    func snapshotsAroundRestore() async throws {
         let mac = try VersionsTestMac()
         mac.recorder.start()
         let page = try mac.page("Версии", texts: ["v1"])
         let block = try #require(try mac.blocks(page.id).first)
-        let first = try versionNow(mac, page.id)
+        let first = try await versionNow(mac, page.id)
         try mac.setText("v2", ofBlock: block.id)
-        let second = try versionNow(mac, page.id)
+        let second = try await versionNow(mac, page.id)
         try mac.setText("v3 — не успела стать версией", ofBlock: block.id)
-        try restorer(mac).restore(versionId: first.id, ofPage: page.id)
+        try await restorer(mac).restore(versionId: first.id, ofPage: page.id)
         let versions = try mac.versionList(page.id)
         #expect(versions.count == 4)
         #expect(Set(versions.map(\.id)).isSuperset(of: [first.id, second.id]))
         #expect(try mac.versions.snapshot(versions[1].id)?.blocks.first?.text.string == "v3 — не успела стать версией", "Нет снимка «до»")
         #expect(try mac.versions.snapshot(versions[0].id)?.blocks.first?.text.string == "v1", "Нет новой версии после")
         #expect(try mac.dueCount() == 0)
+        #expect(try mac.versions.allVersionStamps()[page.id]?.filter(\.isBeforeRestore).map(\.id) == [versions[1].id],
+                "Снимок «до» не помечен — прореживание сотрёт его вместе с часом «после»")
     }
 
     @Test("⌘Z восстановления — страница, перенесённые копии и подстраница как до него; ⇧⌘Z — снова как в версии")
-    func undoRestore() throws {
+    func undoRestore() async throws {
         let mac = try VersionsTestMac()
         mac.recorder.start()
         let source = try mac.page("Источник", texts: ["а", "б", "в"])
         let target = try mac.page("Цель", texts: ["своё"])
         let subpage = try mac.tree.createSubpage(in: source.id, title: "Под")
-        let version = try versionNow(mac, source.id)
+        let version = try await versionNow(mac, source.id)
         let blocks = try mac.blocks(source.id)
         let link = try #require(blocks.first { $0.linkedPageId == subpage.id })
         try moveBlocks([blocks[1].id, link.id], from: source.id, to: target.id, mac)
@@ -163,7 +165,7 @@ struct VersionRestoreTests {
         let targetBefore = try mac.blocks(target.id)
         let versionCount = try mac.versionList(source.id).count
 
-        try mac.undoable { try restorer(mac).restore(versionId: version.id, ofPage: source.id) }
+        try await mac.undoable { try await restorer(mac).restore(versionId: version.id, ofPage: source.id) }
         #expect(try mac.texts(source.id) == ["а", "б", "в", ""])
         mac.undoManager.undo()
         #expect(try mac.blocks(source.id).map(\.id) == sourceBefore.map(\.id))
@@ -179,38 +181,38 @@ struct VersionRestoreTests {
     }
 
     @Test("Подстраница, созданная после версии, не теряется: ссылка и страница остаются")
-    func newerSubpageKept() throws {
+    func newerSubpageKept() async throws {
         let mac = try VersionsTestMac()
         let page = try mac.page("Родитель", texts: ["текст"])
-        let version = try versionNow(mac, page.id)
+        let version = try await versionNow(mac, page.id)
         let subpage = try mac.tree.createSubpage(in: page.id, title: "Новая")
-        try restorer(mac).restore(versionId: version.id, ofPage: page.id)
+        try await restorer(mac).restore(versionId: version.id, ofPage: page.id)
         #expect(try mac.store.pageOutline().first { $0.id == subpage.id }?.parentId == page.id)
         #expect(try mac.blocks(page.id).contains { $0.linkedPageId == subpage.id })
     }
 
     @Test("Ссылка на подстраницу, стёртую навсегда, возвращается ссылкой на удалённую страницу")
-    func erasedSubpageLink() throws {
+    func erasedSubpageLink() async throws {
         let mac = try VersionsTestMac()
         let page = try mac.page("Родитель", texts: ["текст"])
         let subpage = try mac.tree.createSubpage(in: page.id, title: "Стёрта")
-        let version = try versionNow(mac, page.id)
+        let version = try await versionNow(mac, page.id)
         try mac.tree.moveToTrash(subpage.id)
         try mac.tree.deleteForever(subpage.id)
-        try restorer(mac).restore(versionId: version.id, ofPage: page.id)
+        try await restorer(mac).restore(versionId: version.id, ofPage: page.id)
         #expect(try mac.blocks(page.id).contains { $0.linkedPageId == subpage.id })
         #expect(try mac.store.pageOutline().first { $0.id == subpage.id } == nil)
     }
 
     @Test("Восстановление уходит на другой Mac обычными правками; там — новая версия с автором этого Mac")
-    func restoreSyncs() throws {
+    func restoreSyncs() async throws {
         let here = try VersionsTestMac(name: "Mac A", syncs: true)
         let there = try VersionsTestMac(name: "Mac B", syncs: true)
         here.store.keepsDeletionMarks = true
         there.store.keepsDeletionMarks = true
         let page = try here.page("Общая", texts: ["было 1", "было 2"])
         try there.receive(here.takeOutgoing())
-        let version = try versionNow(here, page.id)
+        let version = try await versionNow(here, page.id)
         let blocks = try here.blocks(page.id)
         try here.setText("стало", ofBlock: blocks[0].id)
         try here.store.write { try $0.deleteBlock(blocks[1].id) }
@@ -219,7 +221,7 @@ struct VersionRestoreTests {
         try there.versions.clearDue(pageId: page.id, upTo: there.clock.now.addingTimeInterval(3_600))
         there.recorder.start()
 
-        try restorer(here).restore(versionId: version.id, ofPage: page.id)
+        try await restorer(here).restore(versionId: version.id, ofPage: page.id)
         let outgoing = try here.takeOutgoing()
         #expect(!outgoing.isEmpty, "Восстановление не попало в исходящие")
         try there.receive(outgoing)
@@ -230,13 +232,15 @@ struct VersionRestoreTests {
     }
 
     @Test("Версия есть, текущая страница не изменилась — восстановление ничего не ломает")
-    func restoreSameState() throws {
+    func restoreSameState() async throws {
         let mac = try VersionsTestMac()
         let page = try mac.page("Как есть", texts: ["а", "б"])
         let blocks = try mac.blocks(page.id)
-        let version = try versionNow(mac, page.id)
-        try restorer(mac).restore(versionId: version.id, ofPage: page.id)
+        let version = try await versionNow(mac, page.id)
+        try await restorer(mac).restore(versionId: version.id, ofPage: page.id)
         #expect(try mac.blocks(page.id) == blocks)
+        #expect(try mac.versions.allVersionStamps()[page.id]?.filter(\.isBeforeRestore).map(\.id) == [version.id],
+                "Неснятых правок нет — «до восстановления» — последняя версия")
     }
 }
 

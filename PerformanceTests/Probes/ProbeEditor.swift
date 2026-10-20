@@ -101,6 +101,14 @@ final class ProbeEditor {
         return Double(duration.components.seconds) * 1_000 + Double(duration.components.attoseconds) / 1e15
     }
 
+    /// То же для работы с ожиданием (снимки версий на очереди записывателя).
+    static func measureAsync(_ action: () async throws -> Void) async rethrows -> Double {
+        let start = ContinuousClock.now
+        try await action()
+        let duration = ContinuousClock.now - start
+        return Double(duration.components.seconds) * 1_000 + Double(duration.components.attoseconds) / 1e15
+    }
+
     /// Время процессора потока, мс: почти не зависит от нагрузки остальных программ (основной Mac бывает занят,
     /// виртуальный Mac делит с ним процессор) — по нему сравниваются правки.
     static func measureCPU(_ action: () throws -> Void) rethrows -> (wall: Double, cpu: Double) {

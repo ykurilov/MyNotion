@@ -94,13 +94,20 @@ public final class PageVersionStore: Sendable {
         }
     }
 
+    /// Версия — вид страницы перед восстановлением другой версии: прореживание держит её отдельно от остальных.
+    public func markBeforeRestore(_ versionId: UUID) throws {
+        try database.write { db in
+            try db.execute(sql: "UPDATE page_version SET isBeforeRestore = 1 WHERE id = ?", arguments: [versionId.versionKey])
+        }
+    }
+
     /// Время версий каждой страницы (для прореживания).
     public func allVersionStamps() throws -> [UUID: [VersionStamp]] {
         try database.read { db in
             var result: [UUID: [VersionStamp]] = [:]
-            for row in try Row.fetchAll(db, sql: "SELECT id, pageId, createdAt FROM page_version") {
+            for row in try Row.fetchAll(db, sql: "SELECT id, pageId, createdAt, isBeforeRestore FROM page_version") {
                 guard let id = UUID(uuidString: row["id"]), let pageId = UUID(uuidString: row["pageId"]) else { continue }
-                result[pageId, default: []].append(VersionStamp(id: id, createdAt: row["createdAt"]))
+                result[pageId, default: []].append(VersionStamp(id: id, createdAt: row["createdAt"], isBeforeRestore: row["isBeforeRestore"]))
             }
             return result
         }
@@ -170,14 +177,16 @@ public final class PageVersionStore: Sendable {
     }
 }
 
-/// id и время версии — всё, что нужно прореживанию.
+/// id, время версии и пометка «до восстановления» — всё, что нужно прореживанию.
 public struct VersionStamp: Sendable, Hashable {
     public let id: UUID
     public let createdAt: Date
+    public let isBeforeRestore: Bool
 
-    public init(id: UUID, createdAt: Date) {
+    public init(id: UUID, createdAt: Date, isBeforeRestore: Bool = false) {
         self.id = id
         self.createdAt = createdAt
+        self.isBeforeRestore = isBeforeRestore
     }
 }
 

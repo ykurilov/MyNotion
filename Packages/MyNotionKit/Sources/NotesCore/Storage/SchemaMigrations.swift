@@ -269,7 +269,8 @@ private func addPagesNavigation(_ db: Database) throws {
 /// v8. `page_version_file` — файлы, на которые ссылаются хранимые версии: сборщик сирот их не стирает, пока жива версия
 /// (восстановление вернёт блок с файлом). Записи для уже сохранённых версий — по снимкам: файл версии — тот, чей id есть
 /// в её снимке. `block.movedFrom` — пометка «Переместить в» из `props`, с индексом: восстановление версии ищет копии
-/// своих блоков по id, без полного прохода по блокам.
+/// своих блоков по id, без полного прохода по блокам. `page_version.isBeforeRestore` — снимок «до восстановления»:
+/// прореживание не отдаёт его версии «после» того же часа или дня.
 private func indexVersionFilesAndMoves(_ db: Database) throws {
     try db.execute(sql: """
         CREATE TABLE page_version_file (
@@ -278,6 +279,7 @@ private func indexVersionFilesAndMoves(_ db: Database) throws {
             PRIMARY KEY (versionId, fileId)
         );
         CREATE INDEX page_version_file_by_file ON page_version_file(fileId);
+        ALTER TABLE page_version ADD COLUMN isBeforeRestore BOOLEAN NOT NULL DEFAULT 0;
 
         ALTER TABLE block ADD COLUMN movedFrom TEXT
             GENERATED ALWAYS AS (CASE WHEN json_valid(props) THEN json_extract(props, '$.movedFrom') END) VIRTUAL;
