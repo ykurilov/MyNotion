@@ -197,19 +197,15 @@ struct PageTextEditor: NSViewRepresentable {
     static func dismantleNSView(_ scrollView: NSScrollView, coordinator: Coordinator) {
         guard let textView = scrollView.documentView as? PageTextView else { return }
         textView.commitEdits()
-        // Раскладка закрытой страницы отцепляется от её текста и контейнера: виды абзацев TextKit, которые AppKit
-        // держит дольше страницы, не держат с собой раскладку, абзацы и вложения.
-        if let layoutManager = textView.textLayoutManager {
+        // Строки абзацев видимой части: их фрагменты остаются у видов абзацев, которые AppKit может держать
+        // дольше страницы. Отцеплять раскладку от текста целиком дорого (страница на 10 000 блоков — +30 мс
+        // к переходу), а с окном на экране AppKit сам отпускает эти виды.
+        if let layoutManager = textView.textLayoutManager, let viewport = layoutManager.textViewportLayoutController.viewportRange {
             layoutManager.textViewportLayoutController.delegate = nil
-            // Строки абзацев видимой части — их фрагменты остаются у видов абзацев.
-            if let viewport = layoutManager.textViewportLayoutController.viewportRange {
-                layoutManager.enumerateTextLayoutFragments(from: viewport.location) { fragment in
-                    fragment.invalidateLayout()
-                    return fragment.rangeInElement.endLocation.compare(viewport.endLocation) == .orderedAscending
-                }
+            layoutManager.enumerateTextLayoutFragments(from: viewport.location) { fragment in
+                fragment.invalidateLayout()
+                return fragment.rangeInElement.endLocation.compare(viewport.endLocation) == .orderedAscending
             }
-            layoutManager.textContentManager?.removeTextLayoutManager(layoutManager)
-            layoutManager.textContainer = nil
         }
         detachSubviews(of: textView)
     }

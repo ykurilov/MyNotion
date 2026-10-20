@@ -503,9 +503,9 @@ final class MainWindowModel {
     /// Показать страницу активной вкладки: редактор — только у страницы из дерева; «Недавние», корзина и стёртая
     /// страница редактора не держат.
     func showActiveTab(focus: PageTextView.InitialFocus, remember: Bool = true) {
-        // Страницу записали в базу в обход операций дерева (замеры, импорт): дерево перечитывается один раз.
-        if let pageId = tabs.activePageId, tree.page(pageId) == nil, library.trashedPagesById[pageId] == nil { library.reloadTree() }
-        guard let pageId = tabs.activePageId, tree.page(pageId) != nil else {
+        // Страница не из дерева — в корзине (заглушка) или стёрта («Недавние»: открыть её не выйдет). Страницу,
+        // записанную в обход операций дерева (замеры, импорт), редактор открывает, как раньше.
+        guard let pageId = tabs.activePageId, library.trashedPagesById[pageId] == nil else {
             if openDocument != nil { closeOpenDocument() }
             return
         }
@@ -530,6 +530,9 @@ final class MainWindowModel {
             // Файлы открытой страницы — первыми в очереди скачивания (FR-120).
             library.sync.prioritizeFiles(onPage: pageId)
             if remember { saveWindowState { $0.openPageId = pageId } }
+        } catch NotesStoreError.pageNotFound {
+            // Страница стёрта: вкладка показывает «Недавние».
+            if openDocument != nil { closeOpenDocument() }
         } catch {
             loadError = "Не удалось открыть страницу: \(SaveStatus.reason(for: error))"
         }

@@ -146,8 +146,6 @@ enum TypingBenchmark {
         let richPageId = try RichPageGenerator(parts: BlockKinds.richPageParts).ensure(in: model.store)
         // Картинки и файлы образцов — настоящими файлами: прокрутка уменьшает и рисует картинки, как у Юрия.
         SampleMedia.materialize(in: model.store, attachments: model.library.attachments, pageIds: [richPageId])
-        // Страница записана в обход операций дерева: окно узнаёт о ней из перечитанного дерева.
-        model.library.reloadTree()
         report.richPageOpenMs = try await switchPage(to: richPageId, model: model)
         report.richPageTypingMs = try await type(hugePageKeystrokes, in: try openTextView())
         report.richPageScrollMs = try await scroll(try openTextView(), steps: scrollSteps)
