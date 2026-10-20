@@ -33,6 +33,16 @@ struct PageScrollPlaceTests {
         #expect(place.current() == nil)
     }
 
+    @Test("Редактор показывает другую страницу — места у этой страницы нет, а не чужое")
+    func otherPageEditorIsNotThisPage() throws {
+        let fixture = try longPage()
+        try scroll(fixture, to: 3_000)
+        let place = PageScrollPlace()
+        place.attach(fixture.textView)
+        #expect(place.showsEditor(of: fixture.pageId))
+        #expect(!place.showsEditor(of: UUID()))
+    }
+
     @Test("Ушли со страницы, прокрученной вниз, — новый редактор той же страницы встаёт на то же место")
     func placeSurvivesNewEditor() throws {
         let fixture = try longPage()

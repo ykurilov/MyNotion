@@ -475,6 +475,7 @@ final class MainWindowModel {
         // Подписка на «ушли / открыта» (запись недавних) переходит к новым вкладкам.
         if let previous = self.tabs { tabs.onActivePageChange = previous.onActivePageChange }
         tabs.currentScroll = { [weak self] in self?.scrollPlace.current() }
+        tabs.showsEditor = { [weak self] in self?.scrollPlace.showsEditor(of: $0) ?? false }
         tabs.isGone = { [weak library] in library?.isDeletedForever($0) ?? false }
         tabs.onChange = { [weak self] in self?.tabsDidChange() }
         self.tabs = tabs

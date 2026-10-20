@@ -18,6 +18,11 @@ public final class PageScrollPlace {
     public func current() -> TabScroll? {
         textView?.scrollPlace()
     }
+
+    /// Редактор показывает страницу `pageId`: только тогда `current()` — её место (прошлый редактор ещё может быть жив).
+    public func showsEditor(of pageId: UUID) -> Bool {
+        textView?.document.pageId == pageId
+    }
 }
 
 extension PageTextView {
