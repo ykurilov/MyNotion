@@ -53,6 +53,32 @@ final class RichProbePage {
         window.displayIfNeeded()
     }
 
+    /// Ходы цикла событий в своём пуле автоосвобождения, как в окне приложения. Асинхронное ожидание в тесте XCTest
+    /// пул не освобождает, и всё автоосвобождённое (старые тексты, виды) копится до конца теста.
+    func pump(_ milliseconds: Int) {
+        autoreleasepool {
+            RunLoop.current.run(until: Date().addingTimeInterval(Double(milliseconds) / 1_000))
+            window.displayIfNeeded()
+        }
+    }
+
+    /// Занято в куче процесса, МБ (`heap`): объекты, а не пустые страницы, которые система ещё не забрала.
+    static func heapAllocatedMB() -> Double {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/heap")
+        process.arguments = ["\(ProcessInfo.processInfo.processIdentifier)"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        guard (try? process.run()) != nil else { return 0 }
+        let text = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        process.waitUntilExit()
+        // «All zones: 108207 nodes (80228352 bytes)»
+        guard let line = text.split(separator: "\n").first(where: { $0.contains("All zones:") && $0.contains("bytes)") }),
+              let open = line.firstIndex(of: "("), let bytes = Double(line[line.index(after: open)...].prefix { $0.isNumber }) else { return 0 }
+        return bytes / 1_048_576
+    }
+
     func close() {
         window.orderOut(nil)
         try? FileManager.default.removeItem(at: folder)

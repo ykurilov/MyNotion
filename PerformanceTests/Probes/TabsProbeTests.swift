@@ -22,6 +22,7 @@ final class TabsProbeTests: XCTestCase {
 
     struct Round {
         var total: [Double] = []
+        var totalCPU: [Double] = []
         var open: [Double] = []
         var restore: [Double] = []
         var memoryBefore = 0.0, memoryHalfway = 0.0, memoryAfter = 0.0
@@ -30,17 +31,17 @@ final class TabsProbeTests: XCTestCase {
         var scrollMismatches: [String] = []
     }
 
-    func testTwentyRichTabsSwitchQuicklyWithOneEditor() async throws {
+    func testTwentyRichTabsSwitchQuicklyWithOneEditor() throws {
         let page = try RichProbePage()
         defer { page.close() }
-        let round = try await run(page, sourcePageId: page.pageId, label: "«богатых»")
-        let shots = try await checkReturnSnapshot(page, label: "rich")
+        let round = try run(page, sourcePageId: page.pageId, label: "«богатых»")
+        let shots = try checkReturnSnapshot(page, label: "rich")
         XCTAssertLessThanOrEqual(ProbeEditor.p95(round.total), Self.budgetMs, "Переключение вкладки «богатых» страниц: p95 больше 50 мс")
         assertRound(round)
         XCTAssertTrue(shots, "Снимки до ухода и после возврата различаются")
     }
 
-    func testTwentyTextTabsSwitchQuicklyWithOneEditor() async throws {
+    func testTwentyTextTabsSwitchQuicklyWithOneEditor() throws {
         let page = try RichProbePage()
         defer { page.close() }
         // Страница по 1 000 блоков текста 001 (заполнение «богатой» страницы без частей 002).
@@ -56,7 +57,7 @@ final class TabsProbeTests: XCTestCase {
             }
             return created.id
         }
-        let round = try await run(page, sourcePageId: textPage, label: "текстовых")
+        let round = try run(page, sourcePageId: textPage, label: "текстовых")
         XCTAssertLessThanOrEqual(ProbeEditor.p95(round.total), Self.budgetMs, "Переключение вкладки текстовых страниц: p95 больше 50 мс")
         assertRound(round)
     }
@@ -68,7 +69,7 @@ final class TabsProbeTests: XCTestCase {
     }
 
     /// 20 вкладок — копии `sourcePageId` с новыми id; круг прогрева, затем 100 переключений.
-    private func run(_ page: RichProbePage, sourcePageId: UUID, label: String) async throws -> Round {
+    private func run(_ page: RichProbePage, sourcePageId: UUID, label: String) throws -> Round {
         var tabs: [ProbeTab] = []
         for number in 1...Self.tabCount {
             let id = number == 1 ? sourcePageId : try BranchCopyDraft.copy(sourcePageId, in: page.store)
@@ -83,15 +84,19 @@ final class TabsProbeTests: XCTestCase {
                     page.rememberTop(for: tabs[active].anchor)
                 }
                 active = index
-                let open = try ProbeEditor.measure {
+                let opened = try ProbeEditor.measureCPU {
                     page.show(try RichProbePage.editor(for: tabs[index].pageId, in: page.store))
                     page.window.displayIfNeeded()
                 }
-                let restore = ProbeEditor.measure { page.restore(tabs[index].anchor) }
+                let restored = ProbeEditor.measureCPU { page.restore(tabs[index].anchor) }
+                let open = opened.wall, restore = restored.wall
+                // Ход цикла событий в том же пуле: отложенная раскладка и виды, как в окне.
+                RunLoop.current.run(until: Date().addingTimeInterval(0.005))
                 if record {
                     round.open.append(open)
                     round.restore.append(restore)
                     round.total.append(open + restore)
+                    round.totalCPU.append(opened.cpu + restored.cpu)
                 }
             }
         }
@@ -99,39 +104,42 @@ final class TabsProbeTests: XCTestCase {
         // Круг прогрева: шрифты, подсветка кода, кеши TextKit; места прокрутки встают на свои блоки.
         for index in 0..<Self.tabCount { try switchTo(index, record: false) }
         try switchTo(0, record: false)
-        for _ in 0..<5 { try await page.settle(100) }
-        round.memoryBefore = RichProbePage.footprintMB()
+        for _ in 0..<5 { page.pump(100) }
+        round.memoryBefore = RichProbePage.heapAllocatedMB()
 
         var memoryHalfway = 0.0
         for step in 1...Self.switchCount {
             if step == Self.switchCount / 2 + 1 {
-                for _ in 0..<5 { try await page.settle(100) }
-                memoryHalfway = RichProbePage.footprintMB()
+                for _ in 0..<5 { page.pump(100) }
+                memoryHalfway = RichProbePage.heapAllocatedMB()
             }
             let target = step % Self.tabCount
-            let expected = tabs[target].anchor
-            let expectedY = page.blockTopAfterRestore(of: expected)
-            try switchTo(target, record: true)
-            if step % 10 == 0 { try await page.settle(50) } else { try await Task.sleep(for: .milliseconds(10)) }
-            // Место — по пикселям: верх видимой области там же, где был при уходе (свёрнутые абзацы счёт блоков не путают).
-            let nowY = page.textView.visibleRect.minY
-            if let expectedY, abs(nowY - expectedY) > 1 {
-                round.scrollMismatches.append("вкладка \(target + 1): ждали верх \(Int(expectedY)), стало \(Int(nowY))")
+            try autoreleasepool {
+                let expected = tabs[target].anchor
+                let expectedY = page.blockTopAfterRestore(of: expected)
+                try switchTo(target, record: true)
+                page.pump(step % 10 == 0 ? 50 : 10)
+                // Место: у верха тот же блок, что был при уходе (сдвиг внутри блока TextKit 2 уточняет по ходу раскладки).
+                let nowBlock = page.topVisibleBlockIndex() ?? -1
+                if nowBlock != expected.block {
+                    round.scrollMismatches.append("вкладка \(target + 1): ждали блок \(expected.block), у верха \(nowBlock) (верх \(Int(page.textView.visibleRect.minY)), был \(Int(expectedY ?? -1)))")
+                }
             }
         }
         page.textView.inputContext?.activate()
-        for _ in 0..<5 { try await page.settle(100) }
+        for _ in 0..<5 { page.pump(100) }
         round.liveEditors = PageTextView.livePageEditorCount
         round.allEditors = PageTextView.liveEditorCount
-        round.memoryAfter = RichProbePage.footprintMB()
+        if round.liveEditors > 1 { RichPageLeakProbeTests.saveTraceTrees(of: ["PageTextView"], to: "trace-editors-\(label).txt") }
+        round.memoryAfter = RichProbePage.heapAllocatedMB()
         round.memoryHalfway = memoryHalfway
 
         let summary = """
             Проба вкладок (\(label)): \(Self.switchCount) переключений по кругу 20 страниц — p95 \(ProbeEditor.format(ProbeEditor.p95(round.total))) мс, \
             медиана \(ProbeEditor.format(round.total.sorted()[round.total.count / 2])) мс, худшее \(ProbeEditor.format(round.total.max() ?? 0)) мс (предел 50); \
-            из них открытие p95 \(ProbeEditor.format(ProbeEditor.p95(round.open))) мс, возврат места p95 \(ProbeEditor.format(ProbeEditor.p95(round.restore))) мс
+            время процессора медиана \(ProbeEditor.format(ProbeEditor.median(round.totalCPU))) мс, p95 \(ProbeEditor.format(ProbeEditor.p95(round.totalCPU))) мс; из них открытие p95 \(ProbeEditor.format(ProbeEditor.p95(round.open))) мс, возврат места p95 \(ProbeEditor.format(ProbeEditor.p95(round.restore))) мс
             Проба вкладок (\(label)): живых редакторов страницы \(round.liveEditors), всех с колонками и ячейками \(round.allEditors) \
-            (на открытой странице \(page.textView.document.blocks.isEmpty ? 0 : Self.flowEditorsOnScreen(page))); память после прогрева / 50 / 100 переключений — \
+            (на открытой странице \(page.textView.document.blocks.isEmpty ? 0 : Self.flowEditorsOnScreen(page))); занято в куче после прогрева / 50 / 100 переключений — \
             \(ProbeEditor.format(round.memoryBefore)) / \(ProbeEditor.format(round.memoryHalfway)) / \(ProbeEditor.format(round.memoryAfter)) МБ \
             (прирост \(ProbeEditor.format(round.memoryAfter - round.memoryBefore)), предел 5); \
             место прокрутки — расхождений \(round.scrollMismatches.count)
@@ -142,18 +150,18 @@ final class TabsProbeTests: XCTestCase {
     }
 
     /// Место прокрутки на снимке: уходим с вкладки и возвращаемся — у верха тот же блок, снимки совпадают.
-    private func checkReturnSnapshot(_ page: RichProbePage, label: String) async throws -> Bool {
+    private func checkReturnSnapshot(_ page: RichProbePage, label: String) throws -> Bool {
         let other = try RichProbePage.editor(for: page.pageId, in: page.store)
         let ownId = page.textView.document.pageDocument.page.id
         let anchor = page.scrollAnchor()
-        try await page.settle()
+        page.pump(300)
         guard let before = page.snapshot() else { return false }
         page.show(other)
-        try await page.settle()
+        page.pump(300)
         page.show(try RichProbePage.editor(for: ownId, in: page.store))
         page.window.displayIfNeeded()
         page.restore(anchor)
-        try await page.settle()
+        page.pump(300)
         guard let after = page.snapshot() else { return false }
         let difference = Self.differenceFraction(before, after)
         let shots = [page.save(before, name: "tabs-\(label)-до-ухода", to: self), page.save(after, name: "tabs-\(label)-после-возврата", to: self)]

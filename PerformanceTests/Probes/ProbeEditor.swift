@@ -101,6 +101,22 @@ final class ProbeEditor {
         return Double(duration.components.seconds) * 1_000 + Double(duration.components.attoseconds) / 1e15
     }
 
+    /// Время процессора потока, мс: почти не зависит от нагрузки остальных программ (основной Mac бывает занят,
+    /// виртуальный Mac делит с ним процессор) — по нему сравниваются правки.
+    static func measureCPU(_ action: () throws -> Void) rethrows -> (wall: Double, cpu: Double) {
+        let cpuStart = threadCPUMilliseconds()
+        let wall = try measure(action)
+        return (wall, threadCPUMilliseconds() - cpuStart)
+    }
+
+    static func threadCPUMilliseconds() -> Double {
+        var time = timespec()
+        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &time)
+        return Double(time.tv_sec) * 1_000 + Double(time.tv_nsec) / 1e6
+    }
+
+    static func median(_ samples: [Double]) -> Double { samples.isEmpty ? 0 : samples.sorted()[samples.count / 2] }
+
     static func p95(_ samples: [Double]) -> Double {
         let sorted = samples.sorted()
         return sorted[min(max(Int((Double(sorted.count) * 0.95).rounded(.up)) - 1, 0), sorted.count - 1)]

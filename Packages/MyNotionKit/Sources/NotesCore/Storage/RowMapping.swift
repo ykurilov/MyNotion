@@ -42,6 +42,41 @@ enum JSONColumn {
 
     /// Набор меток полей: `{"поле":"метка",…}` по алфавиту. Пишется на каждую запись,
     /// поэтому собирается вручную, без JSONEncoder (эталон — 100 000 блоков).
+    /// Прочитать набор меток `{"поле":"метка",…}`, как его пишет `encodeClocks`, проходом по байтам: открытие страницы
+    /// на 1 000 блоков разбирает 1 000 таких наборов (research R15). Каждое поле — в `assign` по имени. `false` — запись
+    /// не в этом виде (пробелы, экранирование, не метка): её читает JSONDecoder.
+    static func decodeClocks(_ text: String, _ assign: (_ field: Slice<UnsafeBufferPointer<UInt8>>, HybridTimestamp) -> Void) -> Bool {
+        var text = text
+        return text.withUTF8 { bytes in
+            let quote = UInt8(ascii: "\""), end = bytes.count
+            guard end >= 2, bytes[0] == UInt8(ascii: "{"), bytes[end - 1] == UInt8(ascii: "}") else { return false }
+            var position = 1
+            if position == end - 1 { return true }
+            while true {
+                guard bytes[position] == quote else { return false }
+                let keyStart = position + 1
+                var keyEnd = keyStart
+                while keyEnd < end, bytes[keyEnd] != quote, bytes[keyEnd] != UInt8(ascii: "\\") { keyEnd += 1 }
+                let stampStart = keyEnd + 3
+                guard keyEnd < end, bytes[keyEnd] == quote, stampStart + HybridTimestamp.textLength < end,
+                      bytes[keyEnd + 1] == UInt8(ascii: ":"), bytes[keyEnd + 2] == quote,
+                      bytes[stampStart + HybridTimestamp.textLength] == quote,
+                      let stamp = HybridTimestamp.parse(bytes[stampStart..<stampStart + HybridTimestamp.textLength]) else { return false }
+                assign(bytes[keyStart..<keyEnd], stamp)
+                position = stampStart + HybridTimestamp.textLength + 1
+                if bytes[position] == UInt8(ascii: "}") { return position == end - 1 }
+                guard bytes[position] == UInt8(ascii: ",") else { return false }
+                position += 1
+            }
+        }
+    }
+
+    /// Имя поля из записи совпадает с `name`.
+    static func field(_ bytes: Slice<UnsafeBufferPointer<UInt8>>, is name: StaticString) -> Bool {
+        guard bytes.count == name.utf8CodeUnitCount else { return false }
+        return name.withUTF8Buffer { expected in zip(bytes, expected).allSatisfy { $0 == $1 } }
+    }
+
     static func encodeClocks(_ clocks: [(field: String, stamp: HybridTimestamp?)]) -> String {
         let pairs = clocks
             .compactMap { field, stamp in stamp.map { (field, $0) } }
@@ -72,7 +107,42 @@ extension PageFieldClocks {
     }
 }
 
+extension PageFieldClocks {
+    init(databaseJSON text: String) throws {
+        var clocks = PageFieldClocks()
+        let isPlain = JSONColumn.decodeClocks(text) { field, stamp in
+            for (name, path) in Self.databaseFields where JSONColumn.field(field, is: name) {
+                clocks[keyPath: path] = stamp
+                return
+            }
+        }
+        self = isPlain ? clocks : try JSONDecoder().decode(PageFieldClocks.self, from: Data(text.utf8))
+    }
+
+    nonisolated(unsafe) private static let databaseFields: [(StaticString, WritableKeyPath<PageFieldClocks, HybridTimestamp?>)] = [
+        ("title", \.title), ("icon", \.icon), ("placement", \.placement), ("trashedAt", \.trashedAt), ("cover", \.cover),
+        ("isFullWidth", \.isFullWidth), ("isSmallText", \.isSmallText), ("favorite", \.favorite), ("visitedAt", \.visitedAt),
+        ("isTemplate", \.isTemplate),
+    ]
+}
+
 extension BlockFieldClocks {
+    init(databaseJSON text: String) throws {
+        var clocks = BlockFieldClocks()
+        let isPlain = JSONColumn.decodeClocks(text) { field, stamp in
+            for (name, path) in Self.databaseFields where JSONColumn.field(field, is: name) {
+                clocks[keyPath: path] = stamp
+                return
+            }
+        }
+        self = isPlain ? clocks : try JSONDecoder().decode(BlockFieldClocks.self, from: Data(text.utf8))
+    }
+
+    nonisolated(unsafe) private static let databaseFields: [(StaticString, WritableKeyPath<BlockFieldClocks, HybridTimestamp?>)] = [
+        ("kindAndIndent", \.kindAndIndent), ("text", \.text), ("isChecked", \.isChecked), ("placement", \.placement),
+        ("color", \.color), ("props", \.props), ("deleted", \.deleted),
+    ]
+
     var databaseJSON: String {
         JSONColumn.encodeClocks([("kindAndIndent", kindAndIndent), ("text", text), ("isChecked", isChecked),
                                  ("placement", placement), ("color", color), ("props", props), ("deleted", deleted)])
@@ -96,7 +166,7 @@ extension Page {
             favorite: (row["favorite"] as String?).flatMap(FractionalSortKey.init(rawValue:)),
             visitedAt: row["visitedAt"],
             isTemplate: row["isTemplate"],
-            fieldClocks: try RowDecoding.json(PageFieldClocks.self, row, "fieldClocks")
+            fieldClocks: try PageFieldClocks(databaseJSON: row["fieldClocks"])
         )
     }
 
@@ -139,15 +209,15 @@ extension Block {
             id: try RowDecoding.uuid(row, "id"),
             pageId: try RowDecoding.uuid(row, "pageId"),
             kind: kind,
-            text: InlineText(row["text"], runs: try RowDecoding.json([StyledRun].self, row, "textStyles")),
+            text: InlineText(row["text"], runs: (row["textStyles"] as String) == "[]" ? [] : try RowDecoding.json([StyledRun].self, row, "textStyles")),
             indent: row["indent"],
             isChecked: row["isChecked"],
             linkedPageId: RowDecoding.optionalUUID(row, "linkedPageId"),
             sortKey: try RowDecoding.sortKey(row),
             containerId: RowDecoding.optionalUUID(row, "containerId"),
             color: try color.map { try JSONDecoder().decode(BlockColor.self, from: Data($0.utf8)) } ?? .none,
-            props: try RowDecoding.json(BlockProps.self, row, "props"),
-            fieldClocks: try RowDecoding.json(BlockFieldClocks.self, row, "fieldClocks"),
+            props: (row["props"] as String) == "{}" ? .empty : try RowDecoding.json(BlockProps.self, row, "props"),
+            fieldClocks: try BlockFieldClocks(databaseJSON: row["fieldClocks"]),
             textBaseClock: textBaseClock.flatMap(HybridTimestamp.init)
         )
     }
