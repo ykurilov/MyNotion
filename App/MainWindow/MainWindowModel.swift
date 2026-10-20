@@ -18,6 +18,8 @@ final class MainWindowModel {
     /// Окно на экране: по нему библиотека знает, в каком окне работают сейчас.
     @ObservationIgnored weak var window: NSWindow?
     private(set) var collapsedPageIds: Set<UUID> = []
+    /// Свёрнутые разделы панели («Недавние», «Избранное»): вид окна, хранится на этом Mac.
+    private(set) var collapsedSections: Set<SidebarSectionID> = []
     private(set) var sidebarWidth: Double = Metrics.Sidebar.defaultWidth
     /// Боковая панель спрятана шторкой (⌘⌥S).
     private(set) var isSidebarCollapsed = false
@@ -32,6 +34,13 @@ final class MainWindowModel {
     @ObservationIgnored private(set) var search: PageSearchController!
     /// Вкладки окна (003, research R5). Этап 0: одна вкладка — поведение 002; новую вкладку и полосу включает US3.
     @ObservationIgnored private(set) var tabs: WindowTabs!
+    /// Запись открытий для «Недавних»: страница, пробывшая в активной вкладке 2 секунды или с правкой.
+    @ObservationIgnored private var visits: VisitRecorder!
+    /// Галерея снимков не засоряет «Недавние» открытиями, которых никто не делал.
+    @ObservationIgnored var recordsVisits = true
+    @ObservationIgnored private var editObserver: (any NSObjectProtocol)?
+    /// «Показать все» в «Недавних»: список открывают вкладки (US3); пока не подключено — строка ничего не делает.
+    @ObservationIgnored var showAllRecent: (() -> Void)?
 
     /// `opening` — страница нового окна; `nil` — последняя открытая (вид окна в базе) или первая в дереве.
     init(library: PagesLibrary, opening pageId: UUID?) {
@@ -39,6 +48,7 @@ final class MainWindowModel {
         treeOperations = PageTreeOperations(store: library.store)
         let windowState = try? library.store.windowState(WindowState.mainWindowId)
         collapsedPageIds = windowState?.collapsedPageIds ?? []
+        collapsedSections = windowState?.collapsedSidebarSections ?? []
         sidebarWidth = windowState?.sidebarWidth ?? Metrics.Sidebar.defaultWidth
         isSidebarCollapsed = windowState?.isSidebarCollapsed ?? false
         treeOperations.onChange = { [weak library] touched in library?.treeDidChange(touched) }
@@ -55,6 +65,19 @@ final class MainWindowModel {
         let tree = library.tree
         let lastOpen = (pageId ?? windowState?.openPageId).flatMap { tree.page($0)?.id }
         tabs = WindowTabs(state: windowState?.tabs, openPageId: lastOpen)
+        visits = VisitRecorder(store: library.store, onRecorded: { [weak library] _ in library?.reloadRecents() })
+        tabs.onActivePageChange = { [weak self] _, opened in
+            guard let self, recordsVisits else { return }
+            visits.pageOpened(opened)
+        }
+        // Правка открытой страницы (набор, название) — сразу запись открытия.
+        editObserver = NotificationCenter.default.addObserver(forName: PageDocument.didApplyLocalEdits, object: nil, queue: .main) { [weak self] note in
+            guard let document = note.object as? PageDocument else { return }
+            MainActor.assumeIsolated {
+                guard let self, self.recordsVisits, document === self.openDocument else { return }
+                self.visits.pageEdited(document.pageId)
+            }
+        }
         // Хранение вкладок — в `window_state.tabs`, только на этом Mac.
         tabs.onChange = { [weak self] in
             guard let self else { return }
@@ -78,6 +101,9 @@ final class MainWindowModel {
 
     /// Окно закрыли: его страница больше не держится открытой (записывается, если других окон с ней нет).
     func windowClosed() {
+        if let editObserver { NotificationCenter.default.removeObserver(editObserver) }
+        editObserver = nil
+        visits.pageOpened(Optional<UUID>.none)
         if let openDocument { openDocuments.release(openDocument.pageId) }
         openDocument = nil
         library.unregister(self)
@@ -199,6 +225,28 @@ final class MainWindowModel {
         performTreeOperation { try treeOperations.emptyTrash() }
     }
 
+    /// Щелчок по заголовку раздела панели: свернуть или раскрыть.
+    func toggleSection(_ section: SidebarSectionID) {
+        if !collapsedSections.insert(section).inserted { collapsedSections.remove(section) }
+        saveWindowState { $0.collapsedSidebarSections = collapsedSections }
+    }
+
+    // MARK: Избранное
+
+    func isFavorite(_ pageId: UUID) -> Bool { tree.page(pageId)?.favorite != nil }
+
+    /// ☆ и «Добавить в избранное / Убрать из избранного».
+    func toggleFavorite(_ pageId: UUID) {
+        performTreeOperation {
+            if isFavorite(pageId) { try treeOperations.removeFromFavorites(pageId) } else { try treeOperations.addToFavorites(pageId) }
+        }
+    }
+
+    /// Перетащили в «Избранном»: место среди остальных избранных.
+    func moveFavorite(_ pageId: UUID, toIndex index: Int) {
+        performTreeOperation { try treeOperations.moveFavorite(pageId, toIndex: index) }
+    }
+
     func setCollapsedPages(_ pageIds: Set<UUID>) {
         collapsedPageIds = pageIds
         saveWindowState { $0.collapsedPageIds = pageIds }
@@ -316,6 +364,7 @@ final class MainWindowModel {
     private func closeOpenDocument() {
         if let openDocument { openDocuments.release(openDocument.pageId) }
         openDocument = nil
+        visits.pageOpened(Optional<UUID>.none)
         saveWindowState { $0.openPageId = nil }
     }
 

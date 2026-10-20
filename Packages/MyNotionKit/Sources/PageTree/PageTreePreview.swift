@@ -28,6 +28,30 @@ public enum PageTreePreview {
         return true
     }
 
+    /// Меню строки страницы в разделе «Избранное»: открыто на экране, пока `whileOpen` не отработает (снимок),
+    /// и после него закрывается. Меню системное — показывается, пока не закрыто; `false` — строки в разделе нет.
+    @discardableResult
+    public static func showFavoriteRowMenu(ofPage pageId: UUID, in window: NSWindow, whileOpen: @escaping @MainActor () -> Void) -> Bool {
+        guard let outline = window.contentView.flatMap({ findOutline(identifier: "favorites-tree", in: $0) }),
+              let source = outline.dataSource as? PageOutlineDataSource,
+              let row = (0..<outline.numberOfRows).first(where: { (outline.item(atRow: $0) as? PageOutlineItem)?.pageId == pageId }),
+              let rowView = outline.rowView(atRow: row, makeIfNecessary: false) else { return false }
+        let menu = source.pageMenu(for: pageId)
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(600)) {
+            MainActor.assumeIsolated {
+                whileOpen()
+                menu.cancelTracking()
+            }
+        }
+        menu.popUp(positioning: nil, at: NSPoint(x: 120, y: rowView.bounds.maxY + 4), in: rowView)
+        return true
+    }
+
+    private static func findOutline(identifier: String, in view: NSView) -> PageOutlineView? {
+        if let outline = view as? PageOutlineView, outline.accessibilityIdentifier() == identifier { return outline }
+        return view.subviews.lazy.compactMap { findOutline(identifier: identifier, in: $0) }.first
+    }
+
     /// Снять подсветку «под мышью» со всех строк.
     public static func clearHover(in window: NSWindow) {
         guard let outline = outline(in: window) else { return }
@@ -41,7 +65,8 @@ public enum PageTreePreview {
     }
 
     private static func findOutline(in view: NSView) -> PageOutlineView? {
-        if let outline = view as? PageOutlineView { return outline }
+        // Дерево «Страницы», а не разделы «Избранное» и «Недавние» над ним.
+        if let outline = view as? PageOutlineView, outline.accessibilityIdentifier() == "page-tree" { return outline }
         return view.subviews.lazy.compactMap(findOutline).first
     }
 }

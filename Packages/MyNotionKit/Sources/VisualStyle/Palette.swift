@@ -23,6 +23,8 @@ public enum Palette {
     /// Линия разделителя на странице: в тёмной теме Notion 7.39 светлее рамок — ≈ rgb(55, 55, 53) по снимку 19.10.2026.
     public static let dividerLine = themed(light: .hex(0xE6E5E3), dark: .hex(0x373735))
     /// Строка дерева под мышью или выбранная, кнопки при наведении.
+    /// Закрашенная «★» избранной страницы в верхней полосе.
+    public static let favoriteStar = themed(light: .hex(0xE8A600), dark: .hex(0xF0B72F))
     public static let hoverBackground = themed(light: .rgba(33, 27, 23, 0.05), dark: .rgba(255, 255, 255, 0.055))
     public static let inlineCodeText = themed(light: .hex(0xCF5148), dark: .hex(0xCF5148))
     public static let inlineCodeBackground = themed(light: .rgba(33, 27, 23, 0.05), dark: .rgba(255, 255, 255, 0.055))
