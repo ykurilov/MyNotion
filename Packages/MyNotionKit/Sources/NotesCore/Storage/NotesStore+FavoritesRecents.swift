@@ -35,7 +35,7 @@ extension NotesStore {
         """
 
     /// Страницы в корзине вместе с подстраницами (корзина помечает только корень ветки).
-    private static func trashedPageIds(_ db: Database) throws -> Set<UUID> {
+    static func trashedPageIds(_ db: Database) throws -> Set<UUID> {
         try branchIds(db, rootsWhere: "trashedAt IS NOT NULL")
     }
 

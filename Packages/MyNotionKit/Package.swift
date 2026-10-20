@@ -94,7 +94,7 @@ let package = Package(
         .testTarget(name: "RemindersTests", dependencies: ["Reminders", "NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "EmbeddedMediaTests", dependencies: ["EmbeddedMedia"]),
         .testTarget(name: "BacklinksTests", dependencies: ["Backlinks", "NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
-        .testTarget(name: "PageVersionsTests", dependencies: ["PageVersions", "NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
+        .testTarget(name: "PageVersionsTests", dependencies: ["PageVersions", "NotesCore", "Sync", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "NavigationTests", dependencies: ["Navigation", "NotesCore"]),
         .testTarget(name: "PagePickerTests", dependencies: ["PagePicker", "NotesCore"]),
         .testTarget(name: "PageCoverTests", dependencies: ["PageCover", "NotesCore", "Attachments", "VisualStyle"]),

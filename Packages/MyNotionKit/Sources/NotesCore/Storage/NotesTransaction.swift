@@ -19,6 +19,15 @@ public final class NotesTransaction {
     /// Соединение этой транзакции — для таблиц модулей-добавок (синхронизация).
     package var database: Database { db }
 
+    /// Имя Mac, чьи правки записывает транзакция (пачка синхронизации); `nil` — правки этого Mac.
+    /// По нему история версий подписывает автора (research R11).
+    public internal(set) var replicatedFromDeviceName: String?
+
+    /// Транзакция применяет пачку с другого Mac.
+    package func markReplicated(fromDeviceName name: String) {
+        replicatedFromDeviceName = name
+    }
+
     /// Выполнить после успешной фиксации транзакции (например, разбудить отправку).
     package func afterCommit(_ action: @escaping @Sendable () -> Void) {
         db.afterNextTransaction { _ in action() }
@@ -440,6 +449,12 @@ public final class NotesTransaction {
             db.cachedStatement(sql: "SELECT EXISTS (SELECT 1 FROM page WHERE id = ?)"),
             arguments: [id.databaseText]
         ) ?? false
+    }
+
+    /// Живые блоки вне страницы `pageId` с ключом `movedFrom` в свойствах (восстановление версии).
+    func blocksWithMovedFrom(outsidePage pageId: UUID) throws -> [Block] {
+        try Row.fetchAll(db, sql: "SELECT * FROM block WHERE isDeleted = 0 AND pageId != ? AND props LIKE '%\"movedFrom\"%'",
+                         arguments: [pageId.databaseText]).map(Block.init(row:))
     }
 
     private func storedBlock(_ id: UUID) throws -> Block? {

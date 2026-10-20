@@ -48,6 +48,7 @@ public struct ChangeMerger: Sendable {
     }
 
     public func apply(_ batch: SyncBatch, in transaction: NotesTransaction) throws -> MergeReport {
+        transaction.markReplicated(fromDeviceName: batch.deviceName)
         var run = MergeRun(transaction: transaction, sourceDeviceName: batch.deviceName, localDeviceName: localDeviceName,
                            snapshotKnowledge: nil)
         try run.merge(batch.changes)
@@ -57,6 +58,7 @@ public struct ChangeMerger: Sendable {
     /// Снимок всех записей с другого Mac: как пачка, но у текста нет версии начала правки — вместо неё
     /// известное снимку (`knowledge`).
     public func apply(_ snapshot: SyncSnapshot, in transaction: NotesTransaction) throws -> MergeReport {
+        transaction.markReplicated(fromDeviceName: "другой Mac")
         var run = MergeRun(transaction: transaction, sourceDeviceName: "другом Mac", localDeviceName: localDeviceName,
                            snapshotKnowledge: snapshot.knowledge)
         try run.merge(snapshot.changes)

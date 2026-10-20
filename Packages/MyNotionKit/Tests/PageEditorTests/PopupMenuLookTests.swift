@@ -103,7 +103,7 @@ struct PopupMenuLookTests {
         #expect(abs(rows[1].minY - rows[0].minY - 29) < 0.01)
         #expect(abs(rows[2].minY - rows[1].minY - 37) < 0.01, "Черта между группами")
         #expect(!view.isScrollable && view.rowViews.allSatisfy { !$0.isHidden })
-        #expect(view.fittingMenuSize.height == rows[3].maxY - top + Metrics.PopupMenu.verticalPadding)
+        #expect(view.fittingMenuSize.height == rows[rows.count - 1].maxY - top + Metrics.PopupMenu.verticalPadding)
     }
 
     @Test("Меню «/» по-прежнему прокручивается после 8 строк")

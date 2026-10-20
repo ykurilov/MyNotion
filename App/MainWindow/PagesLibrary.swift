@@ -6,6 +6,7 @@ import Observation
 import PageEditor
 import PageSearch
 import PageTree
+import PageVersions
 import VisualStyle
 
 /// Общее для всех окон приложения (FR-029): база, открытые страницы, дерево, корзина и синхронизация.
@@ -26,6 +27,8 @@ final class PagesLibrary {
     /// Избранные страницы по порядку и пять последних, где побывали (US2). Корзина в них не попадает.
     private(set) var favoritePageIds: [UUID] = []
     private(set) var recentPageIds: [UUID] = []
+    /// Шаблоны по порядку (US7): свой раздел панели.
+    private(set) var templatePageIds: [UUID] = []
     /// Меняется при каждом перечитывании «Избранного» и «Недавних»: разделы перечитывают строки.
     private(set) var sectionsRevision = 0
     /// Страницы корзины вместе с подстраницами — для упоминаний «Удалённая страница».
@@ -36,6 +39,8 @@ final class PagesLibrary {
     @ObservationIgnored let reminders: ReminderNotifications
     /// Синхронизация между Mac (US5); выключена — ничего не делает.
     @ObservationIgnored private(set) var sync: SyncController!
+    /// История версий страниц (003, US6).
+    @ObservationIgnored private(set) var versions: AppPageVersions!
     /// Окно, открытое при запуске: его ждут замеры, галерея и снимки окна.
     @ObservationIgnored private(set) var firstWindow: MainWindowModel!
     @ObservationIgnored private var isFirstWindowClaimed = false
@@ -47,7 +52,7 @@ final class PagesLibrary {
         weak var model: MainWindowModel?
     }
 
-    init(store: NotesStore, startsSync: Bool = true, reminders: ReminderNotifications) {
+    init(store: NotesStore, startsSync: Bool = true, reminders: ReminderNotifications, versionTiming: PageVersionRecorder.Timing = .standard) {
         self.store = store
         self.reminders = reminders
         attachments = AttachmentStore(store: store, folder: AttachmentStore.folder(forDatabaseAt: store.database.url))
@@ -57,6 +62,7 @@ final class PagesLibrary {
         reloadTree()
         sync = SyncController(store: store, openDocuments: openDocuments, attachments: attachments, startsEngine: startsSync)
         sync.onRemoteChange = { [weak self] _ in self?.remoteChangesApplied() }
+        versions = AppPageVersions(store: store, deviceName: sync.deviceName, timing: versionTiming)
         firstWindow = MainWindowModel(library: self, opening: nil, restoresTabs: true)
         reminders.openBlock = { [weak self] pageId, blockId in self?.openBlock(blockId, inPage: pageId) }
     }
@@ -129,6 +135,7 @@ final class PagesLibrary {
         treeRevision += 1
         favoritePageIds = ((try? store.favoritePages()) ?? []).map(\.id)
         recentPageIds = recentIds()
+        templatePageIds = tree.templates.map(\.id)
         sectionsRevision += 1
     }
 

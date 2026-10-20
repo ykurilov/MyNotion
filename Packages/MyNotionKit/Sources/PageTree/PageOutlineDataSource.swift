@@ -55,8 +55,9 @@ final class PageOutlineItem: NSObject {
 @MainActor
 final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegate {
     /// Что показывает список: дерево «Страницы» или раздел над ним — «Избранное» (корни — избранные страницы, подстраницы
-    /// раскрываются; тянуть можно только корни) и «Недавние» (плоский список).
-    enum Kind { case tree, favorites, recents }
+    /// раскрываются; тянуть можно только корни), «Шаблоны» (корни — шаблоны, подстраницы раскрываются; не тянется)
+    /// и «Недавние» (плоский список). В «Страницах» шаблонов нет — они в своём разделе.
+    enum Kind { case tree, favorites, templates, recents }
 
     let kind: Kind
     var actions: PageTreeActions
@@ -86,6 +87,7 @@ final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineV
         switch kind {
         case .tree: break
         case .favorites: outlineView.useSectionIdentifier("favorites", label: "Избранное")
+        case .templates: outlineView.useSectionIdentifier("templates", label: "Шаблоны")
         case .recents: outlineView.useSectionIdentifier("recents", label: "Недавние")
         }
         outlineView.dataSource = self
@@ -108,11 +110,11 @@ final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineV
     func show(_ tree: PageTreeSnapshot, collapsedPageIds: Set<UUID>, selectedPageId: UUID?,
               rootPageIds: [UUID] = [], expandedPageIds: Set<UUID> = []) {
         guard let outlineView else { return }
-        self.tree = tree
+        self.tree = kind == .tree ? tree.withoutTemplates() : tree
         self.collapsedPageIds = collapsedPageIds
         self.rootPageIds = rootPageIds
         self.expandedPageIds = expandedPageIds
-        items = items.filter { tree.page($0.key) != nil }
+        items = items.filter { self.tree.page($0.key) != nil }
         isApplyingState = true
         defer { isApplyingState = false }
         outlineView.reloadData()
@@ -184,7 +186,7 @@ final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineV
         case (.tree, _): tree.children(of: parentId)
         case (_, nil): rootPageIds.compactMap { tree.page($0) }
         case (.recents, _): []
-        case (.favorites, _): tree.children(of: parentId)
+        case (.favorites, _), (.templates, _): tree.children(of: parentId)
         }
     }
 
@@ -192,6 +194,7 @@ final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineV
         switch kind {
         case .tree: "page-tree"
         case .favorites: "favorites-row"
+        case .templates: "templates-row"
         case .recents: "recents-row"
         }
     }
@@ -203,7 +206,7 @@ final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineV
     // MARK: Перетаскивание
 
     func outlineView(_ outlineView: NSOutlineView, pasteboardWriterForItem item: Any) -> (any NSPasteboardWriting)? {
-        guard let item = item as? PageOutlineItem, kind != .recents else { return nil }
+        guard let item = item as? PageOutlineItem, kind != .recents, kind != .templates else { return nil }
         if kind == .favorites, !rootPageIds.contains(item.pageId) { return nil }
         let pasteboardItem = NSPasteboardItem()
         pasteboardItem.setString(item.pageId.uuidString, forType: dragType)

@@ -87,6 +87,14 @@ public enum GalleryScene: Hashable, Sendable {
     /// Вкладки окна (US3): полоса с 1, 3 и 12 вкладками, «×» под мышью, панель спрятана, «Открыть в новой вкладке»,
     /// «Недавние» во вкладке, заглушка «Страница в корзине».
     case tabs(GalleryTabs)
+    /// Окно «Переместить в…» (US4): без запроса — недавние и дерево, своя страница серая; с запросом — выдача поиска.
+    case movePicker(GalleryMovePicker)
+    /// История версий (US6).
+    case versionHistory(GalleryVersionHistory)
+    /// Шаблоны (US7): раздел «Шаблоны» в панели, строки на пустой странице, поиск «Ещё шаблоны…».
+    case templates(GalleryTemplates)
+    /// Обратные ссылки (US5): строка «↗ 3 обратные ссылки» под названием и открытый список источников.
+    case backlinks(GalleryBacklinks)
 }
 
 public enum GalleryMarkdownExport: String, Hashable, Sendable, CaseIterable {
@@ -178,6 +186,30 @@ public enum GalleryTheme: String, Hashable, Sendable, CaseIterable, Codable {
     public var title: String { self == .light ? "светлая" : "тёмная" }
 }
 
+/// Шаблоны страниц (US7; в Notion 7.39 «Шаблоны» — отдельный раздел панели и строки на пустой странице).
+public enum GalleryTemplates: CaseIterable, Sendable {
+    /// Раздел «Шаблоны» под деревом «Страниц»: три шаблона, у одного — подстраницы.
+    case sidebarSection
+    /// Пустая новая страница: серый «Шаблоны» и строки шаблонов под первой строкой.
+    case emptyPageRows
+    /// Строк больше пяти: «Ещё шаблоны…» открыло поиск по шаблонам.
+    case searchPopover
+}
+
+/// История версий (US6; сверка — `notion-version-*.png`).
+public enum GalleryVersionHistory: CaseIterable, Sendable {
+    /// Список «1 минута», выбрана прошлая версия: справа она с подсветкой отличий.
+    case list
+    /// Группировка «15 минут».
+    case grouped
+    /// Раскрытая версия: «← Все версии» и что менялось.
+    case details
+    /// Окно «Что будет восстановлено».
+    case restoreDialog
+    /// Полоса «Страница восстановлена» над страницей.
+    case restoredBanner
+}
+
 /// Состояния разделов «Недавние» и «Избранное» (US2).
 public enum GallerySidebarSections: CaseIterable, Sendable {
     /// Пять недавних со строкой «Показать все» и избранное, у одной избранной раскрыты подстраницы.
@@ -228,7 +260,42 @@ public struct GalleryShot: Hashable, Sendable {
 public enum GalleryCatalog {
     /// Все состояния по порядку съёмки.
     public static let states: [GalleryState] = pageStates + blockStates + kindSampleStates + inlineAtomStates + editingStates + sidebarStates
-        + trashStates + importStates + exportStates + syncStates + tabsStates
+        + trashStates + importStates + exportStates + syncStates + tabsStates + copiesStates + versionHistoryStates + templatesStates + backlinksStates
+
+    /// Обратные ссылки (US5, contracts/pages-ui.md, «Обратные ссылки»): строка под названием и список источников.
+    static let backlinksStates: [GalleryState] = [
+        GalleryState("backlinks-row", .backlinks(.row), "Под названием серая строка «↗ 3 обратные ссылки»", section: "Ссылки"),
+        GalleryState("backlinks-list", .backlinks(.list), "Щелчок по строке: список страниц — иконка, название, путь серым", section: "Ссылки"),
+    ]
+
+    /// Копии (US4, contracts/pages-ui.md, «Окно «Переместить в»»; сверка — снимок Notion 7.39 `notion-move-to.png`).
+    /// Пункт «Переместить в» меню блока — в снимке `block-menu`.
+    static let copiesStates: [GalleryState] = [
+        GalleryState("move-picker", .movePicker(.recentAndTree), "«Переместить в…» страницы: недавние, дерево, сама страница серая",
+                     section: "Копии"),
+        GalleryState("move-picker-query", .movePicker(.query), "«Переместить в…» с запросом: выдача поиска с путём", section: "Копии"),
+    ]
+
+    /// История версий (US6, contracts/pages-ui.md, «История версий»).
+    static let versionHistoryStates: [GalleryState] = [
+        GalleryState("version-history-list", .versionHistory(.list), "«История версий»: список, прошлая версия с подсветкой отличий",
+                     section: "История версий", narrowToo: true),
+        GalleryState("version-history-grouped", .versionHistory(.grouped), "Группировка «15 минут»", section: "История версий"),
+        GalleryState("version-history-details", .versionHistory(.details), "Раскрытая версия: что менялось", section: "История версий"),
+        GalleryState("version-history-restore", .versionHistory(.restoreDialog), "Окно «Что будет восстановлено»",
+                     section: "История версий"),
+        GalleryState("version-restored-banner", .versionHistory(.restoredBanner), "После восстановления: полоса «Страница восстановлена»",
+                     section: "История версий"),
+    ]
+
+    /// Шаблоны (US7, contracts/pages-ui.md, «Шаблоны на пустой странице»). Снимаются последними: образец шаблонов
+    /// после съёмки снимается, чтобы строки шаблонов не попали на другие пустые страницы.
+    static let templatesStates: [GalleryState] = [
+        GalleryState("templates-sidebar", .templates(.sidebarSection), "Раздел «Шаблоны» в панели: три шаблона", section: "Шаблоны"),
+        GalleryState("templates-empty-page", .templates(.emptyPageRows), "Пустая страница: заголовок «Шаблоны» и строки шаблонов",
+                     section: "Шаблоны", narrowToo: true),
+        GalleryState("templates-search", .templates(.searchPopover), "Больше пяти шаблонов: «Ещё шаблоны…» открыло поиск", section: "Шаблоны"),
+    ]
 
     /// Вкладки окна (US3, contracts/pages-ui.md, «Верхняя полоса окна»; сверка — снимок Notion 7.39 `notion-sidebar-tabs-topbar.png`).
     static let tabsStates: [GalleryState] = [
@@ -489,6 +556,18 @@ public enum GalleryCatalog {
         GalleryState("markdown-export-failed", .markdownExport(.failed),
                      "Выгрузка не удалась: понятная ошибка и «Закрыть»", section: "Выгрузка в Markdown"),
     ]
+}
+
+/// Состояния обратных ссылок для галереи (US5).
+public enum GalleryBacklinks: Hashable, Sendable, CaseIterable {
+    case row
+    case list
+}
+
+/// Состояния окна «Переместить в…» для галереи (US4).
+public enum GalleryMovePicker: Hashable, Sendable {
+    case recentAndTree
+    case query
 }
 
 /// Состояния вкладок окна для галереи (US3).

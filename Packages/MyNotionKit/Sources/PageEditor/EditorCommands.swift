@@ -40,6 +40,8 @@ public enum EditorCommand: Sendable, Hashable {
     case insertInlineEquation
     /// ⌘D: копия блоков со всем вложенным сразу под ними, как у Notion.
     case duplicateBlocks
+    /// ⇧⌘P: «Переместить в» для выделенных блоков (без выделенных блоков клавиша — у окна: переносит страницу).
+    case moveBlocksToPage
 }
 
 /// Какие клавиши какое действие запускают. ⌘K свободна: ссылка — вставкой адреса или «Формат → Ссылка».
@@ -57,6 +59,7 @@ public enum EditorKeyBindings {
         case ("\r", [.command]), ("\u{3}", [.command]): return .toggleChecked
         case ("t", [.command, .option]): return .toggleAllCollapsed
         case ("d", [.command]): return .duplicateBlocks
+        case ("p", [.command, .shift]): return .moveBlocksToPage
         case ("\u{F700}", [.option, .shift]): return .moveBlocksUp
         case ("\u{F701}", [.option, .shift]): return .moveBlocksDown
         default: return nil
@@ -77,7 +80,7 @@ public enum EditorKeyBindings {
         return command(characters: latin, modifiers: event.modifierFlags)
     }
 
-    /// Клавиши B, I, X, E, U, H, T, D на месте букв латинской раскладки.
+    /// Клавиши B, I, X, E, U, H, T, D, P на месте букв латинской раскладки.
     private static func latinLetter(forKeyCode keyCode: UInt16) -> String? {
         switch keyCode {
         case 11: "b"
@@ -88,6 +91,7 @@ public enum EditorKeyBindings {
         case 4: "h"
         case 17: "t"
         case 2: "d"
+        case 35: "p"
         default: nil
         }
     }

@@ -138,7 +138,10 @@ public final class PageHeaderView: NSView, NSTextFieldDelegate {
             button.frame = NSRect(x: x, y: titleTop - metrics.titleSpacing - metrics.height, width: button.fittingWidth, height: metrics.height)
             x += button.fittingWidth + metrics.spacing
         }
-        underTitle?.view.frame = NSRect(x: 0, y: titleField.frame.maxY, width: bounds.width, height: underTitle?.height ?? 0)
+        // Подложка строки выступает левее названия на её поле — текст стоит под началом названия (как у кнопок выше).
+        let underTitleInset = underTitle?.view is BacklinksRow ? Metrics.BacklinksRow.horizontalPadding - Metrics.Page.emptyHintCaretGap : 0
+        underTitle?.view.frame = NSRect(x: -underTitleInset, y: titleField.frame.maxY, width: bounds.width + underTitleInset,
+                                        height: underTitle?.height ?? 0)
     }
 
     public override func updateTrackingAreas() {

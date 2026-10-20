@@ -30,4 +30,26 @@ struct PagesNavigationSampleTests {
         try sample.ensure(in: store)
         #expect(try store.pageOutline().count == outline.count, "повтор ничего не добавляет")
     }
+
+    @Test("Шаблоны: три в корне, у «Заметок встречи» три подстраницы и «@сегодня»; повтор ничего не добавляет")
+    func templates() throws {
+        let folder = try TemporaryFolder()
+        let store = try NotesStore(database: AppDatabase.open(at: folder.databaseURL), clock: HybridLogicalClock(deviceId: UUID()))
+        let sample = PagesNavigationSample(imageProps: BlockProps())
+        try sample.ensure(in: store)
+
+        let templates = try store.templatePages()
+        #expect(templates.count == 3)
+        let meeting = try #require(templates.first { $0.title == PagesNavigationSample.meetingTemplateTitle })
+        let outline = try store.pageOutline()
+        #expect(outline.filter { $0.parentId == meeting.id }.count == 3)
+        let dates = try #require(try store.pageContent(meeting.id)).blocks.flatMap(\.text.runs).compactMap { run -> DateMention? in
+            if case .date(let date) = run.style { date } else { nil }
+        }
+        #expect(dates.map(\.templateRelative) == [.today])
+
+        let count = outline.count
+        try sample.ensure(in: store)
+        #expect(try store.pageOutline().count == count)
+    }
 }

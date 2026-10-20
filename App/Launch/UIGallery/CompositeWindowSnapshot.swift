@@ -23,7 +23,19 @@ enum CompositeWindowSnapshot {
         for overlay in overlays(of: window) {
             let origin = NSPoint(x: overlay.frame.minX - window.frame.minX, y: overlay.frame.minY - window.frame.minY)
             let rect = NSRect(origin: origin, size: overlay.frame.size)
-            if needsBackdrop(overlay) {
+            if let content = popoverContent(of: overlay) {
+                // Поповер: системное «стекло» с рамкой на снимке рисуется радугой. Вместо него — цвет окна в теме
+                // главного окна, а поверх содержимое поповера (стрелка к якорю не рисуется).
+                let frame = content.convert(content.bounds, to: nil)
+                let area = NSRect(x: rect.minX + frame.minX, y: rect.minY + frame.minY, width: frame.width, height: frame.height)
+                window.effectiveAppearance.performAsCurrentDrawingAppearance {
+                    NSColor.windowBackgroundColor.setFill()
+                    NSBezierPath(roundedRect: area, xRadius: Self.popoverCornerRadius, yRadius: Self.popoverCornerRadius).fill()
+                    NSColor.separatorColor.setStroke()
+                    NSBezierPath(roundedRect: area.insetBy(dx: 0.5, dy: 0.5), xRadius: Self.popoverCornerRadius, yRadius: Self.popoverCornerRadius).stroke()
+                }
+                if let image = render(content) { image.draw(in: area, from: .zero, operation: .sourceOver, fraction: 1) }
+            } else if needsBackdrop(overlay) {
                 // Фон диалога — системное «стекло»: снимок рисует его белым в любой теме. Вместо него —
                 // цвет окна в теме главного окна, а поверх только содержимое диалога.
                 window.effectiveAppearance.performAsCurrentDrawingAppearance {
@@ -72,6 +84,15 @@ enum CompositeWindowSnapshot {
     private static func needsBackdrop(_ window: NSWindow) -> Bool {
         window.sheetParent != nil || window.isModalPanel || window is NSPanel && window.styleMask.contains(.titled)
     }
+
+    /// Содержимое поповера (`NSPopover`): сам вид, который положил в него код. Окно поповера вокруг него —
+    /// «стекло» с рамкой и стрелкой, на снимке оно рисуется радугой.
+    private static func popoverContent(of window: NSWindow) -> NSView? {
+        guard NSStringFromClass(type(of: window)).contains("Popover") else { return nil }
+        return window.contentView
+    }
+
+    static let popoverCornerRadius: CGFloat = 10
 
     /// Скругление системного диалога.
     static let dialogCornerRadius: CGFloat = 16

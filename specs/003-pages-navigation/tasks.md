@@ -163,19 +163,19 @@ description: "Задачи: страницы и навигация"
 
 ### Tests for User Story 4
 
-- [ ] T057 [P] [US4] `PK/Tests/NotesCoreTests/DuplicatePageTests.swift` по contracts/page-operations.md, «Дублирование»: название «(1)» и следующий свободный, место под оригиналом и ссылка в родителе следом, копия шаблона — шаблон, ⌘Z удаляет копию одной правкой
-- [ ] T058 [P] [US4] `PK/Tests/NotesCoreTests/MoveBlocksToPageTests.swift` по contracts/page-operations.md, «Перенос блоков»: конец потока цели, глубины, контейнеры, `movedFrom`, подстраницы переезжают, ⌘Z возвращает исходные с прежними id и прежнего родителя подстраниц; цель — та же страница недоступна
-- [ ] T059 [P] [US4] `PK/Tests/PagePickerTests/PagePickerModelTests.swift`: без запроса — 5 недавних и дерево; с запросом — выдача поиска; недоступные (сама страница и потомки для страницы, исходная для блоков, корзина); клавиатура ↑↓ → Enter Esc
-- [ ] T060 [P] [US4] XCUITest `UITests/DuplicateMoveTests.swift`: «•••» → «Дублировать» у страницы с двумя подстраницами, картинкой и файлом — открыта «(1)», подстраницы-копии, файл открывается; ⌘D при фокусе в панели; выделить три блока с вложенными → ⇧⌘P → поиск → Enter — блоки в конце другой страницы; ⌘Z; «Переместить в» страницы из меню панели
+- [x] T057 [P] [US4] `PK/Tests/NotesCoreTests/DuplicatePageTests.swift` по contracts/page-operations.md, «Дублирование»: название «(1)» и следующий свободный, место под оригиналом и ссылка в родителе следом, копия шаблона — шаблон, ⌘Z удаляет копию одной правкой
+- [x] T058 [P] [US4] `PK/Tests/NotesCoreTests/MoveBlocksToPageTests.swift` по contracts/page-operations.md, «Перенос блоков»: конец потока цели, глубины, контейнеры, `movedFrom`, подстраницы переезжают, ⌘Z возвращает исходные с прежними id и прежнего родителя подстраниц; цель — та же страница недоступна
+- [x] T059 [P] [US4] `PK/Tests/PagePickerTests/PagePickerModelTests.swift`: без запроса — 5 недавних и дерево; с запросом — выдача поиска; недоступные (сама страница и потомки для страницы, исходная для блоков, корзина); клавиатура ↑↓ → Enter Esc
+- [x] T060 [P] [US4] XCUITest `UITests/DuplicateMoveTests.swift`: «•••» → «Дублировать» у страницы с двумя подстраницами, картинкой и файлом — открыта «(1)», подстраницы-копии, файл открывается; ⌘D при фокусе в панели; выделить три блока с вложенными → ⇧⌘P → поиск → Enter — блоки в конце другой страницы; ⌘Z; «Переместить в» страницы из меню панели
 
 ### Implementation for User Story 4
 
-- [ ] T061 [US4] Дублирование в `PK/Sources/NotesCore/Tree/PageTreeOperations+Duplicate.swift` на `PageBranchCopier` (T057); открыть копию — `App/MainWindow/MainWindowModel.swift`
-- [ ] T062 [US4] Перенос блоков в `PK/Sources/NotesCore/Tree/PageTreeOperations+MoveBlocks.swift` на `BlockCopier` с `movedFrom` (T058); перенос страницы — существующий `move` в конец детей цели
-- [ ] T063 [US4] Окно `PK/Sources/PagePicker/PagePickerView.swift` и модель (T059); вид — по `notion-move-to.png`
-- [ ] T064 [US4] Пункты: «Дублировать», «Переместить в» в `App/MainWindow/PageMenu/` и `PK/Sources/PageTree/PageRowMenu/`; «Переместить в» в меню блока (`PK/Sources/PageEditor/SlashCommandMenu.swift`, `blockMenuItems`); маршрут ⌘D (текст и выделенные блоки — блок, фокус в панели — страница) и ⇧⌘P (выделенные блоки — блоки, иначе страница)
-- [ ] T065 [US4] Состояния галереи: окно «Переместить в» без запроса и с запросом, недоступная строка, меню блока с пунктом — в обеих темах; сверка с Notion
-- [ ] T066 [US4] Затронутые тесты зелёные; замер дублирования ветки 50 подстраниц / 5 000 блоков ≤ 2 с, главный поток ≤ 100 мс (SC-204); запись в quickstart.md; коммит
+- [x] T061 [US4] Дублирование в `PK/Sources/NotesCore/Tree/PageTreeOperations+Duplicate.swift` на `PageBranchCopier` (T057); открыть копию — `App/MainWindow/MainWindowModel.swift`
+- [x] T062 [US4] Перенос блоков в `PK/Sources/NotesCore/Tree/PageTreeOperations+MoveBlocks.swift` на `BlockCopier` с `movedFrom` (T058); перенос страницы — существующий `move` в конец детей цели
+- [x] T063 [US4] Окно `PK/Sources/PagePicker/PagePickerView.swift` и модель (T059); вид — по `notion-move-to.png`
+- [x] T064 [US4] Пункты: «Дублировать», «Переместить в» в `App/MainWindow/PageMenu/` и `PK/Sources/PageTree/PageRowMenu/`; «Переместить в» в меню блока (`PK/Sources/PageEditor/SlashCommandMenu.swift`, `blockMenuItems`); маршрут ⌘D (текст и выделенные блоки — блок, фокус в панели — страница) и ⇧⌘P (выделенные блоки — блоки, иначе страница)
+- [x] T065 [US4] Состояния галереи: окно «Переместить в» без запроса и с запросом, недоступная строка, меню блока с пунктом — в обеих темах; сверка с Notion
+- [x] T066 [US4] Затронутые тесты зелёные; замер дублирования ветки 50 подстраниц / 5 000 блоков ≤ 2 с, главный поток ≤ 100 мс (SC-204); запись в quickstart.md; коммит
 
 **Checkpoint**: US4 работает и проверяется сама.
 
@@ -189,17 +189,17 @@ description: "Задачи: страницы и навигация"
 
 ### Tests for User Story 5
 
-- [ ] T067 [P] [US5] `PK/Tests/BacklinksTests/PageLinkIndexTests.swift`: подписчик записи по contracts/page-operations.md, «Обратные ссылки» — упоминание, `pageLink` на чужую страницу, `pageLink` родителя на ребёнка не пишется, правка и удаление блока, пачка с другого Mac, импорт; первое заполнение по всем блокам один раз (отметка в `app_meta`)
-- [ ] T068 [P] [US5] `PK/Tests/BacklinksTests/BacklinksQueryTests.swift`: разные страницы-источники; корзина и шаблоны не считаются; сама страница не считается; склонение «1 обратная ссылка / 3 обратные ссылки / 5 обратных ссылок»
-- [ ] T069 [P] [US5] XCUITest `UITests/BacklinksTests.swift`: на Б ссылаются А (упоминание), В (упоминание) и Г (ссылка на страницу) — «↗ 3 обратные ссылки»; список, переход к блоку ссылки на А; стереть упоминание на В — 2; Г в корзину — 1
+- [x] T067 [P] [US5] `PK/Tests/BacklinksTests/PageLinkIndexTests.swift`: подписчик записи по contracts/page-operations.md, «Обратные ссылки» — упоминание, `pageLink` на чужую страницу, `pageLink` родителя на ребёнка не пишется, правка и удаление блока, пачка с другого Mac, импорт; первое заполнение по всем блокам один раз (отметка в `app_meta`)
+- [x] T068 [P] [US5] `PK/Tests/BacklinksTests/BacklinksQueryTests.swift`: разные страницы-источники; корзина и шаблоны не считаются; сама страница не считается; склонение «1 обратная ссылка / 3 обратные ссылки / 5 обратных ссылок»
+- [x] T069 [P] [US5] XCUITest `UITests/BacklinksTests.swift`: на Б ссылаются А (упоминание), В (упоминание) и Г (ссылка на страницу) — «↗ 3 обратные ссылки»; список, переход к блоку ссылки на А; стереть упоминание на В — 2; Г в корзину — 1
 
 ### Implementation for User Story 5
 
-- [ ] T070 [US5] Подписчик `PK/Sources/Backlinks/PageLinkIndexer.swift` и первое заполнение в фоне после готовности редактора `BacklinkIndexBuild.swift` (T067)
-- [ ] T071 [US5] Запросы `PK/Sources/Backlinks/Backlinks.swift` (T068)
-- [ ] T072 [US5] Строка «↗ N обратных ссылок» в месте «под названием» (`PK/Sources/PageEditor/PageHeader/BacklinksRow.swift`), всплывающий список, переход к блоку через `PageOpenRequest.revealBlockId`; счёт читается при открытии одним запросом
-- [ ] T073 [US5] Состояния галереи: строка и список в обеих темах; сверка с Notion на подстранице «MyNotion — блоки 002», где есть упоминание (одним замком, правки в Notion — убрать восстановлением версии)
-- [ ] T074 [US5] Затронутые тесты зелёные; замеры: переход между страницами со счётом ссылок p95 ≤ 50 мс (SC-206), первое заполнение эталона ≤ 5 с без замирания окна; запись в quickstart.md; коммит
+- [x] T070 [US5] Подписчик `PK/Sources/Backlinks/PageLinkIndexer.swift` и первое заполнение в фоне после готовности редактора `BacklinkIndexBuild.swift` (T067)
+- [x] T071 [US5] Запросы `PK/Sources/Backlinks/Backlinks.swift` (T068)
+- [x] T072 [US5] Строка «↗ N обратных ссылок» в месте «под названием» (`PK/Sources/PageEditor/PageHeader/BacklinksRow.swift`), всплывающий список, переход к блоку через `PageOpenRequest.revealBlockId`; счёт читается при открытии одним запросом
+- [x] T073 [US5] Состояния галереи: строка и список в обеих темах; сверка с Notion на подстранице «MyNotion — блоки 002», где есть упоминание (одним замком, правки в Notion — убрать восстановлением версии)
+- [x] T074 [US5] Затронутые тесты зелёные; замеры: переход между страницами со счётом ссылок p95 ≤ 50 мс (SC-206), первое заполнение эталона ≤ 5 с без замирания окна; запись в quickstart.md; коммит
 
 **Checkpoint**: US5 работает и проверяется сама.
 
@@ -213,23 +213,23 @@ description: "Задачи: страницы и навигация"
 
 ### Tests for User Story 6
 
-- [ ] T075 [P] [US6] `PK/Tests/PageVersionsTests/PageSnapshotTests.swift`: снимок всех потоков и полей страницы, сжатие и разбор, `snapshotVersion`; снимок 1 000 блоков — размер записать
-- [ ] T076 [P] [US6] `PK/Tests/PageVersionsTests/PageVersionRecorderTests.swift` с подменёнными часами по contracts/page-operations.md, «История версий»: отметка от своей правки и от пачки с другого Mac (автор — тот Mac); не чаще раза в минуту; 5 с тишины; `favorite` и `visitedAt` не отмечают; первое открытие без версий — снимок «как было»; закрытие окна — снимки всех отмеченных; ни одного снимка до готовности редактора
-- [ ] T077 [P] [US6] `PK/Tests/PageVersionsTests/VersionPruningTests.swift`: правило Clarifications дословно; последняя версия остаётся всегда; удаление страницы навсегда стирает её версии
-- [ ] T078 [P] [US6] `PK/Tests/PageVersionsTests/VersionDiffTests.swift`: `summary` (название, иконка, обложка, вид, блоки добавлены/удалены/изменены); id блоков для подсветки
-- [ ] T079 [P] [US6] `PK/Tests/PageVersionsTests/VersionRestoreTests.swift`: поля и блоки как в версии; удалённые с тех пор — возвращены с прежними id; копии с `movedFrom` на других страницах — удалены; снимок «до восстановления» и новая версия после; ⌘Z — как было; изменения уходят в исходящие синхронизации
-- [ ] T080 [P] [US6] XCUITest `UITests/VersionHistoryTests.swift`: правки с подменёнными часами (флаг запуска) → «•••» → «История версий»; группировка; раскрытие версии; выбрать раннюю → подсветка → «Восстановить» → «Восстановить эту версию» → полоса «Страница восстановлена»; ⌘Z; Esc закрывает
+- [x] T075 [P] [US6] `PK/Tests/PageVersionsTests/PageSnapshotTests.swift`: снимок всех потоков и полей страницы, сжатие и разбор, `snapshotVersion`; снимок 1 000 блоков — размер записать
+- [x] T076 [P] [US6] `PK/Tests/PageVersionsTests/PageVersionRecorderTests.swift` с подменёнными часами по contracts/page-operations.md, «История версий»: отметка от своей правки и от пачки с другого Mac (автор — тот Mac); не чаще раза в минуту; 5 с тишины; `favorite` и `visitedAt` не отмечают; первое открытие без версий — снимок «как было»; закрытие окна — снимки всех отмеченных; ни одного снимка до готовности редактора
+- [x] T077 [P] [US6] `PK/Tests/PageVersionsTests/VersionPruningTests.swift`: правило Clarifications дословно; последняя версия остаётся всегда; удаление страницы навсегда стирает её версии
+- [x] T078 [P] [US6] `PK/Tests/PageVersionsTests/VersionDiffTests.swift`: `summary` (название, иконка, обложка, вид, блоки добавлены/удалены/изменены); id блоков для подсветки
+- [x] T079 [P] [US6] `PK/Tests/PageVersionsTests/VersionRestoreTests.swift`: поля и блоки как в версии; удалённые с тех пор — возвращены с прежними id; копии с `movedFrom` на других страницах — удалены; снимок «до восстановления» и новая версия после; ⌘Z — как было; изменения уходят в исходящие синхронизации
+- [x] T080 [P] [US6] XCUITest `UITests/VersionHistoryTests.swift`: правки с подменёнными часами (флаг запуска) → «•••» → «История версий»; группировка; раскрытие версии; выбрать раннюю → подсветка → «Восстановить» → «Восстановить эту версию» → полоса «Страница восстановлена»; ⌘Z; Esc закрывает
 
 ### Implementation for User Story 6
 
-- [ ] T081 [US6] Снимок и хранение `PK/Sources/PageVersions/PageSnapshot.swift`, `PageVersionStore.swift` (T075)
-- [ ] T082 [US6] Подписчик `PageVersionDueMarker.swift` и записыватель `PageVersionRecorder.swift`: старт после готовности редактора, по событию, вне главного потока; снимок при закрытии окна и выходе; первая версия при открытии (T076)
-- [ ] T083 [US6] Прореживание `VersionPruning.swift` раз в сутки после готовности редактора; стирание с удалением страницы навсегда (T077)
-- [ ] T084 [US6] Разница `VersionDiff.swift` (T078) и восстановление `PK/Sources/NotesCore/Tree/PageTreeOperations+RestoreVersion.swift` (T079)
-- [ ] T085 [US6] Просмотр `PK/Sources/PageEditor/VersionPreview/`: редактор «только чтение» на документе из снимка, подсветка блоков по разнице; по пробе T005
-- [ ] T086 [US6] Окно истории `App/MainWindow/VersionHistory/` (список, группировка, раскрытие, «Восстановить», окно «Что будет восстановлено», полоса после) по contracts/pages-ui.md и снимкам `notion-version-*.png`; пункт `App/MainWindow/PageMenu/VersionHistoryMenuItem.swift`
-- [ ] T087 [US6] Состояния галереи: история со списком, группировка, раскрытая версия, окно восстановления, полоса — в обеих темах; сверка со снимками Notion
-- [ ] T088 [US6] Затронутые тесты зелёные; замеры: история и показ версии ≤ 0,5 с, восстановление ≤ 1 с (SC-205), набор p95 ≤ 50 мс при записи версий (SC-203), место 200 версий «богатой» страницы; запись в quickstart.md; коммит
+- [x] T081 [US6] Снимок и хранение `PK/Sources/PageVersions/PageSnapshot.swift`, `PageVersionStore.swift` (T075)
+- [x] T082 [US6] Подписчик `PageVersionDueMarker.swift` и записыватель `PageVersionRecorder.swift`: старт после готовности редактора, по событию, вне главного потока; снимок при закрытии окна и выходе; первая версия при открытии (T076)
+- [x] T083 [US6] Прореживание `VersionPruning.swift` раз в сутки после готовности редактора; стирание с удалением страницы навсегда (T077)
+- [x] T084 [US6] Разница `VersionDiff.swift` (T078) и восстановление `PK/Sources/NotesCore/Tree/PageTreeOperations+RestoreVersion.swift` (T079)
+- [x] T085 [US6] Просмотр `PK/Sources/PageEditor/VersionPreview/`: редактор «только чтение» на документе из снимка, подсветка блоков по разнице; по пробе T005
+- [x] T086 [US6] Окно истории `App/MainWindow/VersionHistory/` (список, группировка, раскрытие, «Восстановить», окно «Что будет восстановлено», полоса после) по contracts/pages-ui.md и снимкам `notion-version-*.png`; пункт `App/MainWindow/PageMenu/VersionHistoryMenuItem.swift`
+- [x] T087 [US6] Состояния галереи: история со списком, группировка, раскрытая версия, окно восстановления, полоса — в обеих темах; сверка со снимками Notion
+- [x] T088 [US6] Затронутые тесты зелёные; замеры: история и показ версии ≤ 0,5 с, восстановление ≤ 1 с (SC-205), набор p95 ≤ 50 мс при записи версий (SC-203), место 200 версий «богатой» страницы; запись в quickstart.md; коммит
 
 **Checkpoint**: волна C готова. Вливание по одному: US5, US4, US6 (US4 и US6 правят разные места `MainWindowModel.swift`); после каждого — затронутые тесты.
 
@@ -243,17 +243,17 @@ description: "Задачи: страницы и навигация"
 
 ### Tests for User Story 7
 
-- [ ] T089 [P] [US7] `PK/Tests/NotesCoreTests/TemplateOperationsTests.swift` по contracts/page-operations.md, «Шаблоны»: сделать (в корень, ссылка у прежнего родителя убрана) и перестать, ⌘Z; шаблон в корзине не предлагается
-- [ ] T090 [P] [US7] `PK/Tests/NotesCoreTests/TemplateInstantiationTests.swift`: заполнение пустой страницы (поля, блоки, подстраницы-копии), одна правка с ⌘Z; «Новая страница по шаблону» — в корне; `templateRelative` → момент создания (часы подменены); правка шаблона не меняет прежние копии; «@сегодня» в шаблоне ставит `templateRelative`, вне шаблона — нет
-- [ ] T091 [P] [US7] XCUITest `UITests/TemplatesTests.swift`: «Сделать шаблоном» у страницы с подстраницей и «@сегодня» — раздел «Шаблоны»; ⌘N → строка шаблона → копия с подстраницей, курсор в названии, дата — сегодня; меню шаблона → «Новая страница по шаблону»; «Перестать быть шаблоном»
+- [x] T089 [P] [US7] `PK/Tests/NotesCoreTests/TemplateOperationsTests.swift` по contracts/page-operations.md, «Шаблоны»: сделать (в корень, ссылка у прежнего родителя убрана) и перестать, ⌘Z; шаблон в корзине не предлагается
+- [x] T090 [P] [US7] `PK/Tests/NotesCoreTests/TemplateInstantiationTests.swift`: заполнение пустой страницы (поля, блоки, подстраницы-копии), одна правка с ⌘Z; «Новая страница по шаблону» — в корне; `templateRelative` → момент создания (часы подменены); правка шаблона не меняет прежние копии; «@сегодня» в шаблоне ставит `templateRelative`, вне шаблона — нет
+- [x] T091 [P] [US7] XCUITest `UITests/TemplatesTests.swift`: «Сделать шаблоном» у страницы с подстраницей и «@сегодня» — раздел «Шаблоны»; ⌘N → строка шаблона → копия с подстраницей, курсор в названии, дата — сегодня; меню шаблона → «Новая страница по шаблону»; «Перестать быть шаблоном»
 
 ### Implementation for User Story 7
 
-- [ ] T092 [US7] Операции `PK/Sources/NotesCore/Tree/PageTreeOperations+Templates.swift` на `PageBranchCopier` (T089, T090)
-- [ ] T093 [US7] Раздел `PK/Sources/PageTree/SidebarSections/TemplatesSection.swift`, шаблоны скрыты из «Страниц»; пункты меню «•••» и строки панели (`MakeTemplate*`, `NewFromTemplateRowMenuItem.swift`)
-- [ ] T094 [US7] Строки шаблонов на пустой странице `PK/Sources/PageEditor/TemplateRows/` (до 5, «Ещё шаблоны…» с поиском, ↑↓ Enter); «@сегодня» / «@сейчас» в шаблоне ставят `templateRelative` (`PK/Sources/PageEditor/Inline/`)
-- [ ] T095 [US7] Состояния галереи: раздел «Шаблоны», пустая страница со строками шаблонов, «Ещё шаблоны…» — в обеих темах
-- [ ] T096 [US7] Затронутые тесты зелёные; замер перехода и запуска; запись в quickstart.md; коммит
+- [x] T092 [US7] Операции `PK/Sources/NotesCore/Tree/PageTreeOperations+Templates.swift` на `PageBranchCopier` (T089, T090)
+- [x] T093 [US7] Раздел `PK/Sources/PageTree/SidebarSections/TemplatesSection.swift`, шаблоны скрыты из «Страниц»; пункты меню «•••» и строки панели (`MakeTemplate*`, `NewFromTemplateRowMenuItem.swift`)
+- [x] T094 [US7] Строки шаблонов на пустой странице `PK/Sources/PageEditor/TemplateRows/` (до 5, «Ещё шаблоны…» с поиском, ↑↓ Enter); «@сегодня» / «@сейчас» в шаблоне ставят `templateRelative` (`PK/Sources/PageEditor/Inline/`)
+- [x] T095 [US7] Состояния галереи: раздел «Шаблоны», пустая страница со строками шаблонов, «Ещё шаблоны…» — в обеих темах
+- [x] T096 [US7] Затронутые тесты зелёные; замер перехода и запуска; запись в quickstart.md; коммит
 
 **Checkpoint**: все истории готовы.
 

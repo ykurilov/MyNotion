@@ -4,6 +4,7 @@ import Navigation
 import NotesCore
 import Observation
 import PageEditor
+import PagePicker
 import PageSearch
 import VisualStyle
 
@@ -15,6 +16,8 @@ import VisualStyle
 final class MainWindowModel {
     @ObservationIgnored let library: PagesLibrary
     @ObservationIgnored let treeOperations: PageTreeOperations
+    /// Окно «Переместить в…» (US4, `MainWindowModel+Copies`).
+    @ObservationIgnored let movePicker = PagePickerController()
     /// Окно на экране: по нему библиотека знает, в каком окне работают сейчас.
     @ObservationIgnored weak var window: NSWindow? {
         // В строке светофора система тянет окно раньше, чем вкладка получает мышь: окно само не двигается,
@@ -48,10 +51,16 @@ final class MainWindowModel {
     var isNewTabSearchShown = false
     /// Галерея: вкладка, над которой будто бы мышь («×»).
     var previewHoveredTabId: UUID?
+    /// «История версий» открытой страницы поверх окна (US6); `nil` — закрыта.
+    var versionHistory: VersionHistoryModel?
+    /// Страница, которую только что восстановили из версии: над ней полоса «Страница восстановлена» (US6).
+    var restoredVersionPageId: UUID?
     /// Вкладки хранит только первое окно: вид окна в базе один (`WindowState.mainWindowId`).
     @ObservationIgnored private let restoresTabs: Bool
     /// Страницу перечитали после операции с деревом: встать на прежнее место.
     @ObservationIgnored private var scrollBeforeReload: TabScroll?
+    /// Куда поставить курсор, когда операция перечитывает открытую страницу (заполнение по шаблону — в название).
+    @ObservationIgnored var reopenFocus: PageTextView.InitialFocus?
     @ObservationIgnored private var isTabsSavePending = false
     @ObservationIgnored private var linkedPagesCache: (revision: Int, pages: [UUID: LinkedPage])?
     /// Запись открытий для «Недавних»: страница, пробывшая в активной вкладке 2 секунды или с правкой.
@@ -127,6 +136,8 @@ final class MainWindowModel {
         if let openDocument { openDocuments.release(openDocument.pageId) }
         openDocument = nil
         library.unregister(self)
+        // Версии всех отмеченных страниц — сразу, не дожидаясь минуты (research R11).
+        library.versions.recordAllDue()
     }
 
     var openPageId: UUID? { openDocument?.pageId }
@@ -214,6 +225,8 @@ final class MainWindowModel {
             }
         case .turnInto(let blockId):
             performTreeOperation { try treeOperations.turnIntoSubpage(blockId, in: pageId) }
+        case .moveBlocks(let blockIds, let anchor):
+            showMoveBlocksPicker(blockIds, from: pageId, anchor: anchor)
         }
     }
 
@@ -329,7 +342,7 @@ final class MainWindowModel {
 
     /// Перед операцией правки открытой страницы уходят в базу, чтобы операция видела их.
     @discardableResult
-    private func performTreeOperation<T>(_ operation: () throws -> T) -> T? {
+    func performTreeOperation<T>(_ operation: () throws -> T) -> T? {
         openDocuments.saveAll()
         do {
             return try operation()
@@ -355,7 +368,7 @@ final class MainWindowModel {
     func treeDidChange(_ touchedPageIds: Set<UUID>, reopening releasedPageId: UUID?) {
         if let releasedPageId {
             defer { scrollBeforeReload = nil }
-            return openEditor(releasedPageId, focus: .body, scroll: scrollBeforeReload, remember: false)
+            return openEditor(releasedPageId, focus: reopenFocus ?? .body, scroll: scrollBeforeReload, remember: false)
         }
         if let openPageId, tree.page(openPageId) == nil { closeOpenDocument() }
         showActiveTab(focus: .body)
@@ -496,7 +509,7 @@ final class MainWindowModel {
     }
 
     /// Переход в активной вкладке: история вкладки, затем её страница.
-    private func navigate(to pageId: UUID, focus: PageTextView.InitialFocus) {
+    func navigate(to pageId: UUID, focus: PageTextView.InitialFocus) {
         tabs.open(PageOpenRequest(pageId: pageId))
         showActiveTab(focus: focus)
     }
@@ -528,6 +541,8 @@ final class MainWindowModel {
             restoringScroll = scroll
             openDocument = document
             loadError = nil
+            // Страница без версий получает снимок «как было» (US6, research R11).
+            library.versions.pageOpened(pageId)
             // Файлы открытой страницы — первыми в очереди скачивания (FR-120).
             library.sync.prioritizeFiles(onPage: pageId)
             // Запись — после показа страницы: на пути перехода она не нужна (как запись вкладок).
