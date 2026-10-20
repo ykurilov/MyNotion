@@ -414,6 +414,15 @@ final class UIGalleryRunner {
 
         case .movePicker(let kind):
             await open(library.sample.page.id)
+            // Недавние: сама страница (серая — в себя не переносится) и ещё три.
+            let recent = [library.sample.page.id] + model.tree.pagesInTreeOrder.map(\.id).filter { $0 != library.sample.page.id }.prefix(3)
+            try? model.store.write { transaction in
+                for (index, pageId) in recent.enumerated() {
+                    guard var page = try transaction.page(pageId) else { continue }
+                    page.visitedAt = Date().addingTimeInterval(-Double(index) * 60)
+                    try transaction.updatePage(page)
+                }
+            }
             model.showMovePagePicker(library.sample.page.id)
             guard let picker = model.movePicker.model else { return "окно «Переместить в…» не открылось" }
             if kind == .query { picker.query = String(library.sample.page.title.prefix(4)) }
