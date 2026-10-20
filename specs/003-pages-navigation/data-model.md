@@ -48,7 +48,7 @@ id галереи — из contracts/pages-ui.md, «Галерея»; неизв
 
 Первичный ключ `(sourceBlockId, targetPageId)`; индекс `page_link_by_target(targetPageId)`.
 Пишется подписчиком записи в той же транзакции, что и блок. Ссылка-подстраница на своего ребёнка не пишется (research R10).
-Заполняется миграцией v7 по всем блокам.
+Миграция v7 создаёт таблицу пустой. Заполняется один раз по всем блокам после первого запуска v7 — в фоне, после готовности редактора (отметка «индекс построен» в таблице `app_meta`); пока не построен, строки обратных ссылок нет.
 
 ### page_version — версии страниц
 
@@ -89,7 +89,7 @@ id галереи — из contracts/pages-ui.md, «Галерея»; неизв
 
 1. Копия базы `MyNotion.backup-v6.sqlite` (как v6 в 002), тест восстановления из неё.
 2. `page`: колонки `cover` (JSON, пусто), `isFullWidth`, `isSmallText`, `isTemplate` (`NOT NULL DEFAULT 0`), `favorite` (TEXT), `visitedAt` (дата); индексы `page_by_favorite(favorite) WHERE favorite IS NOT NULL`, `page_by_visit(visitedAt) WHERE visitedAt IS NOT NULL`; в `fieldClocks` — новые ключи пустыми.
-3. Таблицы `page_link`, `page_version`, `page_version_due`; заполнение `page_link` по всем блокам.
+3. Таблицы `page_link` (пустая), `page_version`, `page_version_due`, `app_meta` (ключ — значение, локальные отметки).
 4. `window_state`: колонки `tabs`, `collapsedSidebarSections`.
 5. Повтор миграции ничего не меняет; база новее приложения — запись не идёт (как в 002).
 
