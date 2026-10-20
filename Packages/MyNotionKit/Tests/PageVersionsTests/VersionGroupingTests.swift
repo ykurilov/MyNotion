@@ -46,5 +46,9 @@ struct VersionTimeTextTests {
         #expect(VersionTimeText.text(for: at(2026, 10, 20, 9, 5), now: now, calendar: calendar) == "Вчера в 9:05")
         #expect(VersionTimeText.text(for: at(2026, 10, 19, 18, 25), now: now, calendar: calendar) == "19 октября в 18:25")
         #expect(VersionTimeText.text(for: at(2025, 12, 31, 23, 59), now: now, calendar: calendar) == "31 декабря 2025 в 23:59")
+        // Посреди фразы «Восстановить … к сегодня в 18:25» — со строчной (T101 № 25).
+        #expect(VersionTimeText.inSentence(for: at(2026, 10, 21, 18, 25), now: now, calendar: calendar) == "сегодня в 18:25")
+        #expect(VersionTimeText.inSentence(for: at(2026, 10, 20, 9, 5), now: now, calendar: calendar) == "вчера в 9:05")
+        #expect(VersionTimeText.inSentence(for: at(2026, 10, 19, 18, 25), now: now, calendar: calendar) == "19 октября в 18:25")
     }
 }

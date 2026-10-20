@@ -25,6 +25,7 @@ enum GalleryVersionHistoryScene {
         switch kind {
         case .list: break
         case .grouped: history.grouping = .quarterHour
+        case .groupingMenu: history.isGroupingMenuShown = true
         case .details: history.isExpanded = true
         case .restoreDialog: history.isRestoreDialogShown = true
         case .restoredBanner:

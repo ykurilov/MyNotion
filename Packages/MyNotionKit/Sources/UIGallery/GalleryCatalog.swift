@@ -202,6 +202,8 @@ public enum GalleryVersionHistory: CaseIterable, Sendable {
     case list
     /// Группировка «15 минут».
     case grouped
+    /// Открытый список «Группировать изменения»: 1 минута, 15 минут, 1 час, у выбранной — галочка.
+    case groupingMenu
     /// Раскрытая версия: «← Все версии» и что менялось.
     case details
     /// Окно «Что будет восстановлено».
@@ -281,6 +283,8 @@ public enum GalleryCatalog {
         GalleryState("version-history-list", .versionHistory(.list), "«История версий»: список, прошлая версия с подсветкой отличий",
                      section: "История версий", narrowToo: true),
         GalleryState("version-history-grouped", .versionHistory(.grouped), "Группировка «15 минут»", section: "История версий"),
+        GalleryState("version-history-grouping-menu", .versionHistory(.groupingMenu), "Открытый список «Группировать изменения»",
+                     section: "История версий"),
         GalleryState("version-history-details", .versionHistory(.details), "Раскрытая версия: что менялось", section: "История версий"),
         GalleryState("version-history-restore", .versionHistory(.restoreDialog), "Окно «Что будет восстановлено»",
                      section: "История версий"),

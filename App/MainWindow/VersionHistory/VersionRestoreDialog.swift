@@ -1,4 +1,5 @@
 import AppKit
+import PageVersions
 import PageEditor
 import SwiftUI
 import VisualStyle
@@ -20,7 +21,7 @@ struct VersionRestoreDialogLayer: ViewModifier {
                         .contentShape(Rectangle())
                         .onTapGesture { history.isRestoreDialogShown = false }
                     HStack(spacing: 0) {
-                        summary(time: history.timeText(version), versionId: version.id)
+                        summary(time: VersionTimeText.inSentence(for: version.createdAt), versionId: version.id)
                             .frame(width: 280)
                         VersionPreviewView(document: preview.document, highlightedBlockIds: [], linkedPages: linkedPages,
                                            mentions: mentions, headerAddons: headerAddons)
@@ -97,23 +98,24 @@ struct VersionRestoreDialogLayer: ViewModifier {
     }
 }
 
-/// Полоса над страницей после восстановления (≈ `notion-version-restored.png`).
+/// Полоса над страницей после восстановления, как у Notion 7.39 (`notion-version-restored.png`): высота 44, текст 14,
+/// в тёмной теме — фон 0x233850 и текст 0x387DC9.
 struct VersionRestoredBanner: View {
     let close: () -> Void
 
     static let background = NSColor(name: nil) { appearance in
         appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            ? NSColor(srgbRed: 0.14, green: 0.24, blue: 0.34, alpha: 1) : NSColor(srgbRed: 0.91, green: 0.95, blue: 0.99, alpha: 1)
+            ? NSColor(srgbRed: 0x23 / 255, green: 0x38 / 255, blue: 0x50 / 255, alpha: 1) : NSColor(srgbRed: 0.91, green: 0.95, blue: 0.99, alpha: 1)
     }
     static let text = NSColor(name: nil) { appearance in
         appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            ? NSColor(srgbRed: 0.36, green: 0.62, blue: 0.92, alpha: 1) : NSColor(srgbRed: 0.14, green: 0.51, blue: 0.89, alpha: 1)
+            ? NSColor(srgbRed: 0x38 / 255, green: 0x7D / 255, blue: 0xC9 / 255, alpha: 1) : NSColor(srgbRed: 0.14, green: 0.51, blue: 0.89, alpha: 1)
     }
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "checkmark.circle.fill").font(.system(size: 13))
-            Text("Страница восстановлена").font(.system(size: 13))
+            Image(systemName: "checkmark.circle.fill").font(.system(size: 14))
+            Text("Страница восстановлена").font(.system(size: 14))
             Spacer()
             Button(action: close) { Image(systemName: "xmark").font(.system(size: 11)).frame(width: 22, height: 22).contentShape(Rectangle()) }
                 .buttonStyle(.plain)
@@ -121,7 +123,7 @@ struct VersionRestoredBanner: View {
         }
         .foregroundStyle(Color(nsColor: Self.text))
         .padding(.horizontal, 14)
-        .frame(height: 34)
+        .frame(height: 44)
         .frame(maxWidth: .infinity)
         .background(Color(nsColor: Self.background))
         .accessibilityElement(children: .contain)

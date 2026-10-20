@@ -35,6 +35,8 @@ extension MainWindowModel {
             do {
                 try await restorer.restore(versionId: versionId, ofPage: pageId)
                 restoredVersionPageId = pageId
+                // Как у Notion: после восстановления каретки в странице нет — страница перерисована, а не открыта для набора.
+                window?.makeFirstResponder(nil)
             } catch {
                 showVersionError("Не удалось восстановить версию: \(SaveStatus.reason(for: error))")
             }
