@@ -365,6 +365,10 @@ public enum Metrics {
     public enum PageMenu {
         public static let width: CGFloat = 265
         public static let searchInset: CGFloat = 10
+        /// Подменю «Вид страницы ›» слева от меню и его переключатели (≈ по снимку `notion-page-appearance.png`).
+        public static let submenuWidth: CGFloat = 230
+        public static let submenuGap: CGFloat = 4
+        public static let switchSize = CGSize(width: 26, height: 14)
     }
 
     /// Обложка страницы (contracts/pages-ui.md, «Шапка страницы»): высота ≈ 30 % высоты области страницы с верхней

@@ -97,7 +97,7 @@ let package = Package(
         .testTarget(name: "PageVersionsTests", dependencies: ["PageVersions", "NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "NavigationTests", dependencies: ["Navigation", "NotesCore"]),
         .testTarget(name: "PagePickerTests", dependencies: ["PagePicker", "NotesCore"]),
-        .testTarget(name: "PageCoverTests", dependencies: ["PageCover", "NotesCore", "Attachments"]),
+        .testTarget(name: "PageCoverTests", dependencies: ["PageCover", "NotesCore", "Attachments", "VisualStyle"]),
     ],
     swiftLanguageModes: [.v6]
 )

@@ -13,6 +13,7 @@ public final class PageMenuPresenter {
     public init(items: [PageMenuItem], context: PageMenuContext) {
         view = PageMenuView(rows: PageMenuLayout.rows(items, context: context), context: context)
         view.onChoose = { [weak self] in self?.card.close() }
+        card.onClose = { [weak view] in view?.submenu.close() }
     }
 
     public var isShown: Bool { card.isShown }
@@ -33,6 +34,8 @@ final class PageMenuView: NSView, NSSearchFieldDelegate {
     private var searchField: NSSearchField?
     private var entries: [(row: NSView, title: String?)] = []
     var onChoose: (() -> Void)?
+    /// Подменю с переключателями («Вид страницы ›»).
+    let submenu = PageMenuSubmenu()
 
     init(rows: [PageMenuRow], context: PageMenuContext) {
         self.context = context
@@ -80,13 +83,14 @@ final class PageMenuView: NSView, NSSearchFieldDelegate {
             }
             return [(row, title)]
         case .toggles(let toggles):
-            return toggles.map { toggle in
-                let row = PageMenuRowView(title: toggle.title, hint: toggle.isOn(context) ? "●" : "◯") { [weak self] in
-                    toggle.toggle(context)
-                    self?.onChoose?()
-                }
-                return (row, toggle.title)
+            // Как у Notion: строка «Вид страницы ›» открывает сбоку подменю с переключателями; переключение меню не закрывает.
+            let row = PageMenuRowView(title: title, hint: "›") { [weak self] in
+                guard let self else { return }
+                self.submenu.show(toggles, context: context, besides: self.entries.first { $0.title == title }?.row)
             }
+            row.onHover = { [weak row] in row?.press() }
+            row.setAccessibilityIdentifier("page-menu-\(item.slot)")
+            return [(row, title)]
         }
     }
 
@@ -137,6 +141,7 @@ final class PageMenuView: NSView, NSSearchFieldDelegate {
     /// Оставить пункты, в названии которых есть запрос; при запросе линии и подвал прячутся.
     func filter(_ query: String) {
         let query = query.trimmingCharacters(in: .whitespaces)
+        submenu.close()
         for (row, title) in entries where !(row is NSSearchField) {
             if let title {
                 row.isHidden = !query.isEmpty && title.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) == nil
@@ -159,6 +164,8 @@ final class PageMenuRowView: NSView {
     private let titleLabel: NSTextField
     private let hintLabel: NSTextField
     private var isHovered = false { didSet { needsDisplay = true } }
+    /// Мышь пришла на пункт (подменю открывается наведением).
+    var onHover: (() -> Void)?
 
     init(title: String, hint: String?, action: @escaping () -> Void) {
         self.title = title
@@ -204,7 +211,10 @@ final class PageMenuRowView: NSView {
         addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
     }
 
-    override func mouseEntered(with event: NSEvent) { isHovered = true }
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
+        onHover?()
+    }
     override func mouseExited(with event: NSEvent) { isHovered = false }
     override func mouseUp(with event: NSEvent) {
         if bounds.contains(convert(event.locationInWindow, from: nil)) { press() }

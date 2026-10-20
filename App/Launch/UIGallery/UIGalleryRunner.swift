@@ -3,6 +3,7 @@ import CryptoKit
 import MarkdownExport
 import NotesCore
 import NotionImport
+import PageCover
 import PageEditor
 import PageTree
 import SwiftUI
@@ -390,6 +391,19 @@ final class UIGalleryRunner {
             button.performClick(nil)
             await settle()
 
+        case .pageMenuAppearance:
+            await open(library.sample.page.id)
+            guard let button = Self.view(identified: "page-menu", in: window) as? NSButton else { return "нет кнопки «•••»" }
+            button.performClick(nil)
+            await settle()
+            let menuWindow = window.childWindows?.first { $0.contentView.flatMap { Self.find("page-menu-appearance", in: $0) } != nil }
+            guard let row = menuWindow?.contentView.flatMap({ Self.find("page-menu-appearance", in: $0) }) else { return "нет «Вид страницы»" }
+            _ = row.accessibilityPerformPress()
+            await settle()
+
+        case .pageCover(let state):
+            return await showPageCover(state)
+
         case .notionImport(let state):
             guard let controller = AppDelegate.importController else { return "импорт из Notion не подключён" }
             await open(library.sample.page.id)
@@ -550,6 +564,115 @@ final class UIGalleryRunner {
     }
 
     /// Вид окна по метке доступности.
+    /// Обложка и вид страницы (US1): страницы с обложками создаются при первом снимке и остаются до конца галереи.
+    private func showPageCover(_ state: GalleryPageCover) async -> String? {
+        switch state {
+        case .addHover:
+            await open(library.emptyPage)
+            if !PageEditorPreview.hoverHeader(in: window) { return "шапка не под мышью" }
+            return Self.view(identified: "add-page-cover", in: window)?.isHidden == false ? nil : "«Добавить обложку» не видна"
+        case .smallText, .fullWidth:
+            await open(library.sample.page.id)
+            guard let textView = PageEditorPreview.textView(in: window) else { return "нет редактора" }
+            // Только вид: данные образца не меняются, следующий снимок откроет страницу как была.
+            textView.applyLayout(PageLayoutSettings(isFullWidth: state == .fullWidth, isSmallText: state == .smallText))
+            await settle()
+            return nil
+        case .image:
+            guard let pageId = coverPages()?.image else { return "страница с картинкой-обложкой не создана" }
+            await open(pageId)
+            return await coverDrawn()
+        case .gallery, .hover, .reposition, .pickerGallery, .pickerUpload:
+            guard let pageId = coverPages()?.gallery else { return "страница с обложкой не создана" }
+            await open(pageId)
+            if let problem = await coverDrawn() { return problem }
+            guard let cover = Self.view(identified: "page-cover", in: window) as? CoverView else { return "нет обложки" }
+            switch state {
+            case .hover: cover.isHovered = true
+            case .reposition: cover.beginReposition()
+            case .pickerGallery, .pickerUpload:
+                cover.isHovered = true
+                cover.layoutSubtreeIfNeeded()
+                cover.changeCover()
+                await settle()
+                let picker = window.childWindows?.compactMap(\.contentView).first { $0.accessibilityIdentifier() == "cover-picker" }
+                guard let picker else { return "окно «Сменить обложку» не открылось" }
+                if state == .pickerUpload { _ = Self.find("cover-tab-upload", in: picker)?.accessibilityPerformPress() }
+            default: break
+            }
+            await settle()
+            return nil
+        }
+    }
+
+    /// Ждать, пока картинка обложки нарисуется (копия грузится в фоне).
+    private func coverDrawn() async -> String? {
+        for _ in 0..<20 {
+            if let cover = Self.view(identified: "page-cover", in: window) as? CoverView, cover.hasImage { return nil }
+            await settle()
+        }
+        return "обложка не нарисована"
+    }
+
+    private var coverPageIds: (gallery: UUID, image: UUID)?
+
+    /// «Обложка из галереи» с иконкой и текстом и «Обложка-картинка» с настоящей картинкой в хранилище файлов.
+    private func coverPages() -> (gallery: UUID, image: UUID)? {
+        if let coverPageIds { return coverPageIds }
+        let store = model.store
+        guard let picture = try? model.library.attachments.importData(Self.coverPicture(), name: "Закат.png", contentType: "public.png"),
+              let ids = try? store.write({ transaction -> (UUID, UUID) in
+                  func page(_ title: String, icon: String?, cover: PageCover) throws -> UUID {
+                      var page = try transaction.createPage(title: title)
+                      page.icon = icon
+                      page.cover = cover
+                      try transaction.updatePage(page)
+                      let blocks = try transaction.blocks(ofPage: page.id)
+                      var key = blocks.last?.sortKey
+                      for text in ["Обложка — во всю ширину области страницы, иконка заходит на неё.",
+                                   "Под обложкой — строка кнопок и название, как у Notion."] {
+                          key = .between(key, nil)
+                          try transaction.insertBlock(Block(pageId: page.id, kind: .paragraph, text: InlineText(text), sortKey: key!))
+                      }
+                      return page.id
+                  }
+                  return (try page("Обложка из галереи", icon: "🌅", cover: PageCover(source: .gallery("gradients_8"))),
+                          try page("Обложка-картинка", icon: nil, cover: PageCover(source: .file(picture), offset: 0.35)))
+              })
+        else { return nil }
+        model.library.reloadTree()
+        coverPageIds = (ids.0, ids.1)
+        return coverPageIds
+    }
+
+    /// Картинка-«фотография» для обложки: небо с солнцем и горы.
+    private static func coverPicture() -> Data {
+        let size = NSSize(width: 1600, height: 1000)
+        let image = NSImage(size: size, flipped: false) { rect in
+            NSGradient(colors: [NSColor(srgbRed: 0.98, green: 0.62, blue: 0.36, alpha: 1), NSColor(srgbRed: 0.35, green: 0.45, blue: 0.75, alpha: 1)])?
+                .draw(in: rect, angle: 90)
+            NSColor(srgbRed: 1, green: 0.85, blue: 0.5, alpha: 1).setFill()
+            NSBezierPath(ovalIn: NSRect(x: 700, y: 420, width: 200, height: 200)).fill()
+            NSColor(srgbRed: 0.18, green: 0.22, blue: 0.3, alpha: 1).setFill()
+            let hills = NSBezierPath()
+            hills.move(to: .zero)
+            hills.line(to: NSPoint(x: 0, y: 380)); hills.line(to: NSPoint(x: 420, y: 620)); hills.line(to: NSPoint(x: 820, y: 360))
+            hills.line(to: NSPoint(x: 1200, y: 560)); hills.line(to: NSPoint(x: 1600, y: 320)); hills.line(to: NSPoint(x: 1600, y: 0))
+            hills.close()
+            hills.fill()
+            return true
+        }
+        guard let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff),
+              let png = bitmap.representation(using: .png, properties: [:]) else { return Data() }
+        return png
+    }
+
+    static func find(_ identifier: String, in view: NSView) -> NSView? {
+        if view.accessibilityIdentifier() == identifier { return view }
+        for subview in view.subviews { if let found = find(identifier, in: subview) { return found } }
+        return nil
+    }
+
     static func view(identified identifier: String, in window: NSWindow) -> NSView? {
         func find(_ view: NSView) -> NSView? {
             if view.accessibilityIdentifier() == identifier { return view }

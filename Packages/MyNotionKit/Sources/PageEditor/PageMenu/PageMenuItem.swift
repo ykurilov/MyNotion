@@ -69,11 +69,15 @@ public struct PageMenuItem {
 @MainActor
 public struct PageMenuToggle {
     public let title: String
+    /// Метка доступности переключателя (UI-тесты).
+    public let identifier: String?
     public let isOn: @MainActor (PageMenuContext) -> Bool
     public let toggle: @MainActor (PageMenuContext) -> Void
 
-    public init(title: String, isOn: @escaping @MainActor (PageMenuContext) -> Bool, toggle: @escaping @MainActor (PageMenuContext) -> Void) {
+    public init(title: String, identifier: String? = nil, isOn: @escaping @MainActor (PageMenuContext) -> Bool,
+                toggle: @escaping @MainActor (PageMenuContext) -> Void) {
         self.title = title
+        self.identifier = identifier
         self.isOn = isOn
         self.toggle = toggle
     }

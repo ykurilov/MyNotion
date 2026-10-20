@@ -34,7 +34,8 @@ public final class PopupCard {
         self.panel = panel
         guard PopupWindows.show(panel, over: window, makingKey: true) else { return }
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
-            if let panel = self?.panel, event.window !== panel { self?.close() }
+            // Подменю карточки — её дочернее окно: щелчок в нём карточку не закрывает.
+            if let panel = self?.panel, event.window !== panel, event.window?.parent !== panel { self?.close() }
             return event
         }
         deactivationObserver = PopupWindows.onAppDeactivation { [weak self] in self?.close() }

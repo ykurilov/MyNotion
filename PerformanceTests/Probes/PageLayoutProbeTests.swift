@@ -1,9 +1,10 @@
 import AppKit
 import NotesCore
+import PageCover
 import PageEditor
 import XCTest
 
-/// Проба вида страницы (T003, research R14, п. 1): «богатая» страница 002 с заглушкой обложки 280 над шапкой;
+/// Проба вида страницы (T003, research R14, п. 1; US1 — с настоящей обложкой галереи): «богатая» страница 002 с обложкой 280;
 /// «Мелкий шрифт» и «Широкая страница» туда и обратно. Перекладка ≤ 200 мс; после каждого шага снимок окна: ширина
 /// строки и размер шрифта изменились, таблица, код и картинка нарисованы не пустыми; набор после переключений p95 ≤ 50 мс.
 @MainActor
@@ -16,10 +17,8 @@ final class PageLayoutProbeTests: XCTestCase {
     func testLayoutSwitchesRelayoutQuicklyAndKeepViewsDrawn() async throws {
         let page = try RichProbePage()
         defer { page.close() }
-        let cover = NSView()
-        cover.wantsLayer = true
-        cover.layer?.backgroundColor = NSColor.systemTeal.cgColor
-        page.textView.setCover(cover, height: 280)
+        let cover = CoverView(cover: PageCover(source: .gallery("gradients_5")), fileURL: { _ in nil })
+        page.textView.setCover(cover, height: 280) { [weak cover] left, width in cover?.setColumn(left: left, width: width) }
         try await page.settle()
 
         let paragraphIndex = try XCTUnwrap(page.textView.document.blocks.firstIndex { $0.kind == .paragraph })
@@ -61,7 +60,7 @@ final class PageLayoutProbeTests: XCTestCase {
             var shots: [String] = []
             if let bitmap = page.snapshot() {
                 let coverInk = page.inkFraction(of: cover, in: bitmap)
-                XCTAssertGreaterThan(coverInk, 0.5, "\(step.name): заглушка обложки не нарисована")
+                XCTAssertGreaterThan(coverInk, 0.5, "\(step.name): обложка не нарисована")
                 shots.append(page.save(bitmap, name: "layout-\(step.name)-top", to: self))
             }
             // Виды 002: таблица, код, картинка — каждый у верха окна, со снимком.
