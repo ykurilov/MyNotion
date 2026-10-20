@@ -18,6 +18,36 @@ public struct BacklinkIndexBuild: Sendable {
         self.batchSize = max(batchSize, 1)
     }
 
+    /// Служебное (замер заполнения): стереть индекс и отметку «построен» — как до первого запуска v7.
+    public func reset() throws {
+        try store.database.dbWriter.write { db in try db.execute(sql: "DELETE FROM page_link") }
+        try store.setAppMeta(Self.builtKey, nil)
+    }
+
+    /// Служебное (замер заполнения, только на копии базы): каждый `step`-й блок получает упоминание страницы,
+    /// чтобы заполнению было что вносить в индекс. Возвращает число размеченных блоков.
+    @discardableResult
+    public func seedMentionsForBenchmark(everyNthBlock step: Int) throws -> Int {
+        try store.database.dbWriter.write { db in
+            try db.execute(sql: """
+                UPDATE block SET textStyles = '[{"style":"mention","pageId":"'
+                    || (SELECT id FROM page WHERE trashedAt IS NULL LIMIT 1 OFFSET (abs(random()) % (SELECT COUNT(*) FROM page WHERE trashedAt IS NULL)))
+                    || '","start":0,"length":1}]'
+                WHERE isDeleted = 0 AND rowid % ? = 0
+                """, arguments: [max(step, 1)])
+            return db.changesCount
+        }
+    }
+
+    /// Служебное (замер заполнения): сколько страниц, блоков и записей индекса сейчас в базе.
+    public func counts() throws -> (pages: Int, blocks: Int, links: Int) {
+        try store.database.dbWriter.read { db in
+            (try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM page WHERE trashedAt IS NULL") ?? 0,
+             try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM block WHERE isDeleted = 0") ?? 0,
+             try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM page_link") ?? 0)
+        }
+    }
+
     /// `true` — построено сейчас; `false` — уже было построено.
     @discardableResult
     public func runIfNeeded() async throws -> Bool {

@@ -21,6 +21,8 @@ struct LaunchOptions {
     var typingBenchmarkURL: URL?
     /// `--search-benchmark <путь>`: замер поиска — время от нажатия до выдачи на экране (T054), отчёт в файл и выход.
     var searchBenchmarkURL: URL?
+    /// `--backlink-benchmark <путь>`: первое заполнение индекса обратных ссылок на эталоне — время и остановки окна (US5, T074), отчёт в файл и выход.
+    var backlinkBenchmarkURL: URL?
     /// `--rich-memory-check <путь>`: память за 120 переходов между «богатыми» страницами (US3, T056), отчёт в файл и выход.
     var richMemoryCheckURL: URL?
     /// `--tabs-benchmark <путь>`: замер вкладок — переключение, «назад», «вперёд», память 20 вкладок (US3, T056),
@@ -55,7 +57,7 @@ struct LaunchOptions {
     /// (`--launch-report`) синхронизацию не выключает: на базе, где она включена, мерится память с ней
     /// (`scripts/vm/sync-memory-check.sh`); у эталонной базы синхронизации нет.
     var allowsSync: Bool {
-        uiGalleryURL == nil && typingBenchmarkURL == nil && searchBenchmarkURL == nil && windowSnapshotURL == nil
+        uiGalleryURL == nil && typingBenchmarkURL == nil && searchBenchmarkURL == nil && backlinkBenchmarkURL == nil && windowSnapshotURL == nil
             && richMemoryCheckURL == nil
             && exportMarkdownURL == nil && tabsBenchmarkURL == nil
     }
@@ -74,6 +76,7 @@ struct LaunchOptions {
             case "--window-snapshot": windowSnapshotURL = remaining.popFirst().map(Self.fileURL)
             case "--typing-benchmark": typingBenchmarkURL = remaining.popFirst().map(Self.fileURL)
             case "--search-benchmark": searchBenchmarkURL = remaining.popFirst().map(Self.fileURL)
+            case "--backlink-benchmark": backlinkBenchmarkURL = remaining.popFirst().map(Self.fileURL)
             case "--rich-memory-check": richMemoryCheckURL = remaining.popFirst().map(Self.fileURL)
             case "--tabs-benchmark": tabsBenchmarkURL = remaining.popFirst().map(Self.fileURL)
             case "--export-markdown": exportMarkdownURL = remaining.popFirst().map(Self.fileURL)

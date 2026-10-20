@@ -203,4 +203,25 @@ struct PageLinkIndexTests {
         try await BacklinkIndexBuild(store: library.store).runIfNeeded()
         #expect(try library.rows().isEmpty)
     }
+
+    @Test("Служебный замер: разметка блоков ссылками, сброс и заполнение дают индекс по размеченным блокам")
+    func benchmarkSeedResetAndBuild() async throws {
+        let library = try BacklinksLibrary(indexBuilt: true)
+        let target = try library.page("Цель")
+        let source = try library.page("Источник")
+        for _ in 0..<10 { try library.addMention(of: target.id, on: source.id) }
+        let build = BacklinkIndexBuild(store: library.store, batchSize: 3)
+
+        let seeded = try build.seedMentionsForBenchmark(everyNthBlock: 2)
+        try build.reset()
+        #expect(try library.rows().isEmpty)
+        #expect(try library.store.appMeta(BacklinkIndexBuild.builtKey) == nil)
+
+        #expect(try await build.runIfNeeded())
+        let counts = try build.counts()
+        #expect(seeded > 0)
+        #expect(counts.links >= seeded)
+        #expect(counts.pages >= 2)
+        _ = target
+    }
 }
