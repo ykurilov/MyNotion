@@ -5,6 +5,7 @@ import NotesCore
 import NotionImport
 import PageCover
 import PageEditor
+import PagePicker
 import PageTree
 import SwiftUI
 import Sync
@@ -411,6 +412,13 @@ final class UIGalleryRunner {
         case .tabs(let kind):
             return await GalleryTabsScene.show(kind, model: model, library: library)
 
+        case .movePicker(let kind):
+            await open(library.sample.page.id)
+            model.showMovePagePicker(library.sample.page.id)
+            guard let picker = model.movePicker.model else { return "окно «Переместить в…» не открылось" }
+            if kind == .query { picker.query = String(library.sample.page.title.prefix(4)) }
+            await settle()
+
         case .pageMenu:
             await open(library.sample.page.id)
             guard let button = Self.view(identified: "page-menu", in: window) as? NSButton else { return "нет кнопки «•••»" }
@@ -528,6 +536,9 @@ final class UIGalleryRunner {
             await settle()
         case .tabs(let kind):
             await GalleryTabsScene.tearDown(kind, model: model)
+        case .movePicker:
+            model.movePicker.close()
+            await settle()
         case .favoriteStar, .sidebarSections:
             if model.collapsedSections.contains(.favorites) { model.toggleSection(.favorites) }
             await setSections(favorites: [], recents: [])

@@ -18,7 +18,7 @@ public struct PagesNavigationSample: Sendable {
     }
 
     public var parts: [Part] {
-        [Self.duplicationBranch, Self.covers, Self.favoritesAndRecents, Self.templates, Self.backlinks, Self.versions].compactMap { $0 }
+        [Self.copiesSource, Self.copiesTarget, Self.duplicationBranch, Self.covers, Self.favoritesAndRecents, Self.templates, Self.backlinks, Self.versions].compactMap { $0 }
     }
 
     public func ensure(in store: NotesStore) throws {

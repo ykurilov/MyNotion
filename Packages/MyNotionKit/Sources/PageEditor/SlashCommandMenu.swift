@@ -72,7 +72,7 @@ struct PopupMenuItem: Equatable {
     static let duplicate = PopupMenuItem(title: "Дублировать", icon: .symbol("plus.square.on.square"), keywords: [], action: .duplicate,
                                          hint: "⌘D", startsGroup: true)
     static let moveTo = PopupMenuItem(title: "Переместить в", icon: .symbol("arrow.turn.up.right"), keywords: [], action: .moveTo,
-                                      hint: "⇧⌘P")
+                                      hint: "⌘⇧P")
     static let delete = PopupMenuItem(title: "Удалить", icon: .symbol("trash"), keywords: [], action: .delete, hint: "Del")
 
     /// Заголовок меню блока — название его типа, как «Text» у Notion.

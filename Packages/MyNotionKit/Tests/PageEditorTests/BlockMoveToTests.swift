@@ -19,7 +19,7 @@ struct BlockMoveToTests {
     func menuHasMoveTo() {
         let paragraph = PopupMenuItem.blockMenuItems(for: .paragraph)
         #expect(paragraph.map(\.title) == ["Преобразовать в", "Цвет", "Дублировать", "Переместить в", "Удалить"])
-        #expect(paragraph.map(\.hint) == [nil, nil, "⌘D", "⇧⌘P", "Del"])
+        #expect(paragraph.map(\.hint) == [nil, nil, "⌘D", "⌘⇧P", "Del"])
         #expect(paragraph.map(\.startsGroup) == [false, false, true, false, false])
         let pageLink = PopupMenuItem.blockMenuItems(for: .pageLink)
         #expect(pageLink.map(\.title) == ["Преобразовать в", "Цвет", "Переместить в", "Удалить"])

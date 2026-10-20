@@ -19,7 +19,7 @@ struct BlockMenuTests {
         let popups = editor.textView.popups
         #expect(popups.sectionTitle == "Заголовок 2")
         #expect(popups.visibleItems.map(\.title) == ["Преобразовать в", "Цвет", "Дублировать", "Переместить в", "Удалить"])
-        #expect(popups.visibleItems.map(\.hint) == [nil, nil, "⌘D", "⇧⌘P", "Del"])
+        #expect(popups.visibleItems.map(\.hint) == [nil, nil, "⌘D", "⌘⇧P", "Del"])
         #expect(popups.visibleItems.map(\.startsGroup) == [false, false, true, false, false])
         #expect(popups.visibleItems.map(\.opensSubmenu) == [true, true, false, false, false])
         let frame = try #require(popups.menuFrame)
