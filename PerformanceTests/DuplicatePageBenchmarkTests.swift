@@ -35,11 +35,23 @@ final class DuplicatePageBenchmarkTests: XCTestCase {
         let undoSeconds = BranchCopyProbeTests.seconds(ContinuousClock.now - undoStarted)
         let afterUndo = try store.pageOutline().count
 
+        // ⇧⌘Z: копия заново, тоже с очереди записи.
+        let redoWatch = MainThreadWatch()
+        redoWatch.start()
+        let redoStarted = ContinuousClock.now
+        undoManager.redo()
+        let redoCopy = try await XCTUnwrap(tree.pendingDuplicate).value
+        let redoSeconds = BranchCopyProbeTests.seconds(ContinuousClock.now - redoStarted)
+        redoWatch.stop()
+        let redone = try BranchCopyProbeTests.texts(ofBranch: redoCopy.id, in: store)
+
         let summary = """
             Дублирование: 51 страница, \(original.blockCount) блоков, 10 картинок — \(String(format: "%.2f", seconds)) с (предел 2), \
             главный поток замирал не дольше \(ProbeEditor.format(watch.maxGapMs)) мс (предел 100)
             Дублирование: копия «\(copy.title)» — \(copied.pageCount) страниц, текст совпал: \(copied.texts == original.texts ? "да" : "нет")
             Дублирование: ⌘Z стёр копию за \(String(format: "%.2f", undoSeconds)) с, страниц в базе \(afterUndo)
+            Дублирование: ⇧⌘Z — \(String(format: "%.2f", redoSeconds)) с, главный поток замирал не дольше \(ProbeEditor.format(redoWatch.maxGapMs)) мс, \
+            текст совпал: \(redone.texts == original.texts ? "да" : "нет")
             """
         print(summary)
         add(XCTAttachment(string: summary))
@@ -47,5 +59,8 @@ final class DuplicatePageBenchmarkTests: XCTestCase {
         XCTAssertLessThanOrEqual(watch.maxGapMs, 100, "Главный поток замирал дольше 100 мс")
         XCTAssertEqual(copied.texts, original.texts)
         XCTAssertEqual(afterUndo, original.pageCount, "⌘Z не стёр копию")
+        XCTAssertLessThanOrEqual(redoSeconds, 2, "Повтор дублирования дольше 2 с")
+        XCTAssertLessThanOrEqual(redoWatch.maxGapMs, 100, "Повтор дублирования замораживал главный поток дольше 100 мс")
+        XCTAssertEqual(redone.texts, original.texts)
     }
 }

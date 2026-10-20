@@ -10,6 +10,8 @@ extension MainWindowModel {
     func duplicatePage(_ pageId: UUID) {
         // Набранное уходит в базу раньше копии: копия читает страницу из базы.
         openDocuments.saveAll()
+        // ⇧⌘Z дописывает копию с очереди записи — по готовности она открывается, как после «Дублировать».
+        treeOperations.onDuplicateRedone = { [weak self] copy in self?.navigate(to: copy.id, focus: .unchanged) }
         Task {
             do {
                 let copy = try await treeOperations.duplicate(pageId)

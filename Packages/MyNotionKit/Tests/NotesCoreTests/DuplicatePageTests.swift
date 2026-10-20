@@ -147,7 +147,13 @@ struct DuplicatePageTests {
         #expect(try outline(parent.id) == ["→ Альфа", "→ Бета", "после ссылок"])
         #expect(!undoManager.canUndo)
 
+        var redonePage: Page?
+        tree.onDuplicateRedone = { redonePage = $0 }
         undoManager.redo()
+        let redoCopy = try #require(tree.pendingDuplicate, "Повтор пишет копию с очереди записи")
+        _ = try await redoCopy.value
+        for _ in 0..<100 where redonePage == nil { await Task.yield() }
+        #expect(redonePage?.title == "Альфа (1)", "Окно узнаёт копию повтора, чтобы открыть её")
         #expect(try childTitles(parent.id) == ["Альфа", "Альфа (1)", "Бета"])
         #expect(try outline(parent.id) == ["→ Альфа", "→ Альфа (1)", "→ Бета", "после ссылок"])
         let redone = try #require(try store.pageTree().children(of: parent.id).first { $0.title == "Альфа (1)" })
@@ -155,6 +161,27 @@ struct DuplicatePageTests {
 
         undoManager.undo()
         #expect(try store.pageOutline().count == pagesBefore)
+    }
+
+    @Test("⌘Z сразу после ⇧⌘Z, пока копия повтора пишется: копия стирается по готовности, повтор снова доступен")
+    func undoWhileRedoIsWriting() async throws {
+        let (parent, alpha, _, _) = try projects()
+        let pagesBefore = try store.pageOutline().count
+        let undoManager = makeUndoManager()
+        undoManager.beginUndoGrouping()
+        _ = try await tree.duplicate(alpha.id)
+        undoManager.endUndoGrouping()
+        undoManager.undo()
+
+        undoManager.redo()
+        let pending = try #require(tree.pendingDuplicate)
+        undoManager.undo()
+        _ = try? await pending.value
+        await tree.pendingErase?.value
+
+        #expect(try store.pageOutline().count == pagesBefore)
+        #expect(try outline(parent.id) == ["→ Альфа", "→ Бета", "после ссылок"])
+        #expect(undoManager.canRedo)
     }
 
     @Test("Удаление копии навсегда не трогает оригинал: текст ветки тот же")

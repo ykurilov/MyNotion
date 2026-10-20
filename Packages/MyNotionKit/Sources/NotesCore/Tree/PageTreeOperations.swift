@@ -17,6 +17,12 @@ public final class PageTreeOperations {
     public var onAppearanceChange: ((UUID) -> Void)?
     /// Отмена не удалась (например, страницу уже стёрли навсегда).
     public var onUndoFailure: ((any Error) -> Void)?
+    /// Повтор дублирования (⇧⌘Z) дописал копию с очереди записи: окно открывает её (US4).
+    public var onDuplicateRedone: ((Page) -> Void)?
+    /// Копия повтора дублирования, которая ещё пишется с очереди записи.
+    public internal(set) var pendingDuplicate: Task<Page, any Error>?
+    /// Стирание копии, отменённой раньше, чем повтор её дописал.
+    public internal(set) var pendingErase: Task<Void, Never>?
 
     public init(store: NotesStore, undoManager: UndoManager? = nil) {
         self.store = store

@@ -8,6 +8,12 @@ extension PageTreeOperations {
     /// Возвращает корень копии.
     @discardableResult
     public func duplicate(_ pageId: UUID, now: Date = Date()) async throws -> Page {
+        let copy = try await writeCopyOffMain(of: pageId, now: now)
+        registerDuplicateUndo(copy.id, original: pageId)
+        return copy
+    }
+
+    private func writeCopyOffMain(of pageId: UUID, now: Date) async throws -> Page {
         let store = store
         let (copy, touched) = try await Task.detached {
             try store.write { transaction in
@@ -16,7 +22,6 @@ extension PageTreeOperations {
             }
         }.value
         onChange?(touched)
-        registerDuplicateUndo(copy.id, original: pageId)
         return copy
     }
 
@@ -26,6 +31,11 @@ extension PageTreeOperations {
 
     /// Отмена: копия со всей веткой (и с тем, что в ней успели удалить в корзину) стирается, ссылка в родителе — тоже.
     private func eraseDuplicate(_ copyId: UUID, original: UUID) throws {
+        try eraseBranch(copyId)
+        registerUndo("Дублирование") { $0.redoDuplicate(original) }
+    }
+
+    private func eraseBranch(_ copyId: UUID) throws {
         try perform { transaction in
             let all = try transaction.allPages()
             let children = Dictionary(grouping: all, by: \.parentId)
@@ -38,13 +48,43 @@ extension PageTreeOperations {
             collect(copy)
             try Self.erase(branch, transaction)
         }
-        registerUndo("Дублирование") { try $0.redoDuplicate(original) }
     }
 
-    /// Повтор: копия заново (стёртые id не возвращаются). Пишется здесь же — повтор идёт из меню «Правка» синхронно.
-    private func redoDuplicate(_ original: UUID) throws {
-        let copy = try perform { try Self.writeDuplicate(of: original, in: $0, now: Date()) }
-        registerDuplicateUndo(copy.id, original: original)
+    /// Копия повтора, пока пишется: отменённая раньше готовности стирается, как только допишется.
+    private final class RedoneCopy {
+        let task: Task<Page, any Error>
+        var copyId: UUID?
+        var isWithdrawn = false
+        init(task: Task<Page, any Error>) { self.task = task }
+    }
+
+    /// Повтор (⇧⌘Z): копия заново (стёртые id не возвращаются), тоже с очереди записи — главный поток не ждёт.
+    /// Запись отмены ставится сразу: меню «Правка» ждёт её в том же шаге повтора.
+    private func redoDuplicate(_ original: UUID) {
+        let redone = RedoneCopy(task: Task { try await self.writeCopyOffMain(of: original, now: Date()) })
+        pendingDuplicate = redone.task
+        registerUndo("Дублирование") { try $0.withdrawRedone(redone, original: original) }
+        Task { [weak self] in
+            do {
+                let copy = try await redone.task.value
+                redone.copyId = copy.id
+                if self?.pendingDuplicate == redone.task { self?.pendingDuplicate = nil }
+                if !redone.isWithdrawn { self?.onDuplicateRedone?(copy) }
+            } catch {
+                self?.pendingDuplicate = nil
+                self?.onUndoFailure?(error)
+            }
+        }
+    }
+
+    private func withdrawRedone(_ redone: RedoneCopy, original: UUID) throws {
+        if let copyId = redone.copyId { return try eraseDuplicate(copyId, original: original) }
+        redone.isWithdrawn = true
+        pendingErase = Task { [weak self] in
+            guard let copy = try? await redone.task.value else { return }
+            do { try self?.eraseBranch(copy.id) } catch { self?.onUndoFailure?(error) }
+        }
+        registerUndo("Дублирование") { $0.redoDuplicate(original) }
     }
 
     nonisolated static func writeDuplicate(of pageId: UUID, in transaction: NotesTransaction, now: Date) throws -> Page {
