@@ -35,7 +35,7 @@ extension PageTreeOperations {
         registerUndo("Дублирование") { $0.redoDuplicate(original) }
     }
 
-    private func eraseBranch(_ copyId: UUID) throws {
+    func eraseBranch(_ copyId: UUID) throws {
         try perform { transaction in
             let all = try transaction.allPages()
             let children = Dictionary(grouping: all, by: \.parentId)
