@@ -111,20 +111,32 @@ final class RichProbePage {
         window.displayIfNeeded()
     }
 
-    /// Место прокрутки, как его хранит вкладка (data-model.md, «Tab.scroll»): блок у верха и сдвиг от его верха.
+    /// Место прокрутки, как его хранит вкладка (data-model.md, «Tab.scroll»): блок у верха и сдвиг от верха его абзаца.
     func scrollAnchor() -> (block: Int, offset: CGFloat) {
         let block = topVisibleBlockIndex() ?? 0
-        return (block, textView.visibleRect.minY - blockTop(block))
+        return (block, textView.visibleRect.minY - (blockTopLaidOut(block) ?? textView.visibleRect.minY))
     }
 
-    /// Вернуть место прокрутки: верх блока плюс сдвиг.
+    /// Вернуть место прокрутки так, как его вернёт вкладка: TextKit 2 ставит видимую область на абзац блока
+    /// (`relocateViewport`) — раскладывается только он и соседи, а не всё выше; затем сдвиг.
     func restore(_ anchor: (block: Int, offset: CGFloat)) {
-        // Раскладка до блока: без неё у только что открытой страницы место абзаца ещё прикидочное.
-        textView.scrollRangeToVisible(NSRange(location: location(ofBlock: anchor.block), length: 0))
+        guard let layoutManager = textView.textLayoutManager, let storage = textView.textContentStorage,
+              let location = storage.location(storage.documentRange.location, offsetBy: location(ofBlock: anchor.block)) else { return }
+        let y = layoutManager.textViewportLayoutController.relocateViewport(to: location)
+        textView.layoutSubtreeIfNeeded()
+        let top = blockTopLaidOut(anchor.block) ?? (y + textView.textContainerOrigin.y)
         let clip = scrollView.contentView
-        clip.scroll(to: NSPoint(x: 0, y: max(0, blockTop(anchor.block) + anchor.offset)))
+        clip.scroll(to: NSPoint(x: 0, y: max(0, top + anchor.offset)))
         scrollView.reflectScrolledClipView(clip)
         window.displayIfNeeded()
+    }
+
+    /// Верх абзаца блока в координатах текста по разложенному фрагменту; `nil` — абзац не разложен.
+    func blockTopLaidOut(_ index: Int) -> CGFloat? {
+        guard let layoutManager = textView.textLayoutManager, let storage = textView.textContentStorage,
+              let location = storage.location(storage.documentRange.location, offsetBy: location(ofBlock: index)),
+              let fragment = layoutManager.textLayoutFragment(for: location) else { return nil }
+        return fragment.layoutFragmentFrame.minY + textView.textContainerOrigin.y
     }
 
     /// Где окажется верх видимой области после возврата места `anchor`: запоминается при уходе со вкладки.
