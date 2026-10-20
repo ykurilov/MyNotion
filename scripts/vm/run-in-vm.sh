@@ -123,7 +123,7 @@ SCRIPT
 chmod +x ~/run-uitest.command; rm -f ~/uitest.done ~/uitest.log; open ~/run-uitest.command"
     for _ in {1..360}; do vm_ssh $ip "test -f ~/uitest.done" && break; perl -e 'select(undef,undef,undef,5)'; done
     # Замеры печатают итоги строками «Запуск…», «Память…», «Набор…», «Поиск…», «Импорт…».
-    vm_ssh $ip "grep -E 'Test Case .*(passed|failed)|error:|Executed|TEST (EXECUTE )?(SUCCEEDED|FAILED)|^(Запуск|Из них|Память|Набор|Переход|Открытие|Прокрутка|Поиск|Импорт|Снимок|Проба)' ~/uitest.log | tail -60; echo exit=\$(cat ~/uitest.done 2>/dev/null)";;
+    vm_ssh $ip "grep -E 'Test Case .*(passed|failed)|error:|Executed|TEST (EXECUTE )?(SUCCEEDED|FAILED)|^(Запуск|Из них|Память|Набор|Переход|Открытие|Прокрутка|Поиск|Импорт|Снимок|Проба|Миграция)' ~/uitest.log | tail -60; echo exit=\$(cat ~/uitest.done 2>/dev/null)";;
   ssh)
     shift; ip=$(ensure_vm_running); vm_ssh $ip "$@";;
   status)
