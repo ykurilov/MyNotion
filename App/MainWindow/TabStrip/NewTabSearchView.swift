@@ -48,8 +48,10 @@ struct NewTabSearchView: View {
         }
         .frame(width: Self.width)
         .background(Color(nsColor: Palette.popupMenuBackground), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(nsColor: Palette.border)))
-        .shadow(color: .black.opacity(0.2), radius: 16, y: 6)
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color(nsColor: Palette.newTabCardRing)))
+        // Тень как у окна Notion 7.39: широкая вниз и короткая у края.
+        .shadow(color: .black.opacity(0.14), radius: 24, y: 24)
+        .shadow(color: .black.opacity(0.08), radius: 6, y: 4)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("new-tab-search")
     }

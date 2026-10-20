@@ -16,4 +16,11 @@ extension Palette {
     }
     /// «×» на вкладке (тёмная — 0x7D7A75).
     public static var tabClose: NSColor { pageHeaderButton }
+    /// Рамка окна «Открыть в новой вкладке…» (⌘T): у Notion 7.39 — кольцо 1 0x383836 в тёмной теме (замер 21.10.2026);
+    /// в светлой — заметное на белой странице кольцо (проверка T101 № 21: светлая карточка без рамки тонула).
+    public static let newTabCardRing = NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ? NSColor(srgbRed: 0x38 / 255, green: 0x38 / 255, blue: 0x36 / 255, alpha: 1)
+            : NSColor(srgbRed: 15 / 255, green: 15 / 255, blue: 15 / 255, alpha: 0.12)
+    }
 }
