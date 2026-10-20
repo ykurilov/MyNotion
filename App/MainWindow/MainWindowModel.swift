@@ -4,6 +4,7 @@ import Navigation
 import NotesCore
 import Observation
 import PageEditor
+import PagePicker
 import PageSearch
 import VisualStyle
 
@@ -15,6 +16,8 @@ import VisualStyle
 final class MainWindowModel {
     @ObservationIgnored let library: PagesLibrary
     @ObservationIgnored let treeOperations: PageTreeOperations
+    /// Окно «Переместить в…» (US4, `MainWindowModel+Copies`).
+    @ObservationIgnored let movePicker = PagePickerController()
     /// Окно на экране: по нему библиотека знает, в каком окне работают сейчас.
     @ObservationIgnored weak var window: NSWindow? {
         // В строке светофора система тянет окно раньше, чем вкладка получает мышь: окно само не двигается,
@@ -214,6 +217,8 @@ final class MainWindowModel {
             }
         case .turnInto(let blockId):
             performTreeOperation { try treeOperations.turnIntoSubpage(blockId, in: pageId) }
+        case .moveBlocks(let blockIds, let anchor):
+            showMoveBlocksPicker(blockIds, from: pageId, anchor: anchor)
         }
     }
 
@@ -495,7 +500,7 @@ final class MainWindowModel {
     }
 
     /// Переход в активной вкладке: история вкладки, затем её страница.
-    private func navigate(to pageId: UUID, focus: PageTextView.InitialFocus) {
+    func navigate(to pageId: UUID, focus: PageTextView.InitialFocus) {
         tabs.open(PageOpenRequest(pageId: pageId))
         showActiveTab(focus: focus)
     }

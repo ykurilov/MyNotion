@@ -253,6 +253,9 @@ private struct PagesWindow: View {
         actions.moveFavorite = { model.moveFavorite($0, toIndex: $1) }
         actions.rowMenuHandlers[.favorite] = { model.toggleFavorite($0) }
         actions.rowMenuHandlers[.openInNewTab] = { model.open(PageOpenRequest(pageId: $0, inNewTab: true)) }
+        actions.rowMenuHandlers[.duplicate] = { model.duplicatePage($0) }
+        // Окно выбора — у меню строки: там, где мышь выбрала пункт.
+        actions.rowMenuHandlers[.moveTo] = { model.showMovePagePicker($0, anchor: NSRect(origin: NSEvent.mouseLocation, size: .zero)) }
         actions.pageFlags = { [tree = model.tree] pageId in
             let page = tree.page(pageId)
             return (isTemplate: page?.isTemplate ?? false, isFavorite: page?.favorite != nil)

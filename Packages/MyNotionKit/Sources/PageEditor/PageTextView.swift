@@ -395,7 +395,7 @@ public class PageTextView: NSTextView {
 
     public override func keyDown(with event: NSEvent) {
         hideBlockHandles()
-        if !hasMarkedText(), let command = EditorKeyBindings.command(for: event) {
+        if !hasMarkedText(), let command = EditorKeyBindings.command(for: event), handlesKey(command) {
             perform(command)
             return
         }
@@ -409,7 +409,7 @@ public class PageTextView: NSTextView {
 
     /// ⌘B, ⌘I, ⇧⌘X, ⌘E, ⌘Enter — раньше меню: окно спрашивает поле ввода первым.
     public override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if window?.firstResponder === self, !hasMarkedText(), let command = EditorKeyBindings.command(for: event) {
+        if window?.firstResponder === self, !hasMarkedText(), let command = EditorKeyBindings.command(for: event), handlesKey(command) {
             perform(command)
             return true
         }
@@ -492,7 +492,21 @@ public class PageTextView: NSTextView {
         case .insertInlineEquation: insertInlineEquation()
         case .duplicateBlocks:
             if let selected = selectedBlockRange() { duplicateBlocks(at: selected) }
+        case .moveBlocksToPage:
+            if let selected = selectedBlocks { requestMoveBlocks(selected, anchor: nil) }
         }
+    }
+
+    /// «Переместить в» (US4): окно выбирает страницу и переносит блоки (`PageTreeOperations.moveBlocks`).
+    func requestMoveBlocks(_ range: Range<Int>, anchor: NSRect?) {
+        commitEdits()
+        guard !range.isEmpty, range.upperBound <= document.blocks.count else { return }
+        onSubpageRequest?(.moveBlocks(blockIds: document.blocks[range].map(\.id), anchor: anchor))
+    }
+
+    /// ⇧⌘P берёт редактор, только когда выделены блоки; иначе клавиша — у меню окна (переносит страницу).
+    private func handlesKey(_ command: EditorCommand) -> Bool {
+        command != .moveBlocksToPage || isBlockSelection
     }
 
     /// Блоки под курсором или выделением.

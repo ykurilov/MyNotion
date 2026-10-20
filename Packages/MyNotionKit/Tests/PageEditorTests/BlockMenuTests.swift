@@ -12,16 +12,16 @@ struct BlockMenuTests {
         editor.textView.openBlockMenu(forBlock: editor.document.blocks[index].id, below: NSRect(x: 100, y: 500, width: 20, height: 20))
     }
 
-    @Test("Короткое меню: заголовок — тип блока; «Преобразовать в», «Цвет», «Дублировать» ⌘D, «Удалить» Del")
+    @Test("Короткое меню: заголовок — тип блока; «Преобразовать в», «Цвет», «Дублировать» ⌘D, «Переместить в» ⇧⌘P, «Удалить» Del")
     func shortMenu() throws {
         let editor = try EditorFixture([.paragraph("один"), .heading(2, "два")])
         openMenu(editor, block: 1)
         let popups = editor.textView.popups
         #expect(popups.sectionTitle == "Заголовок 2")
-        #expect(popups.visibleItems.map(\.title) == ["Преобразовать в", "Цвет", "Дублировать", "Удалить"])
-        #expect(popups.visibleItems.map(\.hint) == [nil, nil, "⌘D", "Del"])
-        #expect(popups.visibleItems.map(\.startsGroup) == [false, false, true, false])
-        #expect(popups.visibleItems.map(\.opensSubmenu) == [true, true, false, false])
+        #expect(popups.visibleItems.map(\.title) == ["Преобразовать в", "Цвет", "Дублировать", "Переместить в", "Удалить"])
+        #expect(popups.visibleItems.map(\.hint) == [nil, nil, "⌘D", "⌘⇧P", "Del"])
+        #expect(popups.visibleItems.map(\.startsGroup) == [false, false, true, false, false])
+        #expect(popups.visibleItems.map(\.opensSubmenu) == [true, true, false, false, false])
         let frame = try #require(popups.menuFrame)
         #expect(frame.width == Metrics.PopupMenu.blockMenuWidth)
     }
@@ -146,10 +146,10 @@ struct BlockMenuTests {
         #expect(editor.texts == ["один", "один", "два"])
     }
 
-    @Test("Подстраницу не дублировать: в её меню нет «Дублировать»")
+    @Test("Подстраницу не дублировать: в её меню нет «Дублировать», группу начинает «Переместить в»")
     func pageLinkHasNoDuplicate() {
         #expect(!PopupMenuItem.blockMenuItems(for: .pageLink).contains(.duplicate))
-        #expect(PopupMenuItem.blockMenuItems(for: .pageLink).last?.startsGroup == true)
+        #expect(PopupMenuItem.blockMenuItems(for: .pageLink).first { $0.action == .moveTo }?.startsGroup == true)
     }
 
     @Test("Длинный список по высоте экрана: строки целиком, прокрутка за выбранной строкой, полоса прокрутки")

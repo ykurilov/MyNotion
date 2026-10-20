@@ -163,19 +163,19 @@ description: "Задачи: страницы и навигация"
 
 ### Tests for User Story 4
 
-- [ ] T057 [P] [US4] `PK/Tests/NotesCoreTests/DuplicatePageTests.swift` по contracts/page-operations.md, «Дублирование»: название «(1)» и следующий свободный, место под оригиналом и ссылка в родителе следом, копия шаблона — шаблон, ⌘Z удаляет копию одной правкой
-- [ ] T058 [P] [US4] `PK/Tests/NotesCoreTests/MoveBlocksToPageTests.swift` по contracts/page-operations.md, «Перенос блоков»: конец потока цели, глубины, контейнеры, `movedFrom`, подстраницы переезжают, ⌘Z возвращает исходные с прежними id и прежнего родителя подстраниц; цель — та же страница недоступна
-- [ ] T059 [P] [US4] `PK/Tests/PagePickerTests/PagePickerModelTests.swift`: без запроса — 5 недавних и дерево; с запросом — выдача поиска; недоступные (сама страница и потомки для страницы, исходная для блоков, корзина); клавиатура ↑↓ → Enter Esc
-- [ ] T060 [P] [US4] XCUITest `UITests/DuplicateMoveTests.swift`: «•••» → «Дублировать» у страницы с двумя подстраницами, картинкой и файлом — открыта «(1)», подстраницы-копии, файл открывается; ⌘D при фокусе в панели; выделить три блока с вложенными → ⇧⌘P → поиск → Enter — блоки в конце другой страницы; ⌘Z; «Переместить в» страницы из меню панели
+- [x] T057 [P] [US4] `PK/Tests/NotesCoreTests/DuplicatePageTests.swift` по contracts/page-operations.md, «Дублирование»: название «(1)» и следующий свободный, место под оригиналом и ссылка в родителе следом, копия шаблона — шаблон, ⌘Z удаляет копию одной правкой
+- [x] T058 [P] [US4] `PK/Tests/NotesCoreTests/MoveBlocksToPageTests.swift` по contracts/page-operations.md, «Перенос блоков»: конец потока цели, глубины, контейнеры, `movedFrom`, подстраницы переезжают, ⌘Z возвращает исходные с прежними id и прежнего родителя подстраниц; цель — та же страница недоступна
+- [x] T059 [P] [US4] `PK/Tests/PagePickerTests/PagePickerModelTests.swift`: без запроса — 5 недавних и дерево; с запросом — выдача поиска; недоступные (сама страница и потомки для страницы, исходная для блоков, корзина); клавиатура ↑↓ → Enter Esc
+- [x] T060 [P] [US4] XCUITest `UITests/DuplicateMoveTests.swift`: «•••» → «Дублировать» у страницы с двумя подстраницами, картинкой и файлом — открыта «(1)», подстраницы-копии, файл открывается; ⌘D при фокусе в панели; выделить три блока с вложенными → ⇧⌘P → поиск → Enter — блоки в конце другой страницы; ⌘Z; «Переместить в» страницы из меню панели
 
 ### Implementation for User Story 4
 
-- [ ] T061 [US4] Дублирование в `PK/Sources/NotesCore/Tree/PageTreeOperations+Duplicate.swift` на `PageBranchCopier` (T057); открыть копию — `App/MainWindow/MainWindowModel.swift`
-- [ ] T062 [US4] Перенос блоков в `PK/Sources/NotesCore/Tree/PageTreeOperations+MoveBlocks.swift` на `BlockCopier` с `movedFrom` (T058); перенос страницы — существующий `move` в конец детей цели
-- [ ] T063 [US4] Окно `PK/Sources/PagePicker/PagePickerView.swift` и модель (T059); вид — по `notion-move-to.png`
-- [ ] T064 [US4] Пункты: «Дублировать», «Переместить в» в `App/MainWindow/PageMenu/` и `PK/Sources/PageTree/PageRowMenu/`; «Переместить в» в меню блока (`PK/Sources/PageEditor/SlashCommandMenu.swift`, `blockMenuItems`); маршрут ⌘D (текст и выделенные блоки — блок, фокус в панели — страница) и ⇧⌘P (выделенные блоки — блоки, иначе страница)
-- [ ] T065 [US4] Состояния галереи: окно «Переместить в» без запроса и с запросом, недоступная строка, меню блока с пунктом — в обеих темах; сверка с Notion
-- [ ] T066 [US4] Затронутые тесты зелёные; замер дублирования ветки 50 подстраниц / 5 000 блоков ≤ 2 с, главный поток ≤ 100 мс (SC-204); запись в quickstart.md; коммит
+- [x] T061 [US4] Дублирование в `PK/Sources/NotesCore/Tree/PageTreeOperations+Duplicate.swift` на `PageBranchCopier` (T057); открыть копию — `App/MainWindow/MainWindowModel.swift`
+- [x] T062 [US4] Перенос блоков в `PK/Sources/NotesCore/Tree/PageTreeOperations+MoveBlocks.swift` на `BlockCopier` с `movedFrom` (T058); перенос страницы — существующий `move` в конец детей цели
+- [x] T063 [US4] Окно `PK/Sources/PagePicker/PagePickerView.swift` и модель (T059); вид — по `notion-move-to.png`
+- [x] T064 [US4] Пункты: «Дублировать», «Переместить в» в `App/MainWindow/PageMenu/` и `PK/Sources/PageTree/PageRowMenu/`; «Переместить в» в меню блока (`PK/Sources/PageEditor/SlashCommandMenu.swift`, `blockMenuItems`); маршрут ⌘D (текст и выделенные блоки — блок, фокус в панели — страница) и ⇧⌘P (выделенные блоки — блоки, иначе страница)
+- [x] T065 [US4] Состояния галереи: окно «Переместить в» без запроса и с запросом, недоступная строка, меню блока с пунктом — в обеих темах; сверка с Notion
+- [x] T066 [US4] Затронутые тесты зелёные; замер дублирования ветки 50 подстраниц / 5 000 блоков ≤ 2 с, главный поток ≤ 100 мс (SC-204); запись в quickstart.md; коммит
 
 **Checkpoint**: US4 работает и проверяется сама.
 

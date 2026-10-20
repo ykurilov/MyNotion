@@ -81,6 +81,7 @@ final class PageMenuView: NSView, NSSearchFieldDelegate {
                 perform(context)
                 self?.onChoose?()
             }
+            row.setAccessibilityIdentifier("page-menu-\(item.slot)")
             return [(row, title)]
         case .toggles(let toggles):
             // Как у Notion: строка «Вид страницы ›» открывает сбоку подменю с переключателями; переключение меню не закрывает.

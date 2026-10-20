@@ -1,4 +1,4 @@
 extension PageRowMenuItem {
-    /// «Переместить в» — US4: заготовка этапа 0, история заменяет этот файл своим пунктом.
-    static let moveTo: PageRowMenuItem? = nil
+    /// «Переместить в» (US4): окно выбора страницы у меню строки.
+    static let moveTo: PageRowMenuItem? = PageRowMenuItem(slot: .moveTo) { _ in "Переместить в" }
 }

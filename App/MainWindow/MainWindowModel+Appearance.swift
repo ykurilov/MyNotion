@@ -46,7 +46,7 @@ extension MainWindowModel {
     }
 
     /// Сообщение листом над окном: страница открыта, и полоса ошибки окна (`loadError`) не видна.
-    private func showError(_ message: String) {
+    func showError(_ message: String) {
         guard let window else { return }
         let alert = NSAlert()
         alert.messageText = message

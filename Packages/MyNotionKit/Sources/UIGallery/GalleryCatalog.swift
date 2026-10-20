@@ -87,6 +87,8 @@ public enum GalleryScene: Hashable, Sendable {
     /// Вкладки окна (US3): полоса с 1, 3 и 12 вкладками, «×» под мышью, панель спрятана, «Открыть в новой вкладке»,
     /// «Недавние» во вкладке, заглушка «Страница в корзине».
     case tabs(GalleryTabs)
+    /// Окно «Переместить в…» (US4): без запроса — недавние и дерево, своя страница серая; с запросом — выдача поиска.
+    case movePicker(GalleryMovePicker)
 }
 
 public enum GalleryMarkdownExport: String, Hashable, Sendable, CaseIterable {
@@ -228,7 +230,15 @@ public struct GalleryShot: Hashable, Sendable {
 public enum GalleryCatalog {
     /// Все состояния по порядку съёмки.
     public static let states: [GalleryState] = pageStates + blockStates + kindSampleStates + inlineAtomStates + editingStates + sidebarStates
-        + trashStates + importStates + exportStates + syncStates + tabsStates
+        + trashStates + importStates + exportStates + syncStates + tabsStates + copiesStates
+
+    /// Копии (US4, contracts/pages-ui.md, «Окно «Переместить в»»; сверка — снимок Notion 7.39 `notion-move-to.png`).
+    /// Пункт «Переместить в» меню блока — в снимке `block-menu`.
+    static let copiesStates: [GalleryState] = [
+        GalleryState("move-picker", .movePicker(.recentAndTree), "«Переместить в…» страницы: недавние, дерево, сама страница серая",
+                     section: "Копии"),
+        GalleryState("move-picker-query", .movePicker(.query), "«Переместить в…» с запросом: выдача поиска с путём", section: "Копии"),
+    ]
 
     /// Вкладки окна (US3, contracts/pages-ui.md, «Верхняя полоса окна»; сверка — снимок Notion 7.39 `notion-sidebar-tabs-topbar.png`).
     static let tabsStates: [GalleryState] = [
@@ -489,6 +499,12 @@ public enum GalleryCatalog {
         GalleryState("markdown-export-failed", .markdownExport(.failed),
                      "Выгрузка не удалась: понятная ошибка и «Закрыть»", section: "Выгрузка в Markdown"),
     ]
+}
+
+/// Состояния окна «Переместить в…» для галереи (US4).
+public enum GalleryMovePicker: Hashable, Sendable {
+    case recentAndTree
+    case query
 }
 
 /// Состояния вкладок окна для галереи (US3).
