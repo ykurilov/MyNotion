@@ -28,6 +28,7 @@ public class FlowTextView: PageTextView {
     func adoptSettings(from host: PageTextView) {
         linkedPages = host.linkedPages
         onOpenPage = host.onOpenPage
+        onSubpageRequest = host.onSubpageRequest
         onResolveConflict = host.onResolveConflict
         openURL = host.openURL
         mentionDirectory = host.mentionDirectory

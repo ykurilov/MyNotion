@@ -37,6 +37,50 @@ public final class PageTreeOperations {
         return page
     }
 
+    /// «/» → «Страница», как в Notion 7.39: подстраница с блоком-ссылкой там, где курсор, а не в конце родителя.
+    /// В дереве она встаёт по порядку ссылок: сразу за соседом, чья ссылка выше, или перед тем, чья ниже.
+    /// Отмена — один шаг: страница уходит в корзину (набранное в ней цело), убранный блок возвращается на место.
+    @discardableResult
+    public func createSubpage(in parentId: UUID, title: String = "", linkAt placement: SubpageLinkPlacement) throws -> Page {
+        try createSubpage(in: parentId, linkAt: placement) { _ in title }
+    }
+
+    /// «Преобразовать в → Страница», как в Notion: блок становится ссылкой на подстраницу с его текстом в названии,
+    /// вложенные под ним блоки переезжают внутрь (со своими колонками, таблицами и подстраницами).
+    /// Страница не открывается; ⌘Z одним шагом возвращает блок с детьми на место.
+    @discardableResult
+    public func turnIntoSubpage(_ blockId: UUID, in pageId: UUID) throws -> Page {
+        try createSubpage(in: pageId, linkAt: .replacing(blockId: blockId), movesChildren: true) { block in
+            block.text.string.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    private func createSubpage(
+        in parentId: UUID, linkAt placement: SubpageLinkPlacement, movesChildren: Bool = false, title: (Block) -> String
+    ) throws -> Page {
+        let created = try perform { transaction in
+            guard try transaction.page(parentId) != nil else { throw NotesStoreError.pageNotFound(parentId) }
+            let blocks = try transaction.blocks(ofPage: parentId)
+            guard let anchor = blocks.first(where: { $0.id == placement.blockId }) else {
+                throw NotesStoreError.blockNotFound(placement.blockId)
+            }
+            let placed = Self.linkPlacement(at: placement, anchor: anchor, in: blocks)
+            let siblings = try transaction.allPages().filter { $0.parentId == parentId && $0.trashedAt == nil }
+            let pageKey = Self.subpageSortKey(linkedAfter: placed.preceding, in: Self.documentOrder(blocks), siblings: siblings)
+            let page = try transaction.createPage(title: title(anchor), parentId: parentId, after: pageKey.after, before: pageKey.before)
+            var link = Block(pageId: parentId, kind: .pageLink, linkedPageId: page.id, sortKey: placed.sortKey)
+            link.indent = anchor.indent
+            link.containerId = anchor.containerId
+            let children = movesChildren ? try Self.moveChildren(of: anchor, in: blocks, into: page.id, transaction) : ChildrenMove()
+            if placement.replaces { try transaction.deleteBlock(anchor.id) }
+            let inserted = try transaction.insertBlock(link)
+            return InlineSubpage(page: page, link: inserted, replaced: placement.replaces ? anchor : nil, children: children)
+        }
+        try moveCollapsed(created.children.copiedIds)
+        registerUndo("Новая подстраница") { try $0.withdraw(created) }
+        return created.page
+    }
+
     public func rename(_ pageId: UUID, to title: String) throws {
         let oldTitle = try perform { transaction in
             guard var page = try transaction.page(pageId) else { throw NotesStoreError.pageNotFound(pageId) }
@@ -162,6 +206,189 @@ public final class PageTreeOperations {
 
     // MARK: Внутреннее
 
+    /// Что сделала «Страница» из «/»: для отмены и возврата.
+    private struct InlineSubpage {
+        let page: Page
+        let link: Block
+        /// Блок, на месте которого встала ссылка; `nil` — ссылка встала за блоком.
+        let replaced: Block?
+        var children = ChildrenMove()
+    }
+
+    /// Что переехало внутрь новой подстраницы при «Преобразовать в»: для отмены и возврата.
+    private struct ChildrenMove {
+        /// Дети и всё в их контейнерах, как лежали в родителе (сначала контейнер, потом его потоки).
+        var originals: [Block] = []
+        /// Копии ссылок на переехавшие подстраницы — в новой странице.
+        var linkCopies: [Block] = []
+        /// id переехавших блоков: прежний → новый (свёрнутость переключателей едет за ними).
+        var copiedIds: [UUID: UUID] = [:]
+        /// Переехавшие подстраницы: прежнее и новое место.
+        var reparented: [(pageId: UUID, from: (parentId: UUID?, sortKey: FractionalSortKey), to: FractionalSortKey)] = []
+    }
+
+    /// Отмена «Страницы» из «/»: подстраница — в корзину, ссылка убрана, прежний блок с детьми — на месте,
+    /// переехавшие подстраницы — у прежнего родителя.
+    private func withdraw(_ created: InlineSubpage) throws {
+        try perform { transaction in
+            for moved in created.children.reparented {
+                guard var page = try transaction.page(moved.pageId) else { continue }
+                (page.parentId, page.sortKey) = moved.from
+                try transaction.updatePage(page)
+            }
+            for copy in created.children.linkCopies where try transaction.block(copy.id) != nil {
+                try transaction.deleteBlock(copy.id)
+            }
+            for original in created.children.originals where try transaction.block(original.id) == nil {
+                try transaction.insertBlock(original)
+            }
+            guard var page = try transaction.page(created.page.id) else { throw NotesStoreError.pageNotFound(created.page.id) }
+            page.trashedAt = Date()
+            try transaction.updatePage(page)
+            try Self.removeLinks(to: page.id, in: created.link.pageId, transaction)
+            if let replaced = created.replaced, try transaction.block(replaced.id) == nil {
+                try transaction.insertBlock(replaced)
+            }
+        }
+        try moveCollapsed(Dictionary(uniqueKeysWithValues: created.children.copiedIds.map { ($1, $0) }))
+        registerUndo("Новая подстраница") { try $0.reinstate(created) }
+    }
+
+    /// Возврат «Страницы» из «/»: подстраница из корзины, ссылка — на прежнем месте тем же блоком.
+    private func reinstate(_ created: InlineSubpage) throws {
+        try perform { transaction in
+            guard var page = try transaction.page(created.page.id) else { throw NotesStoreError.pageNotFound(created.page.id) }
+            page.trashedAt = nil
+            try transaction.updatePage(page)
+            if let replaced = created.replaced, try transaction.block(replaced.id) != nil {
+                try transaction.deleteBlock(replaced.id)
+            }
+            for original in created.children.originals where try transaction.block(original.id) != nil {
+                try transaction.deleteBlock(original.id)
+            }
+            for copy in created.children.linkCopies where try transaction.block(copy.id) == nil {
+                try transaction.insertBlock(copy)
+            }
+            for moved in created.children.reparented {
+                guard var subpage = try transaction.page(moved.pageId) else { continue }
+                (subpage.parentId, subpage.sortKey) = (page.id, moved.to)
+                try transaction.updatePage(subpage)
+            }
+            if try !transaction.blocks(ofPage: created.link.pageId).contains(where: { $0.linkedPageId == page.id }) {
+                try transaction.insertBlock(created.link)
+            }
+        }
+        try moveCollapsed(created.children.copiedIds)
+        registerUndo("Новая подстраница") { try $0.withdraw(created) }
+    }
+
+    /// Дети блока — следующие за ним в его потоке блоки с отступом больше — переезжают в начало новой страницы
+    /// копиями с новыми id: вложенность между собой, типы, цвет, данные (файлы, адреса) те же, контейнеры
+    /// (колонки, таблицы) — со своими потоками. Подстраницы, чьи ссылки среди детей, переезжают под новую страницу.
+    private static func moveChildren(of anchor: Block, in blocks: [Block], into pageId: UUID,
+                                     _ transaction: NotesTransaction) throws -> ChildrenMove {
+        let flow = blocks.filter { $0.containerId == anchor.containerId }.sorted(by: flowOrder)
+        guard let index = flow.firstIndex(where: { $0.id == anchor.id }) else { return ChildrenMove() }
+        let children = flow[(index + 1)...].prefix { $0.indent > anchor.indent }
+        guard !children.isEmpty else { return ChildrenMove() }
+        let flows = Dictionary(grouping: blocks.filter { $0.containerId != nil }, by: \.containerId)
+            .mapValues { $0.sorted(by: flowOrder) }
+
+        var move = ChildrenMove()
+        var copies: [Block] = []
+        var newIds: [UUID: UUID] = [:]
+        func copy(_ block: Block, sortKey: FractionalSortKey, indent: Int, containerId: UUID?) {
+            let copied = Block(pageId: pageId, kind: block.kind, text: block.text, indent: indent, isChecked: block.isChecked,
+                               linkedPageId: block.linkedPageId, sortKey: sortKey, containerId: containerId, color: block.color,
+                               props: block.props)
+            newIds[block.id] = copied.id
+            move.originals.append(block)
+            copies.append(copied)
+            for inner in flows[block.id] ?? [] {
+                copy(inner, sortKey: inner.sortKey, indent: inner.indent, containerId: copied.id)
+            }
+        }
+        var key: FractionalSortKey?
+        for child in children {
+            key = .between(key, nil)
+            copy(child, sortKey: key!, indent: max(child.indent - anchor.indent - 1, 0), containerId: nil)
+        }
+        // Ячейка таблицы помнит свой столбец по id: у копии — копия столбца.
+        for index in copies.indices {
+            if let column = copies[index].props.columnId, let copied = newIds[column] { copies[index].props.columnId = copied }
+        }
+        move.copiedIds = newIds
+
+        for original in move.originals.reversed() { try transaction.deleteBlock(original.id) }
+        for block in try transaction.blocks(ofPage: pageId) { try transaction.deleteBlock(block.id) }
+        var pageKey: FractionalSortKey?
+        for copied in copies {
+            try transaction.insertBlock(copied)
+            guard let linked = copied.linkedPageId, var subpage = try transaction.page(linked),
+                  subpage.parentId == anchor.pageId else { continue }
+            pageKey = .between(pageKey, nil)
+            move.reparented.append((linked, (subpage.parentId, subpage.sortKey), pageKey!))
+            move.linkCopies.append(copied)
+            (subpage.parentId, subpage.sortKey) = (pageId, pageKey!)
+            try transaction.updatePage(subpage)
+        }
+        return move
+    }
+
+    /// Свёрнутость — вид этого Mac, мимо транзакций и отмены (research R1): переносится следом за правкой.
+    private func moveCollapsed(_ oldToNew: [UUID: UUID]) throws {
+        try BlockViewStateStore(database: store.database).moveCollapsed(from: oldToNew)
+    }
+
+    /// Ключ ссылки и блок, за которым она встаёт в документе (`nil` — первой).
+    private static func linkPlacement(
+        at placement: SubpageLinkPlacement, anchor: Block, in blocks: [Block]
+    ) -> (sortKey: FractionalSortKey, preceding: Block?) {
+        let flow = blocks.filter { $0.containerId == anchor.containerId }.sorted(by: flowOrder)
+        let index = flow.firstIndex { $0.id == anchor.id } ?? 0
+        if placement.replaces {
+            return (anchor.sortKey, index > 0 ? flow[index - 1] : nil)
+        }
+        let next = index + 1 < flow.count ? flow[index + 1].sortKey : nil
+        return (.between(anchor.sortKey, next), anchor)
+    }
+
+    /// Место подстраницы среди соседей в дереве: за соседом, чья ссылка ближе выше в документе, иначе перед тем,
+    /// чья ссылка ниже; без ссылок у соседей — последней.
+    private static func subpageSortKey(
+        linkedAfter preceding: Block?, in ordered: [Block], siblings: [Page]
+    ) -> (after: FractionalSortKey?, before: FractionalSortKey?) {
+        let siblingKeys = Dictionary(uniqueKeysWithValues: siblings.map { ($0.id, $0.sortKey) })
+        let cut = preceding.flatMap { block in ordered.firstIndex { $0.id == block.id } }.map { $0 + 1 } ?? 0
+        let keys = siblingKeys.values.sorted()
+        if let above = ordered[..<cut].reversed().lazy.compactMap({ $0.linkedPageId.flatMap { siblingKeys[$0] } }).first {
+            return (above, keys.first { above < $0 })
+        }
+        if let below = ordered[cut...].lazy.compactMap({ $0.linkedPageId.flatMap { siblingKeys[$0] } }).first {
+            return (keys.last { $0 < below }, below)
+        }
+        return (keys.last, nil)
+    }
+
+    /// Блоки страницы в порядке чтения: поток страницы, внутри контейнера (колонки, таблицы) — его потоки.
+    private static func documentOrder(_ blocks: [Block]) -> [Block] {
+        let flows = Dictionary(grouping: blocks, by: \.containerId).mapValues { $0.sorted(by: flowOrder) }
+        var ordered: [Block] = []
+        var visited: Set<UUID> = []
+        func walk(_ containerId: UUID?) {
+            for block in flows[containerId] ?? [] where visited.insert(block.id).inserted {
+                ordered.append(block)
+                walk(block.id)
+            }
+        }
+        walk(nil)
+        return ordered
+    }
+
+    private static func flowOrder(_ lhs: Block, _ rhs: Block) -> Bool {
+        lhs.sortKey != rhs.sortKey ? lhs.sortKey < rhs.sortKey : lhs.id.uuidString < rhs.id.uuidString
+    }
+
     /// Новое место страницы; отмена ставит её точно на прежнее.
     private func place(
         _ pageId: UUID,
@@ -250,4 +477,20 @@ public final class PageTreeOperations {
             try transaction.erasePage(page.id)
         }
     }
+}
+
+/// Где встаёт ссылка на подстраницу из «/» или «Преобразовать в».
+public enum SubpageLinkPlacement: Sendable, Equatable {
+    /// На месте блока; сам блок уходит (⌘Z возвращает его).
+    case replacing(blockId: UUID)
+    /// Сразу за блоком, в том же потоке и с тем же отступом.
+    case after(blockId: UUID)
+
+    var blockId: UUID {
+        switch self {
+        case .replacing(let id), .after(let id): id
+        }
+    }
+
+    var replaces: Bool { if case .replacing = self { true } else { false } }
 }

@@ -19,11 +19,12 @@ struct PopupMenuItem: Equatable {
         case duplicate
     }
 
-    /// Значок строки: короткая надпись, системный значок или квадрат чекбокса.
+    /// Значок строки: короткая надпись, системный значок, квадрат чекбокса или лист страницы (как в дереве).
     enum Icon: Equatable {
         case label(String)
         case symbol(String)
         case checkbox
+        case document
     }
 
     var title: String
@@ -664,6 +665,12 @@ final class PopupMenuRowView: NSView {
             path.lineWidth = Metrics.Checkbox.borderWidth
             color.setStroke()
             path.stroke()
+        case .document:
+            // Лист занимает 0,79 высоты своего квадрата: по высоте он вровень с другими значками.
+            let size = side / 0.79
+            DocumentGlyph.image(size: size, color: color)
+                .draw(in: NSRect(x: rect.midX - size / 2, y: rect.midY - size / 2, width: size, height: size),
+                      from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
         }
     }
 
@@ -1016,6 +1023,8 @@ extension PageTextView {
     func applyPopupItem(_ item: PopupMenuItem, session: EditorPopupController.Session, menuFrame: NSRect? = nil) {
         let blockId: UUID
         switch session {
+        case .slash(let id, let slash) where item.action == .setKind(.pageLink):
+            return requestSubpage(fromSlashIn: id, slashLocation: slash)
         case .slash(let id, let slash):
             blockId = id
             let caret = selectedRange().location
@@ -1038,6 +1047,21 @@ extension PageTextView {
             return
         }
         window?.makeFirstResponder(self)
+    }
+
+    /// «/» → «Страница», как в Notion: «/» с поиском стирается, пустой блок владелец дерева заменит ссылкой,
+    /// у блока с текстом ссылка встанет следующим блоком; новая подстраница сразу открывается.
+    /// Стирание — не свой шаг ⌘Z: создание отменяется одним шагом в отмене дерева, а после возврата на страницу
+    /// шаг этого редактора вернул бы «/стр» в уже перечитанный блок.
+    private func requestSubpage(fromSlashIn blockId: UUID, slashLocation slash: Int) {
+        let caret = selectedRange().location
+        if caret > slash {
+            undoManager?.disableUndoRegistration()
+            replaceText(in: NSRange(location: slash, length: caret - slash), with: "")
+            undoManager?.enableUndoRegistration()
+        }
+        guard let block = document.blocks.first(where: { $0.id == blockId }) else { return }
+        onSubpageRequest?(.createAndOpen(block.text.string.isEmpty ? .replacing(blockId: blockId) : .after(blockId: blockId)))
     }
 
     // MARK: Строка с «/»

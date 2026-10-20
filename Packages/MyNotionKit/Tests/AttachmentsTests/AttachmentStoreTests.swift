@@ -173,6 +173,29 @@ import Testing
         #expect(try mac.record(ref.id)?.orphanedAt == nil)
     }
 
+    @Test("«Преобразовать в страницу»: файл ребёнка переезжает со своим блоком и сиротой не становится")
+    @MainActor
+    func fileOfChildMovedIntoSubpageStaysReferenced() throws {
+        let mac = try AttachmentTestMac()
+        let ref = try mac.attachments.importFile(at: try mac.folder.file("a.txt", sampleBytes(10)))
+        let toggle = try mac.store.write { tx in
+            let first = try #require(try tx.blocks(ofPage: mac.pageId).first)
+            var toggle = first
+            toggle.kind = .toggle
+            toggle.text = InlineText("Раздел")
+            return try tx.updateBlock(toggle)
+        }
+        var file = try mac.insertBlock(attachment: ref)
+        file.indent = 1
+        try mac.store.write { _ = try $0.updateBlock(file) }
+
+        mac.now.advance(by: 60)
+        let subpage = try PageTreeOperations(store: mac.store).turnIntoSubpage(toggle.id, in: mac.pageId)
+
+        #expect(try mac.store.pageContent(subpage.id)?.blocks.map(\.props.attachment) == [ref])
+        #expect(try mac.record(ref.id)?.orphanedAt == nil)
+    }
+
     @Test func blockOfKindWithoutFilesDoesNotQueueDownload() throws {
         let mac = try AttachmentTestMac()
         let ref = AttachmentRef(name: "с другого.pdf", byteCount: 100, contentType: "com.adobe.pdf", sha256: String(repeating: "0", count: 64))

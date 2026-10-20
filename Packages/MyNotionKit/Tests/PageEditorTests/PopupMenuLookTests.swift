@@ -114,7 +114,7 @@ struct PopupMenuLookTests {
 
     @Test("Быстрые символы типов — как в Notion")
     func shortcuts() {
-        #expect(PopupMenuItem.blockKinds.map(\.shortcut).prefix(11) == [nil, "#", "##", "###", "-", "1.", "[]", ">", "\"", nil, nil])
+        #expect(PopupMenuItem.blockKinds.map(\.shortcut).prefix(11) == [nil, "#", "##", "###", "-", "1.", "[]", ">", nil, "\"", nil])
     }
 
     /// Строка без выделения отдельно, в обеих темах.

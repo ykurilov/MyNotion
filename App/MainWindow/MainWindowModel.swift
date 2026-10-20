@@ -135,6 +135,22 @@ final class MainWindowModel {
         }
     }
 
+    /// «Страница» в меню «/» или «Преобразовать в» открытой страницы, как в Notion 7.39: подстраница со ссылкой
+    /// у блока. Из «/» — сразу открыть её с курсором в названии; ⌘Z на исходной странице отменяет одним шагом.
+    func handleSubpageRequest(_ request: SubpageRequest, inPage pageId: UUID) {
+        if collapsedPageIds.remove(pageId) != nil {
+            saveWindowState { $0.collapsedPageIds = collapsedPageIds }
+        }
+        switch request {
+        case .createAndOpen(let placement):
+            if let subpage = performTreeOperation({ try treeOperations.createSubpage(in: pageId, linkAt: placement) }) {
+                open(subpage.id, focus: .title, remember: true)
+            }
+        case .turnInto(let blockId):
+            performTreeOperation { try treeOperations.turnIntoSubpage(blockId, in: pageId) }
+        }
+    }
+
     /// Иконка страницы из шапки или из боковой панели (`nil` — убрать); ⌘Z отменяет (FR-034).
     func setIcon(_ pageId: UUID, to icon: String?) {
         performTreeOperation { try treeOperations.setIcon(pageId, to: icon) }
