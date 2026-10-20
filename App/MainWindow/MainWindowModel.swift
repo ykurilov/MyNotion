@@ -30,12 +30,28 @@ final class MainWindowModel {
     private(set) var blockReveal: BlockReveal?
     /// Поле поиска вверху боковой панели и его выдача (FR-018).
     @ObservationIgnored private(set) var search: PageSearchController!
-    /// Вкладки окна (003, research R5). Этап 0: одна вкладка — поведение 002; новую вкладку и полосу включает US3.
+    /// Вкладки окна (US3, research R5): у каждой своя страница, место прокрутки и история «назад/вперёд».
     @ObservationIgnored private(set) var tabs: WindowTabs!
+    /// Меняется с каждым изменением вкладок: полоса вкладок и стрелки «‹ ›» перерисовываются.
+    private(set) var tabsRevision = 0
+    /// Место прокрутки открытой страницы: его читают вкладки, когда уходят со страницы.
+    @ObservationIgnored let scrollPlace = PageScrollPlace()
+    /// Куда встать в только что открытой странице (переключение вкладки, «назад/вперёд»).
+    private(set) var restoringScroll: TabScroll?
+    /// Окно «Открыть в новой вкладке» (⌘T, «+»).
+    var isNewTabSearchShown = false
+    /// Галерея: вкладка, над которой будто бы мышь («×»).
+    var previewHoveredTabId: UUID?
+    /// Вкладки хранит только первое окно: вид окна в базе один (`WindowState.mainWindowId`).
+    @ObservationIgnored private let restoresTabs: Bool
+    /// Страницу перечитали после операции с деревом: встать на прежнее место.
+    @ObservationIgnored private var scrollBeforeReload: TabScroll?
 
     /// `opening` — страница нового окна; `nil` — последняя открытая (вид окна в базе) или первая в дереве.
-    init(library: PagesLibrary, opening pageId: UUID?) {
+    /// `restoresTabs` — первое окно: вкладки из базы и их хранение.
+    init(library: PagesLibrary, opening pageId: UUID?, restoresTabs: Bool = false) {
         self.library = library
+        self.restoresTabs = restoresTabs
         treeOperations = PageTreeOperations(store: library.store)
         let windowState = try? library.store.windowState(WindowState.mainWindowId)
         collapsedPageIds = windowState?.collapsedPageIds ?? []
@@ -54,14 +70,12 @@ final class MainWindowModel {
         library.register(self)
         let tree = library.tree
         let lastOpen = (pageId ?? windowState?.openPageId).flatMap { tree.page($0)?.id }
-        tabs = WindowTabs(state: windowState?.tabs, openPageId: lastOpen)
-        // Хранение вкладок — в `window_state.tabs`, только на этом Mac.
-        tabs.onChange = { [weak self] in
-            guard let self else { return }
-            saveWindowState { $0.tabs = self.tabs.savedState }
-        }
-        if let pageId = lastOpen ?? tree.children(of: nil).first?.id {
-            open(pageId, focus: .body, remember: false)
+        installTabs(WindowTabs(state: restoresTabs ? windowState?.tabs : nil, openPageId: lastOpen))
+        // При запуске открывается только активная вкладка; остальные — адрес и место прокрутки.
+        if tabs.activePageId == nil, tabs.items.count == 1, tabs.activeTab.back.isEmpty, let first = tree.children(of: nil).first {
+            navigate(to: first.id, focus: .body)
+        } else {
+            showActiveTab(focus: .body, remember: false)
         }
     }
 
@@ -78,6 +92,7 @@ final class MainWindowModel {
 
     /// Окно закрыли: его страница больше не держится открытой (записывается, если других окон с ней нет).
     func windowClosed() {
+        saveTabs()
         if let openDocument { openDocuments.release(openDocument.pageId) }
         openDocument = nil
         library.unregister(self)
@@ -100,9 +115,10 @@ final class MainWindowModel {
 
     // MARK: Действия
 
-    /// Просьба открыть страницу из панели, поиска, ссылки (с ⌘ — в новой вкладке). Пока вкладок не видно (до US3),
-    /// всё открывается в активной.
+    /// Просьба открыть страницу из панели, поиска, ссылки: с ⌘ — новой вкладкой справа, активная остаётся;
+    /// иначе — переход в активной вкладке с записью в её историю.
     func open(_ request: PageOpenRequest, focus: PageTextView.InitialFocus = .body) {
+        if request.inNewTab { return tabs.open(request) }
         select(request.pageId, focus: focus)
         guard let blockId = request.revealBlockId, openPageId == request.pageId else { return }
         blockReveal = BlockReveal(blockId: blockId, token: (blockReveal?.token ?? 0) + 1)
@@ -110,7 +126,7 @@ final class MainWindowModel {
 
     func select(_ pageId: UUID?, focus: PageTextView.InitialFocus = .body) {
         guard let pageId, pageId != openPageId else { return }
-        open(pageId, focus: focus, remember: true)
+        navigate(to: pageId, focus: focus)
     }
 
     /// Открыть страницу и перейти к блоку (поиск страниц, US1): свёрнутые предки блока раскрываются.
@@ -137,7 +153,7 @@ final class MainWindowModel {
                 }
             }
             library.reloadTree()
-            open(page.id, focus: .title, remember: true)
+            navigate(to: page.id, focus: .title)
         } catch {
             loadError = "Не удалось создать страницу: \(SaveStatus.reason(for: error))"
         }
@@ -150,7 +166,7 @@ final class MainWindowModel {
             saveWindowState { $0.collapsedPageIds = collapsedPageIds }
         }
         if let subpage = performTreeOperation({ try treeOperations.createSubpage(in: parentId) }) {
-            open(subpage.id, focus: .title, remember: true)
+            navigate(to: subpage.id, focus: .title)
         }
     }
 
@@ -163,7 +179,7 @@ final class MainWindowModel {
         switch request {
         case .createAndOpen(let placement):
             if let subpage = performTreeOperation({ try treeOperations.createSubpage(in: pageId, linkAt: placement) }) {
-                open(subpage.id, focus: .title, remember: true)
+                navigate(to: subpage.id, focus: .title)
             }
         case .turnInto(let blockId):
             performTreeOperation { try treeOperations.turnIntoSubpage(blockId, in: pageId) }
@@ -245,11 +261,15 @@ final class MainWindowModel {
 
     /// Правки с другого Mac легли в базу; открытая страница их уже приняла (research R5), дерево перечитано.
     /// Если открытая страница ушла в корзину или стёрта — открыть другую.
+    /// Страница активной вкладки ушла в корзину или стёрта — вкладка показывает заглушку или «Недавние» (US3).
     func remoteChangesApplied() {
         if let openPageId, tree.page(openPageId) != nil { return }
         if openPageId != nil { closeOpenDocument() }
         // Пустой Mac получил первые страницы — открыть первую, как при запуске.
-        if let first = tree.children(of: nil).first { open(first.id, focus: .unchanged, remember: true) }
+        if tabs.activePageId == nil, tabs.items.count == 1, tabs.activeTab.back.isEmpty, let first = tree.children(of: nil).first {
+            return navigate(to: first.id, focus: .unchanged)
+        }
+        showActiveTab(focus: .unchanged)
     }
 
     // MARK: Внутреннее
@@ -270,27 +290,159 @@ final class MainWindowModel {
     /// Отпускают все окна сразу — иначе второе окно отдало бы первому прежний документ. Возвращает, что перечитать.
     func releaseIfTouched(_ touchedPageIds: Set<UUID>) -> UUID? {
         guard let openPageId, tree.page(openPageId) != nil, touchedPageIds.contains(openPageId) else { return nil }
+        scrollBeforeReload = scrollPlace.current()
         openDocuments.release(openPageId)
         openDocument = nil
         return openPageId
     }
 
     /// После операции в любом окне (и её отмены) дерево перечитано: открытую страницу — перечитать или сменить.
+    /// Открытая страница ушла в корзину — вкладка показывает заглушку «Страница в корзине», стёрта — «Недавние»;
+    /// вернули из корзины — снова страница (contracts/page-operations.md, «Вкладки и история»).
     func treeDidChange(_ touchedPageIds: Set<UUID>, reopening releasedPageId: UUID?) {
-        if let releasedPageId { return open(releasedPageId, focus: .body, remember: false) }
-        guard let openPageId else {
-            if let first = tree.children(of: nil).first { open(first.id, focus: .body, remember: true) }
-            return
+        if let releasedPageId {
+            defer { scrollBeforeReload = nil }
+            return openEditor(releasedPageId, focus: .body, scroll: scrollBeforeReload, remember: false)
         }
-        if tree.page(openPageId) == nil {
-            // Открытая страница ушла в корзину или стёрта: открыть ближайшую видимую.
-            let fallback = touchedPageIds.lazy.compactMap { self.tree.page($0) }.first ?? tree.children(of: nil).first
-            closeOpenDocument()
-            if let fallback { open(fallback.id, focus: .body, remember: true) }
+        if let openPageId, tree.page(openPageId) == nil { closeOpenDocument() }
+        showActiveTab(focus: .body)
+    }
+
+    // MARK: Вкладки
+
+    /// Страница вкладки в корзине: заглушка «Страница в корзине» вместо редактора.
+    var activeTabTrashedPage: Page? {
+        tabs.activePageId.flatMap { library.trashedPagesById[$0] }
+    }
+
+    /// Полоса вкладок: название и иконка каждой; без страницы (или стёртая) — «Недавние».
+    var tabStripItems: [TabStripItem] {
+        _ = tabsRevision
+        return tabs.items.enumerated().map { index, tab in
+            let isActive = index == tabs.activeIndex
+            let page = tab.pageId.flatMap { tree.page($0) ?? library.trashedPagesById[$0] }
+            let title = isActive ? liveTitleOfOpenPage ?? page?.title : page?.title
+            return TabStripItem(id: tab.id, title: page == nil ? TabStripItem.recentPagesTitle : (title?.isEmpty == false ? title! : Page.untitledTitle),
+                                icon: page == nil ? .recentPages : page?.icon.map(TabStripItem.Icon.emoji) ?? .none, isActive: isActive)
         }
     }
 
-    private func open(_ pageId: UUID, focus: PageTextView.InitialFocus, remember: Bool) {
+    var canGoBack: Bool { _ = tabsRevision; return tabs.canGoBack }
+    var canGoForward: Bool { _ = tabsRevision; return tabs.canGoForward }
+
+    /// ⌘[ и «‹».
+    func goBack() {
+        if tabs.goBack() { showActiveTab(focus: .body) }
+    }
+
+    /// ⌘] и «›».
+    func goForward() {
+        if tabs.goForward() { showActiveTab(focus: .body) }
+    }
+
+    /// Щелчок по вкладке.
+    func activateTab(_ index: Int) {
+        tabs.activate(index)
+        showActiveTab(focus: .body)
+    }
+
+    /// ⌃⇥.
+    func showNextTab() {
+        tabs.showNextTab()
+        showActiveTab(focus: .body)
+    }
+
+    /// ⌃⇧⇥.
+    func showPreviousTab() {
+        tabs.showPreviousTab()
+        showActiveTab(focus: .body)
+    }
+
+    /// Перетаскивание вкладки.
+    func moveTab(from source: Int, to destination: Int) {
+        tabs.move(from: source, to: destination)
+    }
+
+    /// «×» на вкладке; ⌘W — активная. Последняя вкладка закрывает окно (как ⌘W 001).
+    func closeTab(at index: Int) {
+        switch tabs.close(at: index) {
+        case .closed: showActiveTab(focus: .body)
+        case .closeWindow: window?.performClose(nil)
+        }
+    }
+
+    func closeActiveTab() { closeTab(at: tabs.activeIndex) }
+
+    /// ⇧⌘T.
+    func reopenClosedTab() {
+        if tabs.reopenClosedTab() { showActiveTab(focus: .body) }
+    }
+
+    var hasClosedTabs: Bool { _ = tabsRevision; return !tabs.closedTabs.isEmpty }
+
+    /// ⌘T и «+»: окно «Открыть в новой вкладке».
+    func showNewTabSearch() {
+        isNewTabSearchShown = true
+    }
+
+    /// Страница, выбранная в окне «Открыть в новой вкладке», — новой вкладкой в конце.
+    func openInNewTab(_ pageId: UUID) {
+        isNewTabSearchShown = false
+        tabs.openNewTab(pageId)
+        showActiveTab(focus: .body)
+    }
+
+    /// «Показать все» в разделе «Недавние» панели: «Недавние» в этой вкладке.
+    func showRecentPages() {
+        tabs.showRecentPages()
+        showActiveTab(focus: .body)
+    }
+
+    /// «Вернуть» на заглушке «Страница в корзине»: запись корзины со страницей вкладки.
+    func restoreActiveTabPage() {
+        guard let pageId = tabs.activePageId, let entry = library.trashEntry(containing: pageId) else { return }
+        restore(entry)
+    }
+
+    /// Вкладки окна: при запуске — из базы; галерея ставит свои.
+    func installTabs(_ tabs: WindowTabs) {
+        // Подписка на «ушли / открыта» (запись недавних) переходит к новым вкладкам.
+        if let previous = self.tabs { tabs.onActivePageChange = previous.onActivePageChange }
+        tabs.currentScroll = { [weak self] in self?.scrollPlace.current() }
+        tabs.isGone = { [weak library] in library?.isDeletedForever($0) ?? false }
+        tabs.onChange = { [weak self] in self?.tabsDidChange() }
+        self.tabs = tabs
+        tabsRevision += 1
+    }
+
+    private func tabsDidChange() {
+        tabsRevision += 1
+        if restoresTabs { saveWindowState { $0.tabs = tabs.savedState } }
+    }
+
+    /// Место прокрутки открытой страницы — в базу вместе с вкладками (уход в фон, выход, закрытие окна).
+    func saveTabs() {
+        if restoresTabs, openDocument != nil { saveWindowState { $0.tabs = tabs.savedState } }
+    }
+
+    /// Переход в активной вкладке: история вкладки, затем её страница.
+    private func navigate(to pageId: UUID, focus: PageTextView.InitialFocus) {
+        tabs.open(PageOpenRequest(pageId: pageId))
+        showActiveTab(focus: focus)
+    }
+
+    /// Показать страницу активной вкладки: редактор — только у страницы из дерева; «Недавние», корзина и стёртая
+    /// страница редактора не держат.
+    func showActiveTab(focus: PageTextView.InitialFocus, remember: Bool = true) {
+        guard let pageId = tabs.activePageId, tree.page(pageId) != nil else {
+            if openDocument != nil { closeOpenDocument() }
+            return
+        }
+        guard pageId != openDocument?.pageId else { return }
+        openEditor(pageId, focus: focus, scroll: tabs.activeTab.scroll, remember: remember)
+    }
+
+    private func openEditor(_ pageId: UUID, focus: PageTextView.InitialFocus, scroll: TabScroll?, remember: Bool) {
         do {
             let document = try openDocuments.open(pageId)
             if let previous = openDocument {
@@ -301,9 +453,8 @@ final class MainWindowModel {
             }
             initialFocus = focus
             blockReveal = nil
+            restoringScroll = scroll
             openDocument = document
-            // Активная вкладка открыла страницу: событие «ушли / открыта» (запись недавних — US2).
-            tabs.open(PageOpenRequest(pageId: pageId))
             loadError = nil
             // Файлы открытой страницы — первыми в очереди скачивания (FR-120).
             library.sync.prioritizeFiles(onPage: pageId)

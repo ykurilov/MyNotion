@@ -26,14 +26,28 @@ struct WindowTabsTests {
         #expect(tabs.items[1].back.isEmpty, "у новой вкладки своя пустая история")
     }
 
-    @Test("⌘T: пустая «Новая вкладка» справа от текущей и становится активной")
-    func newTabIsEmptyAndActive() {
+    @Test("⌘T и «+» (как Notion 7.39): выбранная в окне поиска страница — новой вкладкой в конце, сразу активной")
+    func newTabOpensAtEndAndActive() {
         let tabs = tabs([pageA, pageB], active: 0)
-        tabs.newTab()
-        #expect(tabs.items.count == 3 && tabs.activeIndex == 1)
-        #expect(tabs.activePageId == nil)
+        tabs.openNewTab(pageC)
+        #expect(tabs.items.map(\.pageId) == [pageA, pageB, pageC])
+        #expect(tabs.activeIndex == 2 && tabs.activePageId == pageC)
+        #expect(tabs.activeTab.back.isEmpty, "у новой вкладки своя пустая история")
+    }
+
+    @Test("«Показать все» в «Недавних»: «Недавние» в этой же вкладке, «назад» возвращает страницу")
+    func recentPagesInActiveTab() {
+        let tabs = tabs([pageA, pageB], active: 0)
+        let placeA = TabScroll(blockId: UUID(), offset: 9)
+        tabs.currentScroll = { placeA }
+        tabs.showRecentPages()
+        #expect(tabs.items.count == 2 && tabs.activePageId == nil)
+        #expect(tabs.activeTab.back == [TabEntry(pageId: pageA, scroll: placeA)])
+        tabs.showRecentPages()
+        #expect(tabs.activeTab.back.count == 1, "уже «Недавние» — записи не добавляется")
         tabs.open(PageOpenRequest(pageId: pageC))
-        #expect(tabs.items.map(\.pageId) == [pageA, pageC, pageB], "выбор страницы открывает её в этой вкладке")
+        #expect(tabs.activePageId == pageC && tabs.activeTab.back.map(\.pageId) == [pageA], "«Недавние» в историю не пишутся")
+        #expect(tabs.goBack() && tabs.activePageId == pageA && tabs.activeTab.scroll == placeA)
     }
 
     @Test("Переход в активной вкладке пишет историю с местом прокрутки ухода; назад и вперёд — по ней")
@@ -170,13 +184,13 @@ struct WindowTabsTests {
         let tabs = tabs([pageA, pageB])
         var count = 0
         tabs.onChange = { count += 1 }
-        tabs.newTab()
+        tabs.openNewTab(pageC)
         tabs.activate(0)
         tabs.move(from: 0, to: 1)
         tabs.close(at: 0)
         tabs.reopenClosedTab()
-        tabs.activate(1)
-        tabs.open(PageOpenRequest(pageId: pageC))
+        tabs.showRecentPages()
+        tabs.open(PageOpenRequest(pageId: pageD))
         tabs.goBack()
         #expect(count == 8)
     }

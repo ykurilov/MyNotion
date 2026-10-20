@@ -1,4 +1,4 @@
 extension PageRowMenuItem {
-    /// «Открыть в новой вкладке» — US3: заготовка этапа 0, история заменяет этот файл своим пунктом.
-    static let openInNewTab: PageRowMenuItem? = nil
+    /// «Открыть в новой вкладке» (US3): справа от текущей, активная остаётся (как ⌘-щелчок).
+    static let openInNewTab: PageRowMenuItem? = PageRowMenuItem(slot: .openInNewTab) { _ in "Открыть в новой вкладке" }
 }

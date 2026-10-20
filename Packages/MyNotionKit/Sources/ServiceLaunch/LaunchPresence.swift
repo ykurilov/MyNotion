@@ -13,13 +13,14 @@ public enum LaunchPresence: Equatable, Sendable {
     public static let serviceFlags: Set<String> = [
         "--ui-gallery", "--ui-gallery-only", "--window-snapshot", "--hover-sidebar-row",
         "--generate-reference-library", "--launch-report", "--typing-benchmark", "--search-benchmark", "--export-markdown",
-        "--import-notion",
+        "--import-notion", "--tabs-benchmark",
     ]
     /// Флаги, за которыми идёт значение: значение — не флаг, даже если похоже.
     static let flagsWithValue: Set<String> = [
         "--database", "--generate-reference-library", "--launch-report", "--window-snapshot", "--typing-benchmark",
         "--search-benchmark",
         "--ui-gallery", "--ui-gallery-only", "--hover-sidebar-row", "--appearance", "--export-markdown", "--import-notion",
+        "--tabs-benchmark",
     ]
 
     /// `--generate-visual-sample` сам по себе — для человека (сверка с Notion); вместе со снимком — служебный.

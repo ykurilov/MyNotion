@@ -35,6 +35,16 @@ struct NavigationHistoryTests {
         #expect(tab.pageId == pageA && tab.back.isEmpty)
     }
 
+    @Test("«Недавние» во вкладке: страница — в «назад», «вперёд» очищается; повтор ничего не меняет")
+    func navigateToRecentPages() {
+        var tab = Tab(pageId: pageA, forward: [TabEntry(pageId: pageD)])
+        let placeA = scroll(5)
+        do { let moved = tab.showRecentPages(leaving: placeA); #expect(moved) }
+        #expect(tab.pageId == nil && tab.scroll == nil && tab.forward.isEmpty)
+        #expect(tab.back == [TabEntry(pageId: pageA, scroll: placeA)])
+        do { let moved = tab.showRecentPages(leaving: nil); #expect(!moved) }
+    }
+
     @Test("Назад и вперёд переносят запись между стопками и возвращают место прокрутки")
     func backAndForwardMoveEntriesWithScroll() {
         var tab = Tab(pageId: pageA)

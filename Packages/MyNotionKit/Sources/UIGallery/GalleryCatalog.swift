@@ -76,6 +76,9 @@ public enum GalleryScene: Hashable, Sendable {
     case notionImport(GalleryNotionImport)
     /// Выгрузка в Markdown (FR-017): карточка хода, итог с «Показать в Finder», ошибка.
     case markdownExport(GalleryMarkdownExport)
+    /// Вкладки окна (US3): полоса с 1, 3 и 12 вкладками, «×» под мышью, панель спрятана, «Открыть в новой вкладке»,
+    /// «Недавние» во вкладке, заглушка «Страница в корзине».
+    case tabs(GalleryTabs)
 }
 
 public enum GalleryMarkdownExport: String, Hashable, Sendable, CaseIterable {
@@ -188,7 +191,23 @@ public struct GalleryShot: Hashable, Sendable {
 public enum GalleryCatalog {
     /// Все состояния по порядку съёмки.
     public static let states: [GalleryState] = pageStates + blockStates + kindSampleStates + inlineAtomStates + editingStates + sidebarStates
-        + trashStates + importStates + exportStates + syncStates
+        + trashStates + importStates + exportStates + syncStates + tabsStates
+
+    /// Вкладки окна (US3, contracts/pages-ui.md, «Верхняя полоса окна»; сверка — снимок Notion 7.39 `notion-sidebar-tabs-topbar.png`).
+    static let tabsStates: [GalleryState] = [
+        GalleryState("tabs-one", .tabs(.one), "Одна вкладка: «‹ ›» серые, вкладка цветом страницы, «+»", section: "Вкладки"),
+        GalleryState("tabs-three", .tabs(.three), "Три вкладки, активная — средняя; «‹» можно, «›» нельзя", section: "Вкладки",
+                     narrowToo: true),
+        GalleryState("tabs-twelve", .tabs(.twelve), "Двенадцать вкладок сжаты поровну, названия обрезаны", section: "Вкладки",
+                     narrowToo: true),
+        GalleryState("tabs-hover", .tabs(.hover), "Мышь над неактивной вкладкой: «×»", section: "Вкладки"),
+        GalleryState("tabs-sidebar-hidden", .tabs(.sidebarHidden), "Панель спрятана: полоса сразу за шторкой", section: "Вкладки"),
+        GalleryState("tabs-new-tab-search", .tabs(.newTabSearch), "⌘T: «Открыть в новой вкладке…» — недавние по дням",
+                     section: "Вкладки"),
+        GalleryState("tabs-recent-pages", .tabs(.recentPages), "«Показать все»: «Недавние» во вкладке", section: "Вкладки"),
+        GalleryState("tabs-trashed-page", .tabs(.trashedPage), "Страница вкладки в корзине: «Страница в корзине», «Вернуть»",
+                     section: "Вкладки"),
+    ]
 
     /// Окно «@» и календарик даты (US3, contracts/blocks-and-keys.md, «Упоминания», «Даты и напоминания»).
     static let inlineAtomStates: [GalleryState] = [
@@ -402,4 +421,16 @@ public enum GalleryCatalog {
         GalleryState("markdown-export-failed", .markdownExport(.failed),
                      "Выгрузка не удалась: понятная ошибка и «Закрыть»", section: "Выгрузка в Markdown"),
     ]
+}
+
+/// Состояния вкладок окна для галереи (US3).
+public enum GalleryTabs: Hashable, Sendable {
+    case one
+    case three
+    case twelve
+    case hover
+    case sidebarHidden
+    case newTabSearch
+    case recentPages
+    case trashedPage
 }

@@ -66,6 +66,9 @@ struct MainWindowView: View {
         if let benchmarkURL = options.searchBenchmarkURL, case .success(let library) = library {
             SearchBenchmark.editorReady(model: model ?? library.firstWindow, reportTo: benchmarkURL)
         }
+        if let tabsURL = options.tabsBenchmarkURL, case .success(let library) = library {
+            TabsBenchmark.editorReady(model: model ?? library.firstWindow, reportTo: tabsURL)
+        }
         if let latencyURL = options.reminderLatencyURL, case .success(let library) = library {
             ReminderLatencyCheck.start(library: library, reportTo: latencyURL)
         }
@@ -168,11 +171,8 @@ private struct PagesWindow: View {
                 .transition(.move(edge: .leading))
             }
             VStack(spacing: 0) {
-                // Панель спрятана: над страницей строка светофора со шторкой, путь страницы — под ней.
-                if model.isSidebarCollapsed {
-                    Color(nsColor: Palette.pageBackground)
-                        .frame(height: Metrics.Window.titleBarHeight)
-                }
+                // Вкладки — в строке светофора над страницей; при спрятанной панели — за шторкой (US3).
+                tabStrip
                 pageArea
             }
             .frame(maxWidth: .infinity)
@@ -187,6 +187,12 @@ private struct PagesWindow: View {
             }
         }
         .modifier(NotionImportSheets(controller: importController))
+        .overlay {
+            if model.isNewTabSearchShown {
+                NewTabSearchView(source: RecentPagesSource(store: model.store, tree: model.tree),
+                                 open: { model.openInNewTab($0) }, dismiss: { model.isNewTabSearchShown = false })
+            }
+        }
         .modalCard(isPresented: model.isSyncSettingsShown) {
             SyncSettingsView(controller: model.syncSettingsPreview ?? model.sync) { model.isSyncSettingsShown = false }
         }
@@ -206,20 +212,7 @@ private struct PagesWindow: View {
             selectedPageId: model.openPageId,
             liveTitle: model.liveTitleOfOpenPage,
             trashEntries: model.trashEntries,
-            actions: PageTreeActions(
-                // Фокус остаётся в дереве: стрелки, Enter и ⌘⌫ дальше работают там.
-                select: { model.open(PageOpenRequest.fromClick($0), focus: .unchanged) },
-                rename: { model.rename($0, to: $1) },
-                move: { model.move($0, toParent: $1, at: $2) },
-                moveToTrash: { model.moveToTrash($0) },
-                addSubpage: { model.createSubpage(in: $0) },
-                collapsedPagesChanged: { model.setCollapsedPages($0) },
-                chooseIcon: { pageId, anchor in
-                    guard let window = anchor.window else { return }
-                    let rect = window.convertToScreen(anchor.convert(anchor.bounds, to: nil))
-                    sidebarIconPicker.show(below: rect, in: window) { model.setIcon(pageId, to: $0) }
-                }
-            ),
+            actions: treeActions,
             trashActions: TrashActions(
                 restore: { model.restore($0) },
                 deleteForever: { model.deleteForever($0) },
@@ -231,6 +224,44 @@ private struct PagesWindow: View {
         ) {
             SidebarSearchField(controller: model.search)
         }
+    }
+
+    private var treeActions: PageTreeActions {
+        var actions = PageTreeActions(
+            // Фокус остаётся в дереве: стрелки, Enter и ⌘⌫ дальше работают там.
+            select: { model.open(PageOpenRequest.fromClick($0), focus: .unchanged) },
+            rename: { model.rename($0, to: $1) },
+            move: { model.move($0, toParent: $1, at: $2) },
+            moveToTrash: { model.moveToTrash($0) },
+            addSubpage: { model.createSubpage(in: $0) },
+            collapsedPagesChanged: { model.setCollapsedPages($0) },
+            chooseIcon: { pageId, anchor in
+                guard let window = anchor.window else { return }
+                let rect = window.convertToScreen(anchor.convert(anchor.bounds, to: nil))
+                sidebarIconPicker.show(below: rect, in: window) { model.setIcon(pageId, to: $0) }
+            }
+        )
+        actions.rowMenuHandlers[.openInNewTab] = { model.open(PageOpenRequest(pageId: $0, inNewTab: true)) }
+        return actions
+    }
+
+    /// Полоса вкладок окна (US3, contracts/pages-ui.md, «Верхняя полоса окна»).
+    private var tabStrip: some View {
+        TabStripView(
+            items: model.tabStripItems,
+            canGoBack: model.canGoBack,
+            canGoForward: model.canGoForward,
+            leadingInset: model.isSidebarCollapsed ? Metrics.Tabs.collapsedSidebarLeading : 0,
+            previewHoveredTabId: model.previewHoveredTabId,
+            actions: TabStripActions(
+                back: { model.goBack() },
+                forward: { model.goForward() },
+                activate: { model.activateTab($0) },
+                close: { model.closeTab(at: $0) },
+                move: { model.moveTab(from: $0, to: $1) },
+                newTab: { model.showNewTabSearch() }
+            )
+        )
     }
 
     /// Шторка: середина — на `sidebarToggleCenterX` от левого края, в строке светофора.
@@ -305,10 +336,19 @@ private struct PagesWindow: View {
                 blockReveal: model.blockReveal,
                 onReady: onEditorReady,
                 mentions: mentionSettings(pages: pages),
-                pageMenuItems: PageMenuItems.all(for: model, pageId: document.pageId)
+                pageMenuItems: PageMenuItems.all(for: model, pageId: document.pageId),
+                scrollPlace: model.scrollPlace,
+                restoringScroll: model.restoringScroll
             )
             // Новый документ — новый редактор: страницу перечитали после операции с деревом.
             .id(ObjectIdentifier(document))
+        } else if let trashed = model.activeTabTrashedPage {
+            TrashedPageView(page: trashed) { model.restoreActiveTabPage() }
+                .onAppear { DispatchQueue.main.async { onEditorReady() } }
+        } else if model.loadError == nil, !model.tree.pagesInTreeOrder.isEmpty {
+            // Вкладка без страницы (или её страница стёрта) — «Недавние».
+            RecentPagesView(source: RecentPagesSource(store: model.store, tree: model.tree)) { model.open($0) }
+                .onAppear { DispatchQueue.main.async { onEditorReady() } }
         } else {
             Text(model.loadError ?? "Нет страниц. ⌘N — новая страница")
                 .foregroundStyle(Color(nsColor: Palette.textSecondary))

@@ -384,6 +384,9 @@ final class UIGalleryRunner {
         case .pageTopBar:
             await open(library.sample.page.id)
 
+        case .tabs(let kind):
+            return await GalleryTabsScene.show(kind, model: model, library: library)
+
         case .pageMenu:
             await open(library.sample.page.id)
             guard let button = Self.view(identified: "page-menu", in: window) as? NSButton else { return "нет кнопки «•••»" }
@@ -486,6 +489,8 @@ final class UIGalleryRunner {
         case .sidebarHidden:
             model.toggleSidebar()
             await settle()
+        case .tabs(let kind):
+            await GalleryTabsScene.tearDown(kind, model: model)
         case .search:
             model.search.dismiss()
         case .notionImport:

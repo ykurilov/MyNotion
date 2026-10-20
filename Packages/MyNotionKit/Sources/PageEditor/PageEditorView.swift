@@ -30,6 +30,10 @@ public struct PageEditorView: View {
     let pageMenuItems: [PageMenuItem]
     /// Место слева от «•••» (US2: «☆»).
     let topBarAccessory: AnyView?
+    /// Вкладки (US3): окно читает место прокрутки открытой страницы, когда уходит с неё.
+    let scrollPlace: PageScrollPlace?
+    /// Вкладки (US3): место прокрутки, на которое встать после открытия («назад», переключение вкладки).
+    let restoringScroll: TabScroll?
 
     public init(document: PageDocument, ancestorTitles: [String] = [], initialFocus: PageTextView.InitialFocus,
                 linkedPages: [UUID: LinkedPage] = [:], onOpenPage: @escaping @MainActor (UUID) -> Void = { _ in },
@@ -38,7 +42,8 @@ public struct PageEditorView: View {
                 onResolveConflict: @escaping @MainActor (Conflict) -> Void = { _ in },
                 blockViewState: BlockViewStateStore? = nil, blockReveal: BlockReveal? = nil,
                 onReady: @escaping @MainActor () -> Void = {}, mentions: MentionSettings = MentionSettings(),
-                pageMenuItems: [PageMenuItem] = [], topBarAccessory: AnyView? = nil) {
+                pageMenuItems: [PageMenuItem] = [], topBarAccessory: AnyView? = nil,
+                scrollPlace: PageScrollPlace? = nil, restoringScroll: TabScroll? = nil) {
         self.document = document
         self.ancestorTitles = ancestorTitles
         self.initialFocus = initialFocus
@@ -53,6 +58,8 @@ public struct PageEditorView: View {
         self.mentions = mentions
         self.pageMenuItems = pageMenuItems
         self.topBarAccessory = topBarAccessory
+        self.scrollPlace = scrollPlace
+        self.restoringScroll = restoringScroll
     }
 
     public var body: some View {
@@ -64,7 +71,7 @@ public struct PageEditorView: View {
             PageTextEditor(document: document, icon: document.page.icon, initialFocus: initialFocus, linkedPages: linkedPages,
                            onOpenPage: onOpenPage, onSubpageRequest: onSubpageRequest, onSetIcon: onSetIcon, onResolveConflict: onResolveConflict,
                            blockViewState: blockViewState, blockReveal: blockReveal, onReady: onReady,
-                           mentions: mentions)
+                           mentions: mentions, scrollPlace: scrollPlace, restoringScroll: restoringScroll)
                 .overlay(alignment: .top) { scrollEdgeFade }
         }
         .background(Color(nsColor: Palette.pageBackground))
@@ -122,6 +129,8 @@ struct PageTextEditor: NSViewRepresentable {
     let blockReveal: BlockReveal?
     let onReady: @MainActor () -> Void
     var mentions = MentionSettings()
+    var scrollPlace: PageScrollPlace?
+    var restoringScroll: TabScroll?
 
     /// Какой запрос перехода к блоку редактор уже выполнил.
     final class Coordinator {
@@ -135,8 +144,10 @@ struct PageTextEditor: NSViewRepresentable {
         textView.blockViewState = blockViewState
         let reveal = blockReveal
         context.coordinator.revealToken = reveal?.token
-        textView.onReady = { [weak textView, onReady] in
+        scrollPlace?.attach(textView)
+        textView.onReady = { [weak textView, onReady, restoringScroll] in
             onReady()
+            if let restoringScroll { textView?.restoreScrollPlace(restoringScroll) }
             if let reveal { textView?.revealBlock(reveal.blockId) }
         }
         textView.linkedPages = linkedPages

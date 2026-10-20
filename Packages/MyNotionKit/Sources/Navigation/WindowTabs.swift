@@ -4,6 +4,7 @@ import NotesCore
 /// Вкладки окна (research R5): список, активная, открыть страницу в активной или новой, закрыть и вернуть закрытую,
 /// переставить, «назад/вперёд»; хранение в `window_state.tabs`.
 /// Редактор один — у активной вкладки; неактивная держит только страницу, место прокрутки и свою историю.
+/// Вкладка без страницы показывает «Недавние».
 @MainActor
 public final class WindowTabs {
     /// Сколько закрытых вкладок окна помнит ⇧⌘T (только в памяти).
@@ -61,12 +62,20 @@ public final class WindowTabs {
         activePageDidChange(from: left)
     }
 
-    /// ⌘T и «+»: пустая «Новая вкладка» справа от текущей, сразу активная.
-    public func newTab() {
+    /// ⌘T и «+»: страница, выбранная в окне «Открыть в новой вкладке», — новой вкладкой в конце, сразу активной
+    /// (как Notion 7.39).
+    public func openNewTab(_ pageId: UUID) {
         let left = activePageId
         rememberScroll()
-        items.insert(Tab(), at: activeIndex + 1)
-        activeIndex += 1
+        items.append(Tab(pageId: pageId))
+        activeIndex = items.count - 1
+        activePageDidChange(from: left)
+    }
+
+    /// «Показать все» в разделе «Недавние»: «Недавние» в активной вкладке, «назад» возвращает страницу.
+    public func showRecentPages() {
+        let left = activePageId
+        guard items[activeIndex].showRecentPages(leaving: leavingScroll()) else { return }
         activePageDidChange(from: left)
     }
 

@@ -17,6 +17,18 @@ extension Tab {
         return true
     }
 
+    /// «Показать все» в «Недавних» (как Library в Notion 7.39): вкладка показывает «Недавние», страница — в «назад».
+    /// Сами «Недавние» в историю не пишутся. Уже «Недавние» — ничего.
+    @discardableResult
+    public mutating func showRecentPages(leaving scroll: TabScroll?) -> Bool {
+        guard let current = pageId else { return false }
+        Self.push(TabEntry(pageId: current, scroll: scroll), onto: &back)
+        forward.removeAll()
+        pageId = nil
+        self.scroll = nil
+        return true
+    }
+
     @discardableResult
     public mutating func goBack(leaving scroll: TabScroll?, isGone: (UUID) -> Bool) -> Bool {
         guard let entry = Self.popLive(&back, isGone: isGone) else { return false }
