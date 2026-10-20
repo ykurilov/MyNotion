@@ -100,6 +100,10 @@ public class PageTextView: NSTextView {
     private var isLoadingText = false
     /// Протяжка мышью с поля: где нажали и сдвинулась ли мышь.
     var marginDrag: (start: NSPoint, moved: Bool)?
+    /// Вид страницы: ширина колонки и шкала шрифтов (`PageLayout/`).
+    public internal(set) var layoutSettings = PageLayoutSettings()
+    /// Место обложки над шапкой (`PageLayout/`).
+    let coverSlot = CoverSlot()
 
     public convenience init(document: PageDocument, initialFocus: InitialFocus) {
         self.init(flow: FlowDocument(document), initialFocus: initialFocus)
@@ -821,9 +825,7 @@ public class PageTextView: NSTextView {
     /// Центр — по ширине вместе с полосой прокрутки: длинная страница с полосой не сдвигается (раунд 2, № 23).
     /// У редактора колонки (`FlowTextView`) — вся его ширина.
     var column: (left: CGFloat, width: CGFloat) {
-        let pageWidth = enclosingScrollView?.frame.width ?? bounds.width
-        let left = max(Metrics.Page.minimumSideInset, (pageWidth - Metrics.Page.columnWidth) / 2)
-        return (left, max(0, min(Metrics.Page.columnWidth, bounds.width - left - Metrics.Page.minimumSideInset)))
+        layoutSettings.column(pageWidth: enclosingScrollView?.frame.width ?? bounds.width, textWidth: bounds.width)
     }
 
     public override var textContainerOrigin: NSPoint {
@@ -876,10 +878,12 @@ public class PageTextView: NSTextView {
         }
         header.isHidden = !showsPageHeader
         let headerHeight = showsPageHeader ? header.height(forWidth: columnWidth) : 0
-        header.frame = NSRect(x: left, y: 0, width: columnWidth, height: headerHeight)
-        // Отступ текста сверху — шапка, снизу — пустое место; NSTextView делит высоту поровну, а начало текста
+        let coverHeight = showsPageHeader ? coverSlot.height : 0
+        coverSlot.view?.frame = NSRect(x: 0, y: 0, width: bounds.width, height: coverHeight)
+        header.frame = NSRect(x: left, y: coverHeight, width: columnWidth, height: headerHeight)
+        // Отступ текста сверху — обложка и шапка, снизу — пустое место; NSTextView делит высоту поровну, а начало текста
         // задаёт `textContainerOrigin`.
-        let inset = NSSize(width: left, height: showsPageHeader ? (headerHeight + Metrics.Page.bottomPadding) / 2 : 0)
+        let inset = NSSize(width: left, height: showsPageHeader ? (coverHeight + headerHeight + Metrics.Page.bottomPadding) / 2 : 0)
         if textContainerInset != inset {
             textContainerInset = inset
         }

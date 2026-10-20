@@ -40,6 +40,7 @@ public struct AttachmentCollector: Sendable {
         try attachments.records(sql: """
             SELECT * FROM attachment WHERE orphanedAt IS NOT NULL AND orphanedAt <= ?
                 AND NOT EXISTS (SELECT 1 FROM block WHERE instr(upper(block.props), upper(attachment.id)) > 0)
+                AND NOT EXISTS (SELECT 1 FROM page WHERE page.cover IS NOT NULL AND instr(upper(page.cover), upper(attachment.id)) > 0)
             ORDER BY id
             """, arguments: [now().addingTimeInterval(-Self.orphanLifetime)])
     }

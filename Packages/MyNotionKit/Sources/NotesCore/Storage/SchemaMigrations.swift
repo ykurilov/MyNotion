@@ -17,6 +17,7 @@ public struct SchemaMigrations: Sendable {
         Step(version: "v4", migrate: fillSearchIndex),
         Step(version: "v5", migrate: addSyncBookkeeping),
         Step(version: "v6", migrate: addRichBlocks),
+        Step(version: "v7", migrate: addPagesNavigation),
     ])
 
     /// Та же схема плюс ещё один шаг — для проверки миграций.
@@ -211,6 +212,55 @@ private func addRichBlocks(_ db: Database) throws {
             blockId TEXT PRIMARY KEY NOT NULL,
             isCollapsed BOOLEAN NOT NULL DEFAULT 0
         );
+        """)
+}
+
+/// Страницы и навигация (003, data-model.md, «Миграция v7»): поля страницы, локальные таблицы обратных ссылок, версий и
+/// отметок, вкладки окна. Только схема: индекс обратных ссылок заполняется позже, в фоне (research R10). Новые метки полей
+/// в `fieldClocks` пусты — их просто нет в JSON.
+private func addPagesNavigation(_ db: Database) throws {
+    try db.execute(sql: """
+        ALTER TABLE page ADD COLUMN cover TEXT;
+        ALTER TABLE page ADD COLUMN isFullWidth BOOLEAN NOT NULL DEFAULT 0;
+        ALTER TABLE page ADD COLUMN isSmallText BOOLEAN NOT NULL DEFAULT 0;
+        ALTER TABLE page ADD COLUMN isTemplate BOOLEAN NOT NULL DEFAULT 0;
+        ALTER TABLE page ADD COLUMN favorite TEXT;
+        ALTER TABLE page ADD COLUMN visitedAt DATETIME;
+        CREATE INDEX page_by_favorite ON page(favorite) WHERE favorite IS NOT NULL;
+        CREATE INDEX page_by_visit ON page(visitedAt) WHERE visitedAt IS NOT NULL;
+
+        CREATE TABLE page_link (
+            sourceBlockId TEXT NOT NULL,
+            sourcePageId TEXT NOT NULL,
+            targetPageId TEXT NOT NULL,
+            PRIMARY KEY (sourceBlockId, targetPageId)
+        );
+        CREATE INDEX page_link_by_target ON page_link(targetPageId);
+
+        CREATE TABLE page_version (
+            id TEXT PRIMARY KEY NOT NULL,
+            pageId TEXT NOT NULL,
+            createdAt DATETIME NOT NULL,
+            deviceName TEXT NOT NULL,
+            snapshot BLOB NOT NULL,
+            summary TEXT NOT NULL DEFAULT '{}',
+            byteCount INTEGER NOT NULL
+        );
+        CREATE INDEX page_version_by_page ON page_version(pageId, createdAt);
+
+        CREATE TABLE page_version_due (
+            pageId TEXT PRIMARY KEY NOT NULL,
+            lastChangeAt DATETIME NOT NULL,
+            deviceName TEXT NOT NULL
+        );
+
+        CREATE TABLE app_meta (
+            key TEXT PRIMARY KEY NOT NULL,
+            value TEXT NOT NULL
+        );
+
+        ALTER TABLE window_state ADD COLUMN tabs TEXT;
+        ALTER TABLE window_state ADD COLUMN collapsedSidebarSections TEXT NOT NULL DEFAULT '[]';
         """)
 }
 

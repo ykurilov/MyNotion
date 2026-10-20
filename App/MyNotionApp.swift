@@ -45,7 +45,9 @@ struct MyNotionApp: App {
             if options.uiGalleryURL != nil { galleryLibrary = try UIGalleryRunner.prepareLibrary(in: store) }
             // Служебные запуски (галерея, замеры, снимки) с сервером не связываются.
             let pages = PagesLibrary(store: store, startsSync: options.allowsSync, reminders: reminders)
-            if options.uiGalleryURL != nil || options.generatesRichSample { SampleMedia.materialize(in: store, attachments: pages.attachments) }
+            if options.uiGalleryURL != nil || options.generatesRichSample || options.generates003Sample {
+                SampleMedia.materialize(in: store, attachments: pages.attachments)
+            }
             if let automation = options.syncAutomation { SyncAutomation.start(automation, controller: pages.sync) }
             return pages
         }
@@ -110,6 +112,11 @@ struct MyNotionApp: App {
             // Каждый тип 002 добавляет свою часть через описатель (`BlockKinds.richPageParts`).
             let pageId = try RichPageGenerator(parts: BlockKinds.richPageParts).ensure(in: store)
             try store.saveWindowState(WindowState(windowId: WindowState.mainWindowId, openPageId: pageId))
+        }
+        if options.generates003Sample {
+            // Картинки ветки — те же файлы-образцы, что у картинок «богатой» страницы (`SampleMedia`).
+            let imageProps = BlockKinds.richPageParts.first { $0.name == BlockKind.image.rawValue }?.blocks.first?.props ?? .empty
+            try PagesNavigationSample(imageProps: imageProps).ensure(in: store)
         }
         if options.typingBenchmarkURL != nil {
             try TypingBenchmark.ensureHugePage(in: store)

@@ -22,6 +22,11 @@ public struct AttachmentReferenceCounter: NotesWriteHook {
         let db = transaction.database
         var referenced: [AttachmentRef] = []
         var mayHaveLostReferences = !changes.erasedPageIds.isEmpty
+        // Обложка-файл страницы (003) — такая же ссылка на файл, как картинка в блоке.
+        for change in changes.pages where change.isNew || change.changedFields.contains(.cover) {
+            if let ref = change.page.cover?.attachment { referenced.append(ref) }
+            if !change.isNew { mayHaveLostReferences = true }
+        }
         for change in changes.blocks {
             switch change {
             case .saved(let block, let fields, let isNew):
@@ -66,10 +71,11 @@ public struct AttachmentReferenceCounter: NotesWriteHook {
         }
     }
 
-    /// Живой блок, в `props` которого есть id файла (JSON пишет id заглавными буквами).
+    /// Живой блок, в `props` которого есть id файла (JSON пишет id заглавными буквами), или страница с этой обложкой.
     static let liveReference = """
         SELECT 1 FROM block WHERE block.isDeleted = 0
             AND block.kind IN (\(BlockKind.withAttachments.map { "'\($0.rawValue)'" }.sorted().joined(separator: ", ")))
             AND instr(upper(block.props), upper(attachment.id)) > 0
+        UNION ALL SELECT 1 FROM page WHERE page.cover IS NOT NULL AND instr(upper(page.cover), upper(attachment.id)) > 0
         """
 }

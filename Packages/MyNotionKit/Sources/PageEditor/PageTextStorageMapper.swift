@@ -363,7 +363,7 @@ public final class PageTextStorageMapper: NSObject {
 
     /// Текст блока для страницы: переносы строк — разрывы строки.
     static func pageString(ofBlockText string: String) -> String {
-        string.replacingOccurrences(of: "\n", with: lineSeparatorString)
+        string.utf8.contains(UInt8(ascii: "\n")) ? string.replacingOccurrences(of: "\n", with: lineSeparatorString) : string
     }
 
     /// Текст блока со страницы: разрывы строки — переносы `\n`.
@@ -518,15 +518,16 @@ public final class PageTextStorageMapper: NSObject {
         let base = baseAttributes(for: block, after: previous)
         if block.kind.rendersAsAttachment {
             // Блок без своего текста: один знак-вложение с видом блока (research R2).
-            let text = NSMutableAttributedString(attachment: BlockAttachment(block: block))
-            text.addAttributes(base, range: NSRange(location: 0, length: text.length))
-            if withNewline { text.append(NSAttributedString(string: "\n", attributes: base)) }
-            return text
+            // Знак и перевод строки — одной строкой: словарь атрибутов переводится в Objective-C один раз (research R15).
+            var attributes = base
+            attributes[.attachment] = BlockAttachment(block: block)
+            return NSAttributedString(string: withNewline ? "\u{FFFC}\n" : "\u{FFFC}", attributes: attributes)
         }
         let line = Typography.line(for: textStyle(of: block.kind))
-        let text = NSMutableAttributedString(string: pageString(ofBlockText: block.text.string), attributes: base)
-        let length = text.length
-        for run in block.text.normalized().runs {
+        let body = pageString(ofBlockText: block.text.string)
+        let text = NSMutableAttributedString(string: withNewline ? body + "\n" : body, attributes: base)
+        let length = (body as NSString).length
+        for run in block.text.runs.isEmpty ? [] : block.text.normalized().runs {
             let range = NSRange(location: run.start, length: run.length)
             guard run.start >= 0, NSMaxRange(range) <= length else { continue }
             switch run.style {
@@ -543,12 +544,12 @@ public final class PageTextStorageMapper: NSObject {
                 if let attachment = InlineAtomAttachment.make(for: run.style) { text.addAttribute(.attachment, value: attachment, range: range) }
             }
         }
-        if length > 0 {
+        // Без оформления в строке рисовать нечего: перебор атрибутов — заметная часть открытия страницы (research R15).
+        if length > 0, !block.text.runs.isEmpty {
             text.enumerateAttributes(in: NSRange(location: 0, length: length)) { attributes, range, _ in
                 text.addAttributes(inlineRendering(attributes, line: line), range: range)
             }
         }
-        if withNewline { text.append(NSAttributedString(string: "\n", attributes: base)) }
         return text
     }
 

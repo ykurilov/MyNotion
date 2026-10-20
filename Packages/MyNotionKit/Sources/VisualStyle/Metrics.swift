@@ -13,6 +13,9 @@ public enum Metrics {
         public static let breadcrumbSeparatorKern: CGFloat = 4
         /// Запас справа от пути: длинный путь не упирается в край окна.
         public static let topBarTrailingInset: CGFloat = 24
+        /// «☆» и «•••» справа в верхней полосе (≈ по снимку `notion-sidebar-tabs-topbar.png`).
+        public static let topBarButtonSize: CGFloat = 28
+        public static let topBarButtonSpacing: CGFloat = 2
         /// Затухание прокрученного текста под верхней полосой; верхние `scrollEdgeSolidHeight` — сплошной фон страницы.
         public static let scrollEdgeFadeHeight: CGFloat = 16
         public static let scrollEdgeSolidHeight: CGFloat = 4
@@ -355,6 +358,12 @@ public enum Metrics {
     }
 
     /// Шапка страницы: кнопка «Добавить иконку» при наведении, как у Notion (серая, значок и надпись 14), над названием.
+    /// Меню «•••» страницы (contracts/pages-ui.md), ≈ по Notion.
+    public enum PageMenu {
+        public static let width: CGFloat = 265
+        public static let searchInset: CGFloat = 10
+    }
+
     public enum PageHeaderButton {
         public static let height: CGFloat = 28
         public static let horizontalPadding: CGFloat = 8
@@ -365,6 +374,8 @@ public enum Metrics {
         public static let titleSpacing: CGFloat = 4
         /// Подсветка иконки страницы под мышью — скругление.
         public static let iconHoverCornerRadius: CGFloat = 6
+        /// Между кнопками строки над названием («Добавить иконку», «Добавить обложку»), ≈ по Notion.
+        public static let spacing: CGFloat = 2
     }
 
     /// Панель форматирования над выделенным текстом (FR-033), карточка как у Notion 7.38.1 (снимок 15.10.2026, ±1,2):

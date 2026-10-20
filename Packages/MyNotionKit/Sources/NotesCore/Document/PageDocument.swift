@@ -567,7 +567,11 @@ public final class PageDocument {
     /// а без них — в конце страницы.
     private func rebuildFlows() {
         func ordered(_ items: [Block]) -> [Block] {
-            items.sorted { $0.sortKey != $1.sortKey ? $0.sortKey < $1.sortKey : $0.id.uuidString < $1.id.uuidString }
+            items.sorted { lhs, rhs in
+                if lhs.sortKey < rhs.sortKey { return true }
+                if rhs.sortKey < lhs.sortKey { return false }
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
         }
         var pageFlow: [Block] = []
         var flows: [UUID: [Block]] = [:]

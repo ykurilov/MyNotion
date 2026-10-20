@@ -113,7 +113,8 @@ public final class NotesTransaction {
         updated.createdAt = stored.createdAt
         updated.fieldClocks = stored.fieldClocks
         updated.fieldClocks.stamp(changedFields, with: clock.now())
-        updated.updatedAt = Date()
+        // Избранное и недавние — порядок и вид, а не содержимое: «изменено» не трогают (data-model.md, «Page»).
+        updated.updatedAt = changedFields.isSubset(of: Page.Field.bookkeeping) ? stored.updatedAt : Date()
         try updated.update(in: db)
         changes.pages.append(PageChange(page: updated, changedFields: changedFields, isNew: false))
         return updated

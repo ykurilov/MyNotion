@@ -22,11 +22,10 @@ struct SyncPayloadV2Tests {
         try SyncJSON.decoder().decode(SyncChange.self, from: try SyncJSON.encoder().encode(change))
     }
 
-    @Test("Версия формата — 2")
+    @Test("Версия формата — не ниже 2 (003 — 3, `SyncPayloadV3Tests`)")
     func formatVersion() {
-        #expect(SyncBatch.currentFormatVersion == 2)
-        #expect(SyncBatch(deviceId: "d", deviceName: "Mac", changes: []).formatVersion == 2)
-        #expect(SyncSnapshot(seq: 1, changes: [], knowledge: ClockKnowledge()).formatVersion == 2)
+        #expect(SyncBatch.currentFormatVersion >= 2)
+        #expect(SyncBatch(deviceId: "d", deviceName: "Mac", changes: []).formatVersion == SyncBatch.currentFormatVersion)
     }
 
     @Test("placement блока: {containerId, sortKey}, контейнер пустой — null")
@@ -130,7 +129,7 @@ struct SyncPayloadV2Tests {
     @Test("Mac с форматом 1 пачку v2 не применяет и ждёт обновления")
     func olderMacWaits() throws {
         let key = SymmetricKey(size: .bits256)
-        let sealed = try BatchCipher(key: key).seal(SyncBatch(deviceId: "d", deviceName: "Mac", changes: []), batchId: "b1")
+        let sealed = try BatchCipher(key: key).seal(SyncBatch(formatVersion: 2, deviceId: "d", deviceName: "Mac", changes: []), batchId: "b1")
         #expect(throws: BatchCipherError.newerFormat(2)) {
             try BatchCipher(key: key, supportedFormatVersion: 1).open(sealed, batchId: "b1", deviceId: "d")
         }

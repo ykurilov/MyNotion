@@ -26,6 +26,10 @@ public struct PageEditorView: View {
     let onReady: @MainActor () -> Void
     /// Упоминания и даты (US3): справочник страниц, поиск для окна «@», разрешение на уведомления.
     let mentions: MentionSettings
+    /// Меню «•••» справа в верхней полосе (003); пусто — кнопки нет.
+    let pageMenuItems: [PageMenuItem]
+    /// Место слева от «•••» (US2: «☆»).
+    let topBarAccessory: AnyView?
 
     public init(document: PageDocument, ancestorTitles: [String] = [], initialFocus: PageTextView.InitialFocus,
                 linkedPages: [UUID: LinkedPage] = [:], onOpenPage: @escaping @MainActor (UUID) -> Void = { _ in },
@@ -33,7 +37,8 @@ public struct PageEditorView: View {
                 onSetIcon: @escaping @MainActor (String?) -> Void = { _ in },
                 onResolveConflict: @escaping @MainActor (Conflict) -> Void = { _ in },
                 blockViewState: BlockViewStateStore? = nil, blockReveal: BlockReveal? = nil,
-                onReady: @escaping @MainActor () -> Void = {}, mentions: MentionSettings = MentionSettings()) {
+                onReady: @escaping @MainActor () -> Void = {}, mentions: MentionSettings = MentionSettings(),
+                pageMenuItems: [PageMenuItem] = [], topBarAccessory: AnyView? = nil) {
         self.document = document
         self.ancestorTitles = ancestorTitles
         self.initialFocus = initialFocus
@@ -46,6 +51,8 @@ public struct PageEditorView: View {
         self.blockReveal = blockReveal
         self.onReady = onReady
         self.mentions = mentions
+        self.pageMenuItems = pageMenuItems
+        self.topBarAccessory = topBarAccessory
     }
 
     public var body: some View {
@@ -65,15 +72,25 @@ public struct PageEditorView: View {
 
     /// Путь «Родитель / Страница» шрифтом 14, «/» тусклый; длинный — без середины и с обрезанным по слову названием.
     private var topBar: some View {
-        GeometryReader { proxy in
-            let width = proxy.size.width - Metrics.Page.topBarHorizontalPadding - Metrics.Page.topBarTrailingInset
-            Text(BreadcrumbText.styled(BreadcrumbText.fitting(ancestorTitles + [document.page.pathTitle], width: width,
-                                                              measure: BreadcrumbText.measure)))
-                .lineLimit(1)
-                .accessibilityIdentifier("page-breadcrumb")
-                .padding(.leading, Metrics.Page.topBarHorizontalPadding)
-                .padding(.trailing, Metrics.Page.topBarTrailingInset)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        HStack(spacing: Metrics.Page.topBarButtonSpacing) {
+            GeometryReader { proxy in
+                let width = proxy.size.width - Metrics.Page.topBarHorizontalPadding - Metrics.Page.topBarTrailingInset
+                Text(BreadcrumbText.styled(BreadcrumbText.fitting(ancestorTitles + [document.page.pathTitle], width: width,
+                                                                  measure: BreadcrumbText.measure)))
+                    .lineLimit(1)
+                    .accessibilityIdentifier("page-breadcrumb")
+                    .padding(.leading, Metrics.Page.topBarHorizontalPadding)
+                    .padding(.trailing, Metrics.Page.topBarTrailingInset)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            }
+            if let topBarAccessory { topBarAccessory }
+            if !pageMenuItems.isEmpty {
+                PageMenuButton(items: pageMenuItems) { [document] in
+                    PageMenuContext(page: document.page, wordCount: PageMenuFooter.wordCount(of: document))
+                }
+                .frame(width: Metrics.Page.topBarButtonSize, height: Metrics.Page.topBarButtonSize)
+                .padding(.trailing, Metrics.Page.topBarHorizontalPadding)
+            }
         }
         .frame(height: Metrics.Page.topBarHeight)
     }

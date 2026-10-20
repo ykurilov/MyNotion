@@ -20,13 +20,56 @@ public struct HybridTimestamp: Sendable, Hashable, Comparable, Codable, CustomSt
     }
 
     public init?(_ description: String) {
-        let parts = description.split(separator: "-", maxSplits: 2)
-        guard parts.count == 3, parts[0].count == 16, parts[1].count == 8,
-              let wall = UInt64(parts[0], radix: 16), wall <= UInt64(Int64.max),
-              let counter = UInt32(parts[1], radix: 16),
-              let deviceId = UUID(uuidString: String(parts[2]))
-        else { return nil }
-        self.init(wallMillis: Int64(wall), counter: counter, deviceId: deviceId)
+        var text = description
+        guard let stamp = text.withUTF8({ Self.parse($0[...]) }) else { return nil }
+        self = stamp
+    }
+
+    /// Длина записи метки: 16 + 1 + 8 + 1 + 36.
+    static let textLength = 62
+
+    /// Разбор записи метки по байтам: метки читаются на каждом блоке открываемой страницы (research R15).
+    static func parse(_ bytes: Slice<UnsafeBufferPointer<UInt8>>) -> HybridTimestamp? {
+        guard bytes.count == textLength else { return nil }
+        let start = bytes.startIndex
+        guard let wall = hex(bytes, start, 16), wall <= UInt64(Int64.max), bytes[start + 16] == UInt8(ascii: "-"),
+              let counter = hex(bytes, start + 17, 8), bytes[start + 25] == UInt8(ascii: "-") else { return nil }
+        // UUID: 8-4-4-4-12 шестнадцатеричных цифр.
+        var uuid: uuid_t = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+        let isValid = withUnsafeMutableBytes(of: &uuid) { raw -> Bool in
+            var position = start + 26, byte = 0
+            for group in [8, 4, 4, 4, 12] {
+                for _ in 0..<group / 2 {
+                    guard let value = hex(bytes, position, 2) else { return false }
+                    raw[byte] = UInt8(value)
+                    byte += 1
+                    position += 2
+                }
+                if group != 12 {
+                    guard bytes[position] == UInt8(ascii: "-") else { return false }
+                    position += 1
+                }
+            }
+            return true
+        }
+        guard isValid else { return nil }
+        let deviceId = UUID(uuid: uuid)
+        return HybridTimestamp(wallMillis: Int64(wall), counter: UInt32(counter), deviceId: deviceId)
+    }
+
+    private static func hex(_ bytes: Slice<UnsafeBufferPointer<UInt8>>, _ start: Int, _ count: Int) -> UInt64? {
+        var value: UInt64 = 0
+        for index in start..<start + count {
+            let digit: UInt8
+            switch bytes[index] {
+            case UInt8(ascii: "0")...UInt8(ascii: "9"): digit = bytes[index] - UInt8(ascii: "0")
+            case UInt8(ascii: "a")...UInt8(ascii: "f"): digit = bytes[index] - UInt8(ascii: "a") + 10
+            case UInt8(ascii: "A")...UInt8(ascii: "F"): digit = bytes[index] - UInt8(ascii: "A") + 10
+            default: return nil
+            }
+            value = value << 4 | UInt64(digit)
+        }
+        return value
     }
 
     public static func < (lhs: HybridTimestamp, rhs: HybridTimestamp) -> Bool {
