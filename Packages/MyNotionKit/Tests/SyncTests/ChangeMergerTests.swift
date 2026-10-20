@@ -220,6 +220,33 @@ struct ChangeMergerTests {
         }
     }
 
+    @Test("Подстраница из «/» доходит до другого Mac: ссылка на своём месте, страница под родителем; ⌘Z доходит тоже")
+    func inlineSubpageSyncs() throws {
+        let undoManager = UndoManager()
+        undoManager.groupsByEvent = false
+        a.tree.undoManager = undoManager
+        let shared = try sharedPage(on: a, others: [b], numbering: numbering, text: "до")
+        let tail = try a.store.write { tx in
+            try tx.insertBlock(Block(pageId: shared.page, text: InlineText("после"), sortKey: .between(.between(nil, nil), nil)))
+        }
+        try exchange([a, b], numbering: numbering)
+
+        a.wall.set(30_000)
+        undoManager.beginUndoGrouping()
+        let subpage = try a.tree.createSubpage(in: shared.page, title: "План", linkAt: .after(blockId: shared.block))
+        undoManager.endUndoGrouping()
+        try exchange([a, b], numbering: numbering)
+
+        #expect(try b.store.pageTree().parentId(of: subpage.id) == shared.page)
+        #expect(try b.blocks(shared.page).map { $0.linkedPageId ?? $0.id } == [shared.block, subpage.id, tail.id])
+
+        a.wall.set(40_000)
+        undoManager.undo()
+        try exchange([a, b], numbering: numbering)
+        #expect(try b.blocks(shared.page).map(\.id) == [shared.block, tail.id])
+        #expect(try b.store.trashEntries().map(\.id) == [subpage.id])
+    }
+
     // MARK: Корзина и стирание
 
     @Test("Правка страницы, которую на другом Mac убрали в корзину, возвращает её; Юрий видит уведомление")

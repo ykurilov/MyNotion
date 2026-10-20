@@ -37,6 +37,45 @@ public final class PageTreeOperations {
         return page
     }
 
+    /// «/» → «Страница», как в Notion 7.39: подстраница с блоком-ссылкой там, где курсор, а не в конце родителя.
+    /// В дереве она встаёт по порядку ссылок: сразу за соседом, чья ссылка выше, или перед тем, чья ниже.
+    /// Отмена — один шаг: страница уходит в корзину (набранное в ней цело), убранный блок возвращается на место.
+    @discardableResult
+    public func createSubpage(in parentId: UUID, title: String = "", linkAt placement: SubpageLinkPlacement) throws -> Page {
+        try createSubpage(in: parentId, linkAt: placement) { _ in title }
+    }
+
+    /// «Преобразовать в → Страница», как в Notion: блок становится ссылкой на подстраницу с его текстом в названии.
+    /// Страница не открывается; ⌘Z возвращает блок с текстом.
+    @discardableResult
+    public func turnIntoSubpage(_ blockId: UUID, in pageId: UUID) throws -> Page {
+        try createSubpage(in: pageId, linkAt: .replacing(blockId: blockId)) { block in
+            block.text.string.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    private func createSubpage(in parentId: UUID, linkAt placement: SubpageLinkPlacement, title: (Block) -> String) throws -> Page {
+        let created = try perform { transaction in
+            guard try transaction.page(parentId) != nil else { throw NotesStoreError.pageNotFound(parentId) }
+            let blocks = try transaction.blocks(ofPage: parentId)
+            guard let anchor = blocks.first(where: { $0.id == placement.blockId }) else {
+                throw NotesStoreError.blockNotFound(placement.blockId)
+            }
+            let placed = Self.linkPlacement(at: placement, anchor: anchor, in: blocks)
+            let siblings = try transaction.allPages().filter { $0.parentId == parentId && $0.trashedAt == nil }
+            let pageKey = Self.subpageSortKey(linkedAfter: placed.preceding, in: Self.documentOrder(blocks), siblings: siblings)
+            let page = try transaction.createPage(title: title(anchor), parentId: parentId, after: pageKey.after, before: pageKey.before)
+            var link = Block(pageId: parentId, kind: .pageLink, linkedPageId: page.id, sortKey: placed.sortKey)
+            link.indent = anchor.indent
+            link.containerId = anchor.containerId
+            if placement.replaces { try transaction.deleteBlock(anchor.id) }
+            let inserted = try transaction.insertBlock(link)
+            return InlineSubpage(page: page, link: inserted, replaced: placement.replaces ? anchor : nil)
+        }
+        registerUndo("Новая подстраница") { try $0.withdraw(created) }
+        return created.page
+    }
+
     public func rename(_ pageId: UUID, to title: String) throws {
         let oldTitle = try perform { transaction in
             guard var page = try transaction.page(pageId) else { throw NotesStoreError.pageNotFound(pageId) }
@@ -162,6 +201,93 @@ public final class PageTreeOperations {
 
     // MARK: Внутреннее
 
+    /// Что сделала «Страница» из «/»: для отмены и возврата.
+    private struct InlineSubpage {
+        let page: Page
+        let link: Block
+        /// Блок, на месте которого встала ссылка; `nil` — ссылка встала за блоком.
+        let replaced: Block?
+    }
+
+    /// Отмена «Страницы» из «/»: подстраница — в корзину, ссылка убрана, прежний блок — на месте.
+    private func withdraw(_ created: InlineSubpage) throws {
+        try perform { transaction in
+            guard var page = try transaction.page(created.page.id) else { throw NotesStoreError.pageNotFound(created.page.id) }
+            page.trashedAt = Date()
+            try transaction.updatePage(page)
+            try Self.removeLinks(to: page.id, in: created.link.pageId, transaction)
+            if let replaced = created.replaced, try transaction.block(replaced.id) == nil {
+                try transaction.insertBlock(replaced)
+            }
+        }
+        registerUndo("Новая подстраница") { try $0.reinstate(created) }
+    }
+
+    /// Возврат «Страницы» из «/»: подстраница из корзины, ссылка — на прежнем месте тем же блоком.
+    private func reinstate(_ created: InlineSubpage) throws {
+        try perform { transaction in
+            guard var page = try transaction.page(created.page.id) else { throw NotesStoreError.pageNotFound(created.page.id) }
+            page.trashedAt = nil
+            try transaction.updatePage(page)
+            if let replaced = created.replaced, try transaction.block(replaced.id) != nil {
+                try transaction.deleteBlock(replaced.id)
+            }
+            if try !transaction.blocks(ofPage: created.link.pageId).contains(where: { $0.linkedPageId == page.id }) {
+                try transaction.insertBlock(created.link)
+            }
+        }
+        registerUndo("Новая подстраница") { try $0.withdraw(created) }
+    }
+
+    /// Ключ ссылки и блок, за которым она встаёт в документе (`nil` — первой).
+    private static func linkPlacement(
+        at placement: SubpageLinkPlacement, anchor: Block, in blocks: [Block]
+    ) -> (sortKey: FractionalSortKey, preceding: Block?) {
+        let flow = blocks.filter { $0.containerId == anchor.containerId }.sorted(by: flowOrder)
+        let index = flow.firstIndex { $0.id == anchor.id } ?? 0
+        if placement.replaces {
+            return (anchor.sortKey, index > 0 ? flow[index - 1] : nil)
+        }
+        let next = index + 1 < flow.count ? flow[index + 1].sortKey : nil
+        return (.between(anchor.sortKey, next), anchor)
+    }
+
+    /// Место подстраницы среди соседей в дереве: за соседом, чья ссылка ближе выше в документе, иначе перед тем,
+    /// чья ссылка ниже; без ссылок у соседей — последней.
+    private static func subpageSortKey(
+        linkedAfter preceding: Block?, in ordered: [Block], siblings: [Page]
+    ) -> (after: FractionalSortKey?, before: FractionalSortKey?) {
+        let siblingKeys = Dictionary(uniqueKeysWithValues: siblings.map { ($0.id, $0.sortKey) })
+        let cut = preceding.flatMap { block in ordered.firstIndex { $0.id == block.id } }.map { $0 + 1 } ?? 0
+        let keys = siblingKeys.values.sorted()
+        if let above = ordered[..<cut].reversed().lazy.compactMap({ $0.linkedPageId.flatMap { siblingKeys[$0] } }).first {
+            return (above, keys.first { above < $0 })
+        }
+        if let below = ordered[cut...].lazy.compactMap({ $0.linkedPageId.flatMap { siblingKeys[$0] } }).first {
+            return (keys.last { $0 < below }, below)
+        }
+        return (keys.last, nil)
+    }
+
+    /// Блоки страницы в порядке чтения: поток страницы, внутри контейнера (колонки, таблицы) — его потоки.
+    private static func documentOrder(_ blocks: [Block]) -> [Block] {
+        let flows = Dictionary(grouping: blocks, by: \.containerId).mapValues { $0.sorted(by: flowOrder) }
+        var ordered: [Block] = []
+        var visited: Set<UUID> = []
+        func walk(_ containerId: UUID?) {
+            for block in flows[containerId] ?? [] where visited.insert(block.id).inserted {
+                ordered.append(block)
+                walk(block.id)
+            }
+        }
+        walk(nil)
+        return ordered
+    }
+
+    private static func flowOrder(_ lhs: Block, _ rhs: Block) -> Bool {
+        lhs.sortKey != rhs.sortKey ? lhs.sortKey < rhs.sortKey : lhs.id.uuidString < rhs.id.uuidString
+    }
+
     /// Новое место страницы; отмена ставит её точно на прежнее.
     private func place(
         _ pageId: UUID,
@@ -250,4 +376,20 @@ public final class PageTreeOperations {
             try transaction.erasePage(page.id)
         }
     }
+}
+
+/// Где встаёт ссылка на подстраницу из «/» или «Преобразовать в».
+public enum SubpageLinkPlacement: Sendable, Equatable {
+    /// На месте блока; сам блок уходит (⌘Z возвращает его).
+    case replacing(blockId: UUID)
+    /// Сразу за блоком, в том же потоке и с тем же отступом.
+    case after(blockId: UUID)
+
+    var blockId: UUID {
+        switch self {
+        case .replacing(let id), .after(let id): id
+        }
+    }
+
+    var replaces: Bool { if case .replacing = self { true } else { false } }
 }
