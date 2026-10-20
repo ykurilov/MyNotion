@@ -60,6 +60,49 @@ struct RichRoundTripTests {
         #expect(report.simplified.flatMap(\.items).isEmpty)
     }
 
+    @Test("Обложки: картинка у «богатой» страницы и обложка из галереи — выгрузка → импорт без потерь, тот же SHA-256 и тот же пункт галереи")
+    func coversRoundTrip() throws {
+        let fixture = try RoundTripFixture()
+        let richId = try RichPageGenerator(parts: BlockKinds.richPageParts).ensure(in: fixture.source)
+        let coverBytes = try RoundTripFixture.png(width: 320, height: 120)
+        let fileRef = AttachmentRef(name: "обложка.png", byteCount: coverBytes.count, contentType: "public.png",
+                                    sha256: RoundTripFixture.sha(coverBytes))
+        fixture.registerCoverFile(fileRef, bytes: coverBytes)
+        let galleryId = try fixture.source.write { transaction in
+            var rich = try #require(try transaction.page(richId))
+            rich.cover = PageCover(source: .file(fileRef), offset: 0.37)
+            try transaction.updatePage(rich)
+            var gallery = try transaction.createPage(title: "Страница с обложкой из галереи", icon: "🖼️")
+            gallery.cover = PageCover(source: .gallery("gradient_3"), offset: 0.81)
+            try transaction.updatePage(gallery)
+            var first = try #require(try transaction.blocks(ofPage: gallery.id).first)
+            first.text = InlineText("Текст под обложкой из галереи")
+            try transaction.updateBlock(first)
+            return gallery.id
+        }
+        let exported = try fixture.export()
+        #expect(exported.missingFileCount == 0)
+        let sourceRich = try fixture.snapshot(of: richId, in: fixture.source)
+        let sourceGallery = try fixture.snapshot(of: galleryId, in: fixture.source)
+        _ = try fixture.runImport(from: exported.folder)
+
+        let pages = try fixture.target.pageOutline()
+        let importedRich = try #require(pages.first { $0.title == RichPageGenerator.title })
+        let importedGallery = try #require(pages.first { $0.title == "Страница с обложкой из галереи" })
+        // Текст — без потерь.
+        #expect(try fixture.snapshot(of: importedRich.id, in: fixture.target).map(\.text) == sourceRich.map(\.text))
+        #expect(try fixture.snapshot(of: importedGallery.id, in: fixture.target).map(\.text) == sourceGallery.map(\.text))
+        // Картинка: тот же сдвиг и те же байты.
+        let richCover = try #require(importedRich.cover)
+        #expect(richCover.offset == 0.37)
+        let importedRef = try #require(richCover.attachment)
+        #expect(fixture.importer.hash(of: importedRef.id) == fileRef.sha256)
+        // Галерея: тот же пункт и сдвиг, файла нет.
+        #expect(importedGallery.cover == PageCover(source: .gallery("gradient_3"), offset: 0.81))
+        #expect(importedGallery.icon == "🖼️")
+        #expect(fixture.importer.hashes.contains(fileRef.sha256))
+    }
+
     /// Абзацы со всеми оформлениями в строке: начертания, ссылка, цвета текста и фона, упоминание, дата с напоминанием
     /// и без, формула в строке.
     static func inlineSamples(mentioning pageId: UUID) -> [InlineText] {
@@ -133,6 +176,15 @@ private final class RoundTripFixture {
     }
 
     deinit { try? FileManager.default.removeItem(at: folder) }
+
+    /// Файл обложки исходной базы: байты кладутся на диск, их SHA-256 учитывается среди файлов выгрузки.
+    func registerCoverFile(_ ref: AttachmentRef, bytes: Data) {
+        try? FileManager.default.createDirectory(at: folder.appendingPathComponent("originals", isDirectory: true), withIntermediateDirectories: true)
+        let url = folder.appendingPathComponent("originals", isDirectory: true).appendingPathComponent(ref.id.uuidString)
+        try? bytes.write(to: url)
+        files[ref.id] = url
+        sourceHashes[ref.id] = Self.sha(bytes)
+    }
 
     /// Выгрузить исходную базу; у каждого вложения — свой файл со своими байтами, у картинок — настоящий PNG.
     func export() throws -> MarkdownExportResult {
