@@ -174,6 +174,35 @@ struct MoveBlocksToPageTests {
         #expect(try flow(pages.source.id) == before)
     }
 
+    @Test("Цель в корзине (сама или с предком) — ошибка, ничего не меняется")
+    func trashedTargetRejected() throws {
+        let pages = try pages()
+        let child = try store.write { try $0.createPage(title: "Внутри цели", parentId: pages.target.id) }
+        try tree.moveToTrash(pages.target.id)
+        let before = try flow(pages.source.id)
+        for target in [pages.target.id, child.id] {
+            #expect(throws: NotesStoreError.self) {
+                try tree.moveBlocks([pages.blocks[0].id], from: pages.source.id, to: target)
+            }
+        }
+        #expect(try flow(pages.source.id) == before)
+    }
+
+    @Test("Ссылку на подстраницу — в неё саму или в её подстраницу: ошибка, петли в дереве нет")
+    func linkIntoOwnSubpageRejected() throws {
+        let pages = try pages()
+        let link = try #require(try store.write { try $0.blocks(ofPage: pages.source.id) }.first { $0.linkedPageId == pages.subpage.id })
+        let inner = try store.write { try $0.createPage(title: "Глубже", parentId: pages.subpage.id) }
+        let before = try flow(pages.source.id)
+        for target in [pages.subpage.id, inner.id] {
+            #expect(throws: NotesStoreError.self) {
+                try tree.moveBlocks([link.id], from: pages.source.id, to: target)
+            }
+        }
+        #expect(try flow(pages.source.id) == before)
+        #expect(try store.pageOutline().first { $0.id == pages.subpage.id }?.parentId == pages.source.id)
+    }
+
     @Test("Все блоки страницы ушли — на ней остаётся пустой абзац")
     func emptiedSourceKeepsParagraph() throws {
         let pages = try pages()

@@ -61,8 +61,10 @@ id галереи — из contracts/pages-ui.md, «Галерея»; неизв
 | snapshot | BLOB | JSON `PageSnapshot`, сжатый LZFSE |
 | summary | JSON | что менялось относительно прошлой версии: `titleChanged`, `iconChanged`, `coverChanged`, `layoutChanged`, `blocksAdded`, `blocksRemoved`, `blocksChanged` |
 | byteCount | целое | размер `snapshot` |
+| isBeforeRestore | да/нет | снимок «до восстановления» (v8): прореживается отдельно от остальных версий |
 
 Индекс `page_version_by_page(pageId, createdAt)`.
+**page_version_file** (v8): `versionId`, `fileId` — файлы снимка (обложка, файлы блоков); сборщик сирот 002 их не стирает ни на Mac, ни на сервере, пока версия хранится. Индекс `page_version_file_by_file(fileId)`.
 **PageSnapshot**: поля страницы (`title`, `icon`, `cover`, `isFullWidth`, `isSmallText`) и все её блоки всех потоков в формате записи 002 (с `id`, `containerId`, `sortKey`, `color`, `props`). Версия формата снимка — поле `snapshotVersion` (1).
 
 ### page_version_due — страницы, ждущие снимка
@@ -92,6 +94,12 @@ id галереи — из contracts/pages-ui.md, «Галерея»; неизв
 3. Таблицы `page_link` (пустая), `page_version`, `page_version_due`, `app_meta` (ключ — значение, локальные отметки).
 4. `window_state`: колонки `tabs`, `collapsedSidebarSections`.
 5. Повтор миграции ничего не меняет; база новее приложения — запись не идёт (как в 002).
+
+## Миграция v8
+
+1. Таблица `page_version_file` и индекс по `fileId`; строки для уже сохранённых версий — по их снимкам.
+2. `page_version.isBeforeRestore` (`NOT NULL DEFAULT 0`).
+3. `block.movedFrom` — вычисляемая колонка из `props.movedFrom` и частичный индекс `block_by_moved_from`: восстановление версии ищет копии «Переместить в» по id, без прохода по всем блокам.
 
 ## Синхронизация (формат v3)
 

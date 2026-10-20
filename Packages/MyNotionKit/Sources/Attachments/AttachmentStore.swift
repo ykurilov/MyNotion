@@ -239,16 +239,19 @@ public final class AttachmentStore: Sendable {
         }
     }
 
-    /// Файлы блоков страницы — открытая страница поднимает их в начало очереди скачивания (FR-120).
+    /// Файлы страницы — открытая страница поднимает их в начало очереди скачивания (FR-120): файл обложки (он вверху
+    /// страницы), затем файлы блоков по порядку.
     public func attachmentIds(onPage pageId: UUID) throws -> [UUID] {
         let kinds = BlockKind.withAttachments.map(\.rawValue)
-        let props = try store.database.dbWriter.read { db in
-            try String.fetchAll(db, sql: """
+        let (cover, props) = try store.database.dbWriter.read { db in
+            (try String.fetchOne(db, sql: "SELECT cover FROM page WHERE id = ?", arguments: [pageId.uuidString.lowercased()]),
+             try String.fetchAll(db, sql: """
                 SELECT props FROM block WHERE pageId = ? AND isDeleted = 0 AND kind IN (\(kinds.map { _ in "?" }.joined(separator: ", ")))
                 ORDER BY sortKey
-                """, arguments: StatementArguments([pageId.uuidString.lowercased()] + kinds))
+                """, arguments: StatementArguments([pageId.uuidString.lowercased()] + kinds)))
         }
-        return props.flatMap { text in
+        let coverId = cover.flatMap { try? JSONDecoder().decode(PageCover.self, from: Data($0.utf8)) }?.attachment?.id
+        return [coverId].compactMap { $0 } + props.flatMap { text in
             ((try? JSONDecoder().decode(BlockProps.self, from: Data(text.utf8)))?.attachmentRefs ?? []).map(\.id)
         }
     }

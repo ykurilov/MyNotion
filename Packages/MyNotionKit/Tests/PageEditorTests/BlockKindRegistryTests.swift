@@ -42,6 +42,22 @@ struct BlockKindRegistryTests {
         }
     }
 
+    @Test("Подстраница есть — её название; стёрта или в корзине — «Удалённая страница», как у упоминания; ещё не пришла — «Страница загружается»")
+    func pageLinkToMissingPage() throws {
+        let live = UUID(), gone = UUID(), trashed = UUID()
+        let fixture = try EditorFixture([EditorFixture.Spec(kind: .pageLink, link: live), EditorFixture.Spec(kind: .pageLink, link: gone),
+                                         EditorFixture.Spec(kind: .pageLink, link: trashed)])
+        let blocks = fixture.document.blocks
+        let view = fixture.textView
+        view.linkedPages = [live: LinkedPage(title: "Проекты", icon: "📘")]
+        view.mentionDirectory = MentionDirectory(pages: view.linkedPages, trashedPageIds: [trashed])
+        #expect(view.decoration(for: blocks[0]) == .pageLink(MentionDisplay(title: "Проекты", icon: "📘", state: .page)))
+        #expect(view.decoration(for: blocks[1]) == .pageLink(MentionDisplay(title: "Удалённая страница", icon: nil, state: .deleted)))
+        #expect(view.decoration(for: blocks[2]) == .pageLink(MentionDisplay(title: "Удалённая страница", icon: nil, state: .deleted)))
+        view.mentionDirectory.expectsMissingPages = true
+        #expect(view.decoration(for: blocks[1]) == .pageLink(MentionDisplay(title: "Страница загружается", icon: nil, state: .loading)))
+    }
+
     @Test("Маркеры, стиль текста и подсказки — из описателей")
     func decorationsFromDescriptors() throws {
         let fixture = try EditorFixture([.bullet("пункт"), .numbered("один"), .numbered("два"), .checkbox("дело", checked: true),

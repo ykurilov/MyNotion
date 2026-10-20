@@ -16,7 +16,8 @@ public enum BlockCopier {
     /// Скопировать `roots` — блоки одного потока по порядку (вложенные по отступу уже среди них) — на страницу `pageId`.
     /// Контейнеры берут свои потоки из `pageBlocks` (все блоки исходной страницы). Ключи потока — по порядку между
     /// `after` и `before`; глубина — относительно `indentBase` (по умолчанию — глубина первого). `marksMovedFrom` —
-    /// у каждой копии в `props.movedFrom` id исходного блока.
+    /// у каждой копии в `props.movedFrom` id исходного блока; без него пометка снимается: копия перенесённого раньше блока
+    /// (дубликат, шаблон) — новый блок, восстановление версии страницы, откуда его перенесли, её не удаляет.
     public static func copy(_ roots: [Block], pageBlocks: [Block], into pageId: UUID, after: FractionalSortKey? = nil,
                             before: FractionalSortKey? = nil, indentBase: Int? = nil, marksMovedFrom: Bool = false) -> Copy {
         guard let first = roots.first else { return Copy() }
@@ -25,7 +26,7 @@ public enum BlockCopier {
         var result = Copy()
         func copy(_ block: Block, sortKey: FractionalSortKey, indent: Int, containerId: UUID?) {
             var props = block.props
-            if marksMovedFrom { props.movedFrom = block.id }
+            props.movedFrom = marksMovedFrom ? block.id : nil
             let copied = Block(pageId: pageId, kind: block.kind, text: block.text, indent: indent, isChecked: block.isChecked,
                                linkedPageId: block.linkedPageId, sortKey: sortKey, containerId: containerId, color: block.color, props: props)
             result.newIds[block.id] = copied.id

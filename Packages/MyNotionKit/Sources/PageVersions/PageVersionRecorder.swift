@@ -18,7 +18,8 @@ public struct BackgroundVersionScheduler: VersionRecordingScheduler {
 
 /// Записыватель версий (research R11): по отметкам `page_version_due`, без опроса. Снимок — когда у страницы прошла минута
 /// с прошлой версии и 5 с без правок; пишется на своей очереди, вне главного потока. Ничего не пишет до `start()`
-/// (готовность редактора). Закрытие окна и выход — `recordAllDue()`; первое открытие страницы без версий — снимок «как было».
+/// (готовность редактора). Закрытие окна — `recordAllDue()`, выход — `recordAllDueBeforeQuit()`; первое открытие страницы
+/// без версий — снимок «как было». Главный поток очередь не ждёт — только при выходе.
 public final class PageVersionRecorder: Sendable {
     /// Сроки записи: не чаще раза в `minimumInterval` на страницу и после `quietPeriod` без правок.
     public struct Timing: Sendable {
@@ -62,7 +63,8 @@ public final class PageVersionRecorder: Sendable {
         self.scheduler = scheduler
     }
 
-    /// Записана версия (на очереди записывателя): для окна истории и замеров.
+    /// Записана версия (на очереди записывателя): для окна истории и замеров. Главный поток из него синхронно не ждать:
+    /// при выходе он сам ждёт очередь (`recordAllDueBeforeQuit`).
     public var onRecorded: (@Sendable (PageVersionInfo) -> Void)? {
         get { recordedHandler.withLock { $0 } }
         set { recordedHandler.withLock { $0 = newValue } }
@@ -107,20 +109,34 @@ public final class PageVersionRecorder: Sendable {
         }
     }
 
-    /// Закрытие окна и выход: снимки всех отмеченных сейчас, без ожидания (вызывающий ждёт, работа — на очереди).
-    public func recordAllDue() {
+    /// Закрытие окна: снимки всех отмеченных сейчас, без ожидания 5 с тишины — на очереди записывателя, окно её не ждёт.
+    public func recordAllDue() async {
         guard isStarted else { return }
-        queue.sync {
-            for mark in (try? versions.duePages()) ?? [] { _ = try? record(mark.pageId, deviceName: mark.deviceName) }
+        await withCheckedContinuation { continuation in
+            queue.async {
+                self.recordDueNow()
+                continuation.resume()
+            }
         }
     }
 
-    /// Снимок неснятых правок страницы сейчас (открытие истории, восстановление). `nil` — правок без версии нет.
+    /// Выход: то же, но вызывающий ждёт — приложение закрывается после снимков.
+    public func recordAllDueBeforeQuit() {
+        guard isStarted else { return }
+        queue.sync { recordDueNow() }
+    }
+
+    /// Снимок неснятых правок страницы сейчас (открытие истории, восстановление) — на очереди записывателя.
+    /// `nil` — правок без версии нет.
     @discardableResult
-    public func recordPending(_ pageId: UUID) throws -> PageVersionInfo? {
-        try queue.sync {
-            if let mark = try versions.dueMark(ofPage: pageId) { return try record(pageId, deviceName: mark.deviceName) }
-            return try recordFirstVersionIfNeeded(pageId)
+    public func recordPending(_ pageId: UUID) async throws -> PageVersionInfo? {
+        try await withCheckedThrowingContinuation { continuation in
+            queue.async {
+                continuation.resume(with: Result {
+                    if let mark = try self.versions.dueMark(ofPage: pageId) { return try self.record(pageId, deviceName: mark.deviceName) }
+                    return try self.recordFirstVersionIfNeeded(pageId)
+                })
+            }
         }
     }
 
@@ -138,6 +154,10 @@ public final class PageVersionRecorder: Sendable {
             guard let self else { return }
             queue.sync { self.checkDue() }
         }
+    }
+
+    private func recordDueNow() {
+        for mark in (try? versions.duePages()) ?? [] { _ = try? record(mark.pageId, deviceName: mark.deviceName) }
     }
 
     /// Снять снимки страниц, которым пора; следующая проверка — к ближайшему сроку.

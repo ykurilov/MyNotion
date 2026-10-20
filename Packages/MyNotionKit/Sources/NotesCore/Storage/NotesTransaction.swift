@@ -456,10 +456,27 @@ public final class NotesTransaction {
         ) ?? false
     }
 
-    /// Живые блоки вне страницы `pageId` с ключом `movedFrom` в свойствах (восстановление версии).
-    func blocksWithMovedFrom(outsidePage pageId: UUID) throws -> [Block] {
-        try Row.fetchAll(db, sql: "SELECT * FROM block WHERE isDeleted = 0 AND pageId != ? AND props LIKE '%\"movedFrom\"%'",
-                         arguments: [pageId.databaseText]).map(Block.init(row:))
+    /// Живые блоки вне страницы `pageId`, перенесённые «Переместить в» из блоков `sourceIds` (восстановление версии):
+    /// по индексу `block_by_moved_from`, без прохода по всем блокам.
+    func blocks(movedFrom sourceIds: Set<UUID>, outsidePage pageId: UUID) throws -> [Block] {
+        var found: [Block] = []
+        let ids = sourceIds.map(\.databaseText).sorted()
+        for start in stride(from: 0, to: ids.count, by: Self.movedFromBatch) {
+            let batch = Array(ids[start..<min(start + Self.movedFromBatch, ids.count)])
+            found += try Row.fetchAll(db, sql: Self.movedFromSQL(count: batch.count),
+                                      arguments: StatementArguments(batch + [pageId.databaseText])).map(Block.init(row:))
+        }
+        return found
+    }
+
+    static let movedFromBatch = 500
+
+    /// Запрос копий по `movedFrom`: `IS NOT NULL` — чтобы шёл частичный индекс.
+    static func movedFromSQL(count: Int) -> String {
+        """
+        SELECT * FROM block WHERE movedFrom IN (\(Array(repeating: "?", count: count).joined(separator: ", "))) \
+        AND movedFrom IS NOT NULL AND isDeleted = 0 AND pageId != ? ORDER BY sortKey, id
+        """
     }
 
     private func storedBlock(_ id: UUID) throws -> Block? {

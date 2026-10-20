@@ -31,8 +31,8 @@ final class VersionHistoryPerformanceTests: XCTestCase {
         var showMs: [Double] = []
         for round in 0..<3 {
             var preview: (NSScrollView, VersionPreviewTextView)?
-            showMs.append(try ProbeEditor.measure {
-                try recorder.recordPending(page.pageId)
+            showMs.append(try await ProbeEditor.measureAsync {
+                try await recorder.recordPending(page.pageId)
                 let all = try versions.versions(ofPage: page.pageId)
                 let current = try XCTUnwrap(try versions.snapshot(all[0].id))
                 let selected = try XCTUnwrap(try versions.snapshot(all[50 + round * 40].id))
@@ -63,7 +63,7 @@ final class VersionHistoryPerformanceTests: XCTestCase {
         let operations = PageTreeOperations(store: page.store)
         let restorer = VersionRestorer(recorder: recorder, versions: versions, operations: operations)
         let target = try versions.versions(ofPage: page.pageId)[150].id
-        let restoreMs = try ProbeEditor.measure { try restorer.restore(versionId: target, ofPage: page.pageId) }
+        let restoreMs = try await ProbeEditor.measureAsync { try await restorer.restore(versionId: target, ofPage: page.pageId) }
 
         // Набор, пока пишутся версии: записыватель с короткими сроками снимает страницу снова и снова.
         let documents = OpenDocuments(store: page.store)

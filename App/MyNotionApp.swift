@@ -224,7 +224,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let library = Self.library else { return .terminateNow }
-        defer { library.versions.recordAllDue() }
+        defer { library.versions.recordAllDueBeforeQuit() }
         guard !library.saveAll() else { return .terminateNow }
         if Self.presence == .background {
             // Служебный запуск окон с вопросами не показывает: база у него своя или эталонная.

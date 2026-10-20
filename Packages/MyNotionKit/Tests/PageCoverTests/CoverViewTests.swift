@@ -49,6 +49,20 @@ struct CoverViewTests {
         #expect(view.image != nil)
     }
 
+    @Test("Своя картинка копируется — заглушка с ходом копирования посередине, кнопок нет; копия готова — всё как было")
+    func copyProgressPlaceholder() {
+        let view = CoverView(cover: PageCover(source: .gallery("gradients_3")), fileURL: { _ in nil })
+        view.frame = NSRect(x: 0, y: 0, width: 1200, height: 230)
+        view.isHovered = true
+        view.copyProgress = 0.42
+        view.layoutSubtreeIfNeeded()
+        #expect(!view.copyHint.isHidden && view.copyHint.string == "Копируется… 42 %")
+        #expect(abs(view.copyHint.frame.midX - 600) <= 1)
+        #expect(view.buttons.isHidden, "Сменить обложку посреди копирования нельзя")
+        view.copyProgress = nil
+        #expect(view.copyHint.isHidden && !view.buttons.isHidden)
+    }
+
     @Test("«Переместить» → протянуть → «Сохранить положение» — один сдвиг хозяину; «Отмена» — ничего")
     func repositionSaveAndCancel() {
         let view = CoverView(cover: PageCover(source: .gallery("gradients_3")), fileURL: { _ in nil })

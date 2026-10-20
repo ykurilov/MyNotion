@@ -35,6 +35,40 @@ struct WindowTabsTests {
         #expect(tabs.activeTab.back.isEmpty, "у новой вкладки своя пустая история")
     }
 
+    @Test("Страницу прокрутили в самый верх — старое место вкладки забыто: и при переключении, и в сохранённых вкладках")
+    func topOfPageClearsRememberedPlace() {
+        let tabs = tabs([pageA, pageB])
+        let placeA = TabScroll(blockId: UUID(), offset: 40)
+        var place: TabScroll? = placeA
+        tabs.currentScroll = { place }
+        tabs.activate(1)
+        #expect(tabs.items[0].scroll == placeA)
+        tabs.activate(0)
+        place = nil
+        #expect(tabs.savedState.items[0].scroll == nil, "сохранится старое место, а страница наверху")
+        tabs.activate(1)
+        #expect(tabs.items[0].scroll == nil, "вернёмся не наверх, а на старое место")
+    }
+
+    @Test("Редактора этой страницы нет (заглушка корзины, страница ещё открывается) — место вкладки не трогается")
+    func noEditorKeepsRememberedPlace() {
+        let tabs = tabs([pageA, pageB])
+        let placeA = TabScroll(blockId: UUID(), offset: 40)
+        let other = TabScroll(blockId: UUID(), offset: 7)
+        tabs.currentScroll = { placeA }
+        tabs.activate(1)
+        tabs.activate(0)
+        // Редактор показывает другую страницу (прошлый, ещё не отпущенный): его место — не место этой вкладки.
+        tabs.currentScroll = { other }
+        tabs.showsEditor = { _ in false }
+        #expect(tabs.savedState.items[0].scroll == placeA)
+        tabs.activate(1)
+        #expect(tabs.items[0].scroll == placeA)
+        tabs.activate(0)
+        tabs.open(PageOpenRequest(pageId: pageC))
+        #expect(tabs.activeTab.back == [TabEntry(pageId: pageA, scroll: placeA)])
+    }
+
     @Test("«Показать все» в «Недавних»: «Недавние» в этой же вкладке, «назад» возвращает страницу")
     func recentPagesInActiveTab() {
         let tabs = tabs([pageA, pageB], active: 0)

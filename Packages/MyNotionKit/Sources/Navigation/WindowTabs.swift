@@ -18,9 +18,12 @@ public final class WindowTabs {
     public var onActivePageChange: ((_ left: UUID?, _ opened: UUID?) -> Void)?
     /// Список или активная вкладка поменялись: окно сохраняет `savedState`.
     public var onChange: (() -> Void)?
-    /// Место прокрутки открытой страницы сейчас (его знает редактор): запоминается, когда активная вкладка уходит
-    /// со страницы, и попадает в `savedState`.
+    /// Место прокрутки открытой страницы сейчас (его знает редактор), `nil` — страница в самом верху: запоминается,
+    /// когда активная вкладка уходит со страницы, и попадает в `savedState`.
     public var currentScroll: (() -> TabScroll?)?
+    /// Редактор показывает эту страницу. Без него (заглушка «Страница в корзине», страница ещё открывается) место
+    /// вкладки не трогается: `currentScroll` отдал бы место прошлого редактора или «наверху».
+    public var showsEditor: (UUID) -> Bool = { _ in true }
     /// Страница удалена навсегда: её записи «назад/вперёд» пропускаются.
     public var isGone: (UUID) -> Bool = { _ in false }
 
@@ -40,7 +43,7 @@ public final class WindowTabs {
 
     public var savedState: TabsState {
         var saved = items
-        if activePageId != nil, let scroll = currentScroll?() { saved[activeIndex].scroll = scroll }
+        if activePageId != nil { saved[activeIndex].scroll = activeScroll() }
         return TabsState(active: activeIndex, items: saved)
     }
 
@@ -165,15 +168,21 @@ public final class WindowTabs {
 
     // MARK: Внутреннее
 
-    /// Место прокрутки страницы, с которой уходит активная вкладка.
-    private func leavingScroll() -> TabScroll? {
-        activePageId == nil ? nil : currentScroll?()
+    /// Место прокрутки активной страницы: у её редактора — где он стоит (`nil` — в самом верху), без редактора — то,
+    /// что помнит вкладка.
+    private func activeScroll() -> TabScroll? {
+        guard let pageId = activePageId else { return nil }
+        guard let currentScroll, showsEditor(pageId) else { return activeTab.scroll }
+        return currentScroll()
     }
+
+    /// Место прокрутки страницы, с которой уходит активная вкладка.
+    private func leavingScroll() -> TabScroll? { activeScroll() }
 
     /// Активная вкладка уходит в тень: её место прокрутки — в саму вкладку.
     private func rememberScroll() {
-        guard activePageId != nil, let scroll = currentScroll?() else { return }
-        items[activeIndex].scroll = scroll
+        guard activePageId != nil else { return }
+        items[activeIndex].scroll = activeScroll()
     }
 
     private func activePageDidChange(from left: UUID?) {

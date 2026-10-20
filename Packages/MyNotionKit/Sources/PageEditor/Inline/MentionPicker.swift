@@ -137,13 +137,15 @@ final class MentionPickerController {
 extension PageTextView {
     // MARK: Упоминания и даты — доступ хозяина
 
-    /// Названия, иконки и корзина страниц для упоминаний; смена перерисовывает упоминания.
+    /// Названия, иконки и корзина страниц для упоминаний; смена перерисовывает упоминания и подстраницы без страницы.
     public var mentionDirectory: MentionDirectory {
         get { inlineAtoms.directory }
         set {
             guard newValue != inlineAtoms.directory else { return }
             inlineAtoms.directory = newValue
             redrawInlineAtoms()
+            // Строки блоков-подстраниц без страницы показывают её так же, как упоминания.
+            redrawBlockDecorations()
         }
     }
 

@@ -18,10 +18,28 @@ extension MainWindowModel {
     }
 
     /// Своя картинка из «Загрузить» или перетаскивания из Finder: не картинка или больше 100 МБ — сообщение, обложка прежняя.
-    func setImageCover(from url: URL, on pageId: UUID) {
-        let accessed = url.startAccessingSecurityScopedResource()
-        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-        performAppearanceChange { try coverOperations.setImageCover(from: url, on: pageId) }
+    /// Копия — в фоне, как вставка файла 002: `progress` — доля скопированного, `finished` — копия кончилась
+    /// (обложка поставлена одной правкой с отменой или показано сообщение).
+    func setImageCover(from url: URL, on pageId: UUID, progress: @escaping @MainActor (Double) -> Void = { _ in },
+                       finished: @escaping @MainActor () -> Void = {}) {
+        let operations = coverOperations
+        Task { @MainActor in
+            let accessed = url.startAccessingSecurityScopedResource()
+            defer {
+                if accessed { url.stopAccessingSecurityScopedResource() }
+                finished()
+            }
+            do {
+                let ref = try await operations.importCoverImage(from: url) { fraction in
+                    Task { @MainActor in progress(fraction) }
+                }
+                performAppearanceChange { try operations.setFileCover(ref, on: pageId) }
+            } catch let error as PageCoverError {
+                showError(error.errorDescription ?? "Не удалось поставить обложку")
+            } catch {
+                showError("Не удалось скопировать картинку: \(SaveStatus.reason(for: error))")
+            }
+        }
     }
 
     func repositionCover(_ pageId: UUID, offset: Double) {

@@ -475,6 +475,7 @@ final class MainWindowModel {
         // Подписка на «ушли / открыта» (запись недавних) переходит к новым вкладкам.
         if let previous = self.tabs { tabs.onActivePageChange = previous.onActivePageChange }
         tabs.currentScroll = { [weak self] in self?.scrollPlace.current() }
+        tabs.showsEditor = { [weak self] in self?.scrollPlace.showsEditor(of: $0) ?? false }
         tabs.isGone = { [weak library] in library?.isDeletedForever($0) ?? false }
         tabs.onChange = { [weak self] in self?.tabsDidChange() }
         self.tabs = tabs
@@ -503,9 +504,10 @@ final class MainWindowModel {
         return pages
     }
 
-    /// Место прокрутки открытой страницы — в базу вместе с вкладками (уход в фон, выход, закрытие окна).
+    /// Вкладки с местом прокрутки открытой страницы — в базу сразу (уход в фон, выход, закрытие окна), не дожидаясь
+    /// отложенной записи. И когда редактора нет: активная вкладка — «Недавние» или заглушка корзины.
     func saveTabs() {
-        if restoresTabs, openDocument != nil { saveWindowState { $0.tabs = tabs.savedState } }
+        if restoresTabs { saveWindowState { $0.tabs = tabs.savedState } }
     }
 
     /// Переход в активной вкладке: история вкладки, затем её страница.

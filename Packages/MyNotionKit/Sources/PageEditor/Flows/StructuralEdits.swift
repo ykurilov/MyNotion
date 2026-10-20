@@ -35,7 +35,8 @@ extension PageTextView {
     }
 
     /// «Дублировать» (⌘D, меню блока): копии блоков `range` со всем вложенным — детьми, колонками, ячейками таблиц —
-    /// встают сразу под ними одним шагом ⌘Z. У копий новые id; ячейки ссылаются на копии своих столбцов.
+    /// встают сразу под ними одним шагом ⌘Z. У копий новые id; ячейки ссылаются на копии своих столбцов; пометки переноса
+    /// (`movedFrom`) у копий нет — восстановление версии страницы, откуда принесли оригинал, копию не удаляет.
     /// Подстраница не дублируется: у страницы одна ссылка (data-model.md).
     func duplicateBlocks(at range: Range<Int>) {
         commitEdits()
@@ -49,9 +50,11 @@ extension PageTextView {
         func copy(_ block: Block, sortKey: FractionalSortKey, containerId: UUID?) {
             let id = UUID.timeOrdered()
             newIds[block.id] = id
+            var props = block.props
+            props.movedFrom = nil
             copies.append(Block(id: id, pageId: document.pageId, kind: block.kind, text: block.text, indent: block.indent,
                                 isChecked: block.isChecked, sortKey: sortKey, containerId: containerId, color: block.color,
-                                props: block.props))
+                                props: props))
             for inner in document.pageDocument.flow(block.id) { copy(inner, sortKey: inner.sortKey, containerId: id) }
         }
         var key = blocks[end - 1].sortKey
