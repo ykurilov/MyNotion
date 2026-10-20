@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import GRDB
 import Synchronization
 import Testing
 @testable import Attachments
@@ -299,6 +300,30 @@ import Testing
         #expect(await server.log == ["DELETE \(old.id)"])
         // Сирота моложе 30 дней остаётся.
         #expect(mac.attachments.fileURL(for: fresh.id) != nil)
+    }
+
+    @Test("Сирота, на которую ссылается хранимая версия страницы, не стирается ни на Mac, ни на сервере")
+    func fileOfStoredVersionIsKept() async throws {
+        let mac = try AttachmentTestMac()
+        let server = FakeFileServer()
+        let ref = try mac.attachments.importFile(at: try mac.folder.file("в версии.png", sampleBytes(10)))
+        let block = try mac.insertBlock(.image, attachment: ref)
+        try mac.store.write { try $0.deleteBlock(block.id) }
+        let versionId = UUID().uuidString.lowercased()
+        try await mac.store.database.dbWriter.write { db in
+            try db.execute(sql: "INSERT INTO page_version_file (versionId, fileId) VALUES (?, ?)",
+                           arguments: [versionId, ref.id.uuidString.lowercased()])
+        }
+        mac.now.advance(by: 31 * 86_400)
+        let collector = AttachmentCollector(attachments: mac.attachments, now: mac.now.reading)
+        #expect(try await collector.collect(transport: server.transport).isEmpty)
+        #expect(mac.attachments.fileURL(for: ref.id) != nil)
+        #expect(await server.log.isEmpty)
+
+        try await mac.store.database.dbWriter.write { db in
+            try db.execute(sql: "DELETE FROM page_version_file WHERE versionId = ?", arguments: [versionId])
+        }
+        #expect(try await collector.collect(transport: server.transport) == [ref.id], "Версию проредили — файл отпущен")
     }
 
     @Test func erasingWithoutSyncOnlyRemovesLocalCopy() async throws {

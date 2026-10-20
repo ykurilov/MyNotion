@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import Testing
 @testable import NotesCore
 @testable import PageVersions
@@ -112,5 +113,44 @@ struct VersionPruningTests {
         #expect(try mac.versionList(page.id).isEmpty)
         #expect(try !mac.versions.duePages().contains { $0.pageId == page.id })
         #expect(try mac.versionList(stays.id).count == 1)
+    }
+
+    /// Строки `page_version_file`: какие файлы держит каждая версия.
+    private func versionFiles(_ mac: VersionsTestMac) throws -> Set<[String]> {
+        try mac.store.database.dbWriter.read { db in
+            Set(try Row.fetchAll(db, sql: "SELECT versionId, fileId FROM page_version_file").map { [$0["versionId"], $0["fileId"]] })
+        }
+    }
+
+    @Test("Версия держит свои файлы — обложку и файлы блоков; прореживание и удаление страницы навсегда их отпускают")
+    func versionKeepsItsFiles() throws {
+        let clock = ManualVersionClock()
+        let mac = try VersionsTestMac(clock: clock)
+        let page = try mac.page("С файлами", texts: ["а"])
+        let image = AttachmentRef(name: "фото.png", byteCount: 10, contentType: "public.png", sha256: "")
+        let cover = AttachmentRef(name: "обложка.jpg", byteCount: 10, contentType: "public.jpeg", sha256: "")
+        try mac.updatePage(page.id) { $0.cover = PageCover(source: .file(cover)) }
+        try mac.store.write { tx in
+            var props = BlockProps()
+            props.attachment = image
+            try tx.insertBlock(Block(pageId: page.id, kind: .image, sortKey: .between(try tx.blocks(ofPage: page.id).last?.sortKey, nil),
+                                     props: props))
+        }
+        let content = try #require(try mac.store.pageContent(page.id))
+        let snapshot = PageSnapshot(page: content.page, blocks: content.blocks)
+        #expect(snapshot.fileIds == [image.id, cover.id])
+        let base = clock.now.addingTimeInterval(-10 * 86_400)
+        let old = try mac.versions.save(snapshot, pageId: page.id, createdAt: base, deviceName: "Mac A", summary: VersionSummary())
+        let last = try mac.versions.save(snapshot, pageId: page.id, createdAt: base.addingTimeInterval(60), deviceName: "Mac A",
+                                         summary: VersionSummary())
+        let key = { (id: UUID) in id.uuidString.lowercased() }
+        #expect(try versionFiles(mac) == [[key(old.id), key(image.id)], [key(old.id), key(cover.id)],
+                                          [key(last.id), key(image.id)], [key(last.id), key(cover.id)]])
+        let pruner = VersionPruner(versions: mac.versions, store: mac.store, now: clock.reading, calendar: calendar)
+        #expect(try pruner.pruneIfDue() == true)
+        #expect(try versionFiles(mac) == [[key(last.id), key(image.id)], [key(last.id), key(cover.id)]], "Прореженная версия держит файлы")
+        try mac.tree.moveToTrash(page.id)
+        try mac.tree.deleteForever(page.id)
+        #expect(try versionFiles(mac).isEmpty, "Стёртая навсегда страница держит файлы версиями")
     }
 }

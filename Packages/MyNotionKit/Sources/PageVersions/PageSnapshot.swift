@@ -58,6 +58,13 @@ public struct PageSnapshot: Sendable, Hashable, Codable {
                           blocks: blocks(onPage: pageId))
     }
 
+    /// Файлы снимка: обложка и файлы блоков — как ссылки на файлы у записей (`AttachmentReferenceCounter`).
+    public var fileIds: Set<UUID> {
+        var ids = Set(blocks.filter { BlockKind.withAttachments.contains($0.kind) }.flatMap { $0.props.attachmentRefs.map(\.id) })
+        if let cover = cover?.attachment { ids.insert(cover.id) }
+        return ids
+    }
+
     private struct FormatProbe: Decodable {
         let snapshotVersion: Int
     }

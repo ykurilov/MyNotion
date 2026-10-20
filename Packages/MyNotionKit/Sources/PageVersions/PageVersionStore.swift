@@ -21,8 +21,9 @@ public struct VersionDueMark: Sendable, Hashable {
     public let deviceName: String
 }
 
-/// Версии страниц на этом Mac: таблицы `page_version` и `page_version_due`. Пишет мимо транзакций записей и подписчиков:
-/// версии не синхронизируются и не меняют страниц (research R11).
+/// Версии страниц на этом Mac: таблицы `page_version`, `page_version_file` и `page_version_due`. Пишет мимо транзакций
+/// записей и подписчиков: версии не синхронизируются и не меняют страниц (research R11). Файлы версии (`page_version_file`)
+/// сборщик сирот не стирает, пока версия хранится.
 public final class PageVersionStore: Sendable {
     public let store: NotesStore
 
@@ -73,6 +74,10 @@ public final class PageVersionStore: Sendable {
                 INSERT INTO page_version (id, pageId, createdAt, deviceName, snapshot, summary, byteCount) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, arguments: [info.id.versionKey, pageId.versionKey, createdAt, deviceName, data,
                                  String(decoding: try JSONEncoder().encode(summary), as: UTF8.self), data.count])
+            for fileId in snapshot.fileIds {
+                try db.execute(sql: "INSERT OR IGNORE INTO page_version_file (versionId, fileId) VALUES (?, ?)",
+                               arguments: [info.id.versionKey, fileId.versionKey])
+            }
             try db.execute(sql: "DELETE FROM page_version_due WHERE pageId = ? AND lastChangeAt <= ?", arguments: [pageId.versionKey, createdAt])
         }
         return info
@@ -84,6 +89,7 @@ public final class PageVersionStore: Sendable {
         try database.write { db in
             for id in versionIds {
                 try db.execute(sql: "DELETE FROM page_version WHERE id = ?", arguments: [id.versionKey])
+                try db.execute(sql: "DELETE FROM page_version_file WHERE versionId = ?", arguments: [id.versionKey])
             }
         }
     }
@@ -146,6 +152,9 @@ public final class PageVersionStore: Sendable {
 
     static func erase(pages pageIds: [UUID], in db: Database) throws {
         for pageId in pageIds {
+            try db.execute(sql: """
+                DELETE FROM page_version_file WHERE versionId IN (SELECT id FROM page_version WHERE pageId = ?)
+                """, arguments: [pageId.versionKey])
             try db.execute(sql: "DELETE FROM page_version WHERE pageId = ?", arguments: [pageId.versionKey])
             try db.execute(sql: "DELETE FROM page_version_due WHERE pageId = ?", arguments: [pageId.versionKey])
         }
