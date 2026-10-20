@@ -413,6 +413,8 @@ final class UIGalleryRunner {
             return await GalleryTabsScene.show(kind, model: model, library: library)
         case .versionHistory(let kind):
             return await GalleryVersionHistoryScene.show(kind, model: model)
+        case .templates(let kind):
+            return await GalleryTemplatesScene.show(kind, model: model, library: library, window: window)
 
         case .movePicker(let kind):
             await open(library.sample.page.id)
@@ -552,6 +554,9 @@ final class UIGalleryRunner {
             await settle()
         case .versionHistory:
             GalleryVersionHistoryScene.tearDown(model: model)
+        case .templates:
+            GalleryTemplatesScene.tearDown(model: model)
+            await settle()
         case .favoriteStar, .sidebarSections:
             if model.collapsedSections.contains(.favorites) { model.toggleSection(.favorites) }
             await setSections(favorites: [], recents: [])
