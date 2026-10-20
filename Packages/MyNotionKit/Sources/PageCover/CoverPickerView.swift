@@ -40,7 +40,9 @@ public final class CoverPickerController: NSObject, NSWindowDelegate {
             Self.chooseFile(in: parent) { url in onChoose(.file(url)) }
         }
         view.onCancel = { [weak self] in self?.close() }
-        let size = view.fittingSize
+        // Окно шире карточки на поля тени с каждой стороны.
+        let size = NSSize(width: view.fittingSize.width - 2 * CoverPickerView.shadowMargin,
+                          height: view.fittingSize.height - 2 * CoverPickerView.shadowMargin)
         let card = Self.card(size: size, below: anchor, within: parent.frame, screen: parent.screen?.visibleFrame)
         let window = CoverPickerWindow(view: view)
         window.delegate = self

@@ -83,19 +83,19 @@ description: "Задачи: страницы и навигация"
 
 ### Tests for User Story 1
 
-- [ ] T025 [P] [US1] `PK/Tests/PageCoverTests/PageCoverOperationsTests.swift`: поставить из галереи, случайная — из списка contracts/pages-ui.md, своя картинка (не картинка и > 100 МБ — ошибка, обложка прежняя), сдвиг, убрать; каждая — одна правка с ⌘Z; файл обложки не стирается, пока на него ссылаются
-- [ ] T026 [P] [US1] `PK/Tests/PageEditorTests/PageLayoutSettingsTests.swift`: ширина колонки обычной и широкой страницы при ширинах окна 900, 1200, 1800; шкала 14/16 для абзаца, заголовков, кода, таблицы; название не меняется
-- [ ] T027 [P] [US1] `PK/Tests/MarkdownExportTests/CoverExportTests.swift` + `PK/Tests/NotionImportTests/CoverImportTests.swift`: комментарий и файл `Обложка.*` дословно по contracts/sync-v3-and-export.md; обратный импорт ставит обложку (SHA-256 тот же); отчёт импорта Notion называет потерю обложек
-- [ ] T028 [P] [US1] XCUITest `UITests/PageHeaderTests.swift`: наведение на шапку — «Добавить обложку»; щелчок — обложка; «Сменить обложку» → «Загрузить» картинку из тестовой папки; «Переместить» → «Сохранить положение»; «Убрать»; «•••» → «Вид страницы» → оба переключателя; перезапуск — всё на месте; ⌘Z
+- [x] T025 [P] [US1] `PK/Tests/PageCoverTests/PageCoverOperationsTests.swift`: поставить из галереи, случайная — из списка contracts/pages-ui.md, своя картинка (не картинка и > 100 МБ — ошибка, обложка прежняя), сдвиг, убрать; каждая — одна правка с ⌘Z; файл обложки не стирается, пока на него ссылаются
+- [x] T026 [P] [US1] `PK/Tests/PageEditorTests/PageLayoutSettingsTests.swift`: ширина колонки обычной и широкой страницы при ширинах окна 900, 1200, 1800; шкала 14/16 для абзаца, заголовков, кода, таблицы; название не меняется
+- [x] T027 [P] [US1] `PK/Tests/MarkdownExportTests/CoverExportTests.swift` + `PK/Tests/NotionImportTests/CoverImportTests.swift`: комментарий и файл `Обложка.*` дословно по contracts/sync-v3-and-export.md; обратный импорт ставит обложку (SHA-256 тот же); отчёт импорта Notion называет потерю обложек
+- [x] T028 [P] [US1] XCUITest `UITests/PageHeaderTests.swift`: наведение на шапку — «Добавить обложку»; щелчок — обложка; «Сменить обложку» → «Загрузить» картинку из тестовой папки; «Переместить» → «Сохранить положение»; «Убрать»; «•••» → «Вид страницы» → оба переключателя; перезапуск — всё на месте; ⌘Z
 
 ### Implementation for User Story 1
 
 - [ ] T029 [US1] Галерея в `PK/Sources/PageCover/CoverGallery.swift`: id и цвета, снятые с `notion.so/images/page-cover/<id>.png` (картинки — только для сверки, в сборку не кладутся), рисование заливки и градиента; сверка состава с окном «Change cover» живого Notion (одним замком)
-- [ ] T030 [US1] Вид обложки в `PK/Sources/PageCover/CoverView.swift` в месте «обложка» шапки: высота, заполнение по ширине, `offset`, уменьшенная копия через ImageIO, заглушка не пришедшего файла; иконка заходит на обложку; цифры шапки — со снимка `notion-cover.png` и живого Notion, правка ≈ в contracts/pages-ui.md
-- [ ] T031 [US1] Кнопки при наведении («Добавить обложку» в месте «кнопки»; «Сменить обложку», «Переместить» на обложке), окно «Сменить обложку» (`PK/Sources/PageCover/CoverPickerView.swift`: «Галерея», «Загрузить» с выбором файла и перетаскиванием, «Убрать»), режим «Переместить» (`CoverRepositionMode.swift`)
-- [ ] T032 [US1] Операции в `PK/Sources/NotesCore/Tree/PageTreeOperations+Appearance.swift`: обложка, сдвиг, вид страницы — с отменой; своя картинка — через хранилище вложений 002 (T025)
-- [ ] T033 [US1] «Вид страницы» в `PK/Sources/PageEditor/PageLayout/` (ширина и шкала шрифтов для текста и видов 002, перекладка без пересоздания редактора) и пункт `App/MainWindow/PageMenu/PageAppearanceMenuItem.swift` с переключателями (T026)
-- [ ] T034 [US1] Выгрузка обложки в `PK/Sources/MarkdownExport/` и чтение в `PK/Sources/NotionImport/` (T027)
+- [x] T030 [US1] Вид обложки в `PK/Sources/PageCover/CoverView.swift` в месте «обложка» шапки: высота, заполнение по ширине, `offset`, уменьшенная копия через ImageIO, заглушка не пришедшего файла; иконка заходит на обложку; цифры шапки — со снимка `notion-cover.png` и живого Notion, правка ≈ в contracts/pages-ui.md
+- [x] T031 [US1] Кнопки при наведении («Добавить обложку» в месте «кнопки»; «Сменить обложку», «Переместить» на обложке), окно «Сменить обложку» (`PK/Sources/PageCover/CoverPickerView.swift`: «Галерея», «Загрузить» с выбором файла и перетаскиванием, «Убрать»), режим «Переместить» (`CoverRepositionMode.swift`)
+- [x] T032 [US1] Операции в `PK/Sources/NotesCore/Tree/PageTreeOperations+Appearance.swift`: обложка, сдвиг, вид страницы — с отменой; своя картинка — через хранилище вложений 002 (T025)
+- [x] T033 [US1] «Вид страницы» в `PK/Sources/PageEditor/PageLayout/` (ширина и шкала шрифтов для текста и видов 002, перекладка без пересоздания редактора) и пункт `App/MainWindow/PageMenu/PageAppearanceMenuItem.swift` с переключателями (T026)
+- [x] T034 [US1] Выгрузка обложки в `PK/Sources/MarkdownExport/` и чтение в `PK/Sources/NotionImport/` (T027)
 - [ ] T035 [US1] Состояния галереи: шапка без обложки при наведении, обложка галереи и картинки, при наведении, «Переместить», окно «Сменить обложку» (обе вкладки), мелкий шрифт, широкая — в обеих темах; сверка с `visual-reference/` и живым Notion
 - [ ] T036 [US1] Затронутые тесты зелёные; замеры: набор на «богатой» странице с обложкой, мелким шрифтом и широкой ≤ 50 мс p95, переключение ≤ 200 мс, переход и запуск — со снимками; запись в quickstart.md; коммит
 

@@ -97,8 +97,37 @@ public enum CoverGallery {
     static func image(for item: Item) -> CGImage? {
         switch item.fill {
         case .solid(let color): bitmap(side: 1, colors: [color])
-        case .grid(let side, let colors): bitmap(side: side, colors: colors)
+        case .grid(let side, let colors): bitmap(side: smoothSide, colors: smoothed(side: side, colors: colors))
         }
+    }
+
+    /// Сетка, растянутая системой, видна квадратами: сначала — гладкая сетка `smoothSide` × `smoothSide`
+    /// плавной (кубической Эрмита) смесью соседних цветов, её дорастягивает рисование.
+    static let smoothSide = 96
+
+    private static func smoothed(side: Int, colors: [UInt32]) -> [UInt32] {
+        func channel(_ color: UInt32, _ shift: UInt32) -> Double { Double(color >> shift & 0xFF) }
+        func ease(_ t: Double) -> Double { t * t * (3 - 2 * t) }
+        var result: [UInt32] = []
+        result.reserveCapacity(smoothSide * smoothSide)
+        for row in 0..<smoothSide {
+            // Центры ячеек исходной сетки — в серединах её клеток.
+            let y = min(max((Double(row) + 0.5) / Double(smoothSide) * Double(side) - 0.5, 0), Double(side - 1))
+            let y0 = Int(y), y1 = min(y0 + 1, side - 1), ty = ease(y - Double(y0))
+            for column in 0..<smoothSide {
+                let x = min(max((Double(column) + 0.5) / Double(smoothSide) * Double(side) - 0.5, 0), Double(side - 1))
+                let x0 = Int(x), x1 = min(x0 + 1, side - 1), tx = ease(x - Double(x0))
+                let corners = (colors[y0 * side + x0], colors[y0 * side + x1], colors[y1 * side + x0], colors[y1 * side + x1])
+                var mixed: UInt32 = 0
+                for shift: UInt32 in [16, 8, 0] {
+                    let top = channel(corners.0, shift) * (1 - tx) + channel(corners.1, shift) * tx
+                    let bottom = channel(corners.2, shift) * (1 - tx) + channel(corners.3, shift) * tx
+                    mixed |= UInt32((top * (1 - ty) + bottom * ty).rounded()) << shift
+                }
+                result.append(mixed)
+            }
+        }
+        return result
     }
 
     private static func bitmap(side: Int, colors: [UInt32]) -> CGImage? {

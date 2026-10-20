@@ -13,7 +13,7 @@ final class PageHeaderTests: XCTestCase {
     @MainActor
     func testCoverAndAppearanceSurviveRelaunch() throws {
         let library = try UITestLibrary.make(for: self)
-        let picture = library.databaseURL.deletingLastPathComponent().appendingPathComponent("обложка.png")
+        let picture = library.databaseURL.deletingLastPathComponent().appendingPathComponent("cover-sunset.png")
         try Self.png(width: 1200, height: 900).write(to: picture)
         var app = library.launchApp()
         app.createPage(titled: "Обложка")
@@ -39,11 +39,20 @@ final class PageHeaderTests: XCTestCase {
         app.descendants(matching: .any)["cover-upload-file"].click()
         let sheet = app.sheets.firstMatch
         XCTAssertTrue(sheet.waitForExistence(timeout: 10), "Окно выбора файла не открылось")
+        // Путь — в поле «Перейти к папке» (⇧⌘G), затем кнопка окна «Загрузить».
         app.typeKey("g", modifierFlags: [.command, .shift])
+        RunLoop.current.run(until: Date().addingTimeInterval(1))
         app.typeText(picture.path)
+        RunLoop.current.run(until: Date().addingTimeInterval(1))
         app.typeKey(.return, modifierFlags: [])
-        app.typeKey(.return, modifierFlags: [])
-        XCTAssertTrue(waitFor(cover, value: "обложка.png"), "Своя картинка не стала обложкой: \(String(describing: cover.value))")
+        RunLoop.current.run(until: Date().addingTimeInterval(1.5))
+        let upload = sheet.buttons["Загрузить"]
+        if upload.waitForExistence(timeout: 3), upload.isEnabled { upload.click() } else { app.typeKey(.return, modifierFlags: []) }
+        if !waitForAbsence(sheet) {
+            add(XCTAttachment(screenshot: app.screenshot()))
+            XCTFail("Окно выбора файла не закрылось: \(sheet.debugDescription)")
+        }
+        XCTAssertTrue(waitFor(cover, value: "cover-sunset.png"), "Своя картинка не стала обложкой: \(String(describing: cover.value))")
 
         // «Переместить»: тянем картинку вниз, «Сохранить положение».
         cover.hover()
@@ -64,7 +73,7 @@ final class PageHeaderTests: XCTestCase {
         XCTAssertTrue(waitForAbsence(cover), "Обложка не убралась")
         app.typeKey("z", modifierFlags: .command)
         XCTAssertTrue(cover.waitForExistence(timeout: 5), "⌘Z не вернул обложку")
-        XCTAssertTrue(waitFor(cover, value: "обложка.png"))
+        XCTAssertTrue(waitFor(cover, value: "cover-sunset.png"))
 
         // «•••» → «Вид страницы ›» → «Мелкий шрифт» и «Широкая страница».
         setAppearance(app, ["page-appearance-small-text", "page-appearance-full-width"], expected: "1")
@@ -78,7 +87,7 @@ final class PageHeaderTests: XCTestCase {
         // Перезапуск: обложка и вид на месте; ⌘Z выключает широкую.
         app = library.launchApp()
         XCTAssertTrue(cover.waitForExistence(timeout: 10), "После перезапуска нет обложки")
-        XCTAssertTrue(waitFor(cover, value: "обложка.png"))
+        XCTAssertTrue(waitFor(cover, value: "cover-sunset.png"))
         openAppearance(app)
         XCTAssertEqual(app.descendants(matching: .any)["page-appearance-small-text"].value as? Int, 1)
         XCTAssertEqual(app.descendants(matching: .any)["page-appearance-full-width"].value as? Int, 1)
@@ -101,7 +110,8 @@ final class PageHeaderTests: XCTestCase {
         menu.click()
         let appearance = app.descendants(matching: .any)["page-menu-appearance"]
         XCTAssertTrue(appearance.waitForExistence(timeout: 5), "В меню нет «Вид страницы»")
-        appearance.click()
+        // Пункт меню XCUITest ищет в системном меню и ждёт его открытия: щелчок — по точке, а не по элементу.
+        appearance.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
         XCTAssertTrue(app.descendants(matching: .any)["page-appearance-small-text"].waitForExistence(timeout: 5), "Подменю не открылось")
     }
 
