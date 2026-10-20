@@ -213,23 +213,23 @@ description: "Задачи: страницы и навигация"
 
 ### Tests for User Story 6
 
-- [ ] T075 [P] [US6] `PK/Tests/PageVersionsTests/PageSnapshotTests.swift`: снимок всех потоков и полей страницы, сжатие и разбор, `snapshotVersion`; снимок 1 000 блоков — размер записать
-- [ ] T076 [P] [US6] `PK/Tests/PageVersionsTests/PageVersionRecorderTests.swift` с подменёнными часами по contracts/page-operations.md, «История версий»: отметка от своей правки и от пачки с другого Mac (автор — тот Mac); не чаще раза в минуту; 5 с тишины; `favorite` и `visitedAt` не отмечают; первое открытие без версий — снимок «как было»; закрытие окна — снимки всех отмеченных; ни одного снимка до готовности редактора
-- [ ] T077 [P] [US6] `PK/Tests/PageVersionsTests/VersionPruningTests.swift`: правило Clarifications дословно; последняя версия остаётся всегда; удаление страницы навсегда стирает её версии
-- [ ] T078 [P] [US6] `PK/Tests/PageVersionsTests/VersionDiffTests.swift`: `summary` (название, иконка, обложка, вид, блоки добавлены/удалены/изменены); id блоков для подсветки
-- [ ] T079 [P] [US6] `PK/Tests/PageVersionsTests/VersionRestoreTests.swift`: поля и блоки как в версии; удалённые с тех пор — возвращены с прежними id; копии с `movedFrom` на других страницах — удалены; снимок «до восстановления» и новая версия после; ⌘Z — как было; изменения уходят в исходящие синхронизации
-- [ ] T080 [P] [US6] XCUITest `UITests/VersionHistoryTests.swift`: правки с подменёнными часами (флаг запуска) → «•••» → «История версий»; группировка; раскрытие версии; выбрать раннюю → подсветка → «Восстановить» → «Восстановить эту версию» → полоса «Страница восстановлена»; ⌘Z; Esc закрывает
+- [x] T075 [P] [US6] `PK/Tests/PageVersionsTests/PageSnapshotTests.swift`: снимок всех потоков и полей страницы, сжатие и разбор, `snapshotVersion`; снимок 1 000 блоков — размер записать
+- [x] T076 [P] [US6] `PK/Tests/PageVersionsTests/PageVersionRecorderTests.swift` с подменёнными часами по contracts/page-operations.md, «История версий»: отметка от своей правки и от пачки с другого Mac (автор — тот Mac); не чаще раза в минуту; 5 с тишины; `favorite` и `visitedAt` не отмечают; первое открытие без версий — снимок «как было»; закрытие окна — снимки всех отмеченных; ни одного снимка до готовности редактора
+- [x] T077 [P] [US6] `PK/Tests/PageVersionsTests/VersionPruningTests.swift`: правило Clarifications дословно; последняя версия остаётся всегда; удаление страницы навсегда стирает её версии
+- [x] T078 [P] [US6] `PK/Tests/PageVersionsTests/VersionDiffTests.swift`: `summary` (название, иконка, обложка, вид, блоки добавлены/удалены/изменены); id блоков для подсветки
+- [x] T079 [P] [US6] `PK/Tests/PageVersionsTests/VersionRestoreTests.swift`: поля и блоки как в версии; удалённые с тех пор — возвращены с прежними id; копии с `movedFrom` на других страницах — удалены; снимок «до восстановления» и новая версия после; ⌘Z — как было; изменения уходят в исходящие синхронизации
+- [x] T080 [P] [US6] XCUITest `UITests/VersionHistoryTests.swift`: правки с подменёнными часами (флаг запуска) → «•••» → «История версий»; группировка; раскрытие версии; выбрать раннюю → подсветка → «Восстановить» → «Восстановить эту версию» → полоса «Страница восстановлена»; ⌘Z; Esc закрывает
 
 ### Implementation for User Story 6
 
-- [ ] T081 [US6] Снимок и хранение `PK/Sources/PageVersions/PageSnapshot.swift`, `PageVersionStore.swift` (T075)
-- [ ] T082 [US6] Подписчик `PageVersionDueMarker.swift` и записыватель `PageVersionRecorder.swift`: старт после готовности редактора, по событию, вне главного потока; снимок при закрытии окна и выходе; первая версия при открытии (T076)
-- [ ] T083 [US6] Прореживание `VersionPruning.swift` раз в сутки после готовности редактора; стирание с удалением страницы навсегда (T077)
-- [ ] T084 [US6] Разница `VersionDiff.swift` (T078) и восстановление `PK/Sources/NotesCore/Tree/PageTreeOperations+RestoreVersion.swift` (T079)
-- [ ] T085 [US6] Просмотр `PK/Sources/PageEditor/VersionPreview/`: редактор «только чтение» на документе из снимка, подсветка блоков по разнице; по пробе T005
-- [ ] T086 [US6] Окно истории `App/MainWindow/VersionHistory/` (список, группировка, раскрытие, «Восстановить», окно «Что будет восстановлено», полоса после) по contracts/pages-ui.md и снимкам `notion-version-*.png`; пункт `App/MainWindow/PageMenu/VersionHistoryMenuItem.swift`
-- [ ] T087 [US6] Состояния галереи: история со списком, группировка, раскрытая версия, окно восстановления, полоса — в обеих темах; сверка со снимками Notion
-- [ ] T088 [US6] Затронутые тесты зелёные; замеры: история и показ версии ≤ 0,5 с, восстановление ≤ 1 с (SC-205), набор p95 ≤ 50 мс при записи версий (SC-203), место 200 версий «богатой» страницы; запись в quickstart.md; коммит
+- [x] T081 [US6] Снимок и хранение `PK/Sources/PageVersions/PageSnapshot.swift`, `PageVersionStore.swift` (T075)
+- [x] T082 [US6] Подписчик `PageVersionDueMarker.swift` и записыватель `PageVersionRecorder.swift`: старт после готовности редактора, по событию, вне главного потока; снимок при закрытии окна и выходе; первая версия при открытии (T076)
+- [x] T083 [US6] Прореживание `VersionPruning.swift` раз в сутки после готовности редактора; стирание с удалением страницы навсегда (T077)
+- [x] T084 [US6] Разница `VersionDiff.swift` (T078) и восстановление `PK/Sources/NotesCore/Tree/PageTreeOperations+RestoreVersion.swift` (T079)
+- [x] T085 [US6] Просмотр `PK/Sources/PageEditor/VersionPreview/`: редактор «только чтение» на документе из снимка, подсветка блоков по разнице; по пробе T005
+- [x] T086 [US6] Окно истории `App/MainWindow/VersionHistory/` (список, группировка, раскрытие, «Восстановить», окно «Что будет восстановлено», полоса после) по contracts/pages-ui.md и снимкам `notion-version-*.png`; пункт `App/MainWindow/PageMenu/VersionHistoryMenuItem.swift`
+- [x] T087 [US6] Состояния галереи: история со списком, группировка, раскрытая версия, окно восстановления, полоса — в обеих темах; сверка со снимками Notion
+- [x] T088 [US6] Затронутые тесты зелёные; замеры: история и показ версии ≤ 0,5 с, восстановление ≤ 1 с (SC-205), набор p95 ≤ 50 мс при записи версий (SC-203), место 200 версий «богатой» страницы; запись в quickstart.md; коммит
 
 **Checkpoint**: волна C готова. Вливание по одному: US5, US4, US6 (US4 и US6 правят разные места `MainWindowModel.swift`); после каждого — затронутые тесты.
 

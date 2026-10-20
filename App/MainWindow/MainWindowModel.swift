@@ -51,6 +51,10 @@ final class MainWindowModel {
     var isNewTabSearchShown = false
     /// Галерея: вкладка, над которой будто бы мышь («×»).
     var previewHoveredTabId: UUID?
+    /// «История версий» открытой страницы поверх окна (US6); `nil` — закрыта.
+    var versionHistory: VersionHistoryModel?
+    /// Страница, которую только что восстановили из версии: над ней полоса «Страница восстановлена» (US6).
+    var restoredVersionPageId: UUID?
     /// Вкладки хранит только первое окно: вид окна в базе один (`WindowState.mainWindowId`).
     @ObservationIgnored private let restoresTabs: Bool
     /// Страницу перечитали после операции с деревом: встать на прежнее место.
@@ -130,6 +134,8 @@ final class MainWindowModel {
         if let openDocument { openDocuments.release(openDocument.pageId) }
         openDocument = nil
         library.unregister(self)
+        // Версии всех отмеченных страниц — сразу, не дожидаясь минуты (research R11).
+        library.versions.recordAllDue()
     }
 
     var openPageId: UUID? { openDocument?.pageId }
@@ -532,6 +538,8 @@ final class MainWindowModel {
             restoringScroll = scroll
             openDocument = document
             loadError = nil
+            // Страница без версий получает снимок «как было» (US6, research R11).
+            library.versions.pageOpened(pageId)
             // Файлы открытой страницы — первыми в очереди скачивания (FR-120).
             library.sync.prioritizeFiles(onPage: pageId)
             if remember { saveWindowState { $0.openPageId = pageId } }
