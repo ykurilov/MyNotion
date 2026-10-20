@@ -76,6 +76,7 @@ public final class PageTreeOperations {
             let inserted = try transaction.insertBlock(link)
             return InlineSubpage(page: page, link: inserted, replaced: placement.replaces ? anchor : nil, children: children)
         }
+        try moveCollapsed(created.children.copiedIds)
         registerUndo("Новая подстраница") { try $0.withdraw(created) }
         return created.page
     }
@@ -220,6 +221,8 @@ public final class PageTreeOperations {
         var originals: [Block] = []
         /// Копии ссылок на переехавшие подстраницы — в новой странице.
         var linkCopies: [Block] = []
+        /// id переехавших блоков: прежний → новый (свёрнутость переключателей едет за ними).
+        var copiedIds: [UUID: UUID] = [:]
         /// Переехавшие подстраницы: прежнее и новое место.
         var reparented: [(pageId: UUID, from: (parentId: UUID?, sortKey: FractionalSortKey), to: FractionalSortKey)] = []
     }
@@ -247,6 +250,7 @@ public final class PageTreeOperations {
                 try transaction.insertBlock(replaced)
             }
         }
+        try moveCollapsed(Dictionary(uniqueKeysWithValues: created.children.copiedIds.map { ($1, $0) }))
         registerUndo("Новая подстраница") { try $0.reinstate(created) }
     }
 
@@ -274,6 +278,7 @@ public final class PageTreeOperations {
                 try transaction.insertBlock(created.link)
             }
         }
+        try moveCollapsed(created.children.copiedIds)
         registerUndo("Новая подстраница") { try $0.withdraw(created) }
     }
 
@@ -312,6 +317,7 @@ public final class PageTreeOperations {
         for index in copies.indices {
             if let column = copies[index].props.columnId, let copied = newIds[column] { copies[index].props.columnId = copied }
         }
+        move.copiedIds = newIds
 
         for original in move.originals.reversed() { try transaction.deleteBlock(original.id) }
         for block in try transaction.blocks(ofPage: pageId) { try transaction.deleteBlock(block.id) }
@@ -327,6 +333,11 @@ public final class PageTreeOperations {
             try transaction.updatePage(subpage)
         }
         return move
+    }
+
+    /// Свёрнутость — вид этого Mac, мимо транзакций и отмены (research R1): переносится следом за правкой.
+    private func moveCollapsed(_ oldToNew: [UUID: UUID]) throws {
+        try BlockViewStateStore(database: store.database).moveCollapsed(from: oldToNew)
     }
 
     /// Ключ ссылки и блок, за которым она встаёт в документе (`nil` — первой).

@@ -292,6 +292,24 @@ struct InlineSubpageTests {
         #expect(try outline(page) == ["Раздел", "пункт", "→ Внутри", "после"])
     }
 
+    @Test("Свёрнутые переключатели среди детей остаются свёрнутыми в подстранице и после ⌘Z, ⇧⌘Z")
+    func turnIntoPageKeepsCollapsedToggles() throws {
+        let (page, ids) = try projects(blocks: [(.toggle, "Раздел", 0), (.toggle, "Свёрнутый", 1), (.paragraph, "внутри", 2),
+                                                (.toggle, "Открытый", 1)])
+        let viewState = BlockViewStateStore(database: store.database)
+        try viewState.setCollapsed(true, blockId: ids[1])
+        let undoManager = makeUndoManager()
+
+        let subpage = try undoable(undoManager) { try tree.turnIntoSubpage(ids[0], in: page) }
+        let moved = try blocks(subpage.id)
+        #expect(try viewState.collapsedBlockIds(ofPage: subpage.id) == [moved[0].id])
+
+        undoManager.undo()
+        #expect(try viewState.collapsedBlockIds(ofPage: page) == [ids[1]])
+        undoManager.redo()
+        #expect(try viewState.collapsedBlockIds(ofPage: subpage.id) == [moved[0].id])
+    }
+
     @Test("Подстраница на месте блока несуществующей страницы или блока не создаётся")
     func needsBlock() throws {
         let (page, _) = try projects(["до"])

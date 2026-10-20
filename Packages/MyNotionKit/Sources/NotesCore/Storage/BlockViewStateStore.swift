@@ -32,4 +32,18 @@ public struct BlockViewStateStore: Sendable {
             }
         }
     }
+
+    /// Блоки переехали под новыми id («Преобразовать в → Страница» и его отмена): свёрнутость — за ними.
+    public func moveCollapsed(from oldToNew: [UUID: UUID]) throws {
+        guard !oldToNew.isEmpty else { return }
+        try database.dbWriter.write { db in
+            for (old, new) in oldToNew {
+                guard try Bool.fetchOne(db, sql: "SELECT isCollapsed FROM block_view_state WHERE blockId = ?",
+                                        arguments: [old.databaseText]) == true else { continue }
+                try db.execute(sql: "INSERT OR REPLACE INTO block_view_state (blockId, isCollapsed) VALUES (?, 1)",
+                               arguments: [new.databaseText])
+                try db.execute(sql: "DELETE FROM block_view_state WHERE blockId = ?", arguments: [old.databaseText])
+            }
+        }
+    }
 }
