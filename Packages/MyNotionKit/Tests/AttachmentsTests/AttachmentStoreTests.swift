@@ -326,6 +326,20 @@ import Testing
         #expect(try await collector.collect(transport: server.transport) == [ref.id], "Версию проредили — файл отпущен")
     }
 
+    @Test("Файлы открытой страницы для первоочередной докачки: обложка — первой, потом файлы блоков по порядку")
+    func pageFilesIncludeCoverFirst() throws {
+        let mac = try AttachmentTestMac()
+        let cover = AttachmentRef(name: "обложка.jpg", byteCount: 10, contentType: "public.jpeg", sha256: "")
+        let file = AttachmentRef(name: "договор.pdf", byteCount: 10, contentType: "com.adobe.pdf", sha256: "")
+        try mac.insertBlock(attachment: file)
+        try mac.store.write { tx in
+            var page = try #require(try tx.page(mac.pageId))
+            page.cover = PageCover(source: .file(cover))
+            try tx.updatePage(page)
+        }
+        #expect(try mac.attachments.attachmentIds(onPage: mac.pageId) == [cover.id, file.id])
+    }
+
     @Test func erasingWithoutSyncOnlyRemovesLocalCopy() async throws {
         let mac = try AttachmentTestMac()
         let ref = try mac.attachments.importFile(at: try mac.folder.file("x.txt", sampleBytes(10)))

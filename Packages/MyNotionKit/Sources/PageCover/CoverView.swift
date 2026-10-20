@@ -117,6 +117,12 @@ public final class CoverView: NSView {
         case .file(let ref):
             setAccessibilityValue(ref.name)
             loadThumbnail(of: ref)
+        case .unknown:
+            // Вид обложки от новой версии — заглушка.
+            loadedFile = nil
+            image = nil
+            setAccessibilityValue(nil)
+            needsDisplay = true
         }
     }
 

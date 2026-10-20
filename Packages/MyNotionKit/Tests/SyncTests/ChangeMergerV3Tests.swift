@@ -119,5 +119,10 @@ struct ChangeMergerV3Tests {
         let original = try #require(try a.page(page))
         #expect(copied.cover == original.cover && copied.isFullWidth && copied.isSmallText && copied.isTemplate)
         #expect(copied.favorite == original.favorite && copied.visitedAt == original.visitedAt)
+        // Что видел снимок — и по новым полям: их метки позже всех остальных у этой страницы.
+        let clocks = original.fieldClocks
+        for stamp in [clocks.cover, clocks.isFullWidth, clocks.isSmallText, clocks.favorite, clocks.visitedAt, clocks.isTemplate] {
+            #expect(snapshot.knowledge.covers(try #require(stamp)), "Снимок не знает метки \(String(describing: stamp))")
+        }
     }
 }

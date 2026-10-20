@@ -17,11 +17,16 @@ extension PageTreeOperations {
     }
 
     /// Перенести блоки `blockIds` со страницы `sourcePageId` в конец `targetPageId`. Вложенные под выделенным блоком
-    /// едут с ним, даже если не выделены; глубина первого — 0, остальные — относительно него.
+    /// едут с ним, даже если не выделены; глубина первого — 0, остальные — относительно него. Цель в корзине — ошибка.
     public func moveBlocks(_ blockIds: [UUID], from sourcePageId: UUID, to targetPageId: UUID) throws {
         guard sourcePageId != targetPageId else { throw NotesStoreError.invalidPage("блоки уже на этой странице") }
         let move = try perform { transaction -> BlocksMove in
-            guard try transaction.page(targetPageId) != nil else { throw NotesStoreError.pageNotFound(targetPageId) }
+            guard let target = try transaction.page(targetPageId) else { throw NotesStoreError.pageNotFound(targetPageId) }
+            // Цель могли убрать в корзину (здесь или на другом Mac), пока было открыто окно выбора.
+            let pagesById = Dictionary(uniqueKeysWithValues: try transaction.allPages().map { ($0.id, $0) })
+            guard !PageTreeSnapshot.isInTrash(target, pagesById: pagesById) else {
+                throw NotesStoreError.invalidPage("страница-цель в корзине")
+            }
             let blocks = try transaction.blocks(ofPage: sourcePageId)
             let roots = Self.movedRoots(blockIds, in: blocks)
             guard !roots.isEmpty else { throw NotesStoreError.blockNotFound(blockIds.first ?? UUID()) }
@@ -37,7 +42,7 @@ extension PageTreeOperations {
 
             var move = BlocksMove(originals: copy.originals, copies: copy.blocks, placeholder: placeholder, copiedIds: copy.newIds,
                                   reparented: [])
-            var pageKey = try transaction.allPages().filter { $0.parentId == targetPageId && $0.trashedAt == nil }.map(\.sortKey).max()
+            var pageKey = pagesById.values.filter { $0.parentId == targetPageId && $0.trashedAt == nil }.map(\.sortKey).max()
             for copied in copy.blocks where copied.kind == .pageLink {
                 guard let linked = copied.linkedPageId, var subpage = try transaction.page(linked), subpage.parentId == sourcePageId else { continue }
                 pageKey = .between(pageKey, nil)

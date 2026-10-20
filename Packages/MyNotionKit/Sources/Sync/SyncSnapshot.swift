@@ -24,8 +24,7 @@ public struct SyncSnapshot: Sendable, Hashable, Codable {
             for page in try transaction.allPages() {
                 let known = page.trashedAt == nil ? nil : try transaction.contentKnowledge(ofPage: page.id)
                 changes += ChangeEncoding.fullPage(page, known: known)
-                [page.fieldClocks.title, page.fieldClocks.icon, page.fieldClocks.placement, page.fieldClocks.trashedAt]
-                    .compactMap { $0 }.forEach { knowledge.record($0) }
+                page.fieldClocks.all.forEach { knowledge.record($0) }
                 for (block, isDeleted) in try transaction.blocks(ofPage: page.id, includingDeleted: true) {
                     changes += ChangeEncoding.fullBlock(block, baseHlc: nil)
                     if isDeleted, let deleted = block.fieldClocks.deleted {
