@@ -39,15 +39,14 @@ final class BacklinksTests: XCTestCase {
         open(app, "Ссылки: цель")
         waitForRow(app, "2 обратные ссылки")
 
-        // «Г» в корзину — остаётся одна.
-        open(app, "Ссылки: Г")
-        let menu = app.descendants(matching: .any)["page-menu"]
-        XCTAssertTrue(menu.waitForExistence(timeout: 5))
-        menu.click()
-        let trash = app.descendants(matching: .any)["page-menu-trash"]
-        XCTAssertTrue(trash.waitForExistence(timeout: 5), "В меню «•••» нет «Удалить в корзину»")
-        trash.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
-        open(app, "Ссылки: цель")
+        // «Г» в корзину из меню строки панели, пока открыта «цель», — счёт меняется сразу, без перехода (как в Notion).
+        let sourceRow = app.outlines["page-tree"].outlineRows.containing(NSPredicate(format: "value == %@", "Ссылки: Г")).firstMatch
+        XCTAssertTrue(sourceRow.waitForExistence(timeout: 5), "В панели нет строки «Ссылки: Г»")
+        scrollIntoView(app, sourceRow)
+        sourceRow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).rightClick()
+        XCTAssertTrue(app.menuItems["Удалить в корзину"].waitForExistence(timeout: 5), "В меню строки нет «Удалить в корзину»")
+        app.menuItems["Удалить в корзину"].click()
+        XCTAssertEqual(currentTitle(app), "Ссылки: цель")
         waitForRow(app, "1 обратная ссылка")
 
         // Страница с 30 источниками: счёт и прокручиваемый список.
@@ -65,6 +64,20 @@ final class BacklinksTests: XCTestCase {
     }
 
     // MARK: Помощники
+
+    /// Строка дерева ниже видимой части панели «доступна» для XCUITest, но щелчок по ней попадает мимо:
+    /// прокручиваем панель, пока рамка строки не окажется внутри видимой части.
+    @MainActor
+    private func scrollIntoView(_ app: XCUIApplication, _ row: XCUIElement) {
+        let clip = app.scrollViews.containing(.outline, identifier: "page-tree").firstMatch
+        XCTAssertTrue(clip.exists, "Нет прокрутки панели")
+        for _ in 0..<20 {
+            let visible = clip.frame, frame = row.frame
+            if frame.minY >= visible.minY, frame.maxY <= visible.maxY { return }
+            clip.scroll(byDeltaX: 0, deltaY: frame.maxY > visible.maxY ? -40 : 40)
+        }
+        XCTFail("Строка «\(row.debugDescription)» не видна в панели")
+    }
 
     @MainActor
     private func row(_ app: XCUIApplication) -> XCUIElement {
