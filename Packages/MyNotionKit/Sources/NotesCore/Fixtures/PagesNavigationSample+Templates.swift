@@ -27,7 +27,8 @@ extension PagesNavigationSample {
         for title in ["Повестка", "Итоги", "Задачи после встречи"] {
             subpages.append(try tx.createPage(title: title, parentId: meeting.id))
         }
-        let today = Date().formatted(.iso8601.year().month().day())
+        let parts = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+        let today = String(format: "%04d-%02d-%02d", parts.year!, parts.month!, parts.day!)
         let date = DateMention(start: today, includesTime: false, timeZone: TimeZone.current.identifier, templateRelative: .today)
         let marker = String(UnicodeScalar(InlineText.objectReplacementCharacter)!)
         let dateLine = "Дата встречи: \(marker)"

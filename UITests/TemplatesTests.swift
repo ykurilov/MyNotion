@@ -30,17 +30,18 @@ final class TemplatesTests: XCTestCase {
         let make = app.descendants(matching: .any)["page-menu-template"]
         XCTAssertTrue(make.waitForExistence(timeout: 5), "В меню «•••» нет «Сделать шаблоном»")
         make.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
-        XCTAssertTrue(waitForTemplates(app, ["Шаблон: заметки встречи", "Шаблон: план на неделю", "Шаблон: дневник", "Копии: исходная"]))
+        // Страница верхнего уровня остаётся на своём месте среди корневых: в «Шаблонах» она по порядку дерева.
+        XCTAssertTrue(waitForTemplates(app, ["Копии: исходная", "Шаблон: заметки встречи", "Шаблон: план на неделю", "Шаблон: дневник"]))
         XCTAssertTrue(treeRow(app, "Копии: исходная").waitForNonExistence(timeout: 5), "Шаблон остался в «Страницах»")
 
         // ⌘N → пустая страница → строка шаблона «заметки встречи»: копия с подстраницами, курсор в названии.
         app.typeKey("n", modifierFlags: .command)
-        let firstRow = app.descendants(matching: .any)["template-row-0"]
-        XCTAssertTrue(firstRow.waitForExistence(timeout: 10), "На пустой странице нет строк шаблонов")
-        firstRow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        // Строки идут в порядке раздела: 0 — «Копии: исходная», 1 — «заметки встречи».
+        let meetingRow = app.descendants(matching: .any)["template-row-1"]
+        XCTAssertTrue(meetingRow.waitForExistence(timeout: 10), "На пустой странице нет строк шаблонов")
+        meetingRow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
         waitForTitle(app, Self.meeting)
-        XCTAssertTrue(waitForBody(app) { $0.contains("Повестка") && $0.contains("Итоги") && $0.contains("Задачи после встречи") },
-                      "В копии нет подстраниц: \(app.pageBody.value ?? "")")
+        XCTAssertTrue(waitForBody(app) { $0.hasPrefix("Дата встречи:") }, "В копии нет текста шаблона: \(app.pageBody.value ?? "")")
         XCTAssertTrue(app.textFields["page-title"].value(forKey: "hasKeyboardFocus") as? Bool ?? false, "Курсор не в названии копии")
         XCTAssertFalse(app.descendants(matching: .any)["template-row-0"].exists, "Строки шаблонов остались на заполненной странице")
 
@@ -62,11 +63,15 @@ final class TemplatesTests: XCTestCase {
         XCTAssertTrue(app.wait(for: .notRunning, timeout: 10))
 
         // «@сегодня» копии — день создания; у самого шаблона отметка осталась.
-        let today = Date().formatted(.iso8601.year().month().day())
+        let parts = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+        let today = String(format: "%04d-%02d-%02d", parts.year!, parts.month!, parts.day!)
         let styles = try library.savedTextStyles(ofPage: Self.meeting)
         let copies = styles.filter { !$0.contains("templateRelative") && $0.contains("\"date\"") }
         XCTAssertEqual(copies.count, 1, "Дата копии: \(styles)")
         XCTAssertTrue(copies[0].contains(today), "В копии не сегодняшняя дата: \(copies[0])")
+        // Подстраницы: у шаблона и у копии по три, каждая — со своей страницей.
+        XCTAssertEqual(try library.savedBlocks(ofPage: "Повестка").count, 2, "Подстраница «Повестка» не скопировалась")
+        XCTAssertEqual(try library.savedBlocks(ofPage: Self.meeting).filter { $0.kind == "pageLink" }.count, 6, "У копии нет трёх подстраниц")
         XCTAssertEqual(styles.filter { $0.contains("templateRelative") }.count, 1, "Отметка «@сегодня» у шаблона пропала: \(styles)")
     }
 
