@@ -156,6 +156,6 @@ extension NotesTransaction {
     /// Живые блоки других страниц, перенесённые «Переместить в» из блоков `blockIds` (`props.movedFrom`).
     func movedBlockCopies(of blockIds: Set<UUID>, outsidePage pageId: UUID) throws -> [Block] {
         guard !blockIds.isEmpty else { return [] }
-        return try blocksWithMovedFrom(outsidePage: pageId).filter { $0.props.movedFrom.map(blockIds.contains) ?? false }
+        return try blocks(movedFrom: blockIds, outsidePage: pageId)
     }
 }

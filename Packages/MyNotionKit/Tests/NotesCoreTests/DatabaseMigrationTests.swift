@@ -515,8 +515,8 @@ struct SchemaV8MigrationTests {
         let (files, moved, plan) = try database.dbWriter.read { db in
             (try Row.fetchAll(db, sql: "SELECT versionId, fileId FROM page_version_file").map { "\($0["versionId"] as String) \($0["fileId"] as String)" },
              try String.fetchAll(db, sql: "SELECT id FROM block WHERE movedFrom = ?", arguments: [movedFrom]),
-             try Row.fetchAll(db, sql: "EXPLAIN QUERY PLAN SELECT * FROM block WHERE movedFrom IN (?) AND movedFrom IS NOT NULL",
-                              arguments: [movedFrom]).map { $0["detail"] as String })
+             try Row.fetchAll(db, sql: "EXPLAIN QUERY PLAN " + NotesTransaction.movedFromSQL(count: 2),
+                              arguments: [movedFrom, movedFrom, pageId.databaseText]).map { $0["detail"] as String })
         }
         #expect(files == ["v1 \(fileInVersion)"])
         #expect(moved == [movedBlock])
