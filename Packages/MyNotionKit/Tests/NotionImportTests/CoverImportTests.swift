@@ -67,6 +67,43 @@ struct CoverImportTests {
         #expect(importer.hash(of: importedRef.id) == Self.sha(bytes))
     }
 
+    @Test("Файл вне папки выгрузки (`..`, ссылка-ярлык) не копируется ни обложкой, ни картинкой; обложка — только картинка")
+    func filesOutsideExportAreRefused() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("MyNotionCoverEscape-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let root = folder.appendingPathComponent("export", isDirectory: true)
+        let pageFolder = root.appendingPathComponent("Стр", isDirectory: true)
+        try FileManager.default.createDirectory(at: pageFolder, withIntermediateDirectories: true)
+        try Data("секрет".utf8).write(to: folder.appendingPathComponent("secret.png"))
+        try FileManager.default.createSymbolicLink(at: pageFolder.appendingPathComponent("ярлык.png"),
+                                                   withDestinationURL: folder.appendingPathComponent("secret.png"))
+        try Data("не картинка".utf8).write(to: pageFolder.appendingPathComponent("заметки.txt"))
+        try Data("своя".utf8).write(to: pageFolder.appendingPathComponent("своя.png"))
+        let markdown = { (cover: String) in
+            "# Стр\n<!-- mynotion:cover file=\"\(cover)\" offset=0.5 -->\n\n![](../secret.png)\n\n![](Стр/ярлык.png)\n\n![](Стр/своя.png)\n"
+        }
+        for (name, cover) in [("Стр", "../../secret.png"), ("Стр2", "ярлык.png"), ("Стр3", "заметки.txt")] {
+            try Data(markdown(cover).replacingOccurrences(of: "# Стр\n", with: "# \(name)\n").utf8)
+                .write(to: root.appendingPathComponent("\(name).md"))
+        }
+        for name in ["Стр2", "Стр3"] {
+            try FileManager.default.createSymbolicLink(at: root.appendingPathComponent(name, isDirectory: true), withDestinationURL: pageFolder)
+        }
+        let store = NotesStore(database: try AppDatabase.open(at: folder.appendingPathComponent("db/MyNotion.sqlite")),
+                               clock: HybridLogicalClock(deviceId: UUID()))
+        let importer = HashingCoverImporter()
+        let prepared = try NotionExportUnpacker().prepare(root)
+        defer { prepared.discard() }
+        _ = try NotionImporter(store: store, attachments: importer).importExport(prepared)
+
+        #expect(importer.copiedNames.allSatisfy { $0 == "своя.png" }, "Скопировано: \(importer.copiedNames)")
+        for page in try store.pageOutline() where page.title.hasPrefix("Стр") {
+            #expect(page.cover == nil, "У «\(page.title)» обложка — не картинка из папки выгрузки")
+            let texts = try #require(try store.pageContent(page.id)).blocks.map(\.text.string)
+            #expect(texts.filter { $0.hasPrefix("[файл:") }.count == 2, "\(page.title): \(texts)")
+        }
+    }
+
     @Test("Отчёт импорта называет потерю обложек Notion")
     func reportNamesCoverLoss() {
         #expect(NotionImportReport.coverLossNotice == "Обложки страниц Notion в выгрузку не попадают")
@@ -88,8 +125,12 @@ private final class HashingCoverImporter: NotionAttachmentImporting, Sendable {
         let sha = CoverImportTests.sha(data)
         let ref = AttachmentRef(name: url.lastPathComponent, byteCount: data.count, contentType: "public.jpeg", sha256: sha)
         copies.withLock { $0[ref.id] = sha }
+        names.withLock { $0.append(url.lastPathComponent) }
         return ref
     }
 
     func hash(of id: UUID) -> String? { copies.withLock { $0[id] } }
+
+    private let names = Mutex<[String]>([])
+    var copiedNames: [String] { names.withLock { $0 } }
 }

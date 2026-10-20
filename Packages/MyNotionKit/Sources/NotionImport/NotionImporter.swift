@@ -1,6 +1,7 @@
 import Foundation
 import LinkPreview
 import NotesCore
+import UniformTypeIdentifiers
 
 /// Ход импорта: сначала чтение страниц выгрузки, потом запись в базу.
 public struct NotionImportProgress: Sendable, Equatable {
@@ -125,7 +126,7 @@ public struct NotionImporter: Sendable {
         var plan = try NotionExportReader().read(export.contentRoot) { done, total in
             progress?(NotionImportProgress(phase: .reading, done: done, total: total))
         }
-        try copyAttachments(in: &plan)
+        try copyAttachments(in: &plan, root: export.contentRoot)
         let log = ImportRunLog(store: store)
         let startedAt = now()
         let rootTitle = "Импорт из Notion — " + Self.dateTitle(startedAt)
@@ -184,15 +185,22 @@ public struct NotionImporter: Sendable {
 
     // MARK: Файлы
 
-    /// Картинки и файлы выгрузки — копиями во вложения (contracts/markdown-and-notion.md). Файла нет, он больше 100 МБ
-    /// или хранилища нет — абзац «[файл: имя]», как в 001, и строка в отчёте.
-    private func copyAttachments(in plan: inout NotionExportPlan) throws {
+    /// Картинки и файлы выгрузки — копиями во вложения (contracts/markdown-and-notion.md). Файла нет, он больше 100 МБ,
+    /// лежит вне папки выгрузки `root` или хранилища нет — абзац «[файл: имя]», как в 001, и строка в отчёте.
+    private func copyAttachments(in plan: inout NotionExportPlan, root: URL) throws {
+        let rootPath = root.standardizedFileURL.resolvingSymlinksInPath().path
         for index in plan.pages.indices {
             let folder = plan.pages[index].file.deletingLastPathComponent()
             var missing = 0
-            func copy(_ path: String) -> (URL, AttachmentRef)? {
+            func copy(_ path: String, imageOnly: Bool = false) -> (URL, AttachmentRef)? {
+                // Путь из текста страницы: `..` и ярлыки не выводят за папку выгрузки.
                 let url = path.split(separator: "/").reduce(folder) { $0.appendingPathComponent(String($1)) }
-                let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize
+                    .standardizedFileURL.resolvingSymlinksInPath()
+                guard url.path.hasPrefix(rootPath + "/") else { return nil }
+                let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentTypeKey, .isRegularFileKey])
+                guard values?.isRegularFile == true else { return nil }
+                if imageOnly, values?.contentType?.conforms(to: .image) != true { return nil }
+                let size = values?.fileSize
                 guard let size, size <= AttachmentRef.maximumByteCount, let ref = try? attachments?.importFile(at: url) else { return nil }
                 return (url, ref)
             }
@@ -227,8 +235,10 @@ public struct NotionImporter: Sendable {
             try attach(&plan.pages[index].blocks)
             if case .file(let name)? = plan.pages[index].cover?.source {
                 let stem = plan.pages[index].file.deletingPathExtension().lastPathComponent
-                // Картинки нет или она не копируется — страница без обложки, как у импорта Notion.
-                plan.pages[index].coverFile = copy(stem + "/" + name)?.1
+                // Обложка — картинка в папке страницы. Картинки нет, это не картинка или она не копируется — страница
+                // без обложки, как у импорта Notion.
+                let isFileName = !name.contains("/") && name != "." && name != ".."
+                plan.pages[index].coverFile = isFileName ? copy(stem + "/" + name, imageOnly: true)?.1 : nil
             }
             if missing > 0 { plan.pages[index].simplifications[.file, default: 0] += missing }
         }
