@@ -124,6 +124,20 @@ struct BlockCopierTests {
         #expect(plain.blocks.allSatisfy { $0.props.movedFrom == nil })
     }
 
+    @Test("Копия перенесённого раньше блока без запроса — без movedFrom; с запросом — id нового исходного")
+    func movedFromNotInherited() {
+        let sample = sample()
+        let moved = BlockCopier.copy(sample.roots, pageBlocks: sample.all, into: target, marksMovedFrom: true)
+        let again = BlockCopier.copy(moved.blocks.filter { $0.containerId == nil }, pageBlocks: moved.blocks, into: source)
+        #expect(again.blocks.count == moved.blocks.count)
+        #expect(again.blocks.allSatisfy { $0.props.movedFrom == nil }, "Дубликат унаследовал пометку переноса")
+        let movedAgain = BlockCopier.copy(moved.blocks.filter { $0.containerId == nil }, pageBlocks: moved.blocks, into: source,
+                                          marksMovedFrom: true)
+        for original in movedAgain.originals {
+            #expect(movedAgain.blocks.first { $0.id == movedAgain.newIds[original.id] }?.props.movedFrom == original.id)
+        }
+    }
+
     @Test("movedFrom хранится в props ключом movedFrom")
     func movedFromKey() throws {
         var props = BlockProps()

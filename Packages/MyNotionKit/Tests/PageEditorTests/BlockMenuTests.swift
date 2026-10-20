@@ -146,6 +146,19 @@ struct BlockMenuTests {
         #expect(editor.texts == ["один", "один", "два"])
     }
 
+    @Test("⌘D блока, принесённого «Переместить в»: у копии нет пометки movedFrom — восстановление версии её не удалит")
+    func duplicateDropsMovedFrom() throws {
+        var props = BlockProps()
+        props.movedFrom = UUID()
+        let editor = try EditorFixture([Spec(kind: .paragraph, text: "принесён", props: props)])
+        editor.placeCaret(inBlock: 0, at: 2)
+        editor.perform(.duplicateBlocks)
+        let blocks = editor.document.blocks
+        #expect(blocks.count == 2)
+        #expect(blocks[0].props.movedFrom == props.movedFrom, "У самого перенесённого пометка остаётся")
+        #expect(blocks[1].props.movedFrom == nil)
+    }
+
     @Test("Подстраницу не дублировать: в её меню нет «Дублировать», группу начинает «Переместить в»")
     func pageLinkHasNoDuplicate() {
         #expect(!PopupMenuItem.blockMenuItems(for: .pageLink).contains(.duplicate))

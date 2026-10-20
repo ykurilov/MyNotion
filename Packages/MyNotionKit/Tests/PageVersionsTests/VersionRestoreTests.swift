@@ -96,6 +96,21 @@ struct VersionRestoreTests {
         #expect(try mac.texts(target.id) == ["своё"], "Копии на другой странице не удалены")
     }
 
+    @Test("Дубликат страницы с перенесёнными блоками: восстановление версии исходной страницы его не трогает")
+    func duplicateOfMovedBlocksKept() async throws {
+        let mac = try VersionsTestMac()
+        let source = try mac.page("Откуда", texts: ["остаётся", "уедет"])
+        let target = try mac.page("Куда", texts: ["своё"])
+        let blocks = try mac.blocks(source.id)
+        let version = try versionNow(mac, source.id)
+        try moveBlocks([blocks[1].id], from: source.id, to: target.id, mac)
+        let copy = try await mac.tree.duplicate(target.id)
+        #expect(try mac.texts(copy.id) == ["своё", "уедет"])
+        try restorer(mac).restore(versionId: version.id, ofPage: source.id)
+        #expect(try mac.texts(target.id) == ["своё"])
+        #expect(try mac.texts(copy.id) == ["своё", "уедет"], "Восстановление удалило блоки дубликата")
+    }
+
     @Test("Унесённая ссылка на подстраницу возвращается, подстраница — снова под исходной страницей")
     func movedSubpageReturns() throws {
         let mac = try VersionsTestMac()
