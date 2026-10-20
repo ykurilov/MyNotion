@@ -43,6 +43,8 @@ public class PageTextView: NSTextView {
     private(set) lazy var conflictMarks = ConflictMarksOverlay(textView: self)
     /// Щелчок по блоку-подстранице: открыть страницу.
     public var onOpenPage: (@MainActor (UUID) -> Void)?
+    /// «Страница» в меню «/» и «Преобразовать в»: подстраницу со ссылкой у блока создаёт владелец дерева.
+    public var onSubpageRequest: (@MainActor (SubpageRequest) -> Void)?
     /// ⌘-щелчок по ссылке: открыть адрес (по умолчанию — в браузере по умолчанию).
     public var openURL: @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) }
     let layoutDelegate = BlockLayoutDelegate()
@@ -493,7 +495,7 @@ public class PageTextView: NSTextView {
     }
 
     func setKind(_ kind: BlockKind, ofBlocksAt range: Range<Int>) {
-        guard kind != .pageLink else { return }
+        if kind == .pageLink { return turnIntoSubpage(blockAt: range) }
         if kind == .divider, range.count == 1 { return insertDivider(at: range.lowerBound) }
         if kind == .code, range.count == 1, document.blocks[range.lowerBound].kind != .code { return insertCode(at: range.lowerBound) }
         if kind == .equation, range.count == 1, document.blocks[range.lowerBound].kind != .equation {
@@ -513,6 +515,18 @@ public class PageTextView: NSTextView {
             return draft
         }
         changeBlocks(range, to: drafts, actionName: "Тип блока")
+    }
+
+    /// «Преобразовать в → Страница», как в Notion: блок с текстом становится ссылкой на подстраницу с этим текстом
+    /// в названии. Только один текстовый блок без вложенных: детей переключателя в подстраницу пока не переносим.
+    private func turnIntoSubpage(blockAt range: Range<Int>) {
+        guard range.count == 1, let index = range.first else { return }
+        let blocks = document.blocks
+        let block = blocks[index]
+        guard block.kind != .pageLink, !block.kind.rendersAsAttachment, !block.kind.isContainer,
+              index + 1 == blocks.count || blocks[index + 1].indent <= block.indent else { return }
+        commitEdits()
+        onSubpageRequest?(.turnInto(blockId: block.id))
     }
 
     func removeBlocks(at range: Range<Int>) {

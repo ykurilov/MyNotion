@@ -297,6 +297,7 @@ private struct PagesWindow: View {
                 initialFocus: model.initialFocus,
                 linkedPages: pages,
                 onOpenPage: { model.select($0) },
+                onSubpageRequest: { model.handleSubpageRequest($0, inPage: document.pageId) },
                 onSetIcon: { model.setIcon(document.pageId, to: $0) },
                 onResolveConflict: { model.resolveConflict($0, in: document) },
                 blockViewState: model.blockViewState,

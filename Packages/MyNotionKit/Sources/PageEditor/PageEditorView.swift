@@ -13,6 +13,8 @@ public struct PageEditorView: View {
     /// Названия и иконки страниц для блоков-подстраниц.
     let linkedPages: [UUID: LinkedPage]
     let onOpenPage: @MainActor (UUID) -> Void
+    /// «Страница» в меню «/» или «Преобразовать в»: создать подстраницу со ссылкой у блока.
+    let onSubpageRequest: @MainActor (SubpageRequest) -> Void
     /// Выбрана иконка страницы (`nil` — убрать): правку делает владелец дерева, иконка возвращается в `document`.
     let onSetIcon: @MainActor (String?) -> Void
     /// Выбрана версия в «Двух версиях»: снять конфликт в базе.
@@ -27,6 +29,7 @@ public struct PageEditorView: View {
 
     public init(document: PageDocument, ancestorTitles: [String] = [], initialFocus: PageTextView.InitialFocus,
                 linkedPages: [UUID: LinkedPage] = [:], onOpenPage: @escaping @MainActor (UUID) -> Void = { _ in },
+                onSubpageRequest: @escaping @MainActor (SubpageRequest) -> Void = { _ in },
                 onSetIcon: @escaping @MainActor (String?) -> Void = { _ in },
                 onResolveConflict: @escaping @MainActor (Conflict) -> Void = { _ in },
                 blockViewState: BlockViewStateStore? = nil, blockReveal: BlockReveal? = nil,
@@ -36,6 +39,7 @@ public struct PageEditorView: View {
         self.initialFocus = initialFocus
         self.linkedPages = linkedPages
         self.onOpenPage = onOpenPage
+        self.onSubpageRequest = onSubpageRequest
         self.onSetIcon = onSetIcon
         self.onResolveConflict = onResolveConflict
         self.blockViewState = blockViewState
@@ -51,7 +55,7 @@ public struct PageEditorView: View {
                 SaveStatusBanner(reason: reason)
             }
             PageTextEditor(document: document, icon: document.page.icon, initialFocus: initialFocus, linkedPages: linkedPages,
-                           onOpenPage: onOpenPage, onSetIcon: onSetIcon, onResolveConflict: onResolveConflict,
+                           onOpenPage: onOpenPage, onSubpageRequest: onSubpageRequest, onSetIcon: onSetIcon, onResolveConflict: onResolveConflict,
                            blockViewState: blockViewState, blockReveal: blockReveal, onReady: onReady,
                            mentions: mentions)
                 .overlay(alignment: .top) { scrollEdgeFade }
@@ -94,6 +98,7 @@ struct PageTextEditor: NSViewRepresentable {
     let initialFocus: PageTextView.InitialFocus
     let linkedPages: [UUID: LinkedPage]
     let onOpenPage: @MainActor (UUID) -> Void
+    let onSubpageRequest: @MainActor (SubpageRequest) -> Void
     let onSetIcon: @MainActor (String?) -> Void
     let onResolveConflict: @MainActor (Conflict) -> Void
     let blockViewState: BlockViewStateStore?
@@ -119,6 +124,7 @@ struct PageTextEditor: NSViewRepresentable {
         }
         textView.linkedPages = linkedPages
         textView.onOpenPage = onOpenPage
+        textView.onSubpageRequest = onSubpageRequest
         textView.onSetIcon = onSetIcon
         textView.onResolveConflict = onResolveConflict
         mentions.apply(to: textView)
@@ -141,6 +147,7 @@ struct PageTextEditor: NSViewRepresentable {
         guard let textView = scrollView.documentView as? PageTextView else { return }
         textView.linkedPages = linkedPages
         textView.onOpenPage = onOpenPage
+        textView.onSubpageRequest = onSubpageRequest
         textView.onSetIcon = onSetIcon
         textView.onResolveConflict = onResolveConflict
         mentions.apply(to: textView)

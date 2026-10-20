@@ -3,8 +3,8 @@ import NotesCore
 /// Описатели всех типов блоков по порядку меню «/» (plan.md, Structure Decision).
 enum BlockKindRegistry {
     static let all: [BlockKindDescriptor] = [
-        .paragraph, .heading1, .heading2, .heading3, .bulletItem, .numberedItem, .checkbox, .pageLink,
-        .toggle, .quote, .callout, .divider, .code, .equation, .tableOfContents,
+        .paragraph, .heading1, .heading2, .heading3, .bulletItem, .numberedItem, .checkbox,
+        .toggle, .pageLink, .quote, .callout, .divider, .code, .equation, .tableOfContents,
         .image, .file, .video, .bookmark,
         .table, .tableRow, .tableColumn, .tableCell, .columnList, .column,
     ]
