@@ -23,6 +23,8 @@ public enum Palette {
     /// Линия разделителя на странице: в тёмной теме Notion 7.39 светлее рамок — ≈ rgb(55, 55, 53) по снимку 19.10.2026.
     public static let dividerLine = themed(light: .hex(0xE6E5E3), dark: .hex(0x373735))
     /// Строка дерева под мышью или выбранная, кнопки при наведении.
+    /// Закрашенная «★» избранной страницы в верхней полосе.
+    public static let favoriteStar = themed(light: .hex(0xE8A600), dark: .hex(0xF0B72F))
     public static let hoverBackground = themed(light: .rgba(33, 27, 23, 0.05), dark: .rgba(255, 255, 255, 0.055))
     public static let inlineCodeText = themed(light: .hex(0xCF5148), dark: .hex(0xCF5148))
     public static let inlineCodeBackground = themed(light: .rgba(33, 27, 23, 0.05), dark: .rgba(255, 255, 255, 0.055))
@@ -79,6 +81,16 @@ public enum Palette {
     public static let emojiSectionBarDivider = themed(light: .hex(0xF0EFED), dark: .hex(0x2C2C2B))
     /// «Добавить иконку» в шапке страницы: серая надпись и значок (тёмная — по снимку Notion 16.10.2026, светлая ≈).
     public static let pageHeaderButton = themed(light: .hex(0x9B9A97), dark: .hex(0x7D7A75))
+    /// Выключенный переключатель подменю (≈ по Notion).
+    public static let switchOff = themed(light: .rgba(135, 131, 120, 0.3), dark: .rgba(202, 196, 182, 0.3))
+    /// Заглушка обложки, чья картинка ещё не пришла с другого Mac, и неизвестной обложки галереи (≈ по Notion).
+    public static let placeholder = themed(light: .hex(0xF1F1EF), dark: .hex(0x2F2F2F))
+    /// Кнопки на обложке «Сменить», «Переместить»: тёмная полупрозрачная группа поверх картинки в обеих темах
+    /// (снимок Notion 7.39 `notion-cover-hover-buttons.png`).
+    public static let coverButtonBackground = NSColor.rgba(25, 25, 25, 0.88)
+    public static let coverButtonHover = NSColor.rgba(255, 255, 255, 0.1)
+    public static let coverButtonText = NSColor.rgba(255, 255, 255, 0.78)
+    public static let coverButtonBorder = NSColor.rgba(255, 255, 255, 0.12)
 
     /// Тень всплывающих панелей: четыре слоя, последний — тонкая рамка. В тёмной теме тень гуще, а рамка светлая:
     /// тёмная тень на тёмной странице не видна (≈ по Notion).

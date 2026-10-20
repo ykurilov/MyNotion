@@ -214,7 +214,7 @@ private struct PagesWindow: View {
             selectedPageId: model.openPageId,
             liveTitle: model.liveTitleOfOpenPage,
             trashEntries: model.trashEntries,
-            actions: treeActions,
+            actions: sidebarActions,
             trashActions: TrashActions(
                 restore: { model.restore($0) },
                 deleteForever: { model.deleteForever($0) },
@@ -222,29 +222,58 @@ private struct PagesWindow: View {
             ),
             newPage: { model.createPage() },
             syncBadge: model.sync.badge,
-            openSyncSettings: { model.isSyncSettingsShown = true }
+            openSyncSettings: { model.isSyncSettingsShown = true },
+            sections: sidebarSections,
+            collapsedSections: model.collapsedSections,
+            toggleSection: { model.toggleSection($0) }
         ) {
             SidebarSearchField(controller: model.search)
         }
     }
 
-    private var treeActions: PageTreeActions {
+    /// Что дерево и разделы панели просят сделать окно.
+    private var sidebarActions: PageTreeActions {
         var actions = PageTreeActions(
-            // Фокус остаётся в дереве: стрелки, Enter и ⌘⌫ дальше работают там.
-            select: { model.open(PageOpenRequest.fromClick($0), focus: .unchanged) },
-            rename: { model.rename($0, to: $1) },
-            move: { model.move($0, toParent: $1, at: $2) },
-            moveToTrash: { model.moveToTrash($0) },
-            addSubpage: { model.createSubpage(in: $0) },
-            collapsedPagesChanged: { model.setCollapsedPages($0) },
-            chooseIcon: { pageId, anchor in
-                guard let window = anchor.window else { return }
-                let rect = window.convertToScreen(anchor.convert(anchor.bounds, to: nil))
-                sidebarIconPicker.show(below: rect, in: window) { model.setIcon(pageId, to: $0) }
-            }
+                // Фокус остаётся в дереве: стрелки, Enter и ⌘⌫ дальше работают там.
+                select: { model.open(PageOpenRequest.fromClick($0), focus: .unchanged) },
+                rename: { model.rename($0, to: $1) },
+                move: { model.move($0, toParent: $1, at: $2) },
+                moveToTrash: { model.moveToTrash($0) },
+                addSubpage: { model.createSubpage(in: $0) },
+                collapsedPagesChanged: { model.setCollapsedPages($0) },
+                chooseIcon: { pageId, anchor in
+                    guard let window = anchor.window else { return }
+                    let rect = window.convertToScreen(anchor.convert(anchor.bounds, to: nil))
+                    sidebarIconPicker.show(below: rect, in: window) { model.setIcon(pageId, to: $0) }
+                }
         )
+        actions.moveFavorite = { model.moveFavorite($0, toIndex: $1) }
+        actions.rowMenuHandlers[.favorite] = { model.toggleFavorite($0) }
         actions.rowMenuHandlers[.openInNewTab] = { model.open(PageOpenRequest(pageId: $0, inNewTab: true)) }
+        actions.pageFlags = { [tree = model.tree] pageId in
+            let page = tree.page(pageId)
+            return (isTemplate: page?.isTemplate ?? false, isFavorite: page?.favorite != nil)
+        }
         return actions
+    }
+
+    /// «Недавние» и «Избранное» над деревом «Страницы»: пустой раздел не показывается.
+    private var sidebarSections: [SidebarSectionContent] {
+        let library = model.library
+        let actions = sidebarActions
+        var sections: [SidebarSectionContent] = []
+        if !library.recentPageIds.isEmpty {
+            sections.append(RecentSection.content(tree: model.tree, revision: model.treeRevision + library.sectionsRevision,
+                                                  pageIds: library.recentPageIds, selectedPageId: model.openPageId,
+                                                  liveTitle: model.liveTitleOfOpenPage, actions: actions,
+                                                  showAll: { model.showRecentPages() }))
+        }
+        if !library.favoritePageIds.isEmpty {
+            sections.append(FavoritesSection.content(tree: model.tree, revision: model.treeRevision + library.sectionsRevision,
+                                                     pageIds: library.favoritePageIds, selectedPageId: model.openPageId,
+                                                     liveTitle: model.liveTitleOfOpenPage, actions: actions))
+        }
+        return sections
     }
 
     /// Полоса вкладок окна (US3, contracts/pages-ui.md, «Верхняя полоса окна»).
@@ -339,6 +368,10 @@ private struct PagesWindow: View {
                 onReady: onEditorReady,
                 mentions: mentionSettings(pages: pages),
                 pageMenuItems: PageMenuItems.all(for: model, pageId: document.pageId),
+                topBarAccessory: AnyView(FavoriteStarButton(isFavorite: model.isFavorite(document.pageId)) {
+                    model.toggleFavorite(document.pageId)
+                }),
+                headerAddons: [PageCoverAddon.factory(model)],
                 scrollPlace: model.scrollPlace,
                 restoringScroll: model.restoringScroll
             )

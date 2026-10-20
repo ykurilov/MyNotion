@@ -13,6 +13,8 @@ public final class PageTreeOperations {
     /// Иконка страницы сменилась (в том числе отменой): страница и новая иконка. Вместо `onChange`, чтобы окно
     /// не перечитывало открытую страницу, а только подставило иконку.
     public var onIconChange: ((UUID, String?) -> Void)?
+    /// Обложка или вид страницы сменились (в том числе отменой): как `onIconChange`, без перечитывания страницы.
+    public var onAppearanceChange: ((UUID) -> Void)?
     /// Отмена не удалась (например, страницу уже стёрли навсегда).
     public var onUndoFailure: ((any Error) -> Void)?
 

@@ -68,8 +68,16 @@ public enum GalleryScene: Hashable, Sendable {
     case longBreadcrumb
     /// Верхняя полоса страницы справа: «•••» (003, этап 0; «☆» добавляет US2).
     case pageTopBar
+    /// «☆» в верхней полосе (US2): страница в избранном (закрашенная «★») или нет (пустая).
+    case favoriteStar(isFavorite: Bool)
+    /// Разделы «Недавние» и «Избранное» над деревом (US2).
+    case sidebarSections(GallerySidebarSections)
     /// Открытое меню «•••» страницы: поле «Найти действие…», пункты, подвал «Изменено…» (003, этап 0).
     case pageMenu
+    /// Обложка и вид страницы (US1).
+    case pageCover(GalleryPageCover)
+    /// Меню «•••» с открытым подменю «Вид страницы ›» (US1).
+    case pageMenuAppearance
     /// Синхронизация между Mac (US5): значок, «Две версии», настройки подключения, уведомление.
     case sync(GallerySync)
     /// Импорт из Notion (US6): карточка хода, вопрос о повторе той же выгрузки, отчёт.
@@ -133,6 +141,25 @@ public enum GalleryPageIcon: String, Hashable, Sendable, CaseIterable {
     case pickerSearch
 }
 
+public enum GalleryPageCover: String, Hashable, Sendable, CaseIterable {
+    /// Мышь над шапкой страницы без обложки: «Добавить иконку» и «Добавить обложку».
+    case addHover
+    /// Обложка из галереи и иконка, заходящая на неё.
+    case gallery
+    /// Своя картинка обложкой, без иконки.
+    case image
+    /// Мышь над обложкой: «Сменить обложку», «Переместить».
+    case hover
+    /// Режим «Переместить»: подсказка и «Сохранить положение», «Отмена».
+    case reposition
+    /// Окно «Сменить обложку», вкладки «Галерея» и «Загрузить».
+    case pickerGallery
+    case pickerUpload
+    /// Образец страницы мелким шрифтом и во всю ширину.
+    case smallText
+    case fullWidth
+}
+
 public enum GalleryTrash: String, Hashable, Sendable, CaseIterable {
     /// Строка «Корзина» внизу панели.
     case rowAtBottom
@@ -149,6 +176,16 @@ public enum GalleryTheme: String, Hashable, Sendable, CaseIterable, Codable {
     case dark
 
     public var title: String { self == .light ? "светлая" : "тёмная" }
+}
+
+/// Состояния разделов «Недавние» и «Избранное» (US2).
+public enum GallerySidebarSections: CaseIterable, Sendable {
+    /// Пять недавних со строкой «Показать все» и избранное, у одной избранной раскрыты подстраницы.
+    case recentAndFavorites
+    /// «Избранное» свёрнуто щелчком по заголовку.
+    case favoritesCollapsed
+    /// Меню строки избранной страницы: «Убрать из избранного».
+    case favoriteRowMenu
 }
 
 public struct GalleryWindowSize: Hashable, Sendable, Codable {
@@ -280,8 +317,32 @@ public enum GalleryCatalog {
                      "Полоса «Изменения не сохранены…» над страницей", section: "Страница", narrowToo: true),
         GalleryState("page-top-bar", .pageTopBar,
                      "Верхняя полоса страницы: путь слева, «•••» справа", section: "Страницы и навигация"),
+        GalleryState("favorite-star-empty", .favoriteStar(isFavorite: false),
+                     "«☆» в верхней полосе: страница не в избранном, подсказка «Добавить в избранное»", section: "Страницы и навигация"),
+        GalleryState("favorite-star-filled", .favoriteStar(isFavorite: true),
+                     "«★» закрашена жёлтым: страница в избранном", section: "Страницы и навигация"),
         GalleryState("page-menu", .pageMenu,
                      "Меню «•••»: «Найти действие…», «Удалить в корзину», подвал «Изменено…, N слов»", section: "Страницы и навигация"),
+        GalleryState("page-menu-appearance", .pageMenuAppearance,
+                     "Меню «•••» → «Вид страницы ›»: «Мелкий шрифт», «Широкая страница»", section: "Страницы и навигация"),
+    ] + pageCoverStates
+
+    private static let pageCoverStates: [GalleryState] = [
+        GalleryState("page-cover-add-hover", .pageCover(.addHover), "Шапка без обложки под мышью: «Добавить иконку», «Добавить обложку»",
+                     section: "Страницы и навигация"),
+        GalleryState("page-cover-gallery", .pageCover(.gallery), "Обложка из галереи, иконка заходит на неё", section: "Страницы и навигация",
+                     narrowToo: true),
+        GalleryState("page-cover-image", .pageCover(.image), "Своя картинка обложкой, страница без иконки", section: "Страницы и навигация"),
+        GalleryState("page-cover-hover", .pageCover(.hover), "Мышь над обложкой: «Сменить обложку», «Переместить»",
+                     section: "Страницы и навигация"),
+        GalleryState("page-cover-reposition", .pageCover(.reposition),
+                     "«Переместить»: «Перетащите картинку…», «Сохранить положение», «Отмена»", section: "Страницы и навигация"),
+        GalleryState("page-cover-picker-gallery", .pageCover(.pickerGallery), "Окно «Сменить обложку», «Галерея»: цвета и градиенты",
+                     section: "Страницы и навигация"),
+        GalleryState("page-cover-picker-upload", .pageCover(.pickerUpload), "Окно «Сменить обложку», «Загрузить»",
+                     section: "Страницы и навигация"),
+        GalleryState("page-small-text", .pageCover(.smallText), "Образец страницы мелким шрифтом", section: "Страницы и навигация"),
+        GalleryState("page-full-width", .pageCover(.fullWidth), "Образец страницы во всю ширину", section: "Страницы и навигация"),
     ]
 
     private static let blockStates: [GalleryState] = textBlockKinds.flatMap { kind in
@@ -365,6 +426,13 @@ public enum GalleryCatalog {
                      section: "Боковая панель", narrowToo: true),
         GalleryState("sidebar-search-nothing-found", .search(nothingFound: true),
                      "Поиск слова, которого нет: «Ничего не найдено» и пояснение про корзину по центру карточки под полем", section: "Боковая панель"),
+        GalleryState("sidebar-recent-and-favorites", .sidebarSections(.recentAndFavorites),
+                     "Над «Страницами»: «Недавние» (пять строк и «Показать все») и «Избранное»; открытая страница подсвечена",
+                     section: "Боковая панель", narrowToo: true),
+        GalleryState("sidebar-favorites-collapsed", .sidebarSections(.favoritesCollapsed),
+                     "«Избранное» свёрнуто: остался заголовок, «Недавние» и «Страницы» на месте", section: "Боковая панель"),
+        GalleryState("sidebar-favorite-row-menu", .sidebarSections(.favoriteRowMenu),
+                     "Меню строки в «Избранном»: «Убрать из избранного» среди остальных пунктов", section: "Боковая панель"),
         GalleryState("sidebar-hidden", .sidebarHidden,
                      "Боковая панель свёрнута шторкой: шторка у светофора, страница во всю ширину", section: "Боковая панель",
                      narrowToo: true),

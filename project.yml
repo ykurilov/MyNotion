@@ -120,6 +120,9 @@ targets:
       # Пробы TextKit 2 этапа 0 (research R16) открывают настоящий редактор страницы.
       - package: MyNotionKit
         product: PageEditor
+      # US1: настоящая обложка в пробе вида страницы.
+      - package: MyNotionKit
+        product: PageCover
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion.performancetests

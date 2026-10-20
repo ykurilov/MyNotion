@@ -83,21 +83,21 @@ description: "Задачи: страницы и навигация"
 
 ### Tests for User Story 1
 
-- [ ] T025 [P] [US1] `PK/Tests/PageCoverTests/PageCoverOperationsTests.swift`: поставить из галереи, случайная — из списка contracts/pages-ui.md, своя картинка (не картинка и > 100 МБ — ошибка, обложка прежняя), сдвиг, убрать; каждая — одна правка с ⌘Z; файл обложки не стирается, пока на него ссылаются
-- [ ] T026 [P] [US1] `PK/Tests/PageEditorTests/PageLayoutSettingsTests.swift`: ширина колонки обычной и широкой страницы при ширинах окна 900, 1200, 1800; шкала 14/16 для абзаца, заголовков, кода, таблицы; название не меняется
-- [ ] T027 [P] [US1] `PK/Tests/MarkdownExportTests/CoverExportTests.swift` + `PK/Tests/NotionImportTests/CoverImportTests.swift`: комментарий и файл `Обложка.*` дословно по contracts/sync-v3-and-export.md; обратный импорт ставит обложку (SHA-256 тот же); отчёт импорта Notion называет потерю обложек
-- [ ] T028 [P] [US1] XCUITest `UITests/PageHeaderTests.swift`: наведение на шапку — «Добавить обложку»; щелчок — обложка; «Сменить обложку» → «Загрузить» картинку из тестовой папки; «Переместить» → «Сохранить положение»; «Убрать»; «•••» → «Вид страницы» → оба переключателя; перезапуск — всё на месте; ⌘Z
+- [x] T025 [P] [US1] `PK/Tests/PageCoverTests/PageCoverOperationsTests.swift`: поставить из галереи, случайная — из списка contracts/pages-ui.md, своя картинка (не картинка и > 100 МБ — ошибка, обложка прежняя), сдвиг, убрать; каждая — одна правка с ⌘Z; файл обложки не стирается, пока на него ссылаются
+- [x] T026 [P] [US1] `PK/Tests/PageEditorTests/PageLayoutSettingsTests.swift`: ширина колонки обычной и широкой страницы при ширинах окна 900, 1200, 1800; шкала 14/16 для абзаца, заголовков, кода, таблицы; название не меняется
+- [x] T027 [P] [US1] `PK/Tests/MarkdownExportTests/CoverExportTests.swift` + `PK/Tests/NotionImportTests/CoverImportTests.swift`: комментарий и файл `Обложка.*` дословно по contracts/sync-v3-and-export.md; обратный импорт ставит обложку (SHA-256 тот же); отчёт импорта Notion называет потерю обложек
+- [x] T028 [P] [US1] XCUITest `UITests/PageHeaderTests.swift`: наведение на шапку — «Добавить обложку»; щелчок — обложка; «Сменить обложку» → «Загрузить» картинку из тестовой папки; «Переместить» → «Сохранить положение»; «Убрать»; «•••» → «Вид страницы» → оба переключателя; перезапуск — всё на месте; ⌘Z
 
 ### Implementation for User Story 1
 
-- [ ] T029 [US1] Галерея в `PK/Sources/PageCover/CoverGallery.swift`: id и цвета, снятые с `notion.so/images/page-cover/<id>.png` (картинки — только для сверки, в сборку не кладутся), рисование заливки и градиента; сверка состава с окном «Change cover» живого Notion (одним замком)
-- [ ] T030 [US1] Вид обложки в `PK/Sources/PageCover/CoverView.swift` в месте «обложка» шапки: высота, заполнение по ширине, `offset`, уменьшенная копия через ImageIO, заглушка не пришедшего файла; иконка заходит на обложку; цифры шапки — со снимка `notion-cover.png` и живого Notion, правка ≈ в contracts/pages-ui.md
-- [ ] T031 [US1] Кнопки при наведении («Добавить обложку» в месте «кнопки»; «Сменить обложку», «Переместить» на обложке), окно «Сменить обложку» (`PK/Sources/PageCover/CoverPickerView.swift`: «Галерея», «Загрузить» с выбором файла и перетаскиванием, «Убрать»), режим «Переместить» (`CoverRepositionMode.swift`)
-- [ ] T032 [US1] Операции в `PK/Sources/NotesCore/Tree/PageTreeOperations+Appearance.swift`: обложка, сдвиг, вид страницы — с отменой; своя картинка — через хранилище вложений 002 (T025)
-- [ ] T033 [US1] «Вид страницы» в `PK/Sources/PageEditor/PageLayout/` (ширина и шкала шрифтов для текста и видов 002, перекладка без пересоздания редактора) и пункт `App/MainWindow/PageMenu/PageAppearanceMenuItem.swift` с переключателями (T026)
-- [ ] T034 [US1] Выгрузка обложки в `PK/Sources/MarkdownExport/` и чтение в `PK/Sources/NotionImport/` (T027)
-- [ ] T035 [US1] Состояния галереи: шапка без обложки при наведении, обложка галереи и картинки, при наведении, «Переместить», окно «Сменить обложку» (обе вкладки), мелкий шрифт, широкая — в обеих темах; сверка с `visual-reference/` и живым Notion
-- [ ] T036 [US1] Затронутые тесты зелёные; замеры: набор на «богатой» странице с обложкой, мелким шрифтом и широкой ≤ 50 мс p95, переключение ≤ 200 мс, переход и запуск — со снимками; запись в quickstart.md; коммит
+- [x] T029 [US1] Галерея в `PK/Sources/PageCover/CoverGallery.swift`: id и цвета, снятые с `notion.so/images/page-cover/<id>.png` (картинки — только для сверки, в сборку не кладутся), рисование заливки и градиента; сверка состава с окном «Change cover» живого Notion (одним замком)
+- [x] T030 [US1] Вид обложки в `PK/Sources/PageCover/CoverView.swift` в месте «обложка» шапки: высота, заполнение по ширине, `offset`, уменьшенная копия через ImageIO, заглушка не пришедшего файла; иконка заходит на обложку; цифры шапки — со снимка `notion-cover.png` и живого Notion, правка ≈ в contracts/pages-ui.md
+- [x] T031 [US1] Кнопки при наведении («Добавить обложку» в месте «кнопки»; «Сменить обложку», «Переместить» на обложке), окно «Сменить обложку» (`PK/Sources/PageCover/CoverPickerView.swift`: «Галерея», «Загрузить» с выбором файла и перетаскиванием, «Убрать»), режим «Переместить» (`CoverRepositionMode.swift`)
+- [x] T032 [US1] Операции в `PK/Sources/NotesCore/Tree/PageTreeOperations+Appearance.swift`: обложка, сдвиг, вид страницы — с отменой; своя картинка — через хранилище вложений 002 (T025)
+- [x] T033 [US1] «Вид страницы» в `PK/Sources/PageEditor/PageLayout/` (ширина и шкала шрифтов для текста и видов 002, перекладка без пересоздания редактора) и пункт `App/MainWindow/PageMenu/PageAppearanceMenuItem.swift` с переключателями (T026)
+- [x] T034 [US1] Выгрузка обложки в `PK/Sources/MarkdownExport/` и чтение в `PK/Sources/NotionImport/` (T027)
+- [x] T035 [US1] Состояния галереи: шапка без обложки при наведении, обложка галереи и картинки, при наведении, «Переместить», окно «Сменить обложку» (обе вкладки), мелкий шрифт, широкая — в обеих темах; сверка с `visual-reference/` и живым Notion
+- [x] T036 [US1] Затронутые тесты зелёные; замеры: набор на «богатой» странице с обложкой, мелким шрифтом и широкой ≤ 50 мс p95, переключение ≤ 200 мс, переход и запуск — со снимками; запись в quickstart.md; коммит
 
 **Checkpoint**: US1 работает и проверяется сама.
 
@@ -111,18 +111,18 @@ description: "Задачи: страницы и навигация"
 
 ### Tests for User Story 2
 
-- [ ] T037 [P] [US2] `PK/Tests/NotesCoreTests/FavoriteOperationsTests.swift` по contracts/page-operations.md, «Избранное»: добавить в конец, убрать, переставить (меняется ключ только у перетащенной), корзина прячет и возвращает, удаление навсегда; ⌘Z каждого
-- [ ] T038 [P] [US2] `PK/Tests/NavigationTests/VisitRecorderTests.swift` с подменёнными часами: 2 с на странице — запись; уход за 1,9 с — нет; правка раньше 2 с — запись; повторное открытие той же — одна запись; `updatedAt` не меняется
-- [ ] T039 [P] [US2] XCUITest `UITests/FavoritesRecentsTests.swift`: ☆ у двух страниц и «Добавить в избранное» в меню панели у третьей; перетаскивание в разделе; ☆ ещё раз — убрана; открыть 6 страниц по 3 с — 5 в «Недавних» по порядку; страница в корзину — пропала из обоих разделов, вернуть — снова в избранном; щелчок по заголовку раздела сворачивает; перезапуск — всё на месте
+- [x] T037 [P] [US2] `PK/Tests/NotesCoreTests/FavoriteOperationsTests.swift` по contracts/page-operations.md, «Избранное»: добавить в конец, убрать, переставить (меняется ключ только у перетащенной), корзина прячет и возвращает, удаление навсегда; ⌘Z каждого
+- [x] T038 [P] [US2] `PK/Tests/NavigationTests/VisitRecorderTests.swift` с подменёнными часами: 2 с на странице — запись; уход за 1,9 с — нет; правка раньше 2 с — запись; повторное открытие той же — одна запись; `updatedAt` не меняется
+- [x] T039 [P] [US2] XCUITest `UITests/FavoritesRecentsTests.swift`: ☆ у двух страниц и «Добавить в избранное» в меню панели у третьей; перетаскивание в разделе; ☆ ещё раз — убрана; открыть 6 страниц по 3 с — 5 в «Недавних» по порядку; страница в корзину — пропала из обоих разделов, вернуть — снова в избранном; щелчок по заголовку раздела сворачивает; перезапуск — всё на месте
 
 ### Implementation for User Story 2
 
-- [ ] T040 [US2] Операции в `PK/Sources/NotesCore/Tree/PageTreeOperations+Favorites.swift` (T037)
-- [ ] T041 [US2] Запись открытий `PK/Sources/Navigation/VisitRecorder.swift` по событию «страница открыта / ушли» из T021; правка в странице — сразу (T038)
-- [ ] T042 [US2] Разделы `PK/Sources/PageTree/SidebarSections/RecentSection.swift` (5 строк и «Показать все» — действие панели `showAllRecent`, его открывает US3) и `FavoritesSection.swift` (строки дерева с раскрытием подстраниц, перетаскивание); свёртывание разделов с хранением в `window_state.collapsedSidebarSections`
-- [ ] T043 [US2] ☆ в верхней полосе (`App/MainWindow/PageMenu/FavoriteStarButton.swift`) и пункт `PK/Sources/PageTree/PageRowMenu/FavoriteRowMenuItem.swift`
-- [ ] T044 [US2] Состояния галереи: панель с «Недавними» и «Избранным», свёрнутый раздел, ☆ закрашенная и пустая, меню строки — в обеих темах; сверка с `notion-sidebar-tabs-topbar.png`
-- [ ] T045 [US2] Затронутые тесты зелёные; замеры перехода (запись открытия вне пути перехода) и запуска; запись в quickstart.md; коммит
+- [x] T040 [US2] Операции в `PK/Sources/NotesCore/Tree/PageTreeOperations+Favorites.swift` (T037)
+- [x] T041 [US2] Запись открытий `PK/Sources/Navigation/VisitRecorder.swift` по событию «страница открыта / ушли» из T021; правка в странице — сразу (T038)
+- [x] T042 [US2] Разделы `PK/Sources/PageTree/SidebarSections/RecentSection.swift` (5 строк и «Показать все» — действие панели `showAllRecent`, его открывает US3) и `FavoritesSection.swift` (строки дерева с раскрытием подстраниц, перетаскивание); свёртывание разделов с хранением в `window_state.collapsedSidebarSections`
+- [x] T043 [US2] ☆ в верхней полосе (`App/MainWindow/PageMenu/FavoriteStarButton.swift`) и пункт `PK/Sources/PageTree/PageRowMenu/FavoriteRowMenuItem.swift`
+- [x] T044 [US2] Состояния галереи: панель с «Недавними» и «Избранным», свёрнутый раздел, ☆ закрашенная и пустая, меню строки — в обеих темах; сверка с `notion-sidebar-tabs-topbar.png`
+- [x] T045 [US2] Затронутые тесты зелёные; замеры перехода (запись открытия вне пути перехода) и запуска; запись в quickstart.md; коммит
 
 **Checkpoint**: US2 работает и проверяется сама.
 

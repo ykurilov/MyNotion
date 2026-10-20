@@ -24,6 +24,9 @@ public struct PageTreeSidebar<SearchField: View>: View {
     let openSyncSettings: () -> Void
     /// Разделы над «Страницами» (003): по порядку описателей `SidebarSection`.
     let sections: [SidebarSectionContent]
+    /// Свёрнутые разделы (щелчок по заголовку); «Страницы» не сворачивается.
+    let collapsedSections: Set<SidebarSectionID>
+    let toggleSection: (SidebarSectionID) -> Void
 
     @State private var trashPanel = TrashPanelController()
 
@@ -31,6 +34,7 @@ public struct PageTreeSidebar<SearchField: View>: View {
                 liveTitle: String?, trashEntries: [Page], actions: PageTreeActions, trashActions: TrashActions,
                 newPage: @escaping () -> Void, syncBadge: SyncBadgeState? = nil,
                 openSyncSettings: @escaping () -> Void = {}, sections: [SidebarSectionContent] = [],
+                collapsedSections: Set<SidebarSectionID> = [], toggleSection: @escaping (SidebarSectionID) -> Void = { _ in },
                 @ViewBuilder searchField: () -> SearchField) {
         self.tree = tree
         self.treeRevision = treeRevision
@@ -44,6 +48,8 @@ public struct PageTreeSidebar<SearchField: View>: View {
         self.syncBadge = syncBadge
         self.openSyncSettings = openSyncSettings
         self.sections = sections
+        self.collapsedSections = collapsedSections
+        self.toggleSection = toggleSection
         self.searchField = searchField()
     }
 
@@ -57,11 +63,17 @@ public struct PageTreeSidebar<SearchField: View>: View {
                     .padding(.top, Metrics.SearchField.topSpacing)
                     .padding(.bottom, Metrics.SearchField.bottomSpacing)
             }
-            ForEach(SidebarSection.ordered(sections.map(\.section)).filter { $0.id != .pages }) { section in
-                groupHeader(section.title)
-                sections.first { $0.id == section.id }?.content
+            let shownSections = SidebarSection.ordered(sections.map(\.section)).filter { $0.id != .pages }
+            ForEach(Array(shownSections.enumerated()), id: \.element.id) { index, section in
+                SectionHeader(title: section.title, isCollapsed: collapsedSections.contains(section.id)) { toggleSection(section.id) }
+                    .accessibilityIdentifier("sidebar-section-\(section.id.rawValue)")
+                    .padding(.top, index == 0 ? 0 : Metrics.Sidebar.sectionTopSpacing)
+                if !collapsedSections.contains(section.id) {
+                    sections.first { $0.id == section.id }?.content
+                }
             }
             groupHeader(SidebarSection.pages.title)
+                .padding(.top, shownSections.isEmpty ? 0 : Metrics.Sidebar.sectionTopSpacing)
             PageOutline(tree: tree, treeRevision: treeRevision, collapsedPageIds: collapsedPageIds,
                         selectedPageId: selectedPageId, liveTitle: liveTitle, actions: actions)
             footerDivider
@@ -129,6 +141,37 @@ public struct PageTreeSidebar<SearchField: View>: View {
     }
 }
 
+/// Заголовок сворачиваемого раздела: серый, как «Страницы»; под мышью справа от названия появляется стрелка.
+private struct SectionHeader: View {
+    let title: String
+    let isCollapsed: Bool
+    let toggle: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: toggle) {
+            HStack(spacing: 4) {
+                Text(title)
+                    .font(Font(Typography.sidebarGroupHeader.font))
+                    .foregroundStyle(Color(nsColor: Palette.sidebarGroupHeader))
+                if isHovered {
+                    Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                        .font(.system(size: Metrics.Sidebar.sectionChevronSize, weight: .semibold))
+                        .foregroundStyle(Color(nsColor: Palette.sidebarGroupHeader))
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, Metrics.Sidebar.rowHorizontalPadding)
+            .frame(height: Metrics.Sidebar.rowHeight, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .accessibilityLabel(title)
+        .accessibilityHint(isCollapsed ? "Развернуть раздел" : "Свернуть раздел")
+    }
+}
+
 extension PageTreeSidebar where SearchField == EmptyView {
     /// Панель без поля поиска.
     public init(tree: PageTreeSnapshot, treeRevision: Int, collapsedPageIds: Set<UUID>, selectedPageId: UUID?,
@@ -179,26 +222,32 @@ struct SidebarRowButtonStyle: ButtonStyle {
     }
 }
 
-/// `NSOutlineView` дерева внутри SwiftUI.
+/// `NSOutlineView` дерева внутри SwiftUI. Тот же список показывает и разделы над деревом: «Избранное» и «Недавние».
 struct PageOutline: NSViewRepresentable {
     let tree: PageTreeSnapshot
+    /// Меняется, когда список нужно перечитать (у разделов — вместе с их данными).
     let treeRevision: Int
     let collapsedPageIds: Set<UUID>
     let selectedPageId: UUID?
     let liveTitle: String?
     let actions: PageTreeActions
+    var kind: PageOutlineDataSource.Kind = .tree
+    /// Разделы: страницы корня списка и раскрытые ветки.
+    var rootPageIds: [UUID] = []
+    var expandedPageIds: Set<UUID> = []
+    var expandedPagesChanged: (Set<UUID>) -> Void = { _ in }
 
     final class Coordinator {
         let dataSource: PageOutlineDataSource
         var shownRevision: Int?
 
-        @MainActor init(actions: PageTreeActions) {
-            dataSource = PageOutlineDataSource(actions: actions)
+        @MainActor init(actions: PageTreeActions, kind: PageOutlineDataSource.Kind) {
+            dataSource = PageOutlineDataSource(actions: actions, kind: kind)
         }
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(actions: actions)
+        Coordinator(actions: actions, kind: kind)
     }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -218,9 +267,11 @@ struct PageOutline: NSViewRepresentable {
         let coordinator = context.coordinator
         let dataSource = coordinator.dataSource
         dataSource.actions = actions
+        dataSource.expandedPagesChanged = expandedPagesChanged
         if coordinator.shownRevision != treeRevision {
             coordinator.shownRevision = treeRevision
-            dataSource.show(tree, collapsedPageIds: collapsedPageIds, selectedPageId: selectedPageId)
+            dataSource.show(tree, collapsedPageIds: collapsedPageIds, selectedPageId: selectedPageId,
+                            rootPageIds: rootPageIds, expandedPageIds: expandedPageIds)
         } else {
             dataSource.select(selectedPageId)
         }
