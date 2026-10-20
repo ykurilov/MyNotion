@@ -12,7 +12,7 @@ extension MainWindowModel {
         openDocuments.saveAll()
         do {
             try versions.recorder.recordPending(pageId)
-            guard let page = try tree.page(pageId) ?? store.pageContent(pageId)?.page else { return }
+            guard let page = try store.pageContent(pageId)?.page else { return }
             versionHistory = try VersionHistoryModel(pageId: pageId, page: page, versions: versions.versions)
         } catch {
             showVersionError("Не удалось открыть историю версий: \(SaveStatus.reason(for: error))")

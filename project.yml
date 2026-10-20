@@ -123,6 +123,9 @@ targets:
       # US1: настоящая обложка в пробе вида страницы.
       - package: MyNotionKit
         product: PageCover
+      # US6: замер истории версий и набора во время записи версий.
+      - package: MyNotionKit
+        product: PageVersions
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion.performancetests

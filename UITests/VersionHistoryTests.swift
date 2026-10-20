@@ -1,7 +1,7 @@
 import XCTest
 
-/// История версий (US6, quickstart.md): правки с ускоренными часами записи (`--versions-quick`: версия через 1 с тишины,
-/// не чаще раза в 2 с) → «•••» → «История версий»; группировка; раскрытие версии; ранняя версия с подсветкой →
+/// История версий (US6, quickstart.md): образец с 200 версиями за трое суток (`--generate-versions-sample`) и своя правка
+/// с ускоренной записью (`--versions-quick`) → «•••» → «История версий»; группировка; раскрытие версии; ранняя версия с подсветкой →
 /// «Восстановить» → «Восстановить эту версию» → полоса «Страница восстановлена»; ⌘Z — как было; Esc закрывает.
 final class VersionHistoryTests: XCTestCase {
     override func setUpWithError() throws {
@@ -12,59 +12,67 @@ final class VersionHistoryTests: XCTestCase {
     func testHistoryRestoreAndUndo() throws {
         let library = try UITestLibrary.make(for: self)
         let app = XCUIApplication()
-        app.launchArguments = ["--database", library.databaseURL.path, "--versions-quick", "-MyNotion.recentColors", "",
-                               "-NSWindow Frame pages-AppWindow-1", UITestLibrary.startWindowFrame]
+        app.launchArguments = ["--database", library.databaseURL.path, "--generate-versions-sample", "--versions-quick",
+                               "-MyNotion.recentColors", "", "-NSWindow Frame pages-AppWindow-1", UITestLibrary.startWindowFrame]
         app.launch()
-        app.createPage(titled: "История")
+        let row = app.outlines["page-tree"].outlineRows.containing(NSPredicate(format: "value == %@", "Замер: история версий")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10), "Нет страницы образца истории")
+        row.click()
+        XCTAssertTrue(waitFor { bodyText(app).contains("Абзац 1:") },
+                      "Страница образца не открылась: путь «\(app.staticTexts["page-breadcrumb"].exists ? app.staticTexts["page-breadcrumb"].label : "-")», текст «\(bodyText(app).prefix(120))», текстов \(app.textViews.count)")
 
-        // Три правки с паузами: у каждой своя версия.
-        for (index, text) in ["первая правка", " вторая правка", " третья правка"].enumerated() {
-            if index > 0 { pause(3.5) }
-            app.typeText(text)
-        }
-        pause(2)
-        XCTAssertTrue(bodyText(app).contains("третья правка"))
+        // Своя правка: в конец страницы.
+        app.pageBody.click()
+        app.typeKey(.downArrow, modifierFlags: .command)
+        app.typeText(" правка теста")
+        XCTAssertTrue(waitFor { bodyText(app).contains("правка теста") })
 
         openHistory(app)
         let rows = app.descendants(matching: .any).matching(identifier: "version-row")
-        XCTAssertTrue(waitFor { rows.count >= 3 }, "Версий меньше трёх: \(rows.count)")
-        let minuteCount = rows.count
+        XCTAssertTrue(waitFor { rows.count >= 10 }, "Мало строк при «1 минута»: \(rows.count)")
         XCTAssertTrue(app.staticTexts["Текущая версия"].exists, "У самой новой нет метки «Текущая версия»")
         XCTAssertFalse(app.descendants(matching: .any)["version-begin-restore"].isEnabled, "«Восстановить» у текущей включена")
+        let firstPreviewTime = textOf(app.staticTexts["version-preview-time"])
+        XCTAssertFalse(firstPreviewTime.isEmpty, "Нет строки времени версии")
 
-        // Группировка «1 час» — все правки в одном часе: одна строка; обратно «1 минута».
+        // Группировка «1 час»: вторая строка — уже не соседняя минута, а прошлый час; обратно «1 минута».
+        let secondByMinute = rowTime(rows, 1)
+        XCTAssertFalse(secondByMinute.isEmpty, "Не прочитать время строки")
         chooseGrouping(app, "version-grouping-60")
-        XCTAssertTrue(waitFor { rows.count == 1 }, "«1 час» не объединил версии: \(rows.count)")
+        XCTAssertTrue(waitFor { rowTime(rows, 1) != secondByMinute }, "«1 час» не объединил версии: \(secondByMinute)")
         chooseGrouping(app, "version-grouping-1")
-        XCTAssertTrue(waitFor { rows.count == minuteCount })
+        XCTAssertTrue(waitFor { rowTime(rows, 1) == secondByMinute })
+        let minuteRows = rows.count
 
-        // Самая ранняя версия: «Восстановить» включена; раскрытие — что менялось.
-        rows.element(boundBy: minuteCount - 1).click()
+        // Прошлая версия: другая строка времени, «Восстановить» включена; раскрытие — что менялось.
+        rows.element(boundBy: 5).coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5)).click()
         let restore = app.descendants(matching: .any)["version-begin-restore"]
         XCTAssertTrue(waitFor { restore.isEnabled }, "«Восстановить» не включилась у прошлой версии")
-        rows.element(boundBy: minuteCount - 1).descendants(matching: .any)["version-expand"].firstMatch.click()
+        XCTAssertNotEqual(textOf(app.staticTexts["version-preview-time"]), firstPreviewTime)
+        tap(app.descendants(matching: .any)["version-expand"].firstMatch)
         XCTAssertTrue(app.descendants(matching: .any)["version-changes"].waitForExistence(timeout: 5), "Раскрытие не показало изменения")
-        app.descendants(matching: .any)["version-all-versions"].click()
+        add(XCTAttachment(screenshot: app.screenshot()))
+        tap(app.descendants(matching: .any)["version-all-versions"].firstMatch)
         XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 5))
 
         // «Восстановить» → окно «Что будет восстановлено» → «Восстановить эту версию».
-        restore.click()
+        tap(restore)
         let confirm = app.descendants(matching: .any)["version-restore-confirm"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 5), "Окно «Что будет восстановлено» не открылось")
         XCTAssertTrue(app.staticTexts["Что будет восстановлено"].exists)
-        confirm.click()
+        tap(confirm)
         XCTAssertTrue(app.descendants(matching: .any)["version-restored-banner"].waitForExistence(timeout: 5), "Нет полосы «Страница восстановлена»")
         XCTAssertFalse(app.descendants(matching: .any)["version-history"].exists, "История не закрылась после восстановления")
-        XCTAssertTrue(waitFor { !bodyText(app).contains("вторая правка") }, "Страница не стала как в ранней версии: \(bodyText(app))")
+        XCTAssertTrue(waitFor { !bodyText(app).contains("правка теста") }, "Страница не стала как в прошлой версии")
         add(XCTAttachment(screenshot: app.screenshot()))
 
         // ⌘Z — страница как до восстановления.
         app.typeKey("z", modifierFlags: .command)
-        XCTAssertTrue(waitFor { bodyText(app).contains("третья правка") }, "⌘Z не вернул страницу: \(bodyText(app))")
+        XCTAssertTrue(waitFor { bodyText(app).contains("правка теста") }, "⌘Z не вернул страницу")
 
-        // История снова открывается; прошлые версии на месте; Esc закрывает.
+        // История снова открывается, версии на месте; Esc закрывает.
         openHistory(app)
-        XCTAssertTrue(waitFor { rows.count >= minuteCount + 1 }, "Версии пропали после восстановления: \(rows.count)")
+        XCTAssertTrue(waitFor { rows.count >= minuteRows && rows.element(boundBy: 1).exists }, "Версии пропали после восстановления: \(rows.count)")
         app.typeKey(.escape, modifierFlags: [])
         XCTAssertTrue(waitFor { !app.descendants(matching: .any)["version-history"].exists }, "Esc не закрыл историю")
     }
@@ -88,13 +96,31 @@ final class VersionHistoryTests: XCTestCase {
         item.click()
     }
 
+    /// Щелчок по точке: окно истории — SwiftUI поверх видов AppKit, и XCUITest считает его кнопки «не нажимаемыми»,
+    /// хотя мышь до них доходит.
     @MainActor
-    private func bodyText(_ app: XCUIApplication) -> String {
-        app.pageBody.value as? String ?? ""
+    private func tap(_ element: XCUIElement) {
+        XCTAssertTrue(element.waitForExistence(timeout: 5), "Нет \(element)")
+        element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
     }
 
-    private func pause(_ seconds: TimeInterval) {
-        RunLoop.current.run(until: Date().addingTimeInterval(seconds))
+    /// Время строки списка (первый текст строки).
+    @MainActor
+    private func rowTime(_ rows: XCUIElementQuery, _ index: Int) -> String {
+        textOf(rows.element(boundBy: index).staticTexts.firstMatch)
+    }
+
+    /// Текст надписи SwiftUI: в `value`, у некоторых — в `label`.
+    @MainActor
+    private func textOf(_ element: XCUIElement) -> String {
+        guard element.exists else { return "" }
+        return (element.value as? String).flatMap { $0.isEmpty ? nil : $0 } ?? element.label
+    }
+
+    @MainActor
+    private func bodyText(_ app: XCUIApplication) -> String {
+        let body = app.pageBody
+        return body.exists ? body.value as? String ?? "" : ""
     }
 
     @MainActor

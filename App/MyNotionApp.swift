@@ -45,7 +45,6 @@ struct MyNotionApp: App {
             if options.uiGalleryURL != nil { galleryLibrary = try UIGalleryRunner.prepareLibrary(in: store) }
             // Служебные запуски (галерея, замеры, снимки) с сервером не связываются.
             let pages = PagesLibrary(store: store, startsSync: options.allowsSync, reminders: reminders, versionTiming: options.versionTiming)
-            if options.generates003Sample { PageVersionsSampleLaunch.ensure(in: pages) }
             if options.uiGalleryURL != nil || options.generatesRichSample || options.generates003Sample {
                 SampleMedia.materialize(in: store, attachments: pages.attachments)
             }
@@ -119,6 +118,10 @@ struct MyNotionApp: App {
             // Картинки ветки — те же файлы-образцы, что у картинок «богатой» страницы (`SampleMedia`).
             let imageProps = BlockKinds.richPageParts.first { $0.name == BlockKind.image.rawValue }?.blocks.first?.props ?? .empty
             try PagesNavigationSample(imageProps: imageProps).ensure(in: store)
+        }
+        if options.generates003Sample || options.generatesVersionsSample {
+            // До первого окна: окно открывает страницу образца, как любую страницу базы.
+            PageVersionsSampleLaunch.ensure(in: store)
         }
         if options.typingBenchmarkURL != nil {
             try TypingBenchmark.ensureHugePage(in: store)

@@ -51,6 +51,8 @@ struct LaunchOptions {
     var videoMemoryURL: URL?
     /// `--versions-quick`: версии пишутся через 1 с тишины и не чаще раза в 2 с — UI-тест истории без минутных ожиданий.
     var versionTiming = PageVersionRecorder.Timing.standard
+    /// `--generate-versions-sample`: только страница «Замер: история версий» с 200 версиями (UI-тест US6).
+    var generatesVersionsSample = false
     /// Служебный запуск — в фоне: не забирает фокус и не всплывает.
     let presence: LaunchPresence
 
@@ -73,6 +75,7 @@ struct LaunchOptions {
             case "--generate-visual-sample": generatesVisualSample = true
             case "--generate-rich-sample": generatesRichSample = true
             case "--generate-003-sample": generates003Sample = true
+            case "--generate-versions-sample": generatesVersionsSample = true
             case "--versions-quick": versionTiming = PageVersionRecorder.Timing(minimumInterval: 2, quietPeriod: 1)
             case "--launch-report": launchReportURL = remaining.popFirst().map(Self.fileURL)
             case "--window-snapshot": windowSnapshotURL = remaining.popFirst().map(Self.fileURL)

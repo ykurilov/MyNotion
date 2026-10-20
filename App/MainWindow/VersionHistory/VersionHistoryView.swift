@@ -83,7 +83,8 @@ struct VersionHistoryView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .keyboardShortcut(.cancelAction)
+            // Пока открыто окно восстановления, Esc закрывает его, а не историю.
+            .keyboardShortcut(history.isRestoreDialogShown ? nil : .cancelAction)
             .accessibilityLabel("Закрыть историю версий")
             .accessibilityIdentifier("version-history-close")
         }
@@ -196,8 +197,8 @@ private struct VersionRow: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { history.select(version.id) }
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
         .accessibilityIdentifier("version-row")
     }
 }
