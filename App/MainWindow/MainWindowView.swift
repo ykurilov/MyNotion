@@ -50,6 +50,9 @@ struct MainWindowView: View {
         // Напоминания ставятся после готовности редактора, не при запуске (research R11); служебные запуски — без них.
         if options.allowsSync, case .success(let library) = library { library.reminders.start() }
         LaunchMilestones.editorReady(reportTo: options.launchReportURL)
+        // Первое заполнение индекса обратных ссылок — один раз, в фоне, когда редактор уже на экране (research R10).
+        // Замер заполнения запускает его сам.
+        if case .success(let library) = library, options.backlinkBenchmarkURL == nil { BacklinkIndexStarter.start(store: library.store) }
         if let snapshotURL = options.windowSnapshotURL {
             WindowSnapshot.capture(to: snapshotURL, hoveredSidebarRow: options.hoveredSidebarRow)
         }
@@ -67,6 +70,9 @@ struct MainWindowView: View {
         }
         if let benchmarkURL = options.searchBenchmarkURL, case .success(let library) = library {
             SearchBenchmark.editorReady(model: model ?? library.firstWindow, reportTo: benchmarkURL)
+        }
+        if let benchmarkURL = options.backlinkBenchmarkURL, case .success(let library) = library {
+            BacklinkBenchmark.editorReady(store: library.store, reportTo: benchmarkURL)
         }
         if let tabsURL = options.tabsBenchmarkURL, case .success(let library) = library {
             TabsBenchmark.editorReady(model: model ?? library.firstWindow, reportTo: tabsURL)
@@ -385,7 +391,7 @@ private struct PagesWindow: View {
                 topBarAccessory: AnyView(FavoriteStarButton(isFavorite: model.isFavorite(document.pageId)) {
                     model.toggleFavorite(document.pageId)
                 }),
-                headerAddons: [PageCoverAddon.factory(model)],
+                headerAddons: [PageCoverAddon.factory(model), BacklinksAddon.factory(model)],
                 scrollPlace: model.scrollPlace,
                 restoringScroll: model.restoringScroll,
                 templates: TemplateSettings(templates: model.templateChoices(forPage: document.pageId),

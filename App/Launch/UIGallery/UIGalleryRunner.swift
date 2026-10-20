@@ -451,6 +451,9 @@ final class UIGalleryRunner {
         case .pageCover(let state):
             return await showPageCover(state)
 
+        case .backlinks(let state):
+            return await showBacklinks(state)
+
         case .notionImport(let state):
             guard let controller = AppDelegate.importController else { return "импорт из Notion не подключён" }
             await open(library.sample.page.id)
@@ -556,6 +559,9 @@ final class UIGalleryRunner {
             GalleryVersionHistoryScene.tearDown(model: model)
         case .templates:
             GalleryTemplatesScene.tearDown(model: model)
+            await settle()
+        case .backlinks(.list):
+            NSApp.windows.first { $0.isVisible && $0.className.contains("Popover") }?.close()
             await settle()
         case .favoriteStar, .sidebarSections:
             if model.collapsedSections.contains(.favorites) { model.toggleSection(.favorites) }
@@ -695,6 +701,52 @@ final class UIGalleryRunner {
             await settle()
             return nil
         }
+    }
+
+    /// Обратные ссылки (US5): «цель» с тремя источниками; строка появляется, когда счёт прочитан в фоне.
+    private func showBacklinks(_ state: GalleryBacklinks) async -> String? {
+        guard let targetId = backlinksPageId() else { return "страница с обратными ссылками не создана" }
+        await open(targetId)
+        var row: BacklinksRow?
+        for _ in 0..<40 {
+            row = Self.view(identified: "backlinks-row", in: window) as? BacklinksRow
+            if row != nil { break }
+            await settle()
+        }
+        guard let row else { return "строка обратных ссылок не появилась" }
+        if state == .list {
+            row.onPress?(row)
+            for _ in 0..<40 where !NSApp.windows.contains(where: { $0.isVisible && $0.className.contains("Popover") }) { await settle() }
+            await settle()
+        }
+        return nil
+    }
+
+    private var backlinksTargetId: UUID?
+
+    /// Страница «Обратные ссылки» с иконкой и три страницы, где на неё ссылаются: упоминание в тексте, во вложенной странице и блок-ссылка.
+    private func backlinksPageId() -> UUID? {
+        if let backlinksTargetId { return backlinksTargetId }
+        let id = try? model.store.write { transaction -> UUID in
+            func filled(_ page: Page, _ make: (FractionalSortKey) -> Block) throws {
+                for block in try transaction.blocks(ofPage: page.id) { try transaction.deleteBlock(block.id) }
+                try transaction.insertBlock(make(.between(nil, nil)))
+            }
+            let target = try transaction.createPage(title: "Обратные ссылки", icon: "🎯")
+            let project = try transaction.createPage(title: "Проект «Весна»", icon: "🌱")
+            let notes = try transaction.createPage(title: "Заметки со встречи", parentId: project.id)
+            let idea = try transaction.createPage(title: "Идея про отпуск", icon: "🏖️")
+            func mention(_ prefix: String) -> InlineText {
+                InlineText(prefix + "\u{FFFC}", runs: [StyledRun(start: (prefix as NSString).length, length: 1, style: .mention(target.id))])
+            }
+            try filled(project) { Block(pageId: project.id, text: mention("Подробности — в "), sortKey: $0) }
+            try filled(notes) { Block(pageId: notes.id, text: mention("Договорились: "), sortKey: $0) }
+            try filled(idea) { Block(pageId: idea.id, kind: .pageLink, linkedPageId: target.id, sortKey: $0) }
+            return target.id
+        }
+        model.library.reloadTree()
+        backlinksTargetId = id
+        return id
     }
 
     /// Ждать, пока картинка обложки нарисуется (копия грузится в фоне).
