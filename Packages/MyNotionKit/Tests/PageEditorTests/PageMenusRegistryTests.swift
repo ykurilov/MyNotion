@@ -72,9 +72,34 @@ struct PageMenusRegistryTests {
         var ran: [UUID] = []
         let item = PageMenuItem(slot: .trash, title: { _ in "Удалить в корзину" }, kind: .action({ ran.append($0.page.id) }, shortcut: "⌘⌫"))
         let view = PageMenuView(rows: PageMenuLayout.rows([item], context: context), context: context)
-        let row = try #require(view.subviews.compactMap { $0 as? PageMenuRowView }.first)
+        let row = try #require(view.actions.rowViews.first)
         row.press()
         #expect(ran == [context.page.id])
+    }
+
+    @Test("Подменю «Вид страницы ›» — по середине своей строки, заходит на меню на 4, как у Notion 7.39 (T101 № 11)")
+    func appearanceSubmenuPlace() {
+        // Меню у правого края экрана; строка «Вид страницы» — в 4 от краёв меню.
+        let menu = NSRect(x: 1176, y: 300, width: Metrics.PageMenu.width, height: 400)
+        let row = NSRect(x: menu.minX + 4, y: 560, width: menu.width - 8, height: 29)
+        let size = NSSize(width: Metrics.PageMenu.submenuWidth, height: 64)
+        let card = PageMenuSubmenu.cardFrame(size: size, row: row, screen: NSRect(x: 0, y: 0, width: 1440, height: 900))
+        #expect(card.midY == row.midY, "подменю \(card) не по середине строки \(row)")
+        #expect(menu.minX - card.maxX == -4, "подменю должно заходить на меню на 4: \(card)")
+        // Слева нет места — справа, тоже с заходом на 4.
+        let left = NSRect(x: 4, y: 560, width: menu.width - 8, height: 29)
+        let right = PageMenuSubmenu.cardFrame(size: size, row: left, screen: NSRect(x: 0, y: 0, width: 1440, height: 900))
+        #expect(right.minX == left.maxX)
+    }
+
+    @Test("Меню «•••»: значки у всех пунктов, кроме поиска и подвала; ширина 256, как у Notion")
+    func pageMenuIcons() throws {
+        let items = [PageMenuItem(slot: .findAction, title: { _ in "Найти действие…" }, kind: .search), Self.item(.duplicate, "Дублировать"),
+                     Self.item(.moveTo, "Переместить в"), Self.item(.versionHistory, "История версий"), Self.item(.template, "Сделать шаблоном"),
+                     Self.item(.trash, "Удалить в корзину"), PageMenuItem(slot: .footer, title: { _ in "Изменено" }, kind: .footer)]
+        let view = PageMenuView(rows: PageMenuLayout.rows(items, context: context), context: context)
+        #expect(view.fittingSize.width == 256)
+        #expect(view.actions.rowViews.allSatisfy { $0.action.icon != nil })
     }
 
     // MARK: Места шапки

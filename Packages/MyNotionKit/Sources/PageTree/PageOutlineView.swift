@@ -8,7 +8,7 @@ import VisualStyle
 final class PageOutlineView: NSOutlineView {
     var onRename: ((_ row: Int) -> Void)?
     var onTrash: ((_ row: Int) -> Void)?
-    var onContextMenu: ((_ row: Int) -> NSMenu?)?
+    var onContextMenu: ((_ row: Int, _ locationInWindow: NSPoint) -> Void)?
     /// Подписка снимается в `deinit` — он не привязан к главному потоку.
     nonisolated(unsafe) private var clipObserver: (any NSObjectProtocol)?
 
@@ -79,10 +79,11 @@ final class PageOutlineView: NSOutlineView {
         return NSRect(x: leading, y: frame.minY, width: max(0, bounds.width - leading), height: frame.height)
     }
 
-    /// Меню по правой кнопке — то же, что у «⋯».
+    /// Меню по правой кнопке — то же, что у «⋯», от точки щелчка (как у Notion).
     override func menu(for event: NSEvent) -> NSMenu? {
         let row = row(at: convert(event.locationInWindow, from: nil))
-        return row >= 0 ? onContextMenu?(row) : nil
+        if row >= 0 { onContextMenu?(row, event.locationInWindow) }
+        return nil
     }
 
     override func keyDown(with event: NSEvent) {

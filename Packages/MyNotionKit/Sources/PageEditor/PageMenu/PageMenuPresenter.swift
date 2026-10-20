@@ -27,213 +27,78 @@ public final class PageMenuPresenter {
     public func close() { card.close() }
 }
 
-/// Строки меню «•••»: поле поиска, пункты, линии, подвал.
+/// Строки меню «•••» — меню действий (`ActionMenuView`) из описателей: значки по местам, подменю «Вид страницы ›».
 @MainActor
-final class PageMenuView: NSView, NSSearchFieldDelegate {
-    private let context: PageMenuContext
-    private var searchField: NSSearchField?
-    private var entries: [(row: NSView, title: String?)] = []
-    var onChoose: (() -> Void)?
+final class PageMenuView: NSView {
+    let actions: ActionMenuView
+    var onChoose: (() -> Void)? {
+        get { actions.onChoose }
+        set { actions.onChoose = newValue }
+    }
     /// Подменю с переключателями («Вид страницы ›»).
     let submenu = PageMenuSubmenu()
 
     init(rows: [PageMenuRow], context: PageMenuContext) {
-        self.context = context
-        super.init(frame: .zero)
-        for row in rows {
+        let submenu = self.submenu
+        let entries: [ActionMenuEntry] = rows.map { row in
             switch row {
-            case .separator:
-                entries.append((PageMenuSeparatorView(), nil))
-            case .item(let item):
-                entries += makeRows(item)
+            case .separator: return .separator
+            case .item(let item): return Self.entry(item, context: context, submenu: submenu)
             }
         }
-        entries.forEach { addSubview($0.row) }
-        frame.size = fittingSize
-        layoutRows()
+        actions = ActionMenuView(entries: entries, width: Metrics.PageMenu.width)
+        super.init(frame: NSRect(origin: .zero, size: actions.fittingSize))
+        actions.onFilter = { [weak submenu] in submenu?.close() }
+        actions.autoresizingMask = [.width, .height]
+        actions.frame = bounds
+        addSubview(actions)
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
 
     override var isFlipped: Bool { true }
+    override var fittingSize: NSSize { actions.fittingSize }
 
-    private func makeRows(_ item: PageMenuItem) -> [(NSView, String?)] {
+    private static func entry(_ item: PageMenuItem, context: PageMenuContext, submenu: PageMenuSubmenu) -> ActionMenuEntry {
         let title = item.title(context)
-        let context = context
+        let identifier = "page-menu-\(item.slot)"
         switch item.kind {
         case .search:
-            let field = NSSearchField()
-            field.placeholderString = title
-            field.delegate = self
-            field.focusRingType = .none
-            field.setAccessibilityIdentifier("page-menu-search")
-            searchField = field
-            return [(field, nil)]
+            return .search(placeholder: title, identifier: "page-menu-search")
         case .footer:
-            let label = NSTextField(labelWithString: title)
-            label.font = .systemFont(ofSize: Typography.popupMenuShortcut.fontSize)
-            label.textColor = Palette.textSecondary
-            label.setAccessibilityIdentifier("page-menu-footer")
-            return [(label, nil)]
+            return .footer(title, identifier: "page-menu-footer")
         case .action(let perform, let shortcut):
-            let row = PageMenuRowView(title: title, hint: shortcut) { [weak self] in
-                perform(context)
-                self?.onChoose?()
-            }
-            row.setAccessibilityIdentifier("page-menu-\(item.slot)")
-            return [(row, title)]
+            return .action(ActionMenuAction(title: title, icon: item.slot.icon, hint: shortcut, identifier: identifier) { _ in perform(context) })
         case .toggles(let toggles):
             // Как у Notion: строка «Вид страницы ›» открывает сбоку подменю с переключателями; переключение меню не закрывает.
-            let row = PageMenuRowView(title: title, hint: "›") { [weak self] in
-                guard let self else { return }
-                self.submenu.show(toggles, context: context, besides: self.entries.first { $0.title == title }?.row)
-            }
-            row.onHover = { [weak row] in row?.press() }
-            row.setAccessibilityIdentifier("page-menu-\(item.slot)")
-            return [(row, title)]
+            return .action(ActionMenuAction(title: title, icon: item.slot.icon, opensSubmenu: true, identifier: identifier) { row in
+                submenu.show(toggles, context: context, besides: row)
+            })
         }
     }
 
-    override var fittingSize: NSSize {
-        let height = entries.filter { !$0.row.isHidden }.reduce(2 * Metrics.PopupMenu.verticalPadding) { $0 + rowHeight($1.row) }
-        return NSSize(width: Metrics.PageMenu.width, height: height)
-    }
-
-    private func rowHeight(_ row: NSView) -> CGFloat {
-        switch row {
-        case is PageMenuSeparatorView: Metrics.PopupMenu.groupSeparatorHeight
-        case is NSSearchField: Metrics.PopupMenu.rowHeight
-        case is PageMenuRowView: Metrics.PopupMenu.compactRowHeight
-        default: Metrics.PopupMenu.compactRowHeight
-        }
-    }
-
-    private func layoutRows() {
-        var y = Metrics.PopupMenu.verticalPadding
-        let inset = Metrics.PopupMenu.rowInset
-        for (row, _) in entries where !row.isHidden {
-            let height = rowHeight(row)
-            switch row {
-            case is NSSearchField:
-                row.frame = NSRect(x: Metrics.PageMenu.searchInset, y: y + 4, width: bounds.width - 2 * Metrics.PageMenu.searchInset, height: height - 8)
-            case is NSTextField:
-                row.frame = NSRect(x: inset + Metrics.PopupMenu.rowHorizontalPadding, y: y + (height - 16) / 2, width: bounds.width - 2 * inset, height: 16)
-            default:
-                row.frame = NSRect(x: inset, y: y, width: bounds.width - 2 * inset, height: height)
-            }
-            y += height
-        }
-    }
-
-    override func layout() {
-        super.layout()
-        layoutRows()
-    }
-
-    func focusSearch() {
-        if let searchField { window?.makeFirstResponder(searchField) }
-    }
-
-    func controlTextDidChange(_ notification: Notification) {
-        filter(searchField?.stringValue ?? "")
-    }
+    func focusSearch() { actions.focusSearch() }
 
     /// Оставить пункты, в названии которых есть запрос; при запросе линии и подвал прячутся.
-    func filter(_ query: String) {
-        let query = query.trimmingCharacters(in: .whitespaces)
-        submenu.close()
-        for (row, title) in entries where !(row is NSSearchField) {
-            if let title {
-                row.isHidden = !query.isEmpty && title.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) == nil
-            } else {
-                row.isHidden = !query.isEmpty
-            }
-        }
-        needsLayout = true
-    }
+    func filter(_ query: String) { actions.filter(query) }
 
     /// Названия видимых пунктов — для проверок.
-    var visibleTitles: [String] { entries.filter { !$0.row.isHidden }.compactMap(\.title) }
+    var visibleTitles: [String] { actions.visibleTitles }
 }
 
-/// Пункт меню: название, серая подсказка справа, подложка под мышью.
-@MainActor
-final class PageMenuRowView: NSView {
-    let title: String
-    private let action: () -> Void
-    private let titleLabel: NSTextField
-    private let hintLabel: NSTextField
-    private var isHovered = false { didSet { needsDisplay = true } }
-    /// Мышь пришла на пункт (подменю открывается наведением).
-    var onHover: (() -> Void)?
-
-    init(title: String, hint: String?, action: @escaping () -> Void) {
-        self.title = title
-        self.action = action
-        titleLabel = NSTextField(labelWithString: title)
-        hintLabel = NSTextField(labelWithString: hint ?? "")
-        super.init(frame: .zero)
-        titleLabel.font = Typography.popupMenuTitle.font
-        titleLabel.textColor = Palette.textPrimary
-        hintLabel.font = .systemFont(ofSize: Typography.popupMenuShortcut.fontSize)
-        hintLabel.textColor = Palette.textSecondary
-        addSubview(titleLabel)
-        addSubview(hintLabel)
-        setAccessibilityElement(true)
-        setAccessibilityRole(.menuItem)
-        setAccessibilityLabel(title)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
-
-    override var isFlipped: Bool { true }
-
-    override func layout() {
-        super.layout()
-        let padding = Metrics.PopupMenu.rowHorizontalPadding
-        let hint = hintLabel.intrinsicContentSize
-        hintLabel.frame = NSRect(x: bounds.width - padding - hint.width, y: (bounds.height - hint.height) / 2, width: hint.width, height: hint.height)
-        let titleSize = titleLabel.intrinsicContentSize
-        titleLabel.frame = NSRect(x: padding, y: (bounds.height - titleSize.height) / 2, width: hintLabel.frame.minX - 2 * padding, height: titleSize.height)
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        guard isHovered else { return }
-        Palette.hoverBackground.setFill()
-        NSBezierPath(roundedRect: bounds.insetBy(dx: Metrics.PopupMenu.rowHighlightInset, dy: 0), xRadius: Metrics.PopupMenu.rowCornerRadius,
-                     yRadius: Metrics.PopupMenu.rowCornerRadius).fill()
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        trackingAreas.forEach(removeTrackingArea)
-        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        isHovered = true
-        onHover?()
-    }
-    override func mouseExited(with event: NSEvent) { isHovered = false }
-    override func mouseUp(with event: NSEvent) {
-        if bounds.contains(convert(event.locationInWindow, from: nil)) { press() }
-    }
-
-    func press() { action() }
-
-    override func accessibilityPerformPress() -> Bool {
-        press()
-        return true
-    }
-}
-
-/// Линия между группами меню.
-final class PageMenuSeparatorView: NSView {
-    override func draw(_ dirtyRect: NSRect) {
-        Palette.border.setFill()
-        NSRect(x: Metrics.PopupMenu.rowHorizontalPadding, y: bounds.midY, width: bounds.width - 2 * Metrics.PopupMenu.rowHorizontalPadding, height: 1).fill()
+extension PageMenuSlot {
+    /// Значок пункта (SF Symbols) — близкий к значку того же пункта у Notion 7.39.
+    var icon: String? {
+        switch self {
+        case .findAction, .footer: nil
+        case .duplicate: "square.on.square"
+        case .moveTo: "arrow.turn.up.right"
+        case .versionHistory: "clock.arrow.circlepath"
+        case .appearance: "textformat"
+        case .template: "doc.on.doc"
+        case .trash: "trash"
+        }
     }
 }
 

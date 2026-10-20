@@ -28,20 +28,23 @@ public enum PageTreePreview {
         return true
     }
 
-    /// Меню строки страницы в разделе «Избранное»: открыто на экране, пока `whileOpen` не отработает (снимок),
-    /// и после него закрывается. Меню системное — показывается, пока не закрыто; `false` — строки в разделе нет.
+    /// Меню строки страницы в разделе «Избранное» от «⋯» строки: открыто на экране, пока `whileOpen` не отработает
+    /// (снимок), и после него закрывается; `false` — строки в разделе нет.
     @discardableResult
-    public static func showFavoriteRowMenu(ofPage pageId: UUID, in window: NSWindow, whileOpen: @escaping @MainActor () -> Void) -> Bool {
+    public static func showFavoriteRowMenu(ofPage pageId: UUID, in window: NSWindow, whileOpen: @escaping @MainActor () -> Void) async -> Bool {
         guard let outline = window.contentView.flatMap({ findOutline(identifier: "favorites-tree", in: $0) }),
               let source = outline.dataSource as? PageOutlineDataSource,
               let row = (0..<outline.numberOfRows).first(where: { (outline.item(atRow: $0) as? PageOutlineItem)?.pageId == pageId }),
-              let rowView = outline.rowView(atRow: row, makeIfNecessary: false) else { return false }
-        let menu = source.pageMenu(for: pageId)
-        // Пока меню открыто, цикл событий в режиме отслеживания: очередь GCD стоит, нужен таймер во всех режимах.
-        let timer = Timer(timeInterval: 0.6, target: MenuCloser(menu: menu, whileOpen: whileOpen),
-                          selector: #selector(MenuCloser.fire), userInfo: nil, repeats: false)
-        RunLoop.main.add(timer, forMode: .common)
-        menu.popUp(positioning: nil, at: NSPoint(x: 120, y: rowView.bounds.maxY + 4), in: rowView)
+              let cell = outline.view(atColumn: 0, row: row, makeIfNecessary: false) as? PageTreeCellView else { return false }
+        (outline.rowView(atRow: row, makeIfNecessary: false) as? PageTreeRowView)?.isHovered = true
+        cell.isRowHovered = true
+        cell.layoutSubtreeIfNeeded()
+        source.rowMenu.show(source.pageMenu(for: pageId), from: cell.menuButton)
+        try? await Task.sleep(for: .milliseconds(400))
+        whileOpen()
+        source.rowMenu.close()
+        cell.isRowHovered = false
+        (outline.rowView(atRow: row, makeIfNecessary: false) as? PageTreeRowView)?.isHovered = false
         return true
     }
 
@@ -66,22 +69,5 @@ public enum PageTreePreview {
         // Дерево «Страницы», а не разделы «Избранное» и «Недавние» над ним.
         if let outline = view as? PageOutlineView, outline.accessibilityIdentifier() == "page-tree" { return outline }
         return view.subviews.lazy.compactMap(findOutline).first
-    }
-}
-
-/// Цель таймера: снять снимок и закрыть открытое меню.
-@MainActor
-private final class MenuCloser: NSObject {
-    private let menu: NSMenu
-    private let whileOpen: @MainActor () -> Void
-
-    init(menu: NSMenu, whileOpen: @escaping @MainActor () -> Void) {
-        self.menu = menu
-        self.whileOpen = whileOpen
-    }
-
-    @objc func fire() {
-        whileOpen()
-        menu.cancelTracking()
     }
 }

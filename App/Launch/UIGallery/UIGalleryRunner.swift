@@ -404,7 +404,7 @@ final class UIGalleryRunner {
             case .favoritesCollapsed: model.toggleSection(.favorites)
             case .favoriteRowMenu:
                 await settle()
-                guard PageTreePreview.showFavoriteRowMenu(ofPage: sectionPages.favorites[1], in: window, whileOpen: { [self] in
+                guard await PageTreePreview.showFavoriteRowMenu(ofPage: sectionPages.favorites[1], in: window, whileOpen: { [self] in
                     capturedWhileShowing = try? CompositeWindowSnapshot.png(of: window)
                 }) else { return "строки в «Избранном» нет" }
                 if capturedWhileShowing == nil { return "меню строки не снялось" }
