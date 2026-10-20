@@ -16,7 +16,11 @@ final class MainWindowModel {
     @ObservationIgnored let library: PagesLibrary
     @ObservationIgnored let treeOperations: PageTreeOperations
     /// Окно на экране: по нему библиотека знает, в каком окне работают сейчас.
-    @ObservationIgnored weak var window: NSWindow?
+    @ObservationIgnored weak var window: NSWindow? {
+        // В строке светофора система тянет окно раньше, чем вкладка получает мышь: окно само не двигается,
+        // его тянут пустые места строки (`WindowDragArea`), а вкладки перетаскиваются (US3).
+        didSet { window?.isMovable = false }
+    }
     private(set) var collapsedPageIds: Set<UUID> = []
     private(set) var sidebarWidth: Double = Metrics.Sidebar.defaultWidth
     /// Боковая панель спрятана шторкой (⌘⌥S).

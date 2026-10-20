@@ -130,7 +130,8 @@ struct RecentPagesView: View {
         .accessibilityIdentifier("recent-pages")
         .onAppear {
             rows = source.recent()
-            isFieldFocused = true
+            // Следующий оборот цикла: поле уже в окне, и фокус уходит из текста страницы в него.
+            DispatchQueue.main.async { isFieldFocused = true }
         }
         .onChange(of: query) { _, query in
             rows = query.trimmingCharacters(in: .whitespaces).isEmpty ? source.recent() : source.search(query)

@@ -166,6 +166,8 @@ private struct PagesWindow: View {
                 HStack(spacing: 0) {
                     sidebar
                         .frame(width: model.sidebarWidth)
+                        // Строка светофора над панелью тянет окно (окно за фон не тянется — US3, вкладки).
+                        .background(alignment: .top) { WindowDragArea().frame(height: Metrics.Window.titleBarHeight) }
                     sidebarEdge
                 }
                 .transition(.move(edge: .leading))

@@ -56,6 +56,7 @@ struct TabStripView: View {
                     .frame(height: Tabs.separatorWidth)
                     .offset(y: Tabs.stripHeight)
                 HStack(spacing: 0) {
+                    WindowDragArea().frame(width: leadingInset, height: Tabs.stripHeight)
                     navigation
                     separator
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
@@ -65,9 +66,9 @@ struct TabStripView: View {
                         .accessibilityIdentifier("tab-new")
                         .padding(.leading, Tabs.plusCenterFromTabsEnd - Metrics.Window.toolbarButtonSize / 2)
                         .frame(height: Tabs.stripHeight)
-                    Spacer(minLength: 0)
+                    // Пустое место полосы тянет окно, как у Notion.
+                    WindowDragArea().frame(maxWidth: .infinity, maxHeight: Tabs.stripHeight)
                 }
-                .padding(.leading, leadingInset)
             }
         }
         .frame(height: Metrics.Window.titleBarHeight)
@@ -100,21 +101,29 @@ struct TabStripView: View {
     private func tab(_ item: TabStripItem, at index: Int, width: CGFloat) -> some View {
         let isDragged = dragged?.id == item.id
         return HStack(spacing: 0) {
-            TabView(item: item, width: width, isHovered: (hoveredTabId ?? previewHoveredTabId) == item.id, close: { actions.close(index) })
-                .onHover { inside in
-                    if inside { hoveredTabId = item.id } else if hoveredTabId == item.id { hoveredTabId = nil }
+            let isHovered = (hoveredTabId ?? previewHoveredTabId) == item.id
+            TabView(item: item, width: width)
+                // Поверх вкладки: в строке светофора место под видом SwiftUI система считает «тянуть окно».
+                .overlay(TabMouseArea(
+                    onHover: { inside in
+                        if inside { hoveredTabId = item.id } else if hoveredTabId == item.id { hoveredTabId = nil }
+                    },
+                    onClick: { actions.activate(index) },
+                    onDrag: { dragged = (item.id, $0) },
+                    onDragEnd: { translation in
+                        dragged = nil
+                        let step = width + Tabs.separatorWidth
+                        let target = min(max(0, index + Int((translation / step).rounded())), items.count - 1)
+                        if target != index { actions.move(index, target) }
+                    }
+                ))
+                .overlay(alignment: .trailing) {
+                    if isHovered {
+                        CloseTabButton { actions.close(index) }
+                            .padding(.trailing, Tabs.closeCenterFromTrailing - Tabs.closeButtonSize / 2)
+                            .frame(height: Tabs.stripHeight)
+                    }
                 }
-                .onTapGesture { actions.activate(index) }
-                .gesture(
-                    DragGesture(minimumDistance: 4)
-                        .onChanged { drag in dragged = (item.id, drag.translation.width) }
-                        .onEnded { drag in
-                            dragged = nil
-                            let step = width + Tabs.separatorWidth
-                            let target = min(max(0, index + Int((drag.translation.width / step).rounded())), items.count - 1)
-                            if target != index { actions.move(index, target) }
-                        }
-                )
             separator
         }
         .offset(x: isDragged ? dragged?.translation ?? 0 : 0)
@@ -130,12 +139,10 @@ struct TabStripView: View {
     }
 }
 
-/// Одна вкладка: иконка, название (у активной — «…», у остальных — затухание), «×» под мышью.
+/// Одна вкладка: иконка, название (у активной — «…», у остальных — затухание).
 private struct TabView: View {
     let item: TabStripItem
     let width: CGFloat
-    let isHovered: Bool
-    let close: () -> Void
 
     private typealias Tabs = Metrics.Tabs
 
@@ -148,24 +155,16 @@ private struct TabView: View {
         .padding(.trailing, item.isActive ? Tabs.closeCenterFromTrailing + Tabs.closeButtonSize / 2 + 4 : Tabs.closeCenterFromTrailing)
         .frame(width: width, height: item.isActive ? Tabs.stripHeight + Tabs.separatorWidth : Tabs.stripHeight, alignment: .leading)
         .clipped()
-        .overlay(alignment: .trailing) {
-            if isHovered {
-                CloseTabButton(action: close)
-                    .padding(.trailing, Tabs.closeCenterFromTrailing - Tabs.closeButtonSize / 2)
-                    .frame(height: Tabs.stripHeight)
-            }
-        }
         .frame(height: Tabs.stripHeight, alignment: .top)
         .background(alignment: .top) {
             if item.isActive {
                 Color(nsColor: Palette.pageBackground).frame(height: Tabs.stripHeight + Tabs.separatorWidth)
             }
         }
-        .contentShape(Rectangle())
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("window-tab")
+        // Активная — своим идентификатором: признак «выбрана» доступность SwiftUI отдаёт ненадёжно.
+        .accessibilityIdentifier(item.isActive ? "window-tab-active" : "window-tab")
         .accessibilityLabel(item.title)
-        .accessibilityValue(item.isActive ? "активная" : "")
         .accessibilityAddTraits(item.isActive ? .isSelected : [])
     }
 
@@ -234,5 +233,66 @@ private struct CloseTabButton: View {
         .help("Закрыть вкладку")
         .accessibilityLabel("Закрыть вкладку")
         .accessibilityIdentifier("tab-close")
+    }
+}
+
+/// Мышь у вкладки — видом AppKit: в строке светофора жест перетаскивания SwiftUI двигал бы окно, а этот вид окно
+/// не двигает. Щелчок — по отпусканию без сдвига; сдвиг больше 4 — перетаскивание вкладки.
+private struct TabMouseArea: NSViewRepresentable {
+    var onHover: (Bool) -> Void
+    var onClick: () -> Void
+    var onDrag: (CGFloat) -> Void
+    var onDragEnd: (CGFloat) -> Void
+
+    func makeNSView(context: Context) -> MouseView { MouseView() }
+
+    func updateNSView(_ view: MouseView, context: Context) {
+        view.handlers = self
+    }
+
+    final class MouseView: NSView {
+        var handlers: TabMouseArea?
+        private var start: NSPoint?
+        private var isDragging = false
+
+        override var mouseDownCanMoveWindow: Bool { false }
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            trackingAreas.forEach(removeTrackingArea)
+            addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
+                                           owner: self))
+        }
+
+        override func mouseEntered(with event: NSEvent) { handlers?.onHover(true) }
+        override func mouseExited(with event: NSEvent) { handlers?.onHover(false) }
+
+        override func mouseDown(with event: NSEvent) {
+            start = event.locationInWindow
+            isDragging = false
+        }
+
+        override func mouseDragged(with event: NSEvent) {
+            guard let start else { return }
+            let translation = event.locationInWindow.x - start.x
+            if abs(translation) > 4 { isDragging = true }
+            if isDragging { handlers?.onDrag(translation) }
+        }
+
+        override func mouseUp(with event: NSEvent) {
+            guard let start else { return }
+            self.start = nil
+            if isDragging { handlers?.onDragEnd(event.locationInWindow.x - start.x) } else { handlers?.onClick() }
+        }
+    }
+}
+
+/// Пустое место строки светофора: тянет окно. Само окно за фон не тянется — иначе тянулись бы и вкладки.
+struct WindowDragArea: View {
+    var body: some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .gesture(WindowDragGesture())
     }
 }
