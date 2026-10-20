@@ -71,6 +71,7 @@ struct TabStripView: View {
             }
         }
         .frame(height: Metrics.Window.titleBarHeight)
+        .clipped()
         .background(Color(nsColor: Palette.tabStripBackground))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("tab-strip")
@@ -146,6 +147,7 @@ private struct TabView: View {
         .padding(.leading, Tabs.contentInset)
         .padding(.trailing, item.isActive ? Tabs.closeCenterFromTrailing + Tabs.closeButtonSize / 2 + 4 : Tabs.closeCenterFromTrailing)
         .frame(width: width, height: item.isActive ? Tabs.stripHeight + Tabs.separatorWidth : Tabs.stripHeight, alignment: .leading)
+        .clipped()
         .overlay(alignment: .trailing) {
             if isHovered {
                 CloseTabButton(action: close)
@@ -197,9 +199,10 @@ private struct TabView: View {
         if item.isActive {
             text.truncationMode(.tail)
         } else {
-            // Не влезло — конец затухает, как у Notion.
-            text.fixedSize()
-                .frame(maxWidth: .infinity, alignment: .leading)
+            // Не влезло — конец затухает, как у Notion. Название во всю длину лежит поверх места и обрезается им.
+            Color.clear
+                .frame(maxWidth: .infinity, maxHeight: Tabs.titleFontSize * 1.5)
+                .overlay(alignment: .leading) { text.fixedSize() }
                 .clipped()
                 .mask(alignment: .leading) {
                     HStack(spacing: 0) {

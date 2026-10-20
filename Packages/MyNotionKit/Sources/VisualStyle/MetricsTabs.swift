@@ -18,7 +18,7 @@ extension Metrics {
         public static let collapsedSidebarLeading: CGFloat = Window.sidebarToggleCenterX + Window.toolbarButtonSize / 2 + 2
         /// Вкладка: 199 и линия справа; когда не влезают — сжимаются поровну до `minimumTabWidth`.
         public static let tabWidth: CGFloat = 199
-        public static let minimumTabWidth: CGFloat = 72
+        public static let minimumTabWidth: CGFloat = 40
         /// Иконка ≈ 15 с 16 от левого края, название — с 16 без иконки и с 39 с иконкой; шрифт 14.
         public static let contentInset: CGFloat = 16
         public static let iconSize: CGFloat = 15

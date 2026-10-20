@@ -30,7 +30,7 @@ struct RecentPagesSource {
         ((try? store.recentPages(limit: Self.limit)) ?? []).compactMap { page in
             guard tree.page(page.id) != nil else { return nil }
             return RecentPageRow(pageId: page.id, title: page.title.isEmpty ? Page.untitledTitle : page.title, icon: page.icon,
-                                 path: tree.ancestors(of: page.id).map(\.pathTitle).joined(separator: " / "), visitedAt: page.visitedAt)
+                                 path: tree.ancestors(of: page.id).map { $0.title.isEmpty ? Page.untitledTitle : $0.title }.joined(separator: " / "), visitedAt: page.visitedAt)
         }
     }
 
