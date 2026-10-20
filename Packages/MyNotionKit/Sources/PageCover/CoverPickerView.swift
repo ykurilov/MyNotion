@@ -112,7 +112,7 @@ public final class CoverPickerView: NSView {
     public enum Tab: Equatable { case gallery, upload }
 
     static let shadowMargin: CGFloat = 24
-    static let uploadHint = "Картинки шире 1500 пикселей смотрятся лучше. Не больше 100 МБ"
+    static let uploadHint = "Картинки шире 1500 пикселей смотрятся лучше.\nНе больше 100 МБ"
 
     private(set) var tab: Tab
     var onChoose: ((CoverPickerController.Choice) -> Void)?

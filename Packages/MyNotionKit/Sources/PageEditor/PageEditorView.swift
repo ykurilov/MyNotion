@@ -68,7 +68,8 @@ public struct PageEditorView: View {
                            onOpenPage: onOpenPage, onSubpageRequest: onSubpageRequest, onSetIcon: onSetIcon, onResolveConflict: onResolveConflict,
                            blockViewState: blockViewState, blockReveal: blockReveal, onReady: onReady,
                            mentions: mentions, headerAddons: headerAddons)
-                .overlay(alignment: .top) { scrollEdgeFade }
+                // У страницы с обложкой затухания нет, как у Notion: оно легло бы светлой полосой на верх обложки.
+                .overlay(alignment: .top) { if document.page.cover == nil { scrollEdgeFade } }
         }
         .background(Color(nsColor: Palette.pageBackground))
     }
