@@ -17,16 +17,24 @@ enum DateQuery {
         ("Через неделю", 7, ["через неделю", "next week", "неделя"]),
     ]
 
+    /// «Сейчас» — только на странице-шаблоне: день и время; в копии шаблона станут моментом её создания.
+    private static let nowWord = (title: "Сейчас", keywords: ["сейчас", "now"])
+
     /// Подсказки окна «@»: набранная дата — первой, затем слова, чьё начало совпало с набором. Каждая — новая дата.
-    static func suggestions(for query: String, now: Date, calendar: Calendar) -> [Suggestion] {
+    /// На странице-шаблоне «Сегодня» и «Сейчас» помечаются: в копии шаблона они станут датой создания (003, US7).
+    static func suggestions(for query: String, now: Date, calendar: Calendar, isTemplate: Bool = false) -> [Suggestion] {
         let typed = normalized(query)
         var result: [Suggestion] = []
         if let mention = parse(typed, now: now, calendar: calendar), !words.contains(where: { $0.keywords.contains(typed) }) {
             result.append(Suggestion(title: mention.titleInPicker(calendar: calendar), mention: mention))
         }
         for word in words where typed.isEmpty || word.keywords.contains(where: { $0.hasPrefix(typed) }) {
-            guard let mention = day(offset: word.days, now: now, calendar: calendar) else { continue }
+            guard var mention = day(offset: word.days, now: now, calendar: calendar) else { continue }
+            if isTemplate, word.days == 0 { mention.templateRelative = .today }
             result.append(Suggestion(title: word.title, mention: mention))
+        }
+        if isTemplate, typed.isEmpty || nowWord.keywords.contains(where: { $0.hasPrefix(typed) }) {
+            result.append(Suggestion(title: nowWord.title, mention: moment(now: now, calendar: calendar)))
         }
         return result
     }
@@ -92,6 +100,14 @@ enum DateQuery {
         guard let year = parts.year, let month = parts.month, let day = parts.day else { return nil }
         return DateMention(start: DateMention.startText(year: year, month: month, day: day), includesTime: false,
                            timeZone: calendar.timeZone.identifier)
+    }
+
+    /// Сейчас: день и время до минуты, помечено «сейчас» шаблона.
+    private static func moment(now: Date, calendar: Calendar) -> DateMention {
+        let parts = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: now)
+        return DateMention(start: DateMention.startText(year: parts.year ?? 2000, month: parts.month ?? 1, day: parts.day ?? 1,
+                                                        hour: parts.hour, minute: parts.minute),
+                           includesTime: true, timeZone: calendar.timeZone.identifier, templateRelative: .now)
     }
 
     /// Месяц по началу названия: «окт», «октября», «oct».

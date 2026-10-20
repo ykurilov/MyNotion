@@ -36,6 +36,8 @@ public struct PageEditorView: View {
     let scrollPlace: PageScrollPlace?
     /// Вкладки (US3): место прокрутки, на которое встать после открытия («назад», переключение вкладки).
     let restoringScroll: TabScroll?
+    /// Шаблоны для строк на пустой странице (US7).
+    let templates: TemplateSettings
 
     public init(document: PageDocument, ancestorTitles: [String] = [], initialFocus: PageTextView.InitialFocus,
                 linkedPages: [UUID: LinkedPage] = [:], onOpenPage: @escaping @MainActor (UUID) -> Void = { _ in },
@@ -45,7 +47,8 @@ public struct PageEditorView: View {
                 blockViewState: BlockViewStateStore? = nil, blockReveal: BlockReveal? = nil,
                 onReady: @escaping @MainActor () -> Void = {}, mentions: MentionSettings = MentionSettings(),
                 pageMenuItems: [PageMenuItem] = [], topBarAccessory: AnyView? = nil, headerAddons: [PageHeaderAddonFactory] = [],
-                scrollPlace: PageScrollPlace? = nil, restoringScroll: TabScroll? = nil) {
+                scrollPlace: PageScrollPlace? = nil, restoringScroll: TabScroll? = nil,
+                templates: TemplateSettings = TemplateSettings()) {
         self.document = document
         self.ancestorTitles = ancestorTitles
         self.initialFocus = initialFocus
@@ -63,6 +66,7 @@ public struct PageEditorView: View {
         self.headerAddons = headerAddons
         self.scrollPlace = scrollPlace
         self.restoringScroll = restoringScroll
+        self.templates = templates
     }
 
     public var body: some View {
@@ -74,7 +78,8 @@ public struct PageEditorView: View {
             PageTextEditor(document: document, icon: document.page.icon, initialFocus: initialFocus, linkedPages: linkedPages,
                            onOpenPage: onOpenPage, onSubpageRequest: onSubpageRequest, onSetIcon: onSetIcon, onResolveConflict: onResolveConflict,
                            blockViewState: blockViewState, blockReveal: blockReveal, onReady: onReady,
-                           mentions: mentions, headerAddons: headerAddons, scrollPlace: scrollPlace, restoringScroll: restoringScroll)
+                           mentions: mentions, headerAddons: headerAddons, scrollPlace: scrollPlace, restoringScroll: restoringScroll,
+                           templates: templates)
                 // У страницы с обложкой затухания нет, как у Notion: оно легло бы светлой полосой на верх обложки.
                 .overlay(alignment: .top) { if document.page.cover == nil { scrollEdgeFade } }
         }
@@ -136,6 +141,7 @@ struct PageTextEditor: NSViewRepresentable {
     var headerAddons: [PageHeaderAddonFactory] = []
     var scrollPlace: PageScrollPlace?
     var restoringScroll: TabScroll?
+    var templates = TemplateSettings()
 
     /// Какой запрос перехода к блоку редактор уже выполнил.
     final class Coordinator {
@@ -161,6 +167,7 @@ struct PageTextEditor: NSViewRepresentable {
         textView.onSetIcon = onSetIcon
         textView.onResolveConflict = onResolveConflict
         mentions.apply(to: textView)
+        templates.apply(to: textView)
         let scrollView = Self.makeScrollView(around: textView)
         textView.installHeaderAddons(headerAddons.map { $0(document) })
         return scrollView
@@ -186,6 +193,7 @@ struct PageTextEditor: NSViewRepresentable {
         textView.onSetIcon = onSetIcon
         textView.onResolveConflict = onResolveConflict
         mentions.apply(to: textView)
+        templates.apply(to: textView)
         textView.showIcon(icon)
         textView.showAppearance(of: document.page)
         if let blockReveal, blockReveal.token != context.coordinator.revealToken {

@@ -387,7 +387,9 @@ private struct PagesWindow: View {
                 }),
                 headerAddons: [PageCoverAddon.factory(model)],
                 scrollPlace: model.scrollPlace,
-                restoringScroll: model.restoringScroll
+                restoringScroll: model.restoringScroll,
+                templates: TemplateSettings(templates: model.templateChoices(forPage: document.pageId),
+                                            choose: { model.fillOpenPage(document.pageId, fromTemplate: $0) })
             )
             // Новый документ — новый редактор: страницу перечитали после операции с деревом.
             .id(ObjectIdentifier(document))

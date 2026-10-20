@@ -59,6 +59,8 @@ final class MainWindowModel {
     @ObservationIgnored private let restoresTabs: Bool
     /// Страницу перечитали после операции с деревом: встать на прежнее место.
     @ObservationIgnored private var scrollBeforeReload: TabScroll?
+    /// Куда поставить курсор, когда операция перечитывает открытую страницу (заполнение по шаблону — в название).
+    @ObservationIgnored var reopenFocus: PageTextView.InitialFocus?
     @ObservationIgnored private var isTabsSavePending = false
     @ObservationIgnored private var linkedPagesCache: (revision: Int, pages: [UUID: LinkedPage])?
     /// Запись открытий для «Недавних»: страница, пробывшая в активной вкладке 2 секунды или с правкой.
@@ -366,7 +368,7 @@ final class MainWindowModel {
     func treeDidChange(_ touchedPageIds: Set<UUID>, reopening releasedPageId: UUID?) {
         if let releasedPageId {
             defer { scrollBeforeReload = nil }
-            return openEditor(releasedPageId, focus: .body, scroll: scrollBeforeReload, remember: false)
+            return openEditor(releasedPageId, focus: reopenFocus ?? .body, scroll: scrollBeforeReload, remember: false)
         }
         if let openPageId, tree.page(openPageId) == nil { closeOpenDocument() }
         showActiveTab(focus: .body)
