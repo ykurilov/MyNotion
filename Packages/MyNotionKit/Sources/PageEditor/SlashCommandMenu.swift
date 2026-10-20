@@ -17,6 +17,8 @@ struct PopupMenuItem: Equatable {
         case turnInto
         /// Меню блока: копия блока со всем вложенным сразу под ним (⌘D).
         case duplicate
+        /// Меню блока: окно «Переместить в…» для блока или выделенных блоков (⇧⌘P, US4).
+        case moveTo
     }
 
     /// Значок строки: короткая надпись, системный значок, квадрат чекбокса или лист страницы (как в дереве).
@@ -45,6 +47,7 @@ struct PopupMenuItem: Equatable {
         case .insertTable: "table"
         case .turnInto: "turn-into"
         case .duplicate: "duplicate"
+        case .moveTo: "move-to"
         }
     }
 
@@ -68,6 +71,8 @@ struct PopupMenuItem: Equatable {
     static let color = PopupMenuItem(title: "Цвет", icon: .symbol("paintbrush"), keywords: [], action: .color)
     static let duplicate = PopupMenuItem(title: "Дублировать", icon: .symbol("plus.square.on.square"), keywords: [], action: .duplicate,
                                          hint: "⌘D", startsGroup: true)
+    static let moveTo = PopupMenuItem(title: "Переместить в", icon: .symbol("arrow.turn.up.right"), keywords: [], action: .moveTo,
+                                      hint: "⇧⌘P")
     static let delete = PopupMenuItem(title: "Удалить", icon: .symbol("trash"), keywords: [], action: .delete, hint: "Del")
 
     /// Заголовок меню блока — название его типа, как «Text» у Notion.
@@ -84,10 +89,9 @@ struct PopupMenuItem: Equatable {
     /// Меню блока «⋮⋮», как у Notion 7.39: короткое, типы — в подменю. Подстраницу не дублировать: у страницы одна ссылка.
     static func blockMenuItems(for kind: BlockKind) -> [PopupMenuItem] {
         var items: [PopupMenuItem] = [.turnInto, .color]
-        if kind != .pageLink { items.append(.duplicate) }
-        var delete = PopupMenuItem.delete
-        delete.startsGroup = kind == .pageLink
-        return items + [delete]
+        var moveTo = PopupMenuItem.moveTo
+        if kind != .pageLink { items.append(.duplicate) } else { moveTo.startsGroup = true }
+        return items + [moveTo, .delete]
     }
 
     /// Меню «/»: поиск по названию и словам-подсказкам без учёта регистра.
@@ -1037,6 +1041,11 @@ extension PageTextView {
         case .setKind(let kind): setKind(kind, ofBlocksAt: index..<index + 1)
         case .delete: removeBlocks(at: index..<index + 1)
         case .duplicate: duplicateBlocks(at: index..<index + 1)
+        case .moveTo:
+            // Меню блока внутри выделения действует на всё выделение, как у Notion.
+            let range = selectedBlocks.flatMap { $0.contains(index) ? $0 : nil } ?? index..<index + 1
+            requestMoveBlocks(range, anchor: menuFrame.map { NSRect(x: $0.minX, y: $0.maxY, width: $0.width, height: 0) })
+            return
         case .insertColumns(let count):
             insertColumns(count, at: index)
             return

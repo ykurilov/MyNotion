@@ -249,6 +249,13 @@ private struct PageCommands: Commands {
                 .keyboardShortcut("n")
             Button("Новая подстраница") { model?.createSubpage() }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
+            // ⌘D и ⇧⌘P в тексте страницы берёт редактор (блоки); здесь — фокус в панели, в названии или «Недавние» нет.
+            Button("Дублировать страницу") { model?.openPageId.map { model?.duplicatePage($0) } }
+                .keyboardShortcut("d")
+                .disabled(model?.openPageId == nil)
+            Button("Переместить страницу в…") { model?.openPageId.map { model?.showMovePagePicker($0) } }
+                .keyboardShortcut("p", modifiers: [.command, .shift])
+                .disabled(model?.openPageId == nil)
             // Сочетание ловит и `AppDelegate`: с ⌥ буква на русской раскладке другая.
             Button("Новое окно") { openWindow(id: MainWindowView.sceneId) }
                 .keyboardShortcut("n", modifiers: [.command, .option])
