@@ -44,11 +44,19 @@ public final class NotesTransaction {
     }
 
     static func fetchBlocks(ofPage pageId: UUID, in db: Database) throws -> [Block] {
-        try Row.fetchAll(
+        let rows = try Row.fetchCursor(
             db,
             sql: "SELECT * FROM block WHERE pageId = ? AND isDeleted = 0 ORDER BY sortKey, id",
             arguments: [pageId.databaseText]
-        ).map(Block.init(row:))
+        )
+        var columns: BlockColumns?
+        var blocks: [Block] = []
+        while let row = try rows.next() {
+            let known = try columns ?? BlockColumns(row)
+            columns = known
+            blocks.append(try Block(row: row, columns: known))
+        }
+        return blocks
     }
 
     /// Контейнеры страницы под пометкой «удалён» и их контейнер.

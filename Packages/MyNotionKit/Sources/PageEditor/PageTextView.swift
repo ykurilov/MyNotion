@@ -1079,7 +1079,6 @@ public class PageTextView: NSTextView {
     private func restorePendingScrollPlace() -> Bool {
         guard let place = pendingScrollPlace else { return didRestoreScrollPlace }
         pendingScrollPlace = nil
-        layoutSubtreeIfNeeded()
         restoreScrollPlace(place)
         didRestoreScrollPlace = true
         return true

@@ -13,6 +13,8 @@ final class BlockViewHosting {
     private var isUpdating = false
     /// Пока ставили виды, вид узнал свою высоту (колонки, таблица) и попросил поставить заново.
     private var needsAnotherPass = false
+    /// Прокрутка без расстановки видов: место прокрутки вкладки ставится до раскладки, виды встанут после неё.
+    private var ignoresScrolling = false
 
     init(textView: PageTextView) {
         self.textView = textView
@@ -91,6 +93,13 @@ final class BlockViewHosting {
         }
     }
 
+    /// Прокрутить, не ставя виды на абзацы, которые ещё не разложены на новом месте.
+    func withoutUpdatesOnScroll(_ scroll: () -> Void) {
+        ignoresScrolling = true
+        defer { ignoresScrolling = false }
+        scroll()
+    }
+
     /// Снять все виды (страница загружена заново).
     func removeAll() {
         for view in views.values { view.removeFromSuperview() }
@@ -111,7 +120,7 @@ final class BlockViewHosting {
         guard let clip = textView?.enclosingScrollView?.contentView else { return }
         clip.postsBoundsChangedNotifications = true
         scrollObserver = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: clip, queue: .main) {
-            [weak self] _ in MainActor.assumeIsolated { self?.update() }
+            [weak self] _ in MainActor.assumeIsolated { if self?.ignoresScrolling == false { self?.update() } }
         }
     }
 }

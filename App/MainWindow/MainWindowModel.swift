@@ -529,7 +529,13 @@ final class MainWindowModel {
             loadError = nil
             // Файлы открытой страницы — первыми в очереди скачивания (FR-120).
             library.sync.prioritizeFiles(onPage: pageId)
-            if remember { saveWindowState { $0.openPageId = pageId } }
+            // Запись — после показа страницы: на пути перехода она не нужна (как запись вкладок).
+            if remember {
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, openDocument?.pageId == pageId else { return }
+                    saveWindowState { $0.openPageId = pageId }
+                }
+            }
         } catch NotesStoreError.pageNotFound {
             // Страница стёрта: вкладка показывает «Недавние».
             if openDocument != nil { closeOpenDocument() }

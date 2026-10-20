@@ -40,8 +40,10 @@ extension PageTextView {
         guard let location = storage.location(storage.documentRange.location, offsetBy: start) else { return }
         let clip = scrollView.contentView
         let top = layoutManager.textViewportLayoutController.relocateViewport(to: location) + textContainerOrigin.y
-        clip.scroll(to: NSPoint(x: clip.bounds.minX, y: max(0, top + place.offset)))
-        scrollView.reflectScrolledClipView(clip)
+        blockViews.withoutUpdatesOnScroll {
+            clip.scroll(to: NSPoint(x: clip.bounds.minX, y: max(0, top + place.offset)))
+            scrollView.reflectScrolledClipView(clip)
+        }
         scrollAnchor = ScrollAnchor(blockId: place.blockId, offset: place.offset, visibleTop: clip.bounds.minY)
         layoutSubtreeIfNeeded()
         keepScrollAnchor()
@@ -67,8 +69,10 @@ extension PageTextView {
             guard let blockTop = paragraphTop(ofBlockAt: index) else { break }
             let wanted = max(0, blockTop + anchor.offset)
             guard abs(wanted - clip.bounds.minY) > 0.5 else { break }
-            clip.scroll(to: NSPoint(x: clip.bounds.minX, y: wanted))
-            scrollView.reflectScrolledClipView(clip)
+            blockViews.withoutUpdatesOnScroll {
+                clip.scroll(to: NSPoint(x: clip.bounds.minX, y: wanted))
+                scrollView.reflectScrolledClipView(clip)
+            }
             // Якорь держится и посреди раскладки окна: раскладка видимой области — напрямую, не через `layout()`.
             textLayoutManager?.textViewportLayoutController.layoutViewport()
             blockViews.update()

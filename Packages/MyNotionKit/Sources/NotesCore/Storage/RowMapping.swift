@@ -33,6 +33,37 @@ enum RowDecoding {
     }
 }
 
+/// Места колонок блока в строках одной выборки: имя колонки ищется один раз на выборку, а не по 15 раз на блок
+/// (профиль переключения вкладок, 003: поиск колонок по имени — четверть разбора блоков страницы).
+struct BlockColumns {
+    let id, pageId, kind, text, textStyles, indent, isChecked, linkedPageId, sortKey, containerId, color, props, fieldClocks,
+        textBaseClock: Int
+
+    init(_ row: Row) throws {
+        let names = Array(row.columnNames)
+        func index(_ name: String) throws -> Int {
+            guard let index = names.firstIndex(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) else {
+                throw NotesStoreError.corruptedRecord("Нет колонки \(name)")
+            }
+            return index
+        }
+        id = try index("id")
+        pageId = try index("pageId")
+        kind = try index("kind")
+        text = try index("text")
+        textStyles = try index("textStyles")
+        indent = try index("indent")
+        isChecked = try index("isChecked")
+        linkedPageId = try index("linkedPageId")
+        sortKey = try index("sortKey")
+        containerId = try index("containerId")
+        color = try index("color")
+        props = try index("props")
+        fieldClocks = try index("fieldClocks")
+        textBaseClock = try index("textBaseClock")
+    }
+}
+
 enum JSONColumn {
     static func encode(_ value: some Encodable) throws -> String {
         let encoder = JSONEncoder()
@@ -200,24 +231,37 @@ extension Page {
 
 extension Block {
     init(row: Row) throws {
-        guard let kind = BlockKind(rawValue: row["kind"]) else {
+        try self.init(row: row, columns: BlockColumns(row))
+    }
+
+    init(row: Row, columns c: BlockColumns) throws {
+        guard let kind = BlockKind(rawValue: row[c.kind]) else {
             throw NotesStoreError.corruptedRecord("Колонка kind — неизвестный тип блока")
         }
-        let textBaseClock: String? = row["textBaseClock"]
-        let color: String? = row["color"]
+        let textBaseClock: String? = row[c.textBaseClock]
+        let color: String? = row[c.color]
+        guard let id = (row[c.id] as String?).flatMap(UUID.init(uuidString:)) else { throw NotesStoreError.corruptedRecord("Колонка id — не UUID") }
+        guard let pageId = (row[c.pageId] as String?).flatMap(UUID.init(uuidString:)) else {
+            throw NotesStoreError.corruptedRecord("Колонка pageId — не UUID")
+        }
+        guard let sortKey = FractionalSortKey(rawValue: row[c.sortKey]) else {
+            throw NotesStoreError.corruptedRecord("Колонка sortKey — не ключ порядка")
+        }
+        let textStyles: String = row[c.textStyles]
+        let props: String = row[c.props]
         self.init(
-            id: try RowDecoding.uuid(row, "id"),
-            pageId: try RowDecoding.uuid(row, "pageId"),
+            id: id,
+            pageId: pageId,
             kind: kind,
-            text: InlineText(row["text"], runs: (row["textStyles"] as String) == "[]" ? [] : try RowDecoding.json([StyledRun].self, row, "textStyles")),
-            indent: row["indent"],
-            isChecked: row["isChecked"],
-            linkedPageId: RowDecoding.optionalUUID(row, "linkedPageId"),
-            sortKey: try RowDecoding.sortKey(row),
-            containerId: RowDecoding.optionalUUID(row, "containerId"),
+            text: InlineText(row[c.text], runs: textStyles == "[]" ? [] : try JSONDecoder().decode([StyledRun].self, from: Data(textStyles.utf8))),
+            indent: row[c.indent],
+            isChecked: row[c.isChecked],
+            linkedPageId: (row[c.linkedPageId] as String?).flatMap(UUID.init(uuidString:)),
+            sortKey: sortKey,
+            containerId: (row[c.containerId] as String?).flatMap(UUID.init(uuidString:)),
             color: try color.map { try JSONDecoder().decode(BlockColor.self, from: Data($0.utf8)) } ?? .none,
-            props: (row["props"] as String) == "{}" ? .empty : try RowDecoding.json(BlockProps.self, row, "props"),
-            fieldClocks: try BlockFieldClocks(databaseJSON: row["fieldClocks"]),
+            props: props == "{}" ? .empty : try JSONDecoder().decode(BlockProps.self, from: Data(props.utf8)),
+            fieldClocks: try BlockFieldClocks(databaseJSON: row[c.fieldClocks]),
             textBaseClock: textBaseClock.flatMap(HybridTimestamp.init)
         )
     }

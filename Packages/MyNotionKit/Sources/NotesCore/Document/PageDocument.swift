@@ -581,12 +581,15 @@ public final class PageDocument {
     /// сразу за своим `columnList` или `table` (их находит цепочка контейнеров, в том числе удалённых),
     /// а без них — в конце страницы.
     private func rebuildFlows() {
+        // Сортируются номера блоков, а не сами блоки: перестановка больших структур стоила половины чтения
+        // страницы при открытии (профиль переключения вкладок, 003).
         func ordered(_ items: [Block]) -> [Block] {
-            items.sorted { lhs, rhs in
-                if lhs.sortKey < rhs.sortKey { return true }
-                if rhs.sortKey < lhs.sortKey { return false }
-                return lhs.id.uuidString < rhs.id.uuidString
-            }
+            let keys = items.map(\.sortKey)
+            return items.indices.sorted { lhs, rhs in
+                if keys[lhs] < keys[rhs] { return true }
+                if keys[rhs] < keys[lhs] { return false }
+                return items[lhs].id.uuidString < items[rhs].id.uuidString
+            }.map { items[$0] }
         }
         var pageFlow: [Block] = []
         var flows: [UUID: [Block]] = [:]
