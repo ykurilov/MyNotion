@@ -894,7 +894,6 @@ public class PageTextView: NSTextView {
         coverSlot.view?.frame = NSRect(x: 0, y: 0, width: bounds.width, height: coverHeight)
         let headerTop = coverHeight - (coverHeight > 0 ? header.coverOverlap : 0)
         header.frame = NSRect(x: left, y: headerTop, width: columnWidth, height: headerHeight)
-        coverSlot.columnDidChange?(left, columnWidth)
         // Отступ текста сверху — обложка и шапка, снизу — пустое место; NSTextView делит высоту поровну, а начало текста
         // задаёт `textContainerOrigin`.
         let inset = NSSize(width: left, height: showsPageHeader ? (headerTop + headerHeight + Metrics.Page.bottomPadding) / 2 : 0)

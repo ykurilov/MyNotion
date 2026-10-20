@@ -33,19 +33,19 @@ struct CoverViewTests {
         #expect(mode.originalOffset == 0.5)
     }
 
-    @Test("Кнопки «Сменить обложку» и «Переместить» — при наведении, у правого края колонки, у низа обложки")
+    @Test("Кнопки «Сменить» и «Переместить» — при наведении, тёмной группой справа вверху обложки, как у Notion 7.39")
     func hoverButtons() {
         let view = CoverView(cover: PageCover(source: .gallery("gradients_3")), fileURL: { _ in nil })
         view.frame = NSRect(x: 0, y: 0, width: 1200, height: 230)
-        view.setColumn(left: 240, width: 720)
         view.layoutSubtreeIfNeeded()
         #expect(view.buttons.isHidden)
         view.isHovered = true
         view.layoutSubtreeIfNeeded()
         #expect(!view.buttons.isHidden)
-        #expect(view.buttons.items.map(\.title) == ["Сменить обложку", "Переместить"])
-        #expect(view.buttons.frame.maxX == 960)
-        #expect(view.buttons.frame.maxY == 230 - Metrics.PageCover.buttonBottomInset)
+        #expect(view.buttons.items.map(\.title) == ["Сменить", "Переместить"])
+        #expect(view.buttons.frame.maxX == 1200 - Metrics.PageCover.buttonInset)
+        #expect(view.buttons.frame.minY == Metrics.PageCover.buttonInset)
+        #expect(view.buttons.frame.height == Metrics.PageCover.buttonHeight)
         #expect(view.image != nil)
     }
 
@@ -95,8 +95,11 @@ struct CoverViewTests {
         view.tiles[2].press()
         view.removeButton.press()
         #expect(chosen == [.gallery("solid_blue"), .remove])
+        let galleryHeight = view.cardSize.height
+        #expect(view.cardSize.width == Metrics.PageCover.pickerWidth)
         view.uploadTab.press()
         #expect(view.uploadTab.isSelected)
+        #expect(view.cardSize.height < galleryHeight)
         #expect(!view.uploadButton.isHidden)
         #expect(view.tiles.allSatisfy { $0.isHidden })
     }

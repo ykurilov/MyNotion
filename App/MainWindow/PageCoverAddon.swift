@@ -66,7 +66,7 @@ final class PageCoverAddon: PageHeaderAddon {
                 self.model?.repositionCover(self.pageId, offset: offset)
             }
             coverView = view
-            textView.setCover(view, height: coverHeight(in: textView)) { [weak view] left, width in view?.setColumn(left: left, width: width) }
+            textView.setCover(view, height: coverHeight(in: textView))
         }
     }
 
@@ -80,7 +80,7 @@ final class PageCoverAddon: PageHeaderAddon {
         guard let textView, let coverView else { return }
         let height = coverHeight(in: textView)
         guard height != coverView.frame.height else { return }
-        textView.setCover(coverView, height: height) { [weak coverView] left, width in coverView?.setColumn(left: left, width: width) }
+        textView.setCover(coverView, height: height)
     }
 
     private func openPicker(below anchor: NSRect) {

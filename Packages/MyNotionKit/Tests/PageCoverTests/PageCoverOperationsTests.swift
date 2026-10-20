@@ -68,8 +68,8 @@ struct PageCoverOperationsTests {
         }
         #expect(seen.isSubset(of: Set(CoverGallery.ids)))
         #expect(seen.count > 3)
-        #expect(CoverGallery.ids == ["solid_red", "solid_yellow", "solid_blue", "solid_beige", "gradients_8", "gradients_2",
-                                     "gradients_11", "gradients_4", "gradients_10", "gradients_5", "gradients_3"])
+        #expect(CoverGallery.ids == ["solid_red", "solid_yellow", "solid_blue", "solid_beige", "gradients_8", "gradients_4",
+                                     "gradients_2", "gradients_11", "gradients_10", "gradients_5", "gradients_3"])
     }
 
     @Test("Своя картинка — копия в хранилище файлов 002, обложка ссылается на неё")

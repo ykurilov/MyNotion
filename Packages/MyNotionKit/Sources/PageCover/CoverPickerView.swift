@@ -27,7 +27,7 @@ public final class CoverPickerController: NSObject, NSWindowDelegate {
 
     public var isShown: Bool { view != nil }
 
-    /// Открыть под `anchor` («Сменить обложку», координаты экрана) над окном `parent`.
+    /// Открыть под `anchor` (группа кнопок обложки, координаты экрана) над окном `parent`.
     public func show(below anchor: NSRect, in parent: NSWindow, tab: CoverPickerView.Tab = .gallery,
                      onChoose: @escaping (Choice) -> Void) {
         close()
@@ -40,13 +40,19 @@ public final class CoverPickerController: NSObject, NSWindowDelegate {
             Self.chooseFile(in: parent) { url in onChoose(.file(url)) }
         }
         view.onCancel = { [weak self] in self?.close() }
-        // Окно шире карточки на поля тени с каждой стороны.
-        let size = NSSize(width: view.fittingSize.width - 2 * CoverPickerView.shadowMargin,
-                          height: view.fittingSize.height - 2 * CoverPickerView.shadowMargin)
-        let card = Self.card(size: size, below: anchor, within: parent.frame, screen: parent.screen?.visibleFrame)
+        let card = Self.card(size: view.cardSize, below: anchor, within: parent.frame, screen: parent.screen?.visibleFrame)
         let window = CoverPickerWindow(view: view)
         window.delegate = self
         window.setFrame(card.insetBy(dx: -CoverPickerView.shadowMargin, dy: -CoverPickerView.shadowMargin), display: false)
+        // Вкладка «Загрузить» короче «Галереи»: карточка по содержимому, верх на месте.
+        view.onSizeChange = { [weak window, weak view] in
+            guard let window, let view else { return }
+            var frame = window.frame
+            let height = view.cardSize.height + 2 * CoverPickerView.shadowMargin
+            frame.origin.y = frame.maxY - height
+            frame.size.height = height
+            window.setFrame(frame, display: true)
+        }
         self.view = view
         self.window = window
         PopupWindows.show(window, over: parent, makingKey: true)
@@ -90,10 +96,11 @@ public final class CoverPickerController: NSObject, NSWindowDelegate {
         }
     }
 
-    /// Карточка под кнопкой, правым краем к её правому краю (как у Notion); не помещается снизу — над кнопкой.
+    /// Карточка под группой кнопок, правым краем к её правому краю (как у Notion); не помещается снизу — над ней.
     static func card(size: NSSize, below anchor: NSRect, within bounds: NSRect, screen: NSRect?) -> NSRect {
-        var origin = NSPoint(x: (anchor.maxX - size.width).rounded(), y: anchor.minY - 6 - size.height)
-        if let screen, origin.y < screen.minY { origin.y = anchor.maxY + 6 }
+        let spacing = Metrics.PageCover.pickerAnchorSpacing
+        var origin = NSPoint(x: (anchor.maxX - size.width).rounded(), y: anchor.minY - spacing - size.height)
+        if let screen, origin.y < screen.minY { origin.y = anchor.maxY + spacing }
         origin.x = max(bounds.minX + 8, min(origin.x, bounds.maxX - 8 - size.width))
         return NSRect(origin: origin, size: size)
     }
@@ -111,6 +118,8 @@ public final class CoverPickerView: NSView {
     var onChoose: ((CoverPickerController.Choice) -> Void)?
     var onUploadFile: (() -> Void)?
     var onCancel: (() -> Void)?
+    /// Карточка сменила высоту (другая вкладка).
+    var onSizeChange: (() -> Void)?
 
     let galleryTab = CoverPickerTabButton(title: "Галерея", identifier: "cover-tab-gallery")
     let uploadTab = CoverPickerTabButton(title: "Загрузить", identifier: "cover-tab-upload")
@@ -166,6 +175,7 @@ public final class CoverPickerView: NSView {
         uploadHintLabel.isHidden = tab != .upload
         needsLayout = true
         needsDisplay = true
+        onSizeChange?()
     }
 
     private var card: NSRect { bounds.insetBy(dx: Self.shadowMargin, dy: Self.shadowMargin) }
@@ -177,12 +187,20 @@ public final class CoverPickerView: NSView {
         return NSSize(width: width, height: metrics.pickerTileHeight)
     }
 
-    public override var fittingSize: NSSize {
+    /// Карточка без полей тени: «Галерея» — плитки, «Загрузить» — кнопка и подпись.
+    var cardSize: NSSize {
         let metrics = Metrics.PageCover.self
         let rows = (CoverGallery.items.count + metrics.pickerTilesPerRow - 1) / metrics.pickerTilesPerRow
         let gallery = metrics.pickerTabHeight + metrics.pickerPadding + 20
-            + CGFloat(rows) * (metrics.pickerTileHeight + metrics.pickerTileSpacing) + metrics.pickerPadding
-        return NSSize(width: metrics.pickerWidth + 2 * Self.shadowMargin, height: gallery + 2 * Self.shadowMargin)
+            + CGFloat(rows) * (metrics.pickerTileHeight + metrics.pickerTileSpacing) - metrics.pickerTileSpacing + metrics.pickerPadding
+        let upload = metrics.pickerTabHeight + metrics.pickerPadding + Self.uploadButtonHeight + 12 + 32 + metrics.pickerPadding
+        return NSSize(width: metrics.pickerWidth, height: tab == .gallery ? gallery : upload)
+    }
+
+    static let uploadButtonHeight: CGFloat = 26
+
+    public override var fittingSize: NSSize {
+        NSSize(width: cardSize.width + 2 * Self.shadowMargin, height: cardSize.height + 2 * Self.shadowMargin)
     }
 
     public override func layout() {
@@ -206,7 +224,7 @@ public final class CoverPickerView: NSView {
                                 y: top + 20 + CGFloat(row) * (tile.height + metrics.pickerTileSpacing), width: tile.width, height: tile.height)
         }
         let inner = card.width - 2 * metrics.pickerPadding
-        uploadButton.frame = NSRect(x: card.minX + metrics.pickerPadding, y: top, width: inner, height: 32)
+        uploadButton.frame = NSRect(x: card.minX + metrics.pickerPadding, y: top, width: inner, height: Self.uploadButtonHeight)
         let hint = uploadHintLabel.sizeThatFits(NSSize(width: inner, height: .greatestFiniteMagnitude))
         uploadHintLabel.frame = NSRect(x: card.minX + metrics.pickerPadding, y: uploadButton.frame.maxY + 12, width: inner, height: hint.height)
     }

@@ -16,8 +16,7 @@ struct PageHeaderCoverTests {
         textView.header.layoutSubtreeIfNeeded()
         let titleWithoutCover = textView.header.convert(textView.header.titleField.frame, to: textView).minY
         let cover = NSView()
-        var columns: [(CGFloat, CGFloat)] = []
-        textView.setCover(cover, height: 200) { columns.append(($0, $1)) }
+        textView.setCover(cover, height: 200)
         textView.header.layoutSubtreeIfNeeded()
 
         #expect(cover.frame == NSRect(x: 0, y: 0, width: textView.bounds.width, height: 200))
@@ -26,7 +25,6 @@ struct PageHeaderCoverTests {
         let title = textView.header.convert(textView.header.titleField.frame, to: textView)
         #expect(title.minY == icon.maxY + Metrics.Page.iconToTitleSpacing)
         #expect(textView.textContainerOrigin.y >= title.maxY)
-        #expect(columns.last.map { $0.0 == textView.column.left && $0.1 == textView.column.width } == true)
         // Обложка выше иконки: иконка рисуется поверх.
         let order = textView.subviews
         #expect(try #require(order.firstIndex(of: cover)) < #require(order.firstIndex(of: textView.header)))

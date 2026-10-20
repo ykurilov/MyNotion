@@ -373,26 +373,29 @@ public enum Metrics {
 
     /// Обложка страницы (contracts/pages-ui.md, «Шапка страницы»): высота ≈ 30 % высоты области страницы с верхней
     /// полосой, как `30vh` у Notion (снимок `notion-cover.png`: окно 780, обложка 218); кнопки при наведении —
-    /// группой справа внизу в границах колонки текста (≈ по Notion).
+    /// тёмной группой справа вверху обложки, окно «Сменить обложку» под ними (сверено с Notion 7.39 20.10.2026:
+    /// `notion-cover-hover-buttons.png`, `notion-change-cover.png`).
     public enum PageCover {
         public static let heightFraction: CGFloat = 0.3
         public static let minimumHeight: CGFloat = 160
         public static let maximumHeight: CGFloat = 280
-        public static let buttonHeight: CGFloat = 26
+        public static let buttonHeight: CGFloat = 23
         public static let buttonFontSize: CGFloat = 12
         public static let buttonHorizontalPadding: CGFloat = 8
-        public static let buttonGroupCornerRadius: CGFloat = 4
-        /// От нижнего края обложки до кнопок.
-        public static let buttonBottomInset: CGFloat = 10
+        public static let buttonGroupCornerRadius: CGFloat = 5
+        /// От верхнего и правого края обложки до группы кнопок.
+        public static let buttonInset: CGFloat = 8
+        public static let buttonGroupPadding: CGFloat = 2
         /// Подсказка «Перетащите картинку, чтобы сдвинуть».
-        public static let repositionHintHeight: CGFloat = 26
-        /// Окно «Сменить обложку»: ширина, плитки галереи по 4 в ряд.
-        public static let pickerWidth: CGFloat = 540
-        public static let pickerTileHeight: CGFloat = 64
-        public static let pickerTileSpacing: CGFloat = 8
+        public static let repositionHintHeight: CGFloat = 20
+        /// Окно «Сменить обложку»: ширина 428, плитки 94 × 51 по 4 в ряд через 5, вкладки высотой 31; под кнопками на 4.
+        public static let pickerWidth: CGFloat = 428
+        public static let pickerTileHeight: CGFloat = 51
+        public static let pickerTileSpacing: CGFloat = 5
         public static let pickerTilesPerRow = 4
         public static let pickerPadding: CGFloat = 12
-        public static let pickerTabHeight: CGFloat = 36
+        public static let pickerTabHeight: CGFloat = 31
+        public static let pickerAnchorSpacing: CGFloat = 4
 
         /// Высота обложки при высоте области страницы `pageAreaHeight`.
         public static func height(forPageAreaHeight pageAreaHeight: CGFloat) -> CGFloat {

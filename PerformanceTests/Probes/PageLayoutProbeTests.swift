@@ -18,7 +18,7 @@ final class PageLayoutProbeTests: XCTestCase {
         let page = try RichProbePage()
         defer { page.close() }
         let cover = CoverView(cover: PageCover(source: .gallery("gradients_5")), fileURL: { _ in nil })
-        page.textView.setCover(cover, height: 280) { [weak cover] left, width in cover?.setColumn(left: left, width: width) }
+        page.textView.setCover(cover, height: 280)
         try await page.settle()
 
         let paragraphIndex = try XCTUnwrap(page.textView.document.blocks.firstIndex { $0.kind == .paragraph })

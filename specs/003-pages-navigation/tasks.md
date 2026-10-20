@@ -90,7 +90,7 @@ description: "Задачи: страницы и навигация"
 
 ### Implementation for User Story 1
 
-- [ ] T029 [US1] Галерея в `PK/Sources/PageCover/CoverGallery.swift`: id и цвета, снятые с `notion.so/images/page-cover/<id>.png` (картинки — только для сверки, в сборку не кладутся), рисование заливки и градиента; сверка состава с окном «Change cover» живого Notion (одним замком)
+- [x] T029 [US1] Галерея в `PK/Sources/PageCover/CoverGallery.swift`: id и цвета, снятые с `notion.so/images/page-cover/<id>.png` (картинки — только для сверки, в сборку не кладутся), рисование заливки и градиента; сверка состава с окном «Change cover» живого Notion (одним замком)
 - [x] T030 [US1] Вид обложки в `PK/Sources/PageCover/CoverView.swift` в месте «обложка» шапки: высота, заполнение по ширине, `offset`, уменьшенная копия через ImageIO, заглушка не пришедшего файла; иконка заходит на обложку; цифры шапки — со снимка `notion-cover.png` и живого Notion, правка ≈ в contracts/pages-ui.md
 - [x] T031 [US1] Кнопки при наведении («Добавить обложку» в месте «кнопки»; «Сменить обложку», «Переместить» на обложке), окно «Сменить обложку» (`PK/Sources/PageCover/CoverPickerView.swift`: «Галерея», «Загрузить» с выбором файла и перетаскиванием, «Убрать»), режим «Переместить» (`CoverRepositionMode.swift`)
 - [x] T032 [US1] Операции в `PK/Sources/NotesCore/Tree/PageTreeOperations+Appearance.swift`: обложка, сдвиг, вид страницы — с отменой; своя картинка — через хранилище вложений 002 (T025)

@@ -83,11 +83,12 @@ public enum Palette {
     public static let switchOff = themed(light: .rgba(135, 131, 120, 0.3), dark: .rgba(202, 196, 182, 0.3))
     /// Заглушка обложки, чья картинка ещё не пришла с другого Mac, и неизвестной обложки галереи (≈ по Notion).
     public static let placeholder = themed(light: .hex(0xF1F1EF), dark: .hex(0x2F2F2F))
-    /// Кнопки на обложке «Сменить обложку», «Переместить» (≈ по Notion: светлая подложка с тенью-рамкой, тёмная — серая).
-    public static let coverButtonBackground = themed(light: .rgba(255, 255, 255, 0.9), dark: .rgba(37, 37, 37, 0.9))
-    public static let coverButtonHover = themed(light: .rgba(239, 239, 238, 0.95), dark: .rgba(55, 55, 55, 0.95))
-    public static let coverButtonText = themed(light: .rgba(55, 53, 47, 0.65), dark: .rgba(255, 255, 255, 0.81))
-    public static let coverButtonBorder = themed(light: .rgba(15, 15, 15, 0.1), dark: .rgba(255, 255, 255, 0.094))
+    /// Кнопки на обложке «Сменить», «Переместить»: тёмная полупрозрачная группа поверх картинки в обеих темах
+    /// (снимок Notion 7.39 `notion-cover-hover-buttons.png`).
+    public static let coverButtonBackground = NSColor.rgba(25, 25, 25, 0.88)
+    public static let coverButtonHover = NSColor.rgba(255, 255, 255, 0.1)
+    public static let coverButtonText = NSColor.rgba(255, 255, 255, 0.78)
+    public static let coverButtonBorder = NSColor.rgba(255, 255, 255, 0.12)
 
     /// Тень всплывающих панелей: четыре слоя, последний — тонкая рамка. В тёмной теме тень гуще, а рамка светлая:
     /// тёмная тень на тёмной странице не видна (≈ по Notion).

@@ -6,8 +6,6 @@ import NotesCore
 final class CoverSlot {
     var view: NSView?
     var height: CGFloat = 0
-    /// Колонка текста сменилась: кнопки обложки встают в её границы.
-    var columnDidChange: ((_ left: CGFloat, _ width: CGFloat) -> Void)?
     /// Обложка и вид, которые редактор уже показывает (`showAppearance`); `nil` — ещё не показывал.
     var shownAppearance: PageAppearance?
 }
@@ -27,15 +25,14 @@ struct PageAppearance: Equatable {
 
 extension PageTextView {
     /// Поставить вид обложки над шапкой (`nil` — убрать); текст и шапка сдвигаются вниз на `height`, иконка заходит
-    /// на обложку. `columnDidChange` — колонка текста при каждой перекладке.
-    public func setCover(_ view: NSView?, height: CGFloat, columnDidChange: ((_ left: CGFloat, _ width: CGFloat) -> Void)? = nil) {
+    /// на обложку.
+    public func setCover(_ view: NSView?, height: CGFloat) {
         if coverSlot.view !== view {
             coverSlot.view?.removeFromSuperview()
             if let view { addSubview(view, positioned: .below, relativeTo: header) }
             coverSlot.view = view
         }
         coverSlot.height = view == nil ? 0 : height
-        coverSlot.columnDidChange = view == nil ? nil : columnDidChange
         header.hasCover = view != nil
         layoutColumn()
     }

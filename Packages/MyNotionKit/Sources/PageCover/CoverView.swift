@@ -6,27 +6,25 @@ import VisualStyle
 /// Обложка страницы в месте «обложка» шапки (contracts/pages-ui.md, «Шапка страницы»): во всю ширину области
 /// страницы, картинка заполняет по ширине, по вертикали видна часть по `offset`. Своя картинка — уменьшенная копия
 /// по ширине окна × 2 (ImageIO, research R1), полная в память не читается; пока файла нет — заглушка.
-/// При наведении справа внизу, в границах колонки текста, — «Сменить обложку» и «Переместить»; в режиме «Переместить»
-/// картинку тянут мышью, «Сохранить положение» и «Отмена».
+/// При наведении справа вверху — тёмная группа «Сменить» и «Переместить», как у Notion 7.39; в режиме «Переместить»
+/// картинку тянут мышью, там же «Сохранить положение» и «Отмена».
 @MainActor
 public final class CoverView: NSView {
     public private(set) var cover: PageCover
     /// Копия файла обложки на этом Mac; `nil` — ещё не пришёл.
     private let fileURL: (UUID) -> URL?
-    /// «Сменить обложку»: кнопка в координатах экрана, под ней — окно выбора.
+    /// «Сменить»: группа кнопок в координатах экрана, под ней — окно выбора.
     public var onChangeCover: ((NSRect) -> Void)?
     /// «Сохранить положение».
     public var onSaveOffset: ((Double) -> Void)?
 
     let buttons = CoverButtonGroup()
-    let changeButton = CoverButton(title: "Сменить обложку", identifier: "change-page-cover")
+    let changeButton = CoverButton(title: "Сменить", identifier: "change-page-cover")
     let repositionButton = CoverButton(title: "Переместить", identifier: "reposition-page-cover")
     let saveButton = CoverButton(title: "Сохранить положение", identifier: "save-cover-position")
     let cancelButton = CoverButton(title: "Отмена", identifier: "cancel-cover-position")
     let repositionHint = CoverHintLabel(text: "Перетащите картинку, чтобы сдвинуть")
 
-    /// Колонка текста страницы: кнопки встают к её правому краю.
-    private var column: (left: CGFloat, width: CGFloat)?
     public private(set) var repositioning: CoverRepositionMode?
     public var isHovered = false {
         didSet { if isHovered != oldValue { updateButtons() } }
@@ -87,13 +85,6 @@ public final class CoverView: NSView {
         if repositioning != nil { repositioning = nil; updateButtons() }
         if sourceChanged { reloadImage() }
         needsDisplay = true
-    }
-
-    /// Колонка текста страницы (координаты этого вида).
-    public func setColumn(left: CGFloat, width: CGFloat) {
-        guard column?.left != left || column?.width != width else { return }
-        column = (left, width)
-        needsLayout = true
     }
 
     // MARK: Картинка
@@ -193,9 +184,8 @@ public final class CoverView: NSView {
     public override func layout() {
         super.layout()
         let size = buttons.fittingSize
-        let right = column.map { $0.left + $0.width } ?? bounds.maxX - Metrics.Page.minimumSideInset
-        buttons.frame = NSRect(x: (right - size.width).rounded(), y: bounds.maxY - Metrics.PageCover.buttonBottomInset - size.height,
-                               width: size.width, height: size.height)
+        let inset = Metrics.PageCover.buttonInset
+        buttons.frame = NSRect(x: (bounds.maxX - inset - size.width).rounded(), y: inset, width: size.width, height: size.height)
         let hint = repositionHint.fittingSize
         repositionHint.frame = NSRect(x: (bounds.midX - hint.width / 2).rounded(), y: (bounds.midY - hint.height / 2).rounded(),
                                       width: hint.width, height: hint.height)
@@ -212,7 +202,7 @@ public final class CoverView: NSView {
 
     public func changeCover() {
         guard let window else { onChangeCover?(.zero); return }
-        onChangeCover?(window.convertToScreen(changeButton.convert(changeButton.bounds, to: nil)))
+        onChangeCover?(window.convertToScreen(buttons.convert(buttons.bounds, to: nil)))
     }
 
     // MARK: «Переместить»
@@ -295,7 +285,7 @@ enum CoverThumbnail {
     }
 }
 
-/// Кнопки на обложке одной группой, как у Notion: общая подложка, между кнопками — черта.
+/// Кнопки на обложке одной тёмной группой, как у Notion: общая подложка без черт между «Сменить» и «Переместить».
 @MainActor
 final class CoverButtonGroup: NSView {
     private(set) var items: [CoverButton] = []
@@ -312,15 +302,15 @@ final class CoverButtonGroup: NSView {
     }
 
     override var fittingSize: NSSize {
-        NSSize(width: items.reduce(0) { $0 + $1.fittingWidth } + CGFloat(max(0, items.count - 1)), height: Metrics.PageCover.buttonHeight)
+        NSSize(width: items.reduce(0) { $0 + $1.fittingWidth } + 2 * Metrics.PageCover.buttonGroupPadding, height: Metrics.PageCover.buttonHeight)
     }
 
     override func layout() {
         super.layout()
-        var x: CGFloat = 0
+        var x = Metrics.PageCover.buttonGroupPadding
         for item in items {
-            item.frame = NSRect(x: x, y: 0, width: item.fittingWidth, height: bounds.height)
-            x += item.fittingWidth + 1
+            item.frame = NSRect(x: x, y: 2, width: item.fittingWidth, height: bounds.height - 4)
+            x += item.fittingWidth
         }
     }
 
@@ -332,8 +322,6 @@ final class CoverButtonGroup: NSView {
         Palette.coverButtonBorder.setStroke()
         path.lineWidth = 1
         path.stroke()
-        Palette.coverButtonBorder.setFill()
-        for item in items.dropLast() { NSRect(x: item.frame.maxX, y: 0, width: 1, height: bounds.height).fill() }
     }
 }
 
@@ -390,7 +378,7 @@ final class CoverButton: NSView {
     override func draw(_ dirtyRect: NSRect) {
         if isPointerInside {
             Palette.coverButtonHover.setFill()
-            bounds.insetBy(dx: 1, dy: 1).fill()
+            NSBezierPath(roundedRect: bounds, xRadius: 3, yRadius: 3).fill()
         }
         let text = attributedTitle
         let size = text.size()
