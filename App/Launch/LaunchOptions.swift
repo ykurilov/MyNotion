@@ -21,6 +21,11 @@ struct LaunchOptions {
     var typingBenchmarkURL: URL?
     /// `--search-benchmark <путь>`: замер поиска — время от нажатия до выдачи на экране (T054), отчёт в файл и выход.
     var searchBenchmarkURL: URL?
+    /// `--rich-memory-check <путь>`: память за 120 переходов между «богатыми» страницами (US3, T056), отчёт в файл и выход.
+    var richMemoryCheckURL: URL?
+    /// `--tabs-benchmark <путь>`: замер вкладок — переключение, «назад», «вперёд», память 20 вкладок (US3, T056),
+    /// отчёт в файл; в конце оставляет в базе 10 вкладок для замера запуска с ними, и выход.
+    var tabsBenchmarkURL: URL?
     /// `--export-markdown <папка>`: выгрузить все записи в Markdown в эту папку без окна выбора и выйти (T057).
     var exportMarkdownURL: URL?
     /// `--import-notion <путь>`: импортировать выгрузку Notion (ZIP или папку) без окна выбора, напечатать отчёт и выйти (T090).
@@ -51,7 +56,8 @@ struct LaunchOptions {
     /// (`scripts/vm/sync-memory-check.sh`); у эталонной базы синхронизации нет.
     var allowsSync: Bool {
         uiGalleryURL == nil && typingBenchmarkURL == nil && searchBenchmarkURL == nil && windowSnapshotURL == nil
-            && exportMarkdownURL == nil
+            && richMemoryCheckURL == nil
+            && exportMarkdownURL == nil && tabsBenchmarkURL == nil
     }
 
     init(arguments: [String]) {
@@ -68,6 +74,8 @@ struct LaunchOptions {
             case "--window-snapshot": windowSnapshotURL = remaining.popFirst().map(Self.fileURL)
             case "--typing-benchmark": typingBenchmarkURL = remaining.popFirst().map(Self.fileURL)
             case "--search-benchmark": searchBenchmarkURL = remaining.popFirst().map(Self.fileURL)
+            case "--rich-memory-check": richMemoryCheckURL = remaining.popFirst().map(Self.fileURL)
+            case "--tabs-benchmark": tabsBenchmarkURL = remaining.popFirst().map(Self.fileURL)
             case "--export-markdown": exportMarkdownURL = remaining.popFirst().map(Self.fileURL)
             case "--import-notion": importNotionURL = remaining.popFirst().map(Self.fileURL)
             case "--ui-gallery": uiGalleryURL = remaining.popFirst().map(Self.fileURL)

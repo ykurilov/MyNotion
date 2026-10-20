@@ -32,6 +32,10 @@ public struct PageEditorView: View {
     let topBarAccessory: AnyView?
     /// Добавки шапки (US1: обложка); создаются один раз на редактор.
     let headerAddons: [PageHeaderAddonFactory]
+    /// Вкладки (US3): окно читает место прокрутки открытой страницы, когда уходит с неё.
+    let scrollPlace: PageScrollPlace?
+    /// Вкладки (US3): место прокрутки, на которое встать после открытия («назад», переключение вкладки).
+    let restoringScroll: TabScroll?
 
     public init(document: PageDocument, ancestorTitles: [String] = [], initialFocus: PageTextView.InitialFocus,
                 linkedPages: [UUID: LinkedPage] = [:], onOpenPage: @escaping @MainActor (UUID) -> Void = { _ in },
@@ -40,7 +44,8 @@ public struct PageEditorView: View {
                 onResolveConflict: @escaping @MainActor (Conflict) -> Void = { _ in },
                 blockViewState: BlockViewStateStore? = nil, blockReveal: BlockReveal? = nil,
                 onReady: @escaping @MainActor () -> Void = {}, mentions: MentionSettings = MentionSettings(),
-                pageMenuItems: [PageMenuItem] = [], topBarAccessory: AnyView? = nil, headerAddons: [PageHeaderAddonFactory] = []) {
+                pageMenuItems: [PageMenuItem] = [], topBarAccessory: AnyView? = nil, headerAddons: [PageHeaderAddonFactory] = [],
+                scrollPlace: PageScrollPlace? = nil, restoringScroll: TabScroll? = nil) {
         self.document = document
         self.ancestorTitles = ancestorTitles
         self.initialFocus = initialFocus
@@ -56,6 +61,8 @@ public struct PageEditorView: View {
         self.pageMenuItems = pageMenuItems
         self.topBarAccessory = topBarAccessory
         self.headerAddons = headerAddons
+        self.scrollPlace = scrollPlace
+        self.restoringScroll = restoringScroll
     }
 
     public var body: some View {
@@ -67,7 +74,7 @@ public struct PageEditorView: View {
             PageTextEditor(document: document, icon: document.page.icon, initialFocus: initialFocus, linkedPages: linkedPages,
                            onOpenPage: onOpenPage, onSubpageRequest: onSubpageRequest, onSetIcon: onSetIcon, onResolveConflict: onResolveConflict,
                            blockViewState: blockViewState, blockReveal: blockReveal, onReady: onReady,
-                           mentions: mentions, headerAddons: headerAddons)
+                           mentions: mentions, headerAddons: headerAddons, scrollPlace: scrollPlace, restoringScroll: restoringScroll)
                 // У страницы с обложкой затухания нет, как у Notion: оно легло бы светлой полосой на верх обложки.
                 .overlay(alignment: .top) { if document.page.cover == nil { scrollEdgeFade } }
         }
@@ -127,6 +134,8 @@ struct PageTextEditor: NSViewRepresentable {
     let onReady: @MainActor () -> Void
     var mentions = MentionSettings()
     var headerAddons: [PageHeaderAddonFactory] = []
+    var scrollPlace: PageScrollPlace?
+    var restoringScroll: TabScroll?
 
     /// Какой запрос перехода к блоку редактор уже выполнил.
     final class Coordinator {
@@ -140,6 +149,8 @@ struct PageTextEditor: NSViewRepresentable {
         textView.blockViewState = blockViewState
         let reveal = blockReveal
         context.coordinator.revealToken = reveal?.token
+        scrollPlace?.attach(textView)
+        textView.pendingScrollPlace = restoringScroll
         textView.onReady = { [weak textView, onReady] in
             onReady()
             if let reveal { textView?.revealBlock(reveal.blockId) }
@@ -184,7 +195,38 @@ struct PageTextEditor: NSViewRepresentable {
     }
 
     static func dismantleNSView(_ scrollView: NSScrollView, coordinator: Coordinator) {
-        (scrollView.documentView as? PageTextView)?.commitEdits()
+        guard let textView = scrollView.documentView as? PageTextView else { return }
+        textView.commitEdits()
+        // Строки абзацев видимой части: их фрагменты остаются у видов абзацев, которые AppKit может держать
+        // дольше страницы. Отцеплять раскладку от текста целиком дорого (страница на 10 000 блоков — +30 мс
+        // к переходу), а с окном на экране AppKit сам отпускает эти виды.
+        if let layoutManager = textView.textLayoutManager, let viewport = layoutManager.textViewportLayoutController.viewportRange {
+            layoutManager.textViewportLayoutController.delegate = nil
+            layoutManager.enumerateTextLayoutFragments(from: viewport.location) { fragment in
+                fragment.invalidateLayout()
+                return fragment.rangeInElement.endLocation.compare(viewport.endLocation) == .orderedAscending
+            }
+        }
+        detachSubviews(of: textView)
+    }
+
+    /// Нарисованное слоями закрытой страницы.
+    private static func clearContents(of layer: CALayer?) {
+        guard let layer else { return }
+        layer.contents = nil
+        layer.sublayers?.forEach(clearContents)
+    }
+
+    /// Виды закрытой страницы снимаются по одному, от глубоких к верхним, без нарисованного. AppKit подписывает виды
+    /// на системные уведомления блоком, который держит вид, и отписывает при снятии вида с родителя: вид, отпущенный
+    /// вместе с родителем, оставался подписанным. У окна вне экрана (служебные запуски) виды абзацев TextKit живут
+    /// дольше страницы — без раскладки и рисунка они почти ничего не весят.
+    static func detachSubviews(of view: NSView) {
+        for subview in view.subviews.reversed() {
+            detachSubviews(of: subview)
+            clearContents(of: subview.layer)
+            subview.removeFromSuperview()
+        }
     }
 }
 

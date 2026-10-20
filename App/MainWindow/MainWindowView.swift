@@ -66,6 +66,12 @@ struct MainWindowView: View {
         if let benchmarkURL = options.searchBenchmarkURL, case .success(let library) = library {
             SearchBenchmark.editorReady(model: model ?? library.firstWindow, reportTo: benchmarkURL)
         }
+        if let tabsURL = options.tabsBenchmarkURL, case .success(let library) = library {
+            TabsBenchmark.editorReady(model: model ?? library.firstWindow, reportTo: tabsURL)
+        }
+        if let memoryURL = options.richMemoryCheckURL, case .success(let library) = library {
+            RichPagesMemoryCheck.editorReady(model: model ?? library.firstWindow, reportTo: memoryURL)
+        }
         if let latencyURL = options.reminderLatencyURL, case .success(let library) = library {
             ReminderLatencyCheck.start(library: library, reportTo: latencyURL)
         }
@@ -163,16 +169,15 @@ private struct PagesWindow: View {
                 HStack(spacing: 0) {
                     sidebar
                         .frame(width: model.sidebarWidth)
+                        // Строка светофора над панелью тянет окно (окно за фон не тянется — US3, вкладки).
+                        .background(alignment: .top) { WindowDragArea().frame(height: Metrics.Window.titleBarHeight) }
                     sidebarEdge
                 }
                 .transition(.move(edge: .leading))
             }
             VStack(spacing: 0) {
-                // Панель спрятана: над страницей строка светофора со шторкой, путь страницы — под ней.
-                if model.isSidebarCollapsed {
-                    Color(nsColor: Palette.pageBackground)
-                        .frame(height: Metrics.Window.titleBarHeight)
-                }
+                // Вкладки — в строке светофора над страницей; при спрятанной панели — за шторкой (US3).
+                tabStrip
                 pageArea
             }
             .frame(maxWidth: .infinity)
@@ -187,6 +192,12 @@ private struct PagesWindow: View {
             }
         }
         .modifier(NotionImportSheets(controller: importController))
+        .overlay {
+            if model.isNewTabSearchShown {
+                NewTabSearchView(source: RecentPagesSource(store: model.store, tree: model.tree),
+                                 open: { model.openInNewTab($0) }, dismiss: { model.isNewTabSearchShown = false })
+            }
+        }
         .modalCard(isPresented: model.isSyncSettingsShown) {
             SyncSettingsView(controller: model.syncSettingsPreview ?? model.sync) { model.isSyncSettingsShown = false }
         }
@@ -241,6 +252,7 @@ private struct PagesWindow: View {
         )
         actions.moveFavorite = { model.moveFavorite($0, toIndex: $1) }
         actions.rowMenuHandlers[.favorite] = { model.toggleFavorite($0) }
+        actions.rowMenuHandlers[.openInNewTab] = { model.open(PageOpenRequest(pageId: $0, inNewTab: true)) }
         actions.pageFlags = { [tree = model.tree] pageId in
             let page = tree.page(pageId)
             return (isTemplate: page?.isTemplate ?? false, isFavorite: page?.favorite != nil)
@@ -257,7 +269,7 @@ private struct PagesWindow: View {
             sections.append(RecentSection.content(tree: model.tree, revision: model.treeRevision + library.sectionsRevision,
                                                   pageIds: library.recentPageIds, selectedPageId: model.openPageId,
                                                   liveTitle: model.liveTitleOfOpenPage, actions: actions,
-                                                  showAll: model.showAllRecent))
+                                                  showAll: { model.showRecentPages() }))
         }
         if !library.favoritePageIds.isEmpty {
             sections.append(FavoritesSection.content(tree: model.tree, revision: model.treeRevision + library.sectionsRevision,
@@ -265,6 +277,25 @@ private struct PagesWindow: View {
                                                      liveTitle: model.liveTitleOfOpenPage, actions: actions))
         }
         return sections
+    }
+
+    /// Полоса вкладок окна (US3, contracts/pages-ui.md, «Верхняя полоса окна»).
+    private var tabStrip: some View {
+        TabStripView(
+            items: model.tabStripItems,
+            canGoBack: model.canGoBack,
+            canGoForward: model.canGoForward,
+            leadingInset: model.isSidebarCollapsed ? Metrics.Tabs.collapsedSidebarLeading : 0,
+            previewHoveredTabId: model.previewHoveredTabId,
+            actions: TabStripActions(
+                back: { model.goBack() },
+                forward: { model.goForward() },
+                activate: { model.activateTab($0) },
+                close: { model.closeTab(at: $0) },
+                move: { model.moveTab(from: $0, to: $1) },
+                newTab: { model.showNewTabSearch() }
+            )
+        )
     }
 
     /// Шторка: середина — на `sidebarToggleCenterX` от левого края, в строке светофора.
@@ -307,9 +338,7 @@ private struct PagesWindow: View {
     }
 
     /// Что показать в блоках-подстраницах открытой страницы.
-    private var linkedPages: [UUID: LinkedPage] {
-        Dictionary(model.tree.pagesInTreeOrder.map { ($0.id, LinkedPage(title: $0.title, icon: $0.icon)) }) { first, _ in first }
-    }
+    private var linkedPages: [UUID: LinkedPage] { model.linkedPages }
 
     /// Упоминания и даты открытой страницы: названия, корзина, поиск для «@», разрешение на уведомления.
     private func mentionSettings(pages: [UUID: LinkedPage]) -> MentionSettings {
@@ -343,10 +372,19 @@ private struct PagesWindow: View {
                 topBarAccessory: AnyView(FavoriteStarButton(isFavorite: model.isFavorite(document.pageId)) {
                     model.toggleFavorite(document.pageId)
                 }),
-                headerAddons: [PageCoverAddon.factory(model)]
+                headerAddons: [PageCoverAddon.factory(model)],
+                scrollPlace: model.scrollPlace,
+                restoringScroll: model.restoringScroll
             )
             // Новый документ — новый редактор: страницу перечитали после операции с деревом.
             .id(ObjectIdentifier(document))
+        } else if let trashed = model.activeTabTrashedPage {
+            TrashedPageView(page: trashed) { model.restoreActiveTabPage() }
+                .onAppear { DispatchQueue.main.async { onEditorReady() } }
+        } else if model.loadError == nil, !model.tree.pagesInTreeOrder.isEmpty {
+            // Вкладка без страницы (или её страница стёрта) — «Недавние».
+            RecentPagesView(source: RecentPagesSource(store: model.store, tree: model.tree)) { model.open($0) }
+                .onAppear { DispatchQueue.main.async { onEditorReady() } }
         } else {
             Text(model.loadError ?? "Нет страниц. ⌘N — новая страница")
                 .foregroundStyle(Color(nsColor: Palette.textSecondary))

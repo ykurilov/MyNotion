@@ -408,6 +408,8 @@ final class UIGalleryRunner {
                 }) else { return "строки в «Избранном» нет" }
                 if capturedWhileShowing == nil { return "меню строки не снялось" }
             }
+        case .tabs(let kind):
+            return await GalleryTabsScene.show(kind, model: model, library: library)
 
         case .pageMenu:
             await open(library.sample.page.id)
@@ -524,6 +526,8 @@ final class UIGalleryRunner {
         case .sidebarHidden:
             model.toggleSidebar()
             await settle()
+        case .tabs(let kind):
+            await GalleryTabsScene.tearDown(kind, model: model)
         case .favoriteStar, .sidebarSections:
             if model.collapsedSections.contains(.favorites) { model.toggleSection(.favorites) }
             await setSections(favorites: [], recents: [])
