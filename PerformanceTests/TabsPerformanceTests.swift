@@ -33,14 +33,15 @@ final class TabsPerformanceTests: XCTestCase {
             launchSeconds.append(launchReport.editorReadyAt - requestedAt)
         }
 
-        let memoryGrowth = (report.memoryTwentyTabsMB ?? .infinity) - (report.memoryOneTabMB ?? 0)
+        // Живая куча, а не след процесса: след гуляет на ±10 МБ от состояния распределителя, а не от вкладок.
+        let memoryGrowth = (report.heapTwentyTabsMB ?? .infinity) - (report.heapOneTabMB ?? 0)
         let summary = """
             Переключение вкладки (20 «богатых»): p95 \(Self.format(report.switchP95Ms)) мс, медиана \(Self.format(Self.median(report.switchMs))) мс, \
             \(report.switchMs.count) переключений
             Назад: p95 \(Self.format(report.backP95Ms)) мс; вперёд: p95 \(Self.format(report.forwardP95Ms)) мс
             Место прокрутки после возврата: \(report.scrollRestored) из \(report.scrollChecked)
-            Память: 1 вкладка \(Self.format(report.memoryOneTabMB)) МБ, 20 вкладок \(Self.format(report.memoryTwentyTabsMB)) МБ, \
-            прирост \(Self.format(memoryGrowth)) МБ
+            Память (живая куча): 1 вкладка \(Self.format(report.heapOneTabMB)) МБ, 20 вкладок \(Self.format(report.heapTwentyTabsMB)) МБ, \
+            прирост \(Self.format(memoryGrowth)) МБ; след процесса \(Self.format(report.memoryOneTabMB)) → \(Self.format(report.memoryTwentyTabsMB)) МБ
             Запуск с 10 вкладками до EditorReady, с: \(launchSeconds.map { String(format: "%.3f", $0) }.joined(separator: ", "))
             """
         print(summary)
@@ -97,6 +98,8 @@ final class TabsPerformanceTests: XCTestCase {
         let forwardP95Ms: Double?
         let memoryOneTabMB: Double?
         let memoryTwentyTabsMB: Double?
+        let heapOneTabMB: Double?
+        let heapTwentyTabsMB: Double?
         let scrollRestored: Int
         let scrollChecked: Int
         let error: String?
