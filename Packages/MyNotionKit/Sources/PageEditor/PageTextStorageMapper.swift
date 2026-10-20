@@ -491,22 +491,8 @@ public final class PageTextStorageMapper: NSObject {
     }
 
     static func baseAttributes(for block: Block, after previous: BlockKind? = nil) -> [NSAttributedString.Key: Any] {
-        let style = textStyle(of: block.kind)
-        let line = Typography.line(for: style)
-        let spacing = Metrics.block(style)
-        let descriptor = block.kind.descriptor
-        let paragraphStyle = (line.paragraphStyle.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
-        if let lineHeight = descriptor.lineHeight {
-            paragraphStyle.minimumLineHeight = lineHeight
-            paragraphStyle.maximumLineHeight = lineHeight
-        }
-        paragraphStyle.paragraphSpacingBefore = spacingBefore(block.kind, after: previous)
-        paragraphStyle.paragraphSpacing = descriptor.bottomSpacing ?? max(0, spacing.height - line.lineHeight - spacing.topSpacing)
-        let marker: CGFloat = block.kind.hasMarkerColumn ? Metrics.BlockMarker.textInset : descriptor.leadingInset
-        let indent = CGFloat(block.indent) * Metrics.Page.indentPerLevel + marker
-        paragraphStyle.firstLineHeadIndent = indent
-        paragraphStyle.headIndent = indent
-
+        let line = Typography.line(for: textStyle(of: block.kind))
+        let paragraphStyle = paragraphStyle(of: block.kind, indent: block.indent, spacingBefore: spacingBefore(block.kind, after: previous))
         var attributes = paragraphAttributes(of: block)
         attributes[.font] = line.font
         attributes[.foregroundColor] = Palette.notionText(block.color.text?.tone)
@@ -516,6 +502,42 @@ public final class PageTextStorageMapper: NSObject {
             attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
         }
         return attributes
+    }
+
+    private struct ParagraphStyleKey: Hashable {
+        let kind: BlockKind
+        let indent: Int
+        let spacingBefore: CGFloat
+    }
+
+    /// Готовые оформления абзацев: одно на тип, вложенность и отступ сверху. Сборка своего на каждый блок была заметной
+    /// частью открытия страницы (профиль переключения вкладок, 003). Оформление не меняют на месте — только копию.
+    nonisolated(unsafe) private static var paragraphStyles: [ParagraphStyleKey: NSParagraphStyle] = [:]
+    private static let paragraphStylesLock = NSLock()
+
+    private static func paragraphStyle(of kind: BlockKind, indent level: Int, spacingBefore: CGFloat) -> NSParagraphStyle {
+        let key = ParagraphStyleKey(kind: kind, indent: level, spacingBefore: spacingBefore)
+        paragraphStylesLock.lock()
+        defer { paragraphStylesLock.unlock() }
+        if let known = paragraphStyles[key] { return known }
+        let style = textStyle(of: kind)
+        let line = Typography.line(for: style)
+        let spacing = Metrics.block(style)
+        let descriptor = kind.descriptor
+        let paragraphStyle = (line.paragraphStyle.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
+        if let lineHeight = descriptor.lineHeight {
+            paragraphStyle.minimumLineHeight = lineHeight
+            paragraphStyle.maximumLineHeight = lineHeight
+        }
+        paragraphStyle.paragraphSpacingBefore = spacingBefore
+        paragraphStyle.paragraphSpacing = descriptor.bottomSpacing ?? max(0, spacing.height - line.lineHeight - spacing.topSpacing)
+        let marker: CGFloat = kind.hasMarkerColumn ? Metrics.BlockMarker.textInset : descriptor.leadingInset
+        let indent = CGFloat(level) * Metrics.Page.indentPerLevel + marker
+        paragraphStyle.firstLineHeadIndent = indent
+        paragraphStyle.headIndent = indent
+        let shared = paragraphStyle.copy() as? NSParagraphStyle ?? paragraphStyle
+        paragraphStyles[key] = shared
+        return shared
     }
 
     /// Абзац блока: текст с оформлением и, если нужно, перевод строки с атрибутами того же абзаца.

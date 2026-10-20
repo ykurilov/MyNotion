@@ -241,9 +241,16 @@ struct PageMenuButton: NSViewRepresentable {
     let items: [PageMenuItem]
     let context: @MainActor () -> PageMenuContext
 
+    /// Одна картинка на все страницы; кнопка без `sizeToFit` — размер задаёт верхняя полоса, а замер символа
+    /// стоил каждому открытию страницы (профиль переключения вкладок, 003).
+    private static let image = NSImage(systemSymbolName: "ellipsis", accessibilityDescription: "Настройки и действия страницы")!
+
     func makeNSView(context: Context) -> NSButton {
-        let button = NSButton(image: NSImage(systemSymbolName: "ellipsis", accessibilityDescription: "Настройки и действия страницы")!,
-                              target: context.coordinator, action: #selector(Coordinator.open(_:)))
+        let button = NSButton(frame: .zero)
+        button.image = Self.image
+        button.imagePosition = .imageOnly
+        button.target = context.coordinator
+        button.action = #selector(Coordinator.open(_:))
         button.isBordered = false
         button.toolTip = "Настройки и действия страницы"
         button.contentTintColor = Palette.textSecondary

@@ -4,7 +4,7 @@ import SwiftUI
 import VisualStyle
 
 /// Открытая страница: верхняя полоса с путём, полоса ошибки сохранения и редактор
-/// (contracts/visual-style.md, «Страница»). На каждую страницу — свой редактор: задавайте `.id(pageId)`.
+/// (contracts/visual-style.md, «Страница»). На каждый документ — свой редактор (`.id` внутри).
 public struct PageEditorView: View {
     let document: PageDocument
     /// Названия страниц-предков с иконками, от корня; у корневой страницы — пусто.
@@ -75,6 +75,9 @@ public struct PageEditorView: View {
                            onOpenPage: onOpenPage, onSubpageRequest: onSubpageRequest, onSetIcon: onSetIcon, onResolveConflict: onResolveConflict,
                            blockViewState: blockViewState, blockReveal: blockReveal, onReady: onReady,
                            mentions: mentions, headerAddons: headerAddons, scrollPlace: scrollPlace, restoringScroll: restoringScroll)
+                // Новый документ — новый редактор (страницу открыли или перечитали после операции с деревом); верхняя
+                // полоса остаётся и только обновляется: её пересоздание стоило каждому переходу (профиль вкладок, 003).
+                .id(ObjectIdentifier(document))
                 // У страницы с обложкой затухания нет, как у Notion: оно легло бы светлой полосой на верх обложки.
                 .overlay(alignment: .top) { if document.page.cover == nil { scrollEdgeFade } }
         }

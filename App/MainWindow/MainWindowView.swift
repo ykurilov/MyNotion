@@ -376,8 +376,6 @@ private struct PagesWindow: View {
                 scrollPlace: model.scrollPlace,
                 restoringScroll: model.restoringScroll
             )
-            // Новый документ — новый редактор: страницу перечитали после операции с деревом.
-            .id(ObjectIdentifier(document))
         } else if let trashed = model.activeTabTrashedPage {
             TrashedPageView(page: trashed) { model.restoreActiveTabPage() }
                 .onAppear { DispatchQueue.main.async { onEditorReady() } }

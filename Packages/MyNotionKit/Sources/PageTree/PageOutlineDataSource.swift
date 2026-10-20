@@ -135,11 +135,24 @@ final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineV
             if outlineView.selectedRow != row {
                 outlineView.selectRowIndexes([row], byExtendingSelection: false)
             }
-            // Видимую строку не трогаем: прокрутка заново раскладывает видимые строки.
-            if !outlineView.rows(in: outlineView.visibleRect).contains(row) { outlineView.scrollRowToVisible(row) }
+            // Видимую строку не трогаем: прокрутка заново раскладывает видимые строки. Невидимую — показываем чуть позже:
+            // сборка видов строк на новом месте (около 10 мс) не задерживает показ открытой страницы и ввод в неё
+            // (замер «назад», 003); панель догоняет страницу через `revealDelay`, глазом этого не видно.
+            if !outlineView.rows(in: outlineView.visibleRect).contains(row) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.revealDelay) { [weak self] in self?.scrollToVisible(pageId) }
+            }
         } else {
             outlineView.deselectAll(nil)
         }
+    }
+
+    static let revealDelay: DispatchTimeInterval = .milliseconds(50)
+
+    private func scrollToVisible(_ pageId: UUID) {
+        guard let outlineView, tree.page(pageId) != nil else { return }
+        let row = outlineView.row(forItem: item(for: pageId))
+        guard row >= 0, row == outlineView.selectedRow, !outlineView.rows(in: outlineView.visibleRect).contains(row) else { return }
+        outlineView.scrollRowToVisible(row)
     }
 
     func setLiveTitle(_ title: String?, of pageId: UUID?) {
