@@ -209,6 +209,16 @@ struct SlashPageTests {
         #expect(editor.texts == ["Мой план"])
     }
 
+    @Test("Блок с вложенными тоже превращается в страницу: дети переедут внутрь у владельца дерева")
+    func turnIntoPageWithChildren() throws {
+        let editor = try EditorFixture([EditorFixture.Spec(kind: .toggle, text: "Раздел"), .bullet("пункт", indent: 1)])
+        var requests: [SubpageRequest] = []
+        editor.textView.onSubpageRequest = { requests.append($0) }
+        editor.textView.setKind(.pageLink, ofBlocksAt: 0..<1)
+
+        #expect(requests == [.turnInto(blockId: editor.document.blocks[0].id)])
+    }
+
     @Test("Ссылка на подстраницу в «Страницу» не превращается; несколько блоков разом — тоже нет")
     func turnIntoPageOnlyForOneTextBlock() throws {
         let link = UUID()

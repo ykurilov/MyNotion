@@ -52,6 +52,38 @@ final class SlashPageTests: XCTestCase {
         XCTAssertEqual(try blocks("Проекты"), withLink)
     }
 
+    /// «Преобразовать в → Страница» у переключателя с вложенным: ссылка на месте, дети — внутри подстраницы; ⌘Z — один шаг.
+    @MainActor
+    func testTurnIntoPageMovesChildrenAndUndoesInOneStep() throws {
+        let app = library.launchApp()
+        app.createPage(titled: "Проекты")
+        app.typeText("> Раздел")
+        app.typeKey(.return, modifierFlags: [])
+        app.typeText("пункт")
+        XCTAssertTrue(waitUntil { (try? self.blocks("Проекты").map { $0.split(separator: " ").dropFirst().joined(separator: " ") })
+            == ["Раздел", "пункт"] }, "В базе: \(String(describing: try? blocks("Проекты")))")
+        let before = try blocks("Проекты")
+
+        XCTAssertTrue(app.hoverFirstBlock(), "Ручки «⋮⋮» у первого блока не появились")
+        app.blockDragHandle.click()
+        XCTAssertTrue(app.popupItem("turn-into").waitForExistence(timeout: 5), "Меню блока не открылось")
+        // Строки меню — свои виды, не системное меню: щелчок и наведение — по точке (как в ColorTests).
+        app.popupItem("turn-into").coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).hover()
+        XCTAssertTrue(app.popupItem("pageLink").waitForExistence(timeout: 5), "В «Преобразовать в» нет «Страница»")
+        app.popupItem("pageLink").coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+
+        XCTAssertTrue(waitUntil { (try? self.blocks("Проекты")) == ["pageLink "] }, "В базе: \(String(describing: try? blocks("Проекты")))")
+        XCTAssertTrue(waitUntil { (try? self.blocks("Раздел").map { $0.split(separator: " ").dropFirst().joined(separator: " ") })
+            == ["пункт"] }, "В подстранице: \(String(describing: try? blocks("Раздел")))")
+        XCTAssertTrue(row(app, "Раздел").waitForExistence(timeout: 5), "В дереве нет «Раздел»")
+
+        app.pageBody.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6)).click()
+        app.typeKey("z", modifierFlags: .command)
+        XCTAssertTrue(waitUntil { (try? self.blocks("Проекты")) == before }, "После ⌘Z: \(String(describing: try? blocks("Проекты")))")
+        XCTAssertTrue(waitUntil { !self.row(app, "Раздел").exists }, "⌘Z не убрал подстраницу из дерева")
+        app.quit()
+    }
+
     /// Блоки страницы из базы: «тип текст».
     private func blocks(_ title: String) throws -> [String] {
         try library.savedBlocks(ofPage: title).map { "\($0.kind) \($0.text)" }

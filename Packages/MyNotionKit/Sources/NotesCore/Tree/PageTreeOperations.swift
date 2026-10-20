@@ -45,16 +45,19 @@ public final class PageTreeOperations {
         try createSubpage(in: parentId, linkAt: placement) { _ in title }
     }
 
-    /// «Преобразовать в → Страница», как в Notion: блок становится ссылкой на подстраницу с его текстом в названии.
-    /// Страница не открывается; ⌘Z возвращает блок с текстом.
+    /// «Преобразовать в → Страница», как в Notion: блок становится ссылкой на подстраницу с его текстом в названии,
+    /// вложенные под ним блоки переезжают внутрь (со своими колонками, таблицами и подстраницами).
+    /// Страница не открывается; ⌘Z одним шагом возвращает блок с детьми на место.
     @discardableResult
     public func turnIntoSubpage(_ blockId: UUID, in pageId: UUID) throws -> Page {
-        try createSubpage(in: pageId, linkAt: .replacing(blockId: blockId)) { block in
+        try createSubpage(in: pageId, linkAt: .replacing(blockId: blockId), movesChildren: true) { block in
             block.text.string.trimmingCharacters(in: .whitespacesAndNewlines)
         }
     }
 
-    private func createSubpage(in parentId: UUID, linkAt placement: SubpageLinkPlacement, title: (Block) -> String) throws -> Page {
+    private func createSubpage(
+        in parentId: UUID, linkAt placement: SubpageLinkPlacement, movesChildren: Bool = false, title: (Block) -> String
+    ) throws -> Page {
         let created = try perform { transaction in
             guard try transaction.page(parentId) != nil else { throw NotesStoreError.pageNotFound(parentId) }
             let blocks = try transaction.blocks(ofPage: parentId)
@@ -68,9 +71,10 @@ public final class PageTreeOperations {
             var link = Block(pageId: parentId, kind: .pageLink, linkedPageId: page.id, sortKey: placed.sortKey)
             link.indent = anchor.indent
             link.containerId = anchor.containerId
+            let children = movesChildren ? try Self.moveChildren(of: anchor, in: blocks, into: page.id, transaction) : ChildrenMove()
             if placement.replaces { try transaction.deleteBlock(anchor.id) }
             let inserted = try transaction.insertBlock(link)
-            return InlineSubpage(page: page, link: inserted, replaced: placement.replaces ? anchor : nil)
+            return InlineSubpage(page: page, link: inserted, replaced: placement.replaces ? anchor : nil, children: children)
         }
         registerUndo("Новая подстраница") { try $0.withdraw(created) }
         return created.page
@@ -207,11 +211,34 @@ public final class PageTreeOperations {
         let link: Block
         /// Блок, на месте которого встала ссылка; `nil` — ссылка встала за блоком.
         let replaced: Block?
+        var children = ChildrenMove()
     }
 
-    /// Отмена «Страницы» из «/»: подстраница — в корзину, ссылка убрана, прежний блок — на месте.
+    /// Что переехало внутрь новой подстраницы при «Преобразовать в»: для отмены и возврата.
+    private struct ChildrenMove {
+        /// Дети и всё в их контейнерах, как лежали в родителе (сначала контейнер, потом его потоки).
+        var originals: [Block] = []
+        /// Копии ссылок на переехавшие подстраницы — в новой странице.
+        var linkCopies: [Block] = []
+        /// Переехавшие подстраницы: прежнее и новое место.
+        var reparented: [(pageId: UUID, from: (parentId: UUID?, sortKey: FractionalSortKey), to: FractionalSortKey)] = []
+    }
+
+    /// Отмена «Страницы» из «/»: подстраница — в корзину, ссылка убрана, прежний блок с детьми — на месте,
+    /// переехавшие подстраницы — у прежнего родителя.
     private func withdraw(_ created: InlineSubpage) throws {
         try perform { transaction in
+            for moved in created.children.reparented {
+                guard var page = try transaction.page(moved.pageId) else { continue }
+                (page.parentId, page.sortKey) = moved.from
+                try transaction.updatePage(page)
+            }
+            for copy in created.children.linkCopies where try transaction.block(copy.id) != nil {
+                try transaction.deleteBlock(copy.id)
+            }
+            for original in created.children.originals where try transaction.block(original.id) == nil {
+                try transaction.insertBlock(original)
+            }
             guard var page = try transaction.page(created.page.id) else { throw NotesStoreError.pageNotFound(created.page.id) }
             page.trashedAt = Date()
             try transaction.updatePage(page)
@@ -232,11 +259,74 @@ public final class PageTreeOperations {
             if let replaced = created.replaced, try transaction.block(replaced.id) != nil {
                 try transaction.deleteBlock(replaced.id)
             }
+            for original in created.children.originals where try transaction.block(original.id) != nil {
+                try transaction.deleteBlock(original.id)
+            }
+            for copy in created.children.linkCopies where try transaction.block(copy.id) == nil {
+                try transaction.insertBlock(copy)
+            }
+            for moved in created.children.reparented {
+                guard var subpage = try transaction.page(moved.pageId) else { continue }
+                (subpage.parentId, subpage.sortKey) = (page.id, moved.to)
+                try transaction.updatePage(subpage)
+            }
             if try !transaction.blocks(ofPage: created.link.pageId).contains(where: { $0.linkedPageId == page.id }) {
                 try transaction.insertBlock(created.link)
             }
         }
         registerUndo("Новая подстраница") { try $0.withdraw(created) }
+    }
+
+    /// Дети блока — следующие за ним в его потоке блоки с отступом больше — переезжают в начало новой страницы
+    /// копиями с новыми id: вложенность между собой, типы, цвет, данные (файлы, адреса) те же, контейнеры
+    /// (колонки, таблицы) — со своими потоками. Подстраницы, чьи ссылки среди детей, переезжают под новую страницу.
+    private static func moveChildren(of anchor: Block, in blocks: [Block], into pageId: UUID,
+                                     _ transaction: NotesTransaction) throws -> ChildrenMove {
+        let flow = blocks.filter { $0.containerId == anchor.containerId }.sorted(by: flowOrder)
+        guard let index = flow.firstIndex(where: { $0.id == anchor.id }) else { return ChildrenMove() }
+        let children = flow[(index + 1)...].prefix { $0.indent > anchor.indent }
+        guard !children.isEmpty else { return ChildrenMove() }
+        let flows = Dictionary(grouping: blocks.filter { $0.containerId != nil }, by: \.containerId)
+            .mapValues { $0.sorted(by: flowOrder) }
+
+        var move = ChildrenMove()
+        var copies: [Block] = []
+        var newIds: [UUID: UUID] = [:]
+        func copy(_ block: Block, sortKey: FractionalSortKey, indent: Int, containerId: UUID?) {
+            let copied = Block(pageId: pageId, kind: block.kind, text: block.text, indent: indent, isChecked: block.isChecked,
+                               linkedPageId: block.linkedPageId, sortKey: sortKey, containerId: containerId, color: block.color,
+                               props: block.props)
+            newIds[block.id] = copied.id
+            move.originals.append(block)
+            copies.append(copied)
+            for inner in flows[block.id] ?? [] {
+                copy(inner, sortKey: inner.sortKey, indent: inner.indent, containerId: copied.id)
+            }
+        }
+        var key: FractionalSortKey?
+        for child in children {
+            key = .between(key, nil)
+            copy(child, sortKey: key!, indent: max(child.indent - anchor.indent - 1, 0), containerId: nil)
+        }
+        // Ячейка таблицы помнит свой столбец по id: у копии — копия столбца.
+        for index in copies.indices {
+            if let column = copies[index].props.columnId, let copied = newIds[column] { copies[index].props.columnId = copied }
+        }
+
+        for original in move.originals.reversed() { try transaction.deleteBlock(original.id) }
+        for block in try transaction.blocks(ofPage: pageId) { try transaction.deleteBlock(block.id) }
+        var pageKey: FractionalSortKey?
+        for copied in copies {
+            try transaction.insertBlock(copied)
+            guard let linked = copied.linkedPageId, var subpage = try transaction.page(linked),
+                  subpage.parentId == anchor.pageId else { continue }
+            pageKey = .between(pageKey, nil)
+            move.reparented.append((linked, (subpage.parentId, subpage.sortKey), pageKey!))
+            move.linkCopies.append(copied)
+            (subpage.parentId, subpage.sortKey) = (pageId, pageKey!)
+            try transaction.updatePage(subpage)
+        }
+        return move
     }
 
     /// Ключ ссылки и блок, за которым она встаёт в документе (`nil` — первой).

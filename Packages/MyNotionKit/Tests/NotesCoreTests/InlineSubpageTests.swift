@@ -176,6 +176,122 @@ struct InlineSubpageTests {
         #expect(try store.pageContent(page)?.blocks.map(\.id) == blocks)
     }
 
+    /// Страница «Проекты» из блоков по порядку (поток страницы).
+    private func projects(blocks specs: [(BlockKind, String, Int)]) throws -> (page: UUID, blocks: [UUID]) {
+        try store.write { tx in
+            let page = try tx.createPage(title: "Проекты")
+            for block in try tx.blocks(ofPage: page.id) { try tx.deleteBlock(block.id) }
+            var last: FractionalSortKey?
+            var ids: [UUID] = []
+            for (kind, text, indent) in specs {
+                let block = try tx.insertBlock(Block(pageId: page.id, kind: kind, text: InlineText(text), indent: indent,
+                                                     sortKey: .between(last, nil)))
+                last = block.sortKey
+                ids.append(block.id)
+            }
+            return (page.id, ids)
+        }
+    }
+
+    private func blocks(_ pageId: UUID) throws -> [Block] {
+        try #require(try store.pageContent(pageId)).blocks
+    }
+
+    @Test("Преобразовать в страницу блок с детьми: дети переезжают внутрь со своей вложенностью, типами, цветом и данными")
+    func turnIntoPageMovesChildren() throws {
+        let (page, ids) = try projects(blocks: [(.paragraph, "до", 0), (.toggle, "Раздел", 0), (.bulletItem, "пункт", 1),
+                                                (.bulletItem, "под-пункт", 2), (.image, "", 1), (.paragraph, "после", 0)])
+        try store.write { tx in
+            var item = try #require(try tx.block(ids[2]))
+            item.color = BlockColor(text: .red)
+            try tx.updateBlock(item)
+            var image = try #require(try tx.block(ids[4]))
+            image.props.url = URL(string: "https://example.com/cat.png")
+            try tx.updateBlock(image)
+        }
+        let originals = try blocks(page)
+
+        let subpage = try tree.turnIntoSubpage(ids[1], in: page)
+
+        #expect(subpage.title == "Раздел")
+        #expect(try outline(page) == ["до", "→ Раздел", "после"])
+        let moved = try blocks(subpage.id)
+        #expect(moved.map(\.text.string) == ["пункт", "под-пункт", ""])
+        #expect(moved.map(\.kind) == [.bulletItem, .bulletItem, .image])
+        #expect(moved.map(\.indent) == [0, 1, 0])
+        #expect(moved[0].color == BlockColor(text: .red))
+        #expect(moved[2].props == originals[4].props)
+        #expect(Set(moved.map(\.id)).isDisjoint(with: ids), "У переехавших свои id: старые остаются пометками удаления")
+    }
+
+    @Test("Ребёнок-колонки переезжает со своими колонками и их блоками")
+    func turnIntoPageMovesContainers() throws {
+        let (page, ids) = try projects(blocks: [(.toggle, "Раздел", 0), (.columnList, "", 1), (.paragraph, "после", 0)])
+        try store.write { tx in
+            let column = try tx.insertBlock(Block(pageId: page, kind: .column, sortKey: .between(nil, nil), containerId: ids[1]))
+            try tx.insertBlock(Block(pageId: page, text: InlineText("в колонке"), sortKey: .between(nil, nil), containerId: column.id))
+        }
+
+        let subpage = try tree.turnIntoSubpage(ids[0], in: page)
+
+        let moved = try blocks(subpage.id)
+        let list = try #require(moved.first { $0.kind == .columnList })
+        let column = try #require(moved.first { $0.kind == .column })
+        let inner = try #require(moved.first { $0.text.string == "в колонке" })
+        #expect(list.containerId == nil && list.indent == 0)
+        #expect(column.containerId == list.id)
+        #expect(inner.containerId == column.id)
+        #expect(try blocks(page).map(\.kind) == [.pageLink, .paragraph], "В родителе от колонок ничего не осталось")
+    }
+
+    @Test("Ссылка-ребёнок переезжает вместе со своей страницей: та становится подстраницей новой")
+    func turnIntoPageMovesLinkedSubpages() throws {
+        let (page, ids) = try projects(blocks: [(.toggle, "Раздел", 0), (.paragraph, "после", 0)])
+        let inner = try tree.createSubpage(in: page, title: "Внутри", linkAt: .after(blockId: ids[0]))
+        try store.write { tx in
+            var link = try #require(try tx.blocks(ofPage: page).first { $0.linkedPageId == inner.id })
+            link.indent = 1
+            try tx.updateBlock(link)
+        }
+
+        let subpage = try tree.turnIntoSubpage(ids[0], in: page)
+
+        #expect(try store.pageTree().parentId(of: inner.id) == subpage.id)
+        #expect(try outline(subpage.id) == ["→ Внутри"])
+        #expect(try outline(page) == ["→ Раздел", "после"])
+    }
+
+    @Test("⌘Z после переезда детей — один шаг: блоки на месте с прежними id, страница-ребёнок у прежнего родителя; ⇧⌘Z снова")
+    func turnIntoPageWithChildrenUndoRedo() throws {
+        let (page, ids) = try projects(blocks: [(.toggle, "Раздел", 0), (.bulletItem, "пункт", 1), (.paragraph, "после", 0)])
+        let inner = try tree.createSubpage(in: page, title: "Внутри", linkAt: .after(blockId: ids[1]))
+        try store.write { tx in
+            var link = try #require(try tx.blocks(ofPage: page).first { $0.linkedPageId == inner.id })
+            link.indent = 1
+            try tx.updateBlock(link)
+        }
+        let undoManager = makeUndoManager()
+        let before = try blocks(page).map(\.id)
+        let innerSortKey = try #require(try store.pageTree().page(inner.id)).sortKey
+
+        let subpage = try undoable(undoManager) { try tree.turnIntoSubpage(ids[0], in: page) }
+        undoManager.undo()
+
+        #expect(try blocks(page).map(\.id) == before)
+        #expect(try outline(page) == ["Раздел", "пункт", "→ Внутри", "после"])
+        #expect(try store.pageTree().parentId(of: inner.id) == page)
+        #expect(try store.pageTree().page(inner.id)?.sortKey == innerSortKey)
+        #expect(try store.trashEntries().map(\.id) == [subpage.id])
+        #expect(!undoManager.canUndo)
+
+        undoManager.redo()
+        #expect(try outline(page) == ["→ Раздел", "после"])
+        #expect(try outline(subpage.id) == ["пункт", "→ Внутри"])
+        #expect(try store.pageTree().parentId(of: inner.id) == subpage.id)
+        undoManager.undo()
+        #expect(try outline(page) == ["Раздел", "пункт", "→ Внутри", "после"])
+    }
+
     @Test("Подстраница на месте блока несуществующей страницы или блока не создаётся")
     func needsBlock() throws {
         let (page, _) = try projects(["до"])

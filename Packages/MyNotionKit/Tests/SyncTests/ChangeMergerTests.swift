@@ -247,6 +247,51 @@ struct ChangeMergerTests {
         #expect(try b.store.trashEntries().map(\.id) == [subpage.id])
     }
 
+    @Test("«Преобразовать в страницу» с детьми доходит до другого Mac: дети и подстраница внутри новой; ⌘Z доходит тоже")
+    func turnIntoSubpageWithChildrenSyncs() throws {
+        let undoManager = UndoManager()
+        undoManager.groupsByEvent = false
+        let shared = try sharedPage(on: a, others: [b], numbering: numbering, text: "Раздел")
+        let child = try a.store.write { tx in
+            var toggle = try #require(try tx.block(shared.block))
+            toggle.kind = .toggle
+            try tx.updateBlock(toggle)
+            return try tx.insertBlock(Block(pageId: shared.page, kind: .bulletItem, text: InlineText("пункт"), indent: 1,
+                                            sortKey: .between(toggle.sortKey, nil)))
+        }
+        let inner = try a.tree.createSubpage(in: shared.page, title: "Внутри", linkAt: .after(blockId: child.id))
+        try a.store.write { tx in
+            var link = try #require(try tx.blocks(ofPage: shared.page).first { $0.linkedPageId == inner.id })
+            link.indent = 1
+            try tx.updateBlock(link)
+        }
+        try exchange([a, b], numbering: numbering)
+
+        a.wall.set(30_000)
+        a.tree.undoManager = undoManager
+        undoManager.beginUndoGrouping()
+        let subpage = try a.tree.turnIntoSubpage(shared.block, in: shared.page)
+        undoManager.endUndoGrouping()
+        try exchange([a, b], numbering: numbering)
+
+        for mac in [a, b] {
+            #expect(try mac.blocks(shared.page).map(\.linkedPageId) == [subpage.id], "\(mac.name)")
+            #expect(try mac.blocks(subpage.id).map { $0.linkedPageId == nil ? $0.text.string : "→" } == ["пункт", "→"], "\(mac.name)")
+            #expect(try mac.store.pageTree().parentId(of: inner.id) == subpage.id, "\(mac.name)")
+        }
+        #expect(try a.parents() == b.parents())
+
+        a.wall.set(40_000)
+        undoManager.undo()
+        try exchange([a, b], numbering: numbering)
+        for mac in [a, b] {
+            #expect(try mac.blocks(shared.page).map { $0.linkedPageId == nil ? $0.text.string : "→" } == ["Раздел", "пункт", "→"],
+                    "\(mac.name)")
+            #expect(try mac.store.pageTree().parentId(of: inner.id) == shared.page, "\(mac.name)")
+            #expect(try mac.store.trashEntries().map(\.id) == [subpage.id], "\(mac.name)")
+        }
+    }
+
     // MARK: Корзина и стирание
 
     @Test("Правка страницы, которую на другом Mac убрали в корзину, возвращает её; Юрий видит уведомление")

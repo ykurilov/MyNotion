@@ -517,14 +517,12 @@ public class PageTextView: NSTextView {
         changeBlocks(range, to: drafts, actionName: "Тип блока")
     }
 
-    /// «Преобразовать в → Страница», как в Notion: блок с текстом становится ссылкой на подстраницу с этим текстом
-    /// в названии. Только один текстовый блок без вложенных: детей переключателя в подстраницу пока не переносим.
+    /// «Преобразовать в → Страница», как в Notion: текстовый блок становится ссылкой на подстраницу с этим текстом
+    /// в названии, вложенные под ним блоки переезжают внутрь (`PageTreeOperations.turnIntoSubpage`). Только один блок.
     private func turnIntoSubpage(blockAt range: Range<Int>) {
         guard range.count == 1, let index = range.first else { return }
-        let blocks = document.blocks
-        let block = blocks[index]
-        guard block.kind != .pageLink, !block.kind.rendersAsAttachment, !block.kind.isContainer,
-              index + 1 == blocks.count || blocks[index + 1].indent <= block.indent else { return }
+        let block = document.blocks[index]
+        guard block.kind != .pageLink, !block.kind.rendersAsAttachment, !block.kind.isContainer else { return }
         commitEdits()
         onSubpageRequest?(.turnInto(blockId: block.id))
     }
