@@ -81,8 +81,14 @@ enum TabsBenchmark {
         }
         model.library.reloadTree()
 
-        // Одна вкладка с «богатой» страницей — память до вкладок.
+        // Одна вкладка: те же 20 страниц и те же 100 переходов, что у вкладок ниже, — память без вкладок.
         try await show(TabsState(active: 0, items: [Tab(pageId: rich)]), in: model)
+        for pageId in pages.dropFirst() { _ = try await measure(in: model) { model.select(pageId) } }
+        for step in 0..<switches {
+            let pageId = pages[(step * 7 + 3) % tabCount]
+            if pageId != model.openPageId { _ = try await measure(in: model) { model.select(pageId) } }
+            try await Task.sleep(for: .milliseconds(10))
+        }
         try await Task.sleep(for: .seconds(2))
         report.memoryOneTabMB = footprintMB()
 
@@ -127,11 +133,13 @@ enum TabsBenchmark {
         model.saveAll()
     }
 
+    /// Поставить вкладки; редактор ждём, только если активная — другая страница (та же страница не открывается заново).
     private static func show(_ state: TabsState, in model: MainWindowModel) async throws {
-        _ = try await measure(in: model) {
+        let install = {
             model.installTabs(WindowTabs(state: state, openPageId: nil))
             model.showActiveTab(focus: .body)
         }
+        if state.items[state.active].pageId == model.openPageId { install() } else { _ = try await measure(in: model, install) }
     }
 
     /// От команды до готовности редактора новой страницы (с возвратом места прокрутки) и перерисовки окна.

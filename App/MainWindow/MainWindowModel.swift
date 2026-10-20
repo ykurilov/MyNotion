@@ -438,6 +438,8 @@ final class MainWindowModel {
     /// Показать страницу активной вкладки: редактор — только у страницы из дерева; «Недавние», корзина и стёртая
     /// страница редактора не держат.
     func showActiveTab(focus: PageTextView.InitialFocus, remember: Bool = true) {
+        // Страницу записали в базу в обход операций дерева (замеры, импорт): дерево перечитывается один раз.
+        if let pageId = tabs.activePageId, tree.page(pageId) == nil, library.trashedPagesById[pageId] == nil { library.reloadTree() }
         guard let pageId = tabs.activePageId, tree.page(pageId) != nil else {
             if openDocument != nil { closeOpenDocument() }
             return
