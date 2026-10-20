@@ -9,6 +9,9 @@ struct PlannedPage: Sendable {
     let isTable: Bool
     var title: String
     var icon: String?
+    var cover: ParsedCover?
+    /// Обложка-картинка, скопированная в хранилище файлов.
+    var coverFile: AttachmentRef?
     var blocks: [ParsedBlock] = []
     var simplifications: [NotionSimplification: Int] = [:]
     var unknownCodeLanguages: [String] = []
@@ -156,6 +159,7 @@ struct NotionExportReader {
             let parsed = NotionMarkdownParser().parse(text)
             if let title = parsed.title { page.title = title }
             page.icon = parsed.icon
+            page.cover = parsed.cover
             page.blocks = parsed.blocks
             page.simplifications = parsed.simplifications
             page.unknownCodeLanguages = parsed.unknownCodeLanguages

@@ -44,6 +44,8 @@ public final class PageTextStorageMapper: NSObject {
     private var pendingRange: NSRange?
     /// Мэппер сам меняет текст или атрибуты — это не правки пользователя.
     private var isApplying = false
+    /// Шкала шрифта страницы (мелкий шрифт, `PageLayout/`): текст блоков пишется сразу в ней.
+    var fontScale: CGFloat = 1
 
     public convenience init(document: PageDocument, textStorage: NSTextStorage) {
         self.init(flow: FlowDocument(document), textStorage: textStorage)
@@ -62,7 +64,7 @@ public final class PageTextStorageMapper: NSObject {
     /// Показать блоки документа заново целиком.
     public func load() {
         pendingRange = nil
-        applying { textStorage.setAttributedString(Self.attributedText(for: document.blocks)) }
+        applying { textStorage.setAttributedString(PageFontScaling.scaled(Self.attributedText(for: document.blocks), to: fontScale)) }
     }
 
     /// Есть ли правки текста, которые документ ещё не получил.
@@ -142,7 +144,9 @@ public final class PageTextStorageMapper: NSObject {
         guard length == 0 || (textStorage.string as NSString).character(at: length - 1) != Self.newline else { return }
         let attributes = length > 0
             ? textStorage.attributes(at: length - 1, effectiveRange: nil)
-            : document.blocks.last.map { Self.baseAttributes(for: $0, after: previousKind(ofBlockAt: document.blocks.count - 1)) } ?? [:]
+            : document.blocks.last.map {
+                PageFontScaling.scaled(Self.baseAttributes(for: $0, after: previousKind(ofBlockAt: document.blocks.count - 1)), to: fontScale)
+            } ?? [:]
         applying { textStorage.append(NSAttributedString(string: "\n", attributes: attributes)) }
     }
 
@@ -213,7 +217,8 @@ public final class PageTextStorageMapper: NSObject {
             for (paragraph, id) in zip(paragraphs, ids) {
                 guard let block = document.block(id), let index = document.index(ofBlock: id) else { continue }
                 let hasNewline = NSMaxRange(paragraph) > Self.contentRange(of: paragraph, in: string).upperBound
-                let rendered = Self.paragraph(block, withNewline: hasNewline, after: previousKind(ofBlockAt: index))
+                let rendered = PageFontScaling.scaled(Self.paragraph(block, withNewline: hasNewline, after: previousKind(ofBlockAt: index)),
+                                                      to: fontScale)
                 guard rendered.length == paragraph.length else { continue }
                 // Вид блока остаётся тем же: вложение не пересоздаётся, только получает новые поля блока.
                 let existing = paragraph.length > 0
@@ -241,7 +246,7 @@ public final class PageTextStorageMapper: NSObject {
         guard document.blocks.indices.contains(index) else { return }
         let range = characterRange(ofBlocksAt: index..<index + 1)
         guard range.length > 0 else { return }
-        let spacing = Self.spacingBefore(document.blocks[index].kind, after: previousKind(ofBlockAt: index))
+        let spacing = Self.spacingBefore(document.blocks[index].kind, after: previousKind(ofBlockAt: index)) * fontScale
         let current = textStorage.attribute(.paragraphStyle, at: range.location, effectiveRange: nil) as? NSParagraphStyle
         guard current?.paragraphSpacingBefore != spacing else { return }
         applying {
@@ -320,7 +325,7 @@ public final class PageTextStorageMapper: NSObject {
         for index in range {
             text.append(Self.paragraph(blocks[index], withNewline: true, after: previousKind(ofBlockAt: index)))
         }
-        applying { textStorage.replaceCharacters(in: characters, with: text) }
+        applying { textStorage.replaceCharacters(in: characters, with: PageFontScaling.scaled(text, to: fontScale)) }
         paragraphHint = (0, 0)
         refreshSpacing(ofBlockAt: range.upperBound)
     }

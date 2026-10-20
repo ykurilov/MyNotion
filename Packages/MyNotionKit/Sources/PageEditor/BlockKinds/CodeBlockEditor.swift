@@ -11,8 +11,11 @@ import VisualStyle
 /// Размеры и цвета блока кода (contracts/blocks-and-keys.md, «Блок кода»; сверено с Notion — см. там же).
 enum CodeBlockStyle {
     static let fontSize = Typography.line(for: .paragraph).fontSize * Typography.inlineCodeScale
-    static let lineHeight: CGFloat = (fontSize * 1.5).rounded()
-    static var font: NSFont { .monospacedSystemFont(ofSize: fontSize, weight: .regular) }
+    static let lineHeight: CGFloat = lineHeight(scale: 1)
+    static var font: NSFont { font(scale: 1) }
+    /// Мелкий шрифт страницы (`PageLayoutSettings.fontScale`) — код той же шкалой.
+    static func lineHeight(scale: CGFloat) -> CGFloat { (fontSize * scale * 1.5).rounded() }
+    static func font(scale: CGFloat) -> NSFont { .monospacedSystemFont(ofSize: fontSize * scale, weight: .regular) }
     /// Поля текста внутри подложки, как у Notion: сверху место под строку языка.
     /// Сверено с Notion 19.10.2026: текст в 24 от левого края, первая строка — в 34 от верха, под последней — 36.
     static let padding = NSEdgeInsets(top: 34, left: 24, bottom: 36, right: 16)
@@ -25,12 +28,12 @@ enum CodeBlockStyle {
     static let chromeText = Palette.textSecondary
 
     /// Высота вида блока с `lineCount` строками кода.
-    static func height(lineCount: Int) -> CGFloat {
-        padding.top + padding.bottom + CGFloat(max(1, lineCount)) * lineHeight
+    static func height(lineCount: Int, scale: CGFloat = 1) -> CGFloat {
+        padding.top + padding.bottom + CGFloat(max(1, lineCount)) * lineHeight(scale: scale)
     }
 
-    static func height(of code: String) -> CGFloat {
-        height(lineCount: code.utf16.reduce(1) { $1 == 0x0A ? $0 + 1 : $0 })
+    static func height(of code: String, scale: CGFloat = 1) -> CGFloat {
+        height(lineCount: code.utf16.reduce(1) { $1 == 0x0A ? $0 + 1 : $0 }, scale: scale)
     }
 
     /// Цвета токенов как у Notion (сняты с живого Notion 19.10.2026): светлая тема — Prism по умолчанию,
@@ -103,6 +106,8 @@ final class CodeBlockRegistry {
         views[blockId]?.view
     }
 
+    var allViews: [CodeBlockView] { views.values.compactMap(\.view) }
+
     func register(_ view: CodeBlockView) {
         views = views.filter { $0.value.view != nil }
         views[view.blockId] = WeakView(view)
@@ -137,6 +142,10 @@ final class CodeBlockViewFactory: BlockViewFactory {
     func height(for block: Block, width: CGFloat) -> CGFloat? {
         CodeBlockStyle.height(of: block.text.string) + 2 * CodeBlockStyle.outerSpacing
     }
+
+    func height(for block: Block, width: CGFloat, context: BlockViewContext) -> CGFloat? {
+        CodeBlockStyle.height(of: block.text.string, scale: context.textView?.layoutSettings.fontScale ?? 1) + 2 * CodeBlockStyle.outerSpacing
+    }
 }
 
 /// Вид блока кода: подложка, редактор кода с прокруткой вбок (строки не переносятся), язык и «Копировать» сверху.
@@ -163,6 +172,8 @@ final class CodeBlockView: NSView, BlockFieldsView {
     private var copyResetTask: Task<Void, Never>?
 
     static let copyTitle = "Копировать"
+    /// Шкала шрифта страницы, в которой показан код.
+    private(set) var fontScale: CGFloat
     static let copiedTitle = "Скопировано"
 
     init(block: Block, page: PageTextView?) {
@@ -171,8 +182,9 @@ final class CodeBlockView: NSView, BlockFieldsView {
         self.page = page
         syncedText = block.text.string
         highlighter = IncrementalHighlighter(language: .forBlock(block.props.language), text: block.text.string)
-        textView = CodeTextView.make()
-        super.init(frame: NSRect(x: 0, y: 0, width: 720, height: CodeBlockStyle.height(of: block.text.string)))
+        fontScale = page?.layoutSettings.fontScale ?? 1
+        textView = CodeTextView.make(scale: fontScale)
+        super.init(frame: NSRect(x: 0, y: 0, width: 720, height: CodeBlockStyle.height(of: block.text.string, scale: fontScale)))
         wantsLayer = true
         textView.codeView = self
         textView.textStorage?.delegate = self
@@ -241,6 +253,14 @@ final class CodeBlockView: NSView, BlockFieldsView {
     }
 
     // MARK: Блок
+
+    /// Мелкий шрифт страницы включили или выключили: код той же шкалой, текст и подсветка остаются.
+    func applyFontScale(_ scale: CGFloat) {
+        guard scale != fontScale else { return }
+        fontScale = scale
+        textView.applyFontScale(scale)
+        needsLayout = true
+    }
 
     /// Тот же блок с новыми полями (вид заново встал в рамку вложения или блок поправили не здесь).
     func update(_ block: Block) {
@@ -471,7 +491,7 @@ final class CodeTextView: NSTextView {
     /// Курсор двигает сама правка — склейку набора это не прерывает.
     private var isEditing = false
 
-    static func make() -> CodeTextView {
+    static func make(scale: CGFloat = 1) -> CodeTextView {
         let contentStorage = NSTextContentStorage()
         let layoutManager = NSTextLayoutManager()
         contentStorage.addTextLayoutManager(layoutManager)
@@ -479,12 +499,35 @@ final class CodeTextView: NSTextView {
         container.widthTracksTextView = false
         container.lineFragmentPadding = 0
         layoutManager.textContainer = container
-        let textView = CodeTextView(frame: NSRect(x: 0, y: 0, width: 600, height: CodeBlockStyle.lineHeight), textContainer: container)
-        textView.configure()
+        let textView = CodeTextView(frame: NSRect(x: 0, y: 0, width: 600, height: CodeBlockStyle.lineHeight(scale: scale)), textContainer: container)
+        textView.configure(scale: scale)
         return textView
     }
 
-    private func configure() {
+    /// Шрифт и высота строк кода в шкале страницы — и у набранного, и у нового текста.
+    func applyFontScale(_ scale: CGFloat) {
+        let (font, paragraph) = Self.textStyle(scale: scale)
+        typingAttributes[.font] = font
+        typingAttributes[.paragraphStyle] = paragraph
+        defaultParagraphStyle = paragraph
+        self.font = font
+        if let textStorage, textStorage.length > 0 {
+            let whole = NSRange(location: 0, length: textStorage.length)
+            textStorage.beginEditing()
+            textStorage.addAttribute(.font, value: font, range: whole)
+            textStorage.addAttribute(.paragraphStyle, value: paragraph, range: whole)
+            textStorage.endEditing()
+        }
+    }
+
+    private static func textStyle(scale: CGFloat) -> (NSFont, NSParagraphStyle) {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.minimumLineHeight = CodeBlockStyle.lineHeight(scale: scale)
+        paragraph.maximumLineHeight = CodeBlockStyle.lineHeight(scale: scale)
+        return (CodeBlockStyle.font(scale: scale), paragraph)
+    }
+
+    private func configure(scale: CGFloat) {
         isRichText = false
         importsGraphics = false
         allowsUndo = false
@@ -502,10 +545,7 @@ final class CodeTextView: NSTextView {
         autoresizingMask = []
         textContainerInset = .zero
         insertionPointColor = Palette.textPrimary
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.minimumLineHeight = CodeBlockStyle.lineHeight
-        paragraph.maximumLineHeight = CodeBlockStyle.lineHeight
-        let font = CodeBlockStyle.font
+        let (font, paragraph) = Self.textStyle(scale: scale)
         typingAttributes = [.font: font, .foregroundColor: CodeBlockStyle.text, .paragraphStyle: paragraph]
         defaultParagraphStyle = paragraph
         self.font = font

@@ -120,7 +120,9 @@ struct PageMenusRegistryTests {
         let cover = NSView()
         editor.textView.setCover(cover, height: 280)
         #expect(editor.textView.header.frame.minY == 280)
-        #expect(editor.textView.textContainerOrigin.y == originBefore + 280)
+        // Без иконки название под обложкой со своим полем (US1, «Шапка страницы»), а не с полем страницы без обложки.
+        let titleShift = Metrics.Page.headerTopPaddingWithCover - Metrics.Page.headerTopPaddingWithoutIcon
+        #expect(editor.textView.textContainerOrigin.y == originBefore + 280 + titleShift)
         #expect(cover.frame == NSRect(x: 0, y: 0, width: editor.textView.bounds.width, height: 280))
         editor.textView.setCover(nil, height: 280)
         #expect(editor.textView.textContainerOrigin.y == originBefore)

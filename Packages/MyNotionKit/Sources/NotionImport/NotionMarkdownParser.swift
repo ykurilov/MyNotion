@@ -70,6 +70,8 @@ public struct ParsedBlock: Sendable, Hashable {
 public struct ParsedNotionPage: Sendable, Hashable {
     public var title: String?
     public var icon: String?
+    /// Обложка из строки `mynotion:cover` сразу под названием (своя выгрузка); у Notion её нет.
+    public var cover: ParsedCover?
     public var blocks: [ParsedBlock]
     public var simplifications: [NotionSimplification: Int]
     /// Языки кода, которых MyNotion не знает (код стал «Простым текстом»), — для отчёта.
@@ -95,9 +97,14 @@ public struct NotionMarkdownParser: Sendable {
             (icon, title) = Self.splitIcon(NotionInlineParser.parse(heading.text).text.string)
             index += 1
         }
+        var cover: ParsedCover?
+        if title != nil, index < lines.count, let parsed = ParsedCover.parse(lines[index]) {
+            cover = parsed
+            index += 1
+        }
         var builder = PageBuilder()
         builder.consume(lines[index...])
-        return ParsedNotionPage(title: title, icon: icon, blocks: builder.blocks, simplifications: builder.simplifications,
+        return ParsedNotionPage(title: title, icon: icon, cover: cover, blocks: builder.blocks, simplifications: builder.simplifications,
                                 unknownCodeLanguages: builder.unknownCodeLanguages)
     }
 

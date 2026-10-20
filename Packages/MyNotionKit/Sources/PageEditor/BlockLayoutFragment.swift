@@ -120,8 +120,24 @@ final class BlockLayoutFragment: NSTextLayoutFragment, @unchecked Sendable {
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
         let offset = CGPoint(x: point.x - layoutFragmentFrame.minX, y: point.y - layoutFragmentFrame.minY)
+        let scale = textView.layoutSettings.fontScale
         for (decoration, line) in lines {
+            // Мелкий шрифт: маркер, номер, чекбокс и подсказка — той же шкалой, что текст, у своей строки.
+            let anchor: CGPoint? = switch decoration {
+            case .pageLink: nil
+            case .placeholder: CGPoint(x: line.caretX + offset.x, y: line.baseline + offset.y)
+            default: CGPoint(x: line.markerColumn.midX + offset.x, y: line.baseline + offset.y)
+            }
+            guard scale != 1, let anchor else {
+                BlockDecorationPainter.draw(decoration, line: line, offset: offset)
+                continue
+            }
+            context.saveGState()
+            context.translateBy(x: anchor.x, y: anchor.y)
+            context.scaleBy(x: scale, y: scale)
+            context.translateBy(x: -anchor.x, y: -anchor.y)
             BlockDecorationPainter.draw(decoration, line: line, offset: offset)
+            context.restoreGState()
         }
         NSGraphicsContext.restoreGraphicsState()
     }

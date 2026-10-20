@@ -305,7 +305,8 @@ private struct PagesWindow: View {
                 blockReveal: model.blockReveal,
                 onReady: onEditorReady,
                 mentions: mentionSettings(pages: pages),
-                pageMenuItems: PageMenuItems.all(for: model, pageId: document.pageId)
+                pageMenuItems: PageMenuItems.all(for: model, pageId: document.pageId),
+                headerAddons: [PageCoverAddon.factory(model)]
             )
             // Новый документ — новый редактор: страницу перечитали после операции с деревом.
             .id(ObjectIdentifier(document))

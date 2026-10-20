@@ -70,6 +70,10 @@ public enum GalleryScene: Hashable, Sendable {
     case pageTopBar
     /// Открытое меню «•••» страницы: поле «Найти действие…», пункты, подвал «Изменено…» (003, этап 0).
     case pageMenu
+    /// Обложка и вид страницы (US1).
+    case pageCover(GalleryPageCover)
+    /// Меню «•••» с открытым подменю «Вид страницы ›» (US1).
+    case pageMenuAppearance
     /// Синхронизация между Mac (US5): значок, «Две версии», настройки подключения, уведомление.
     case sync(GallerySync)
     /// Импорт из Notion (US6): карточка хода, вопрос о повторе той же выгрузки, отчёт.
@@ -128,6 +132,25 @@ public enum GalleryPageIcon: String, Hashable, Sendable, CaseIterable {
     case picker
     /// В окне набрано «кот»: результаты без разделов, первый подсвечен.
     case pickerSearch
+}
+
+public enum GalleryPageCover: String, Hashable, Sendable, CaseIterable {
+    /// Мышь над шапкой страницы без обложки: «Добавить иконку» и «Добавить обложку».
+    case addHover
+    /// Обложка из галереи и иконка, заходящая на неё.
+    case gallery
+    /// Своя картинка обложкой, без иконки.
+    case image
+    /// Мышь над обложкой: «Сменить обложку», «Переместить».
+    case hover
+    /// Режим «Переместить»: подсказка и «Сохранить положение», «Отмена».
+    case reposition
+    /// Окно «Сменить обложку», вкладки «Галерея» и «Загрузить».
+    case pickerGallery
+    case pickerUpload
+    /// Образец страницы мелким шрифтом и во всю ширину.
+    case smallText
+    case fullWidth
 }
 
 public enum GalleryTrash: String, Hashable, Sendable, CaseIterable {
@@ -263,6 +286,26 @@ public enum GalleryCatalog {
                      "Верхняя полоса страницы: путь слева, «•••» справа", section: "Страницы и навигация"),
         GalleryState("page-menu", .pageMenu,
                      "Меню «•••»: «Найти действие…», «Удалить в корзину», подвал «Изменено…, N слов»", section: "Страницы и навигация"),
+        GalleryState("page-menu-appearance", .pageMenuAppearance,
+                     "Меню «•••» → «Вид страницы ›»: «Мелкий шрифт», «Широкая страница»", section: "Страницы и навигация"),
+    ] + pageCoverStates
+
+    private static let pageCoverStates: [GalleryState] = [
+        GalleryState("page-cover-add-hover", .pageCover(.addHover), "Шапка без обложки под мышью: «Добавить иконку», «Добавить обложку»",
+                     section: "Страницы и навигация"),
+        GalleryState("page-cover-gallery", .pageCover(.gallery), "Обложка из галереи, иконка заходит на неё", section: "Страницы и навигация",
+                     narrowToo: true),
+        GalleryState("page-cover-image", .pageCover(.image), "Своя картинка обложкой, страница без иконки", section: "Страницы и навигация"),
+        GalleryState("page-cover-hover", .pageCover(.hover), "Мышь над обложкой: «Сменить обложку», «Переместить»",
+                     section: "Страницы и навигация"),
+        GalleryState("page-cover-reposition", .pageCover(.reposition),
+                     "«Переместить»: «Перетащите картинку…», «Сохранить положение», «Отмена»", section: "Страницы и навигация"),
+        GalleryState("page-cover-picker-gallery", .pageCover(.pickerGallery), "Окно «Сменить обложку», «Галерея»: цвета и градиенты",
+                     section: "Страницы и навигация"),
+        GalleryState("page-cover-picker-upload", .pageCover(.pickerUpload), "Окно «Сменить обложку», «Загрузить»",
+                     section: "Страницы и навигация"),
+        GalleryState("page-small-text", .pageCover(.smallText), "Образец страницы мелким шрифтом", section: "Страницы и навигация"),
+        GalleryState("page-full-width", .pageCover(.fullWidth), "Образец страницы во всю ширину", section: "Страницы и навигация"),
     ]
 
     private static let blockStates: [GalleryState] = textBlockKinds.flatMap { kind in

@@ -43,6 +43,7 @@ final class MainWindowModel {
         isSidebarCollapsed = windowState?.isSidebarCollapsed ?? false
         treeOperations.onChange = { [weak library] touched in library?.treeDidChange(touched) }
         treeOperations.onIconChange = { [weak library] pageId, _ in library?.iconDidChange(pageId) }
+        treeOperations.onAppearanceChange = { [weak library] pageId in library?.appearanceDidChange(pageId) }
         treeOperations.onUndoFailure = { [weak self] error in
             self?.loadError = "Не удалось отменить: \(SaveStatus.reason(for: error))"
         }

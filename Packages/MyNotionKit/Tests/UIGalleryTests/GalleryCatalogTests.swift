@@ -39,7 +39,7 @@ struct GalleryCatalogTests {
 
     @Test("Страницы и навигация (003): верхняя полоса с «•••» и открытое меню «•••» — в обеих темах")
     func pagesNavigationStatesPresent() {
-        for scene in [GalleryScene.pageTopBar, .pageMenu] {
+        for scene in [GalleryScene.pageTopBar, .pageMenu, .pageMenuAppearance] + GalleryPageCover.allCases.map(GalleryScene.pageCover) {
             #expect(scenes.contains(scene), "\(scene)")
         }
     }

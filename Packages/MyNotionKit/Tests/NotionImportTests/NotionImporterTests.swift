@@ -201,7 +201,7 @@ struct NotionImporterTests {
         #expect(report.simplified.first { $0.pageTitle == "Задачи" }?.items == ["таблицы — по строке на абзац"])
         #expect(NotionSimplification.quote.title(count: 12) == "цитаты (12)")
         // Чего в Markdown Notion нет, отчёт называет всегда, даже если упрощать было нечего (research R14).
-        #expect(report.notices == ["Цвета и колонки Notion в Markdown не выгружает — они не перенесены"])
+        #expect(report.notices == ["Цвета и колонки Notion в Markdown не выгружает — они не перенесены", "Обложки страниц Notion в выгрузку не попадают"])
 
         let run = try #require(try importer().runs().first)
         #expect(run.status == .finished)
@@ -340,7 +340,7 @@ struct NotionImporterTests {
         #expect(content.contains { $0.kind == .checkbox && $0.indent == 1 && $0.text.string == "Вложенная задача" })
         #expect(content.contains { $0.text.string == "Первая строка блока\nВторая строка после переноса\nТретья строка после переноса" })
         #expect(report.simplified.isEmpty)
-        #expect(report.notices == [NotionImportReport.markdownLossNotice])
+        #expect(report.notices == [NotionImportReport.markdownLossNotice, NotionImportReport.coverLossNotice])
     }
 
     @Test("Живая выгрузка Notion 7.39 с блоками 002: всё, что Notion пишет в Markdown, — нужными блоками (T116)")
@@ -372,7 +372,7 @@ struct NotionImporterTests {
         #expect(content.first { $0.kind == .bookmark }?.props.title == "Help, Support, and Documentation for Notion")
         #expect(content.first { $0.kind == .video }?.props.videoSource == .youtube)
         #expect(report.simplified.isEmpty)
-        #expect(report.notices == [NotionImportReport.markdownLossNotice])
+        #expect(report.notices == [NotionImportReport.markdownLossNotice, NotionImportReport.coverLossNotice])
     }
 }
 

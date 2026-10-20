@@ -26,6 +26,9 @@ public enum Metrics {
         public static let headerTopPadding: CGFloat = 96
         /// От верхней полосы до названия, когда иконки нет (≈ по снимку Notion: верх букв названия на 65 от верха окна).
         public static let headerTopPaddingWithoutIcon: CGFloat = 32
+        /// С обложкой, без иконки: от нижнего края обложки до названия (≈ по снимку `notion-cover.png`: верх названия
+        /// на ≈ 39 ниже обложки, строка кнопок — между ними).
+        public static let headerTopPaddingWithCover: CGFloat = 40
         /// Эмодзи иконки внутри квадрата `iconSize`: рисунок ≈ 61×74, как у Notion на снимке (≈ по снимку).
         public static let iconFontSize: CGFloat = 78
         /// Под иконкой — место под строку скрытых кнопок, как у Notion (≈ по снимку: верх букв названия на 267).
@@ -362,6 +365,42 @@ public enum Metrics {
     public enum PageMenu {
         public static let width: CGFloat = 265
         public static let searchInset: CGFloat = 10
+        /// Подменю «Вид страницы ›» слева от меню и его переключатели (≈ по снимку `notion-page-appearance.png`).
+        public static let submenuWidth: CGFloat = 230
+        public static let submenuGap: CGFloat = 4
+        public static let switchSize = CGSize(width: 26, height: 14)
+    }
+
+    /// Обложка страницы (contracts/pages-ui.md, «Шапка страницы»): высота ≈ 30 % высоты области страницы с верхней
+    /// полосой, как `30vh` у Notion (снимок `notion-cover.png`: окно 780, обложка 218); кнопки при наведении —
+    /// тёмной группой справа вверху обложки, окно «Сменить обложку» под ними (сверено с Notion 7.39 20.10.2026:
+    /// `notion-cover-hover-buttons.png`, `notion-change-cover.png`).
+    public enum PageCover {
+        public static let heightFraction: CGFloat = 0.3
+        public static let minimumHeight: CGFloat = 160
+        public static let maximumHeight: CGFloat = 280
+        public static let buttonHeight: CGFloat = 23
+        public static let buttonFontSize: CGFloat = 12
+        public static let buttonHorizontalPadding: CGFloat = 8
+        public static let buttonGroupCornerRadius: CGFloat = 5
+        /// От верхнего и правого края обложки до группы кнопок.
+        public static let buttonInset: CGFloat = 8
+        public static let buttonGroupPadding: CGFloat = 2
+        /// Подсказка «Перетащите картинку, чтобы сдвинуть».
+        public static let repositionHintHeight: CGFloat = 20
+        /// Окно «Сменить обложку»: ширина 428, плитки 94 × 51 по 4 в ряд через 5, вкладки высотой 31; под кнопками на 4.
+        public static let pickerWidth: CGFloat = 428
+        public static let pickerTileHeight: CGFloat = 51
+        public static let pickerTileSpacing: CGFloat = 5
+        public static let pickerTilesPerRow = 4
+        public static let pickerPadding: CGFloat = 12
+        public static let pickerTabHeight: CGFloat = 31
+        public static let pickerAnchorSpacing: CGFloat = 4
+
+        /// Высота обложки при высоте области страницы `pageAreaHeight`.
+        public static func height(forPageAreaHeight pageAreaHeight: CGFloat) -> CGFloat {
+            min(max((pageAreaHeight * heightFraction).rounded(), minimumHeight), maximumHeight)
+        }
     }
 
     public enum PageHeaderButton {

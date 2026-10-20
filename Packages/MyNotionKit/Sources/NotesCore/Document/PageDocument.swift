@@ -97,6 +97,21 @@ public final class PageDocument {
         savedPage.fieldClocks.icon = stored.fieldClocks.icon
     }
 
+    /// Обложку или вид страницы сменили в обход документа (`PageTreeOperations+Appearance`): как `adoptIcon`.
+    public func adoptAppearance(of stored: Page) {
+        Self.copyAppearance(of: stored, to: &page)
+        Self.copyAppearance(of: stored, to: &savedPage)
+    }
+
+    private static func copyAppearance(of stored: Page, to page: inout Page) {
+        page.cover = stored.cover
+        page.isFullWidth = stored.isFullWidth
+        page.isSmallText = stored.isSmallText
+        page.fieldClocks.cover = stored.fieldClocks.cover
+        page.fieldClocks.isFullWidth = stored.fieldClocks.isFullWidth
+        page.fieldClocks.isSmallText = stored.fieldClocks.isSmallText
+    }
+
     public func setText(_ text: InlineText, ofBlock blockId: UUID) {
         guard var block = byId[blockId] else { return }
         let normalized = text.normalized()
