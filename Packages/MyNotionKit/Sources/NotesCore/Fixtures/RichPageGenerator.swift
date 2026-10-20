@@ -106,7 +106,7 @@ public struct RichPageGenerator: Sendable {
     }
 
     /// Текст 001 вперемешку; у каждого десятого блока цвет текста или фона.
-    static func filler(_ index: Int) -> RichBlockSpec {
+    public static func filler(_ index: Int) -> RichBlockSpec {
         let kind: BlockKind = switch index % 20 {
         case 0: .heading1
         case 10: .heading2

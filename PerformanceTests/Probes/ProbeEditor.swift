@@ -94,9 +94,9 @@ final class ProbeEditor {
         return samples
     }
 
-    static func measure(_ action: () -> Void) -> Double {
+    static func measure(_ action: () throws -> Void) rethrows -> Double {
         let start = ContinuousClock.now
-        action()
+        try action()
         let duration = ContinuousClock.now - start
         return Double(duration.components.seconds) * 1_000 + Double(duration.components.attoseconds) / 1e15
     }
