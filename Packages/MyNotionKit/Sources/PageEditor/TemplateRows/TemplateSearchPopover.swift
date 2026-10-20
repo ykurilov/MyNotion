@@ -1,50 +1,67 @@
 import AppKit
 import VisualStyle
 
-/// «Ещё шаблоны…»: поиск по названиям всех шаблонов. ↑↓ меняют строку, Enter выбирает, Esc закрывает.
+/// «Ещё шаблоны…»: поиск по названиям всех шаблонов в карточке всплывающих меню под строкой «Ещё шаблоны…»
+/// (строки шаблонов над ней не закрывает), высотой по найденному — не больше 8 строк. ↑↓ меняют строку, Enter выбирает, Esc закрывает.
 @MainActor
 final class TemplateSearchPopover: NSObject, NSSearchFieldDelegate {
-    private static let width: CGFloat = 300
-    private static let listHeight: CGFloat = 8 * TemplateRowView.height
+    static let width: CGFloat = 300
+    static let maxVisibleRows = 8
+    /// Поле 28 в 8 от верха, под ним 8 до списка, снизу 4.
+    static let fieldTop: CGFloat = 8
+    static let fieldHeight: CGFloat = 28
+    static let listTop: CGFloat = fieldTop + fieldHeight + 8
+    static let bottomPadding: CGFloat = 4
 
     private let choices: [TemplateChoice]
     private let onChoose: (UUID) -> Void
-    private let popover = NSPopover()
+    private let card = PopupCard()
+    let content = TemplateFlippedView()
     private let field = NSSearchField()
     private let list = TemplateFlippedView()
     private let scroll = NSScrollView()
     private var found: [TemplateChoice] = []
-    private var rows: [TemplateRowView] = []
+    private(set) var rows: [TemplateRowView] = []
     private var selected = 0 { didSet { rows.enumerated().forEach { $1.isSelected = $0 == selected } } }
 
     init(choices: [TemplateChoice], onChoose: @escaping (UUID) -> Void) {
         self.choices = choices
         self.onChoose = onChoose
         super.init()
-        let content = NSView(frame: NSRect(x: 0, y: 0, width: Self.width, height: 44 + Self.listHeight))
-        field.frame = NSRect(x: 8, y: Self.listHeight + 8, width: Self.width - 16, height: 28)
         field.placeholderString = "Поиск шаблонов…"
         field.delegate = self
         field.setAccessibilityIdentifier("template-search")
-        scroll.frame = NSRect(x: 0, y: 0, width: Self.width, height: Self.listHeight)
         scroll.documentView = list
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = false
         content.addSubview(scroll)
         content.addSubview(field)
-        let controller = NSViewController()
-        controller.view = content
-        popover.contentViewController = controller
-        popover.behavior = .transient
         reload()
     }
 
-    func show(relativeTo rect: NSRect, of view: NSView) {
-        popover.show(relativeTo: rect, of: view, preferredEdge: .maxY)
-        popover.contentViewController?.view.window?.makeFirstResponder(field)
+    /// Высота карточки при `count` найденных: по строкам, не больше восьми.
+    static func height(forRows count: Int) -> CGFloat {
+        listTop + CGFloat(min(max(count, 1), maxVisibleRows)) * TemplateRowView.height + bottomPadding
     }
 
-    func close() { popover.close() }
+    /// Показать под строкой `anchor` («Ещё шаблоны…») левым краем по ней.
+    func show(below anchor: NSView) {
+        let size = NSSize(width: Self.width, height: Self.height(forRows: found.count))
+        layout(size)
+        let point = NSPoint(x: 0, y: anchor.isFlipped ? anchor.bounds.maxY + 4 : anchor.bounds.minY - 4)
+        card.show(content, size: size, from: anchor.convert(point, to: nil), in: anchor)
+        content.window?.makeFirstResponder(field)
+    }
+
+    var isShown: Bool { card.isShown }
+
+    func close() { card.close() }
+
+    private func layout(_ size: NSSize) {
+        content.frame = NSRect(origin: .zero, size: size)
+        field.frame = NSRect(x: 8, y: Self.fieldTop, width: size.width - 16, height: Self.fieldHeight)
+        scroll.frame = NSRect(x: 0, y: Self.listTop, width: size.width, height: size.height - Self.listTop - Self.bottomPadding)
+    }
 
     private func reload() {
         let query = field.stringValue.trimmingCharacters(in: .whitespaces)
@@ -58,12 +75,12 @@ final class TemplateSearchPopover: NSObject, NSSearchFieldDelegate {
             list.addSubview(row)
             return row
         }
-        list.frame = NSRect(x: 0, y: 0, width: Self.width, height: max(Self.listHeight, CGFloat(rows.count) * TemplateRowView.height))
+        list.frame = NSRect(x: 0, y: 0, width: Self.width, height: CGFloat(rows.count) * TemplateRowView.height)
         selected = 0
     }
 
     private func choose(_ choice: TemplateChoice) {
-        popover.close()
+        card.close()
         onChoose(choice.id)
     }
 

@@ -171,3 +171,16 @@ struct PageMenusRegistryTests {
         #expect(cover.frame.minX == icon.frame.minX, "«Добавить иконку» скрыта — обложка встаёт на её место")
     }
 }
+
+/// Список обратных ссылок открывается под строкой «↗ N обратных ссылок» левым краем по ней (T101 № 6).
+@MainActor
+@Suite("Место списка обратных ссылок")
+struct BacklinksListPlaceTests {
+    @Test("Якорь списка — под строкой на 4, у её левого края, а не по середине строки во всю ширину страницы")
+    func anchorUnderRowStart() {
+        let row = BacklinksRow(title: "3 обратные ссылки")
+        row.frame = NSRect(x: 0, y: 0, width: 720, height: BacklinksRow.height)
+        #expect(row.listAnchor == NSPoint(x: 0, y: BacklinksRow.height + 4))
+        #expect(row.listAnchor.x < row.fittingWidth, "якорь левее конца текста строки")
+    }
+}

@@ -561,7 +561,7 @@ final class UIGalleryRunner {
             GalleryTemplatesScene.tearDown(model: model)
             await settle()
         case .backlinks(.list):
-            NSApp.windows.first { $0.isVisible && $0.className.contains("Popover") }?.close()
+            NSApp.windows.filter { $0.isVisible && $0.className.contains("PopupCardPanel") }.forEach { $0.orderOut(nil) }
             await settle()
         case .favoriteStar, .sidebarSections:
             if model.collapsedSections.contains(.favorites) { model.toggleSection(.favorites) }
@@ -716,7 +716,7 @@ final class UIGalleryRunner {
         guard let row else { return "строка обратных ссылок не появилась" }
         if state == .list {
             row.onPress?(row)
-            for _ in 0..<40 where !NSApp.windows.contains(where: { $0.isVisible && $0.className.contains("Popover") }) { await settle() }
+            for _ in 0..<40 where !NSApp.windows.contains(where: { $0.isVisible && $0.className.contains("PopupCardPanel") }) { await settle() }
             await settle()
         }
         return nil

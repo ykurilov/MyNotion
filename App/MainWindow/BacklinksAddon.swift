@@ -101,14 +101,17 @@ final class BacklinksAddon: PageHeaderAddon {
     }
 }
 
-/// Всплывающий список страниц-источников: иконка, название, путь серым; щелчок — страница на блоке со ссылкой.
+/// Всплывающий список страниц-источников — карточка всплывающих меню (`PopupCard`, тень и рамка) под строкой,
+/// левым краем по ней: иконка, название, путь серым; щелчок — страница на блоке со ссылкой.
 @MainActor
-final class BacklinksListPresenter: NSObject, NSPopoverDelegate {
-    private var popover: NSPopover?
+final class BacklinksListPresenter {
+    private let card = PopupCard()
+
+    var isShown: Bool { card.isShown }
 
     func present(from anchor: NSView, model: MainWindowModel, pageId: UUID) {
-        if let popover, popover.isShown {
-            popover.close()
+        if card.isShown {
+            card.close()
             return
         }
         let store = model.store
@@ -128,26 +131,20 @@ final class BacklinksListPresenter: NSObject, NSPopoverDelegate {
     }
 
     private func show(_ rows: [BacklinkListRow], from anchor: NSView, model: MainWindowModel) {
-        let popover = NSPopover()
-        popover.behavior = .transient
-        popover.animates = false
-        popover.delegate = self
         let height = min(CGFloat(rows.count) * Metrics.BacklinksRow.listRowHeight + 12, Metrics.BacklinksRow.listMaxHeight)
-        let content = BacklinksListView(rows: rows) { [weak popover, weak model] source in
-            popover?.close()
+        let size = NSSize(width: Metrics.BacklinksRow.listWidth, height: height)
+        let content = BacklinksListView(rows: rows) { [weak self, weak model] source in
+            self?.card.close()
             model?.open(PageOpenRequest.fromClick(source.pageId, revealing: source.blockId))
         }
-        .frame(width: Metrics.BacklinksRow.listWidth, height: height)
-        let controller = NSHostingController(rootView: content)
-        controller.sizingOptions = []
-        controller.view.setFrameSize(NSSize(width: Metrics.BacklinksRow.listWidth, height: height))
-        popover.contentViewController = controller
-        popover.contentSize = NSSize(width: Metrics.BacklinksRow.listWidth, height: height)
-        self.popover = popover
-        popover.show(relativeTo: anchor.bounds, of: anchor, preferredEdge: .maxY)
+        .frame(width: size.width, height: size.height)
+        let host = NSHostingView(rootView: content)
+        host.frame.size = size
+        let point = (anchor as? BacklinksRow)?.listAnchor ?? NSPoint(x: 0, y: anchor.bounds.maxY + Metrics.BacklinksRow.listGap)
+        card.show(host, size: size, from: anchor.convert(point, to: nil), in: anchor)
     }
 
-    func popoverDidClose(_ notification: Notification) { popover = nil }
+    func close() { card.close() }
 }
 
 struct BacklinkListRow: Identifiable {
@@ -195,14 +192,16 @@ private struct BacklinkListRowView: View {
                     .font(.system(size: 14))
                     .foregroundStyle(Color(nsColor: Palette.textPrimary))
                     .lineLimit(1)
-                    .layoutPriority(1)
-                Spacer(minLength: 4)
+                    .layoutPriority(2)
+                Spacer(minLength: 8)
                 if !row.path.isEmpty {
+                    // Влезает — целиком; не влезает — «…» в начале пути (ближний родитель виден).
                     Text(row.path)
                         .font(.system(size: 12))
                         .foregroundStyle(Color(nsColor: Palette.textSecondary))
                         .lineLimit(1)
                         .truncationMode(.head)
+                        .layoutPriority(1)
                 }
             }
             .padding(.horizontal, 8)

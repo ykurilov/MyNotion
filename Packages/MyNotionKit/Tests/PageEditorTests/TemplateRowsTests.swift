@@ -67,6 +67,39 @@ struct TemplateRowsTests {
         #expect(editor.textView.templateRows?.rowCount == 6, "пять шаблонов и «Ещё шаблоны…»")
     }
 
+    @Test("Заголовок «Шаблоны» и иконки строк — по левому краю названия страницы (T101 № 12)")
+    func rowsAlignWithTitle() throws {
+        let editor = try EditorFixture([.paragraph()])
+        editor.textView.showIcon(nil)
+        editor.textView.templateChoices = [TemplateChoice(id: UUID(), title: "Шаблон: заметки встречи", icon: "🗓️"),
+                                           TemplateChoice(id: UUID(), title: "Шаблон: отчёт", icon: nil)]
+        editor.textView.layoutSubtreeIfNeeded()
+        let rows = try #require(editor.textView.templateRows)
+        rows.container.layoutSubtreeIfNeeded()
+        rows.rows.forEach { $0.layoutSubtreeIfNeeded() }
+        let pixels = try ViewPixels(editor.textView, appearance: .aqua)
+        let header = editor.textView.header
+        let titleArea = header.convert(header.titleField.frame, to: editor.textView)
+        let title = try #require(pixels.inkBounds(in: titleArea))
+        let headingArea = rows.container.convert(rows.heading.frame, to: editor.textView)
+        let heading = try #require(pixels.inkBounds(in: headingArea))
+        #expect(abs(heading.minX - title.minX) <= 1.5, "заголовок \(heading.minX), название \(title.minX)")
+        for row in rows.rows {
+            let iconArea = row.convert(NSRect(x: 0, y: 0, width: 26, height: row.bounds.height), to: editor.textView)
+            let icon = try #require(pixels.inkBounds(in: iconArea))
+            #expect(abs(icon.minX - title.minX) <= 1, "иконка строки \(icon.minX), название \(title.minX)")
+        }
+    }
+
+    @Test("Поиск «Ещё шаблоны…» — высотой по найденному, без пустоты внизу, не выше 8 строк (T101 № 13)")
+    func searchCardFitsRows() {
+        let six = TemplateSearchPopover(choices: Self.choices(6)) { _ in }
+        #expect(TemplateSearchPopover.height(forRows: 6) == TemplateSearchPopover.listTop + 6 * TemplateRowView.height + 4)
+        #expect(six.rows.count == 6)
+        #expect(TemplateSearchPopover.height(forRows: 20) == TemplateSearchPopover.listTop + 8 * TemplateRowView.height + 4)
+        #expect(TemplateSearchPopover.height(forRows: 0) == TemplateSearchPopover.listTop + TemplateRowView.height + 4)
+    }
+
     @Test("Строк нет: нет шаблонов, страница с текстом, страница не пуста, сама страница — шаблон")
     func noRowsWhenNotOffered() throws {
         let withText = try EditorFixture([.paragraph("уже есть")])

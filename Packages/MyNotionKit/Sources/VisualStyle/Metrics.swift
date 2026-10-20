@@ -178,6 +178,10 @@ public enum Metrics {
         public static let favoritesMaxRows = 7
         /// Стрелка у заголовка раздела при наведении.
         public static let sectionChevronSize: CGFloat = 9
+        /// Поле справа под полосу прокрутки у всех списков панели (у Notion строки до 247 при панели 270) и затухание сверху
+        /// прокрученного списка (у Notion — 34, замер 21.10.2026).
+        public static let scrollGutter: CGFloat = 15
+        public static let scrollTopFadeHeight: CGFloat = 34
     }
 
     /// Верхняя строка окна — в линию со светофором: шторка панели и «✎» (по снимку Notion для Mac).
@@ -455,6 +459,8 @@ public enum Metrics {
         public static let listWidth: CGFloat = 320
         public static let listMaxHeight: CGFloat = 320
         public static let listRowHeight: CGFloat = 36
+        /// Список — карточкой всплывающих меню под строкой на 4.
+        public static let listGap: CGFloat = 4
     }
 
     /// Панель форматирования над выделенным текстом (FR-033), карточка как у Notion 7.38.1 (снимок 15.10.2026, ±1,2):

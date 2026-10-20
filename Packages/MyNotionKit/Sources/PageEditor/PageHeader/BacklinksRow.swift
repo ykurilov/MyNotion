@@ -42,6 +42,10 @@ public final class BacklinksRow: NSView {
     /// Ширина подложки по тексту: строка не тянется на всю ширину страницы.
     public var fittingWidth: CGFloat { ceil(text.size().width) + 2 * Metrics.BacklinksRow.horizontalPadding }
 
+    /// Откуда открывается список: левый верхний угол карточки — под строкой на 4, левым краем по подложке строки
+    /// (T101 № 6: список не сдвигается к середине страницы). В координатах строки.
+    public var listAnchor: NSPoint { NSPoint(x: 0, y: bounds.maxY + Metrics.BacklinksRow.listGap) }
+
     public override func accessibilityPerformPress() -> Bool {
         onPress?(self)
         return true

@@ -253,7 +253,7 @@ struct PageOutline: NSViewRepresentable {
     func makeNSView(context: Context) -> NSScrollView {
         let outlineView = PageOutlineView(frame: .zero)
         context.coordinator.dataSource.attach(to: outlineView)
-        let scrollView = NSScrollView()
+        let scrollView = SidebarScrollView()
         scrollView.documentView = outlineView
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
@@ -276,5 +276,70 @@ struct PageOutline: NSViewRepresentable {
             dataSource.select(selectedPageId)
         }
         dataSource.setLiveTitle(liveTitle, of: selectedPageId)
+    }
+}
+
+/// Прокрутка списков панели, как у Notion 7.39 (замер 21.10.2026): справа у всех разделов одно поле под полосу прокрутки
+/// (строки «Недавних», «Избранного» и «Страниц» одной ширины — у Notion 239 при панели 270), полоса поверх этого поля;
+/// прокрученный список гаснет сверху на 34 — строки не срезаются под заголовком. Снизу — без затухания, линия перед «Корзиной».
+final class SidebarScrollView: NSScrollView {
+    private let fade = CAGradientLayer()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        super.scrollerStyle = .overlay
+        wantsLayer = true
+        fade.colors = [NSColor.clear.cgColor, NSColor.black.cgColor]
+        fade.startPoint = CGPoint(x: 0.5, y: 0)
+        fade.endPoint = CGPoint(x: 0.5, y: 1)
+        contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(self, selector: #selector(contentDidScroll), name: NSView.boundsDidChangeNotification,
+                                               object: contentView)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
+
+    /// Полоса всегда поверх строк: с мышью без трекпада система ставила бы полосу сбоку, и дерево становилось бы уже разделов.
+    override var scrollerStyle: NSScroller.Style {
+        get { .overlay }
+        set { super.scrollerStyle = .overlay }
+    }
+
+    /// Сколько список прокручен от верха.
+    var scrolledOffset: CGFloat { max(0, contentView.bounds.minY) }
+
+    /// Затухание сверху: есть, только пока список прокручен.
+    var isTopFaded: Bool { layer?.mask != nil }
+
+    /// Видимая часть уже вида на поле справа; полоса прокрутки — в этом поле.
+    override func tile() {
+        super.tile()
+        var clip = contentView.frame
+        clip.size.width = max(0, bounds.width - Metrics.Sidebar.scrollGutter)
+        contentView.frame = clip
+    }
+
+    override func layout() {
+        super.layout()
+        updateFade()
+    }
+
+    @objc private func contentDidScroll() { updateFade() }
+
+    private func updateFade() {
+        guard scrolledOffset > 0.5, bounds.height > 0 else {
+            if layer?.mask != nil { layer?.mask = nil }
+            return
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        fade.frame = bounds
+        // Слой не перевёрнут: верх вида — y = 1.
+        let solid = min(1, Metrics.Sidebar.scrollTopFadeHeight / bounds.height)
+        fade.startPoint = CGPoint(x: 0.5, y: 1)
+        fade.endPoint = CGPoint(x: 0.5, y: 1 - solid)
+        if layer?.mask !== fade { layer?.mask = fade }
+        CATransaction.commit()
     }
 }

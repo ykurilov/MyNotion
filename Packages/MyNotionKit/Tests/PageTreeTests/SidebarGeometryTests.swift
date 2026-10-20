@@ -140,6 +140,29 @@ struct SidebarGeometryTests {
         }
     }
 
+    @Test("Списки панели: поле 15 справа под полосу у всех разделов, полоса поверх, сверху затухание только у прокрученного (T101 № 7, 8)")
+    func sidebarListsShareWidthAndFadeOnScroll() throws {
+        let width = Metrics.Sidebar.defaultWidth - 2 * Metrics.Sidebar.panelInset
+        let scroll = SidebarScrollView(frame: NSRect(x: 0, y: 0, width: width, height: 200))
+        let document = NSView(frame: NSRect(x: 0, y: 0, width: width, height: 1000))
+        scroll.documentView = document
+        scroll.layoutSubtreeIfNeeded()
+        // Строки кончаются на 247 при панели 270, как у Notion, — и в «Недавних», где прокрутки нет, и в «Страницах».
+        #expect(Metrics.Sidebar.panelInset + scroll.contentView.frame.width == 247, "видно \(scroll.contentView.frame)")
+        #expect(scroll.scrollerStyle == .overlay)
+        scroll.scrollerStyle = .legacy
+        #expect(scroll.scrollerStyle == .overlay, "полоса сбоку сузила бы дерево против разделов")
+        #expect(!scroll.isTopFaded, "у верха списка затухания нет")
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: 120))
+        scroll.layoutSubtreeIfNeeded()
+        #expect(scroll.isTopFaded, "прокрученный список не гаснет сверху")
+        let mask = try #require(scroll.layer?.mask as? CAGradientLayer)
+        #expect(abs((mask.startPoint.y - mask.endPoint.y) * scroll.bounds.height - Metrics.Sidebar.scrollTopFadeHeight) < 0.5)
+        scroll.contentView.scroll(to: .zero)
+        scroll.layoutSubtreeIfNeeded()
+        #expect(!scroll.isTopFaded)
+    }
+
     // MARK: Переименование (№2)
 
     @Test("Переименование: текст не сдвигается, поле прозрачное", arguments: ["Заметки", ""])
