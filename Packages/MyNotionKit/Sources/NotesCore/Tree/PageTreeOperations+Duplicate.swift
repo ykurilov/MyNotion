@@ -1,0 +1,88 @@
+import Foundation
+
+/// «Дублировать» страницу (research R7, contracts/page-operations.md, «Дублирование»): копия ветки `PageBranchCopier`
+/// сразу под оригиналом с названием «Название (1)» (занято у соседей — следующий свободный номер); в родителе ссылка
+/// на копию — сразу за ссылкой на оригинал. Копия шаблона — шаблон, даты — как были. ⌘Z стирает копию навсегда.
+extension PageTreeOperations {
+    /// Копия пишется с очереди записи: ветка на тысячи блоков не замораживает окно (research R15, проба копии ветки).
+    /// Возвращает корень копии.
+    @discardableResult
+    public func duplicate(_ pageId: UUID, now: Date = Date()) async throws -> Page {
+        let store = store
+        let (copy, touched) = try await Task.detached {
+            try store.write { transaction in
+                let copy = try Self.writeDuplicate(of: pageId, in: transaction, now: now)
+                return (copy, Self.touchedPages(transaction.changes))
+            }
+        }.value
+        onChange?(touched)
+        registerDuplicateUndo(copy.id, original: pageId)
+        return copy
+    }
+
+    private func registerDuplicateUndo(_ copyId: UUID, original: UUID) {
+        registerUndo("Дублирование") { try $0.eraseDuplicate(copyId, original: original) }
+    }
+
+    /// Отмена: копия со всей веткой (и с тем, что в ней успели удалить в корзину) стирается, ссылка в родителе — тоже.
+    private func eraseDuplicate(_ copyId: UUID, original: UUID) throws {
+        try perform { transaction in
+            let all = try transaction.allPages()
+            let children = Dictionary(grouping: all, by: \.parentId)
+            var branch: [Page] = []
+            func collect(_ page: Page) {
+                branch.append(page)
+                for child in children[page.id] ?? [] { collect(child) }
+            }
+            guard let copy = all.first(where: { $0.id == copyId }) else { throw NotesStoreError.pageNotFound(copyId) }
+            collect(copy)
+            try Self.erase(branch, transaction)
+        }
+        registerUndo("Дублирование") { try $0.redoDuplicate(original) }
+    }
+
+    /// Повтор: копия заново (стёртые id не возвращаются). Пишется здесь же — повтор идёт из меню «Правка» синхронно.
+    private func redoDuplicate(_ original: UUID) throws {
+        let copy = try perform { try Self.writeDuplicate(of: original, in: $0, now: Date()) }
+        registerDuplicateUndo(copy.id, original: original)
+    }
+
+    nonisolated static func writeDuplicate(of pageId: UUID, in transaction: NotesTransaction, now: Date) throws -> Page {
+        let all = try transaction.allPages()
+        guard let original = all.first(where: { $0.id == pageId }) else { throw NotesStoreError.pageNotFound(pageId) }
+        let siblings = all.filter { $0.parentId == original.parentId && $0.trashedAt == nil }.sorted(by: PageTreeSnapshot.siblingOrder)
+        let next = siblings.drop { $0.id != pageId }.dropFirst().first?.sortKey
+        let result = try PageBranchCopier.copy(
+            pageId, in: transaction, title: duplicateTitle(original.displayTitle, taken: Set(siblings.map(\.displayTitle))),
+            parentId: original.parentId, sortKey: .between(original.sortKey, next.flatMap { original.sortKey < $0 ? $0 : nil }),
+            now: now, resolvesTemplateDates: false)
+        if let parentId = original.parentId {
+            try placeLink(to: result.rootId, after: pageId, in: parentId, transaction)
+        }
+        guard let copy = try transaction.page(result.rootId) else { throw NotesStoreError.pageNotFound(result.rootId) }
+        return copy
+    }
+
+    /// «Название (1)»; занято — «(2)» и дальше.
+    nonisolated static func duplicateTitle(_ title: String, taken: Set<String>) -> String {
+        var number = 1
+        while taken.contains("\(title) (\(number))") { number += 1 }
+        return "\(title) (\(number))"
+    }
+
+    /// Ссылка на копию — в том же потоке и с тем же отступом сразу за ссылкой на оригинал; ссылки нет — в конец страницы.
+    private nonisolated static func placeLink(to copyId: UUID, after originalId: UUID, in parentId: UUID,
+                                              _ transaction: NotesTransaction) throws {
+        let blocks = try transaction.blocks(ofPage: parentId)
+        guard let link = blocks.first(where: { $0.kind == .pageLink && $0.linkedPageId == originalId }) else {
+            let last = blocks.filter { $0.containerId == nil }.map(\.sortKey).max()
+            try transaction.insertBlock(Block(pageId: parentId, kind: .pageLink, linkedPageId: copyId, sortKey: .between(last, nil)))
+            return
+        }
+        let flow = blocks.filter { $0.containerId == link.containerId }.sorted(by: BlockCopier.flowOrder)
+        let next = flow.drop { $0.id != link.id }.dropFirst().first?.sortKey
+        try transaction.insertBlock(Block(pageId: parentId, kind: .pageLink, indent: link.indent, linkedPageId: copyId,
+                                          sortKey: .between(link.sortKey, next.flatMap { link.sortKey < $0 ? $0 : nil }),
+                                          containerId: link.containerId))
+    }
+}

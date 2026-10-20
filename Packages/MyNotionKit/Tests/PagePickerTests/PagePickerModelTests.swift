@@ -97,7 +97,7 @@ struct PagePickerModelTests {
         let model = model(.blocks(fromPage: pages.work.id), pages, recents: [pages.work, pages.home])
 
         #expect(model.rows.filter { $0.title == "Работа" }.allSatisfy { !$0.isAvailable })
-        #expect(model.rows.filter { $0.title != "Работа" }.allSatisfy(\.isAvailable))
+        #expect(model.rows.filter { $0.title != "Работа" }.allSatisfy { $0.isAvailable })
         #expect(!model.rows.contains { $0.target == .topLevel })
     }
 
