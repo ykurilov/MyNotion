@@ -7,7 +7,7 @@ import PageEditor
 /// Замер вкладок (US3, T056; SC-201, SC-202): флаг `--tabs-benchmark <отчёт>`, сборка Release, эталонная база.
 /// 20 вкладок с «богатыми» страницами 002 (образец и 19 копий ветки), у каждой своё место прокрутки:
 /// 100 переключений по кругу, 10 «назад» и 10 «вперёд» — от команды до готовности редактора и перерисовки окна;
-/// место прокрутки после возврата то же; память с одной вкладкой и с двадцатью после переключений.
+/// место прокрутки после возврата на вкладку и «назад» то же; память с одной вкладкой и с двадцатью после переключений.
 /// В конце в базе остаются 10 вкладок — тест запускает приложение ещё раз и мерит запуск с ними.
 @MainActor
 enum TabsBenchmark {
@@ -33,7 +33,7 @@ enum TabsBenchmark {
         var forwardP95Ms: Double?
         var memoryOneTabMB: Double?
         var memoryTwentyTabsMB: Double?
-        /// Возвратов на вкладку, где блок у верха тот же, что был при уходе, — из скольких проверено.
+        /// Возвратов на вкладку и «назад», где блок у верха тот же, что был при уходе, — из скольких проверено.
         var scrollRestored = 0
         var scrollChecked = 0
         var error: String?
@@ -122,6 +122,10 @@ enum TabsBenchmark {
         for _ in 0..<historySteps {
             guard model.canGoBack else { break }
             report.backMs.append(try await measure(in: model) { model.goBack() })
+            if let expected = model.tabs.activeTab.scroll {
+                report.scrollChecked += 1
+                if model.scrollPlace.current()?.blockId == expected.blockId { report.scrollRestored += 1 }
+            }
         }
         for _ in 0..<historySteps {
             guard model.canGoForward else { break }
