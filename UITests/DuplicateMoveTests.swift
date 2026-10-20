@@ -30,16 +30,18 @@ final class DuplicateMoveTests: XCTestCase {
         waitForTitle(app, "Копии: исходная (1)")
         XCTAssertTrue((app.pageBody.value as? String ?? "").hasPrefix("Начало\nСписок\nпункт 1\nпункт 1.1\nКонец"),
                       "В копии другой текст: \(app.pageBody.value ?? "")")
-        let rows = app.outlines["page-tree"].outlineRows.allElementsBoundByIndex.compactMap { $0.value as? String }
         // Сразу под оригиналом: между его веткой и следующей страницей верхнего уровня.
-        let original = try XCTUnwrap(rows.firstIndex(of: "Копии: исходная"))
-        let copyRow = try XCTUnwrap(rows.firstIndex(of: "Копии: исходная (1)"), "Копии нет в дереве: \(rows)")
-        let next = try XCTUnwrap(rows.firstIndex(of: "Копии: цель"))
-        XCTAssertTrue(original < copyRow && copyRow < next, "Копия не сразу под оригиналом: \(rows)")
+        let original = treeRow(app, "Копии: исходная").frame.minY
+        let copyRow = treeRow(app, "Копии: исходная (1)")
+        XCTAssertTrue(copyRow.waitForExistence(timeout: 5), "Копии нет в дереве")
+        let next = treeRow(app, "Копии: цель").frame.minY
+        XCTAssertTrue(original < copyRow.frame.minY && copyRow.frame.minY < next, "Копия не сразу под оригиналом")
 
         // Три блока с вложенными («Список» › «пункт 1» › «пункт 1.1») → ⇧⌘P → поиск → Enter: в конце «цели».
         open(app, "Копии: исходная")
-        app.pageBody.typeKey(.downArrow, modifierFlags: [])
+        // Курсор — щелчком в первую строку «Начало»: после щелчка по панели клавиши идут в панель.
+        app.pageBody.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: 40, dy: 10)).click()
+        app.typeKey(.downArrow, modifierFlags: [])
         app.typeKey(.escape, modifierFlags: [])
         app.typeKey(.downArrow, modifierFlags: .shift)
         app.typeKey(.downArrow, modifierFlags: .shift)
@@ -65,10 +67,9 @@ final class DuplicateMoveTests: XCTestCase {
         waitForTitle(app, "Копии: цель (1)")
 
         // «Переместить в» из меню строки панели: «цель (1)» → внутрь «исходная (1)».
-        treeRow(app, "Копии: цель (1)").coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).hover()
-        let rowMenu = treeRow(app, "Копии: цель (1)").descendants(matching: .any).matching(identifier: "page-tree-menu").firstMatch
-        XCTAssertTrue(rowMenu.waitForExistence(timeout: 5), "У строки нет «•••»")
-        rowMenu.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        // Меню строки — правой кнопкой (то же, что «•••» строки).
+        treeRow(app, "Копии: цель (1)").coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).rightClick()
+        XCTAssertTrue(app.menuItems["Переместить в"].waitForExistence(timeout: 5), "В меню строки нет «Переместить в»")
         app.menuItems["Переместить в"].click()
         XCTAssertTrue(field.waitForExistence(timeout: 5), "Меню строки не открыло «Переместить в…»")
         app.typeText("исходная (1)")
