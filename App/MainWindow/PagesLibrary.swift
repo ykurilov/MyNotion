@@ -6,6 +6,7 @@ import Observation
 import PageEditor
 import PageSearch
 import PageTree
+import VisualStyle
 
 /// Общее для всех окон приложения (FR-029): база, открытые страницы, дерево, корзина и синхронизация.
 /// У каждого окна свой `MainWindowModel` над этой библиотекой. Одна страница в двух окнах — один `PageDocument`
@@ -22,6 +23,11 @@ final class PagesLibrary {
     /// Меняется при каждом перечитывании дерева.
     private(set) var treeRevision = 0
     private(set) var trashEntries: [Page] = []
+    /// Избранные страницы по порядку и пять последних, где побывали (US2). Корзина в них не попадает.
+    private(set) var favoritePageIds: [UUID] = []
+    private(set) var recentPageIds: [UUID] = []
+    /// Меняется при каждом перечитывании «Избранного» и «Недавних»: разделы перечитывают строки.
+    private(set) var sectionsRevision = 0
     /// Страницы корзины вместе с подстраницами — для упоминаний «Удалённая страница».
     private(set) var trashedPageIds: Set<UUID> = []
     /// Напоминания (US3): индекс, уведомления системы, «Готово».
@@ -101,6 +107,21 @@ final class PagesLibrary {
         trashEntries = NotesStore.trashEntries(in: all)
         trashedPageIds = Set(all.lazy.map(\.id).filter { self.tree.page($0) == nil })
         treeRevision += 1
+        favoritePageIds = ((try? store.favoritePages()) ?? []).map(\.id)
+        recentPageIds = recentIds()
+        sectionsRevision += 1
+    }
+
+    /// Запись открытия легла в базу: перечитываются только «Недавние», дерево и страницы остаются как были.
+    func reloadRecents() {
+        let ids = recentIds()
+        guard ids != recentPageIds else { return }
+        recentPageIds = ids
+        sectionsRevision += 1
+    }
+
+    private func recentIds() -> [UUID] {
+        ((try? store.recentPages(limit: Metrics.Sidebar.recentRowCount)) ?? []).map(\.id)
     }
 
     /// Операция с деревом в любом окне (и её отмена): дерево перечитывается один раз, окна сверяют свои страницы.

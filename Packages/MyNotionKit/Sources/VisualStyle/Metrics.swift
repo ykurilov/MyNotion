@@ -170,6 +170,14 @@ public enum Metrics {
         /// Нижние строки панели («Корзина»): воздух над разделителем и под ним, отступ от нижнего края окна.
         public static let footerDividerSpacing: CGFloat = 6
         public static let footerBottomInset: CGFloat = 10
+        /// Воздух над заголовком раздела панели («Недавние», «Избранное», «Страницы»), если выше есть другой раздел.
+        public static let sectionTopSpacing: CGFloat = 10
+        /// «Недавние» показывают столько страниц и строку «Показать все».
+        public static let recentRowCount = 5
+        /// «Избранное» показывает до стольких строк, остальные — прокруткой внутри раздела.
+        public static let favoritesMaxRows = 7
+        /// Стрелка у заголовка раздела при наведении.
+        public static let sectionChevronSize: CGFloat = 9
     }
 
     /// Верхняя строка окна — в линию со светофором: шторка панели и «✎» (по снимку Notion для Mac).

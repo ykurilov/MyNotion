@@ -37,9 +37,10 @@ struct GalleryCatalogTests {
         for scene in required { #expect(scenes.contains(scene), "\(scene)") }
     }
 
-    @Test("Страницы и навигация (003): верхняя полоса с «•••» и открытое меню «•••» — в обеих темах")
+    @Test("Страницы и навигация (003): верхняя полоса с «•••», «☆» пустая и закрашенная, открытое меню «•••» — в обеих темах")
     func pagesNavigationStatesPresent() {
-        for scene in [GalleryScene.pageTopBar, .pageMenu, .pageMenuAppearance] + GalleryPageCover.allCases.map(GalleryScene.pageCover) {
+        for scene in [GalleryScene.pageTopBar, .pageMenu, .pageMenuAppearance, .favoriteStar(isFavorite: false), .favoriteStar(isFavorite: true)]
+            + GalleryPageCover.allCases.map(GalleryScene.pageCover) {
             #expect(scenes.contains(scene), "\(scene)")
         }
     }
@@ -90,6 +91,11 @@ struct GalleryCatalogTests {
             .sidebarRowHover(longTitle: true), .sidebarSelectedRow, .sidebarRenaming, .sidebarHidden,
         ] + GalleryTrash.allCases.map(GalleryScene.trash)
         for scene in required { #expect(scenes.contains(scene), "\(scene)") }
+    }
+
+    @Test("Избранное и недавние (003, US2): панель с обоими разделами, свёрнутый раздел, меню строки избранной")
+    func favoritesAndRecentsStatesPresent() {
+        for state in GallerySidebarSections.allCases { #expect(scenes.contains(.sidebarSections(state)), "\(state)") }
     }
 
     @Test("Импорт из Notion: ход, вопрос о повторе, отчёт")

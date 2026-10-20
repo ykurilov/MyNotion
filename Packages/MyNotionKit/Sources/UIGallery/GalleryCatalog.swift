@@ -68,6 +68,10 @@ public enum GalleryScene: Hashable, Sendable {
     case longBreadcrumb
     /// Верхняя полоса страницы справа: «•••» (003, этап 0; «☆» добавляет US2).
     case pageTopBar
+    /// «☆» в верхней полосе (US2): страница в избранном (закрашенная «★») или нет (пустая).
+    case favoriteStar(isFavorite: Bool)
+    /// Разделы «Недавние» и «Избранное» над деревом (US2).
+    case sidebarSections(GallerySidebarSections)
     /// Открытое меню «•••» страницы: поле «Найти действие…», пункты, подвал «Изменено…» (003, этап 0).
     case pageMenu
     /// Обложка и вид страницы (US1).
@@ -169,6 +173,16 @@ public enum GalleryTheme: String, Hashable, Sendable, CaseIterable, Codable {
     case dark
 
     public var title: String { self == .light ? "светлая" : "тёмная" }
+}
+
+/// Состояния разделов «Недавние» и «Избранное» (US2).
+public enum GallerySidebarSections: CaseIterable, Sendable {
+    /// Пять недавних со строкой «Показать все» и избранное, у одной избранной раскрыты подстраницы.
+    case recentAndFavorites
+    /// «Избранное» свёрнуто щелчком по заголовку.
+    case favoritesCollapsed
+    /// Меню строки избранной страницы: «Убрать из избранного».
+    case favoriteRowMenu
 }
 
 public struct GalleryWindowSize: Hashable, Sendable, Codable {
@@ -284,6 +298,10 @@ public enum GalleryCatalog {
                      "Полоса «Изменения не сохранены…» над страницей", section: "Страница", narrowToo: true),
         GalleryState("page-top-bar", .pageTopBar,
                      "Верхняя полоса страницы: путь слева, «•••» справа", section: "Страницы и навигация"),
+        GalleryState("favorite-star-empty", .favoriteStar(isFavorite: false),
+                     "«☆» в верхней полосе: страница не в избранном, подсказка «Добавить в избранное»", section: "Страницы и навигация"),
+        GalleryState("favorite-star-filled", .favoriteStar(isFavorite: true),
+                     "«★» закрашена жёлтым: страница в избранном", section: "Страницы и навигация"),
         GalleryState("page-menu", .pageMenu,
                      "Меню «•••»: «Найти действие…», «Удалить в корзину», подвал «Изменено…, N слов»", section: "Страницы и навигация"),
         GalleryState("page-menu-appearance", .pageMenuAppearance,
@@ -389,6 +407,13 @@ public enum GalleryCatalog {
                      section: "Боковая панель", narrowToo: true),
         GalleryState("sidebar-search-nothing-found", .search(nothingFound: true),
                      "Поиск слова, которого нет: «Ничего не найдено» и пояснение про корзину по центру карточки под полем", section: "Боковая панель"),
+        GalleryState("sidebar-recent-and-favorites", .sidebarSections(.recentAndFavorites),
+                     "Над «Страницами»: «Недавние» (пять строк и «Показать все») и «Избранное»; открытая страница подсвечена",
+                     section: "Боковая панель", narrowToo: true),
+        GalleryState("sidebar-favorites-collapsed", .sidebarSections(.favoritesCollapsed),
+                     "«Избранное» свёрнуто: остался заголовок, «Недавние» и «Страницы» на месте", section: "Боковая панель"),
+        GalleryState("sidebar-favorite-row-menu", .sidebarSections(.favoriteRowMenu),
+                     "Меню строки в «Избранном»: «Убрать из избранного» среди остальных пунктов", section: "Боковая панель"),
         GalleryState("sidebar-hidden", .sidebarHidden,
                      "Боковая панель свёрнута шторкой: шторка у светофора, страница во всю ширину", section: "Боковая панель",
                      narrowToo: true),
