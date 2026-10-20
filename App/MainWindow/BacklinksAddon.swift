@@ -113,13 +113,16 @@ final class BacklinksListPresenter: NSObject, NSPopoverDelegate {
     private func show(_ rows: [BacklinkListRow], from anchor: NSView, model: MainWindowModel) {
         let popover = NSPopover()
         popover.behavior = .transient
+        popover.animates = false
         popover.delegate = self
         let height = min(CGFloat(rows.count) * Metrics.BacklinksRow.listRowHeight + 12, Metrics.BacklinksRow.listMaxHeight)
         let content = BacklinksListView(rows: rows) { [weak popover, weak model] source in
             popover?.close()
             model?.open(PageOpenRequest.fromClick(source.pageId, revealing: source.blockId))
         }
+        .frame(width: Metrics.BacklinksRow.listWidth, height: height)
         let controller = NSHostingController(rootView: content)
+        controller.sizingOptions = []
         controller.view.setFrameSize(NSSize(width: Metrics.BacklinksRow.listWidth, height: height))
         popover.contentViewController = controller
         popover.contentSize = NSSize(width: Metrics.BacklinksRow.listWidth, height: height)
@@ -175,6 +178,7 @@ private struct BacklinkListRowView: View {
                     .font(.system(size: 14))
                     .foregroundStyle(Color(nsColor: Palette.textPrimary))
                     .lineLimit(1)
+                    .layoutPriority(1)
                 Spacer(minLength: 4)
                 if !row.path.isEmpty {
                     Text(row.path)

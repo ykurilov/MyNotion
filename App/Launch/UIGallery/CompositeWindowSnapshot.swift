@@ -26,11 +26,25 @@ enum CompositeWindowSnapshot {
             if needsBackdrop(overlay) {
                 // Фон диалога — системное «стекло»: снимок рисует его белым в любой теме. Вместо него —
                 // цвет окна в теме главного окна, а поверх только содержимое диалога.
+                let isPopover = Self.isPopover(overlay)
+                let content = overlay.contentView
+                // Тело всплывающего окна — содержимое с полем вокруг (без стрелки).
+                let body = isPopover && content != nil
+                    ? NSRect(x: rect.minX + content!.frame.minX, y: rect.minY + content!.frame.minY, width: content!.frame.width,
+                             height: content!.frame.height).insetBy(dx: -Self.popoverCornerRadius, dy: -Self.popoverCornerRadius / 2)
+                    : rect
+                let radius = isPopover ? Self.popoverCornerRadius : Self.dialogCornerRadius
                 window.effectiveAppearance.performAsCurrentDrawingAppearance {
                     NSColor.windowBackgroundColor.setFill()
-                    NSBezierPath(roundedRect: rect, xRadius: Self.dialogCornerRadius, yRadius: Self.dialogCornerRadius).fill()
+                    let outline = NSBezierPath(roundedRect: body, xRadius: radius, yRadius: radius)
+                    outline.fill()
+                    if isPopover {
+                        NSColor.separatorColor.setStroke()
+                        outline.lineWidth = 1
+                        outline.stroke()
+                    }
                 }
-                guard let content = overlay.contentView, let image = render(content) else { continue }
+                guard let content, let image = render(content) else { continue }
                 image.draw(in: NSRect(origin: NSPoint(x: rect.minX + content.frame.minX, y: rect.minY + content.frame.minY),
                                       size: content.frame.size), from: .zero, operation: .sourceOver, fraction: 1)
             } else if let image = overlay.contentView?.superview.flatMap(render) {
@@ -70,8 +84,14 @@ enum CompositeWindowSnapshot {
     }
 
     private static func needsBackdrop(_ window: NSWindow) -> Bool {
-        window.sheetParent != nil || window.isModalPanel || window is NSPanel && window.styleMask.contains(.titled)
+        window.sheetParent != nil || window.isModalPanel || window is NSPanel && window.styleMask.contains(.titled) || isPopover(window)
     }
+
+    /// Всплывающее окно (`NSPopover`): его рамка — системное «стекло» с стрелкой, рисуется так же, как диалог.
+    private static func isPopover(_ window: NSWindow) -> Bool { window.className.contains("Popover") }
+
+    /// Скругление всплывающего окна.
+    static let popoverCornerRadius: CGFloat = 10
 
     /// Скругление системного диалога.
     static let dialogCornerRadius: CGFloat = 16

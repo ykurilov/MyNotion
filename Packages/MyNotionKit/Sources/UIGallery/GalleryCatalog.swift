@@ -89,6 +89,8 @@ public enum GalleryScene: Hashable, Sendable {
     case tabs(GalleryTabs)
     /// Окно «Переместить в…» (US4): без запроса — недавние и дерево, своя страница серая; с запросом — выдача поиска.
     case movePicker(GalleryMovePicker)
+    /// Обратные ссылки (US5): строка «↗ 3 обратные ссылки» под названием и открытый список источников.
+    case backlinks(GalleryBacklinks)
 }
 
 public enum GalleryMarkdownExport: String, Hashable, Sendable, CaseIterable {
@@ -230,7 +232,13 @@ public struct GalleryShot: Hashable, Sendable {
 public enum GalleryCatalog {
     /// Все состояния по порядку съёмки.
     public static let states: [GalleryState] = pageStates + blockStates + kindSampleStates + inlineAtomStates + editingStates + sidebarStates
-        + trashStates + importStates + exportStates + syncStates + tabsStates + copiesStates
+        + trashStates + importStates + exportStates + syncStates + tabsStates + copiesStates + backlinksStates
+
+    /// Обратные ссылки (US5, contracts/pages-ui.md, «Обратные ссылки»): строка под названием и список источников.
+    static let backlinksStates: [GalleryState] = [
+        GalleryState("backlinks-row", .backlinks(.row), "Под названием серая строка «↗ 3 обратные ссылки»", section: "Ссылки"),
+        GalleryState("backlinks-list", .backlinks(.list), "Щелчок по строке: список страниц — иконка, название, путь серым", section: "Ссылки"),
+    ]
 
     /// Копии (US4, contracts/pages-ui.md, «Окно «Переместить в»»; сверка — снимок Notion 7.39 `notion-move-to.png`).
     /// Пункт «Переместить в» меню блока — в снимке `block-menu`.
@@ -499,6 +507,12 @@ public enum GalleryCatalog {
         GalleryState("markdown-export-failed", .markdownExport(.failed),
                      "Выгрузка не удалась: понятная ошибка и «Закрыть»", section: "Выгрузка в Markdown"),
     ]
+}
+
+/// Состояния обратных ссылок для галереи (US5).
+public enum GalleryBacklinks: Hashable, Sendable, CaseIterable {
+    case row
+    case list
 }
 
 /// Состояния окна «Переместить в…» для галереи (US4).
