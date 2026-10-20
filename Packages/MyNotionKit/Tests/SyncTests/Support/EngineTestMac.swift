@@ -55,6 +55,8 @@ final class EngineTestMac {
     private(set) var engine: SyncEngine!
     private(set) var connection: SwitchableTransport!
     private(set) var account: SyncAccount!
+    /// Самый новый формат пачек, который этот Mac умеет читать; меньше текущего — «старый» Mac. Задаётся до подключения.
+    var supportedFormatVersion = SyncBatch.currentFormatVersion
 
     init(name: String, wallMillis: Int64) throws {
         self.name = name
@@ -90,7 +92,7 @@ final class EngineTestMac {
         let secret = try #require(try secrets.load(for: account.deviceId))
         connection = SwitchableTransport(server.transport(deviceToken: secret.deviceToken))
         engine = SyncEngine(store: store, account: account, transport: connection,
-                            cipher: BatchCipher(key: secret.encryptionKey),
+                            cipher: BatchCipher(key: secret.encryptionKey, supportedFormatVersion: supportedFormatVersion),
                             applier: RemoteChangeApplier(store: store, openDocuments: documents, localDeviceName: name),
                             timing: .fastForTests)
     }
