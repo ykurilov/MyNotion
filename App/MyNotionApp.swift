@@ -1,5 +1,6 @@
 import AppKit
 import Attachments
+import Backlinks
 import MarkdownExport
 import NotesCore
 import NotionImport
@@ -98,6 +99,8 @@ struct MyNotionApp: App {
         // Индекс поиска и очередь синхронизации пишутся в той же транзакции, что и записи (research R6, R4) —
         // до первой записи. Пока синхронизация не включена, очередь ничего не пишет.
         store.addWriteHook(SearchIndexer())
+        // Индекс обратных ссылок — в той же транзакции, что и блок (research R10).
+        store.addWriteHook(PageLinkIndexer())
         // Ссылки на файлы пересчитываются в той же транзакции, что блоки (data-model.md, «Attachment»).
         store.addWriteHook(AttachmentReferenceCounter(onQueueChange: AttachmentQueueSignal.fire))
         Outbox.install(on: store)

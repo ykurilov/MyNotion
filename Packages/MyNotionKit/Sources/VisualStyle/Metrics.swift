@@ -425,6 +425,18 @@ public enum Metrics {
         public static let spacing: CGFloat = 2
     }
 
+    /// Строка обратных ссылок под названием страницы (003, US5; contracts/pages-ui.md): серая, высотой ≈24.
+    public enum BacklinksRow {
+        public static let height: CGFloat = 24
+        public static let horizontalPadding: CGFloat = 6
+        public static let cornerRadius: CGFloat = 4
+        public static let fontSize: CGFloat = 13
+        /// Окно списка: ширина и самая большая высота; строка — как у пунктов меню.
+        public static let listWidth: CGFloat = 320
+        public static let listMaxHeight: CGFloat = 320
+        public static let listRowHeight: CGFloat = 36
+    }
+
     /// Панель форматирования над выделенным текстом (FR-033), карточка как у Notion 7.38.1 (снимок 15.10.2026, ±1,2):
     /// строка типа блока, разделитель, ряд из 7 кнопок по 36 (шесть как у Notion и цвет «A»).
     /// Панель форматирования, как у Notion 7.39 (снимки 19.10.2026, ±1,3): строка типа и два ряда по 5 кнопок,

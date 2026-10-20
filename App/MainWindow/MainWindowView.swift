@@ -48,6 +48,8 @@ struct MainWindowView: View {
         // Напоминания ставятся после готовности редактора, не при запуске (research R11); служебные запуски — без них.
         if options.allowsSync, case .success(let library) = library { library.reminders.start() }
         LaunchMilestones.editorReady(reportTo: options.launchReportURL)
+        // Первое заполнение индекса обратных ссылок — один раз, в фоне, когда редактор уже на экране (research R10).
+        if case .success(let library) = library { BacklinkIndexStarter.start(store: library.store) }
         if let snapshotURL = options.windowSnapshotURL {
             WindowSnapshot.capture(to: snapshotURL, hoveredSidebarRow: options.hoveredSidebarRow)
         }
@@ -375,7 +377,7 @@ private struct PagesWindow: View {
                 topBarAccessory: AnyView(FavoriteStarButton(isFavorite: model.isFavorite(document.pageId)) {
                     model.toggleFavorite(document.pageId)
                 }),
-                headerAddons: [PageCoverAddon.factory(model)],
+                headerAddons: [PageCoverAddon.factory(model), BacklinksAddon.factory(model)],
                 scrollPlace: model.scrollPlace,
                 restoringScroll: model.restoringScroll
             )
