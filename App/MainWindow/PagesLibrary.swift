@@ -27,6 +27,8 @@ final class PagesLibrary {
     /// Избранные страницы по порядку и пять последних, где побывали (US2). Корзина в них не попадает.
     private(set) var favoritePageIds: [UUID] = []
     private(set) var recentPageIds: [UUID] = []
+    /// Шаблоны по порядку (US7): свой раздел панели.
+    private(set) var templatePageIds: [UUID] = []
     /// Меняется при каждом перечитывании «Избранного» и «Недавних»: разделы перечитывают строки.
     private(set) var sectionsRevision = 0
     /// Страницы корзины вместе с подстраницами — для упоминаний «Удалённая страница».
@@ -133,6 +135,7 @@ final class PagesLibrary {
         treeRevision += 1
         favoritePageIds = ((try? store.favoritePages()) ?? []).map(\.id)
         recentPageIds = recentIds()
+        templatePageIds = tree.templates.map(\.id)
         sectionsRevision += 1
     }
 

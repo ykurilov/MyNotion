@@ -159,6 +159,20 @@ struct TemplateOperationsTests {
         #expect(try store.templatePages().map(\.title) == ["Альфа", "Бета"])
     }
 
+    @Test("Дерево «Страниц» без шаблонов и их подстраниц; список шаблонов — по порядку дерева")
+    func treeWithoutTemplates() throws {
+        let (parent, alpha, beta, inner) = try projects()
+        try tree.makeTemplate(alpha.id)
+
+        let snapshot = try store.pageTree()
+        let visible = snapshot.withoutTemplates()
+
+        #expect(snapshot.templates.map(\.id) == [alpha.id])
+        #expect(visible.page(alpha.id) == nil && visible.page(inner.id) == nil)
+        #expect(visible.page(parent.id) != nil && visible.page(beta.id) != nil)
+        #expect(visible.children(of: nil).map(\.title) == ["Проекты"])
+    }
+
     @Test("Страницы нет — ошибка")
     func missingPageThrows() throws {
         #expect(throws: NotesStoreError.self) { try tree.makeTemplate(UUID()) }

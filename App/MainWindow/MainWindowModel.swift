@@ -340,7 +340,7 @@ final class MainWindowModel {
 
     /// Перед операцией правки открытой страницы уходят в базу, чтобы операция видела их.
     @discardableResult
-    private func performTreeOperation<T>(_ operation: () throws -> T) -> T? {
+    func performTreeOperation<T>(_ operation: () throws -> T) -> T? {
         openDocuments.saveAll()
         do {
             return try operation()

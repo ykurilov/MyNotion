@@ -257,6 +257,8 @@ private struct PagesWindow: View {
         actions.rowMenuHandlers[.favorite] = { model.toggleFavorite($0) }
         actions.rowMenuHandlers[.openInNewTab] = { model.open(PageOpenRequest(pageId: $0, inNewTab: true)) }
         actions.rowMenuHandlers[.duplicate] = { model.duplicatePage($0) }
+        actions.rowMenuHandlers[.template] = { model.toggleTemplate($0) }
+        actions.rowMenuHandlers[.newFromTemplate] = { model.createPage(fromTemplate: $0) }
         // Окно выбора — у меню строки: там, где мышь выбрала пункт.
         actions.rowMenuHandlers[.moveTo] = { model.showMovePagePicker($0, anchor: NSRect(origin: NSEvent.mouseLocation, size: .zero)) }
         actions.pageFlags = { [tree = model.tree] pageId in
@@ -266,7 +268,7 @@ private struct PagesWindow: View {
         return actions
     }
 
-    /// «Недавние» и «Избранное» над деревом «Страницы»: пустой раздел не показывается.
+    /// «Недавние», «Избранное» и «Шаблоны» над деревом «Страницы»: пустой раздел не показывается.
     private var sidebarSections: [SidebarSectionContent] {
         let library = model.library
         let actions = sidebarActions
@@ -280,6 +282,11 @@ private struct PagesWindow: View {
         if !library.favoritePageIds.isEmpty {
             sections.append(FavoritesSection.content(tree: model.tree, revision: model.treeRevision + library.sectionsRevision,
                                                      pageIds: library.favoritePageIds, selectedPageId: model.openPageId,
+                                                     liveTitle: model.liveTitleOfOpenPage, actions: actions))
+        }
+        if !library.templatePageIds.isEmpty {
+            sections.append(TemplatesSection.content(tree: model.tree, revision: model.treeRevision + library.sectionsRevision,
+                                                     pageIds: library.templatePageIds, selectedPageId: model.openPageId,
                                                      liveTitle: model.liveTitleOfOpenPage, actions: actions))
         }
         return sections
