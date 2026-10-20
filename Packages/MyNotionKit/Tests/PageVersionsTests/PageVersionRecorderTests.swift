@@ -125,25 +125,26 @@ struct PageVersionRecorderTests {
     }
 
     @Test("Закрытие окна: снимки всех отмеченных сразу, без ожидания")
-    func closingRecordsAllDue() throws {
+    func closingRecordsAllDue() async throws {
         mac.recorder.start()
         let first = try mac.page("Первая", texts: ["1"])
         let second = try mac.page("Вторая", texts: ["2"])
         mac.clock.advance(by: 1)
-        mac.recorder.recordAllDue()
+        await mac.recorder.recordAllDue()
         #expect(try mac.versionList(first.id).count == 1)
         #expect(try mac.versionList(second.id).count == 1)
         #expect(try mac.dueCount() == 0)
     }
 
     @Test("До готовности редактора — ни одного снимка; после — отмеченное и первое открытие")
-    func nothingBeforeEditorReady() throws {
+    func nothingBeforeEditorReady() async throws {
         let edited = try mac.page("Правка до готовности", texts: ["правка"])
         let opened = try mac.page("Открыта до готовности", texts: ["как было"])
         try mac.versions.clearDue(pageId: opened.id, upTo: mac.clock.now)
         mac.recorder.pageOpened(opened.id)
         mac.clock.advance(by: 120)
-        mac.recorder.recordAllDue()
+        await mac.recorder.recordAllDue()
+        mac.recorder.recordAllDueBeforeQuit()
         #expect(try mac.versionList(edited.id).isEmpty)
         #expect(try mac.versionList(opened.id).isEmpty)
         mac.recorder.start()
@@ -168,13 +169,29 @@ struct PageVersionRecorderTests {
     }
 
     @Test("Снимок по запросу (история, восстановление) — только если есть неснятые правки")
-    func recordPendingNow() throws {
+    func recordPendingNow() async throws {
         mac.recorder.start()
         let page = try mac.page("Сейчас", texts: ["а"])
-        #expect(try mac.recorder.recordPending(page.id) != nil, "Правка без версии — снимок сразу")
+        #expect(try await mac.recorder.recordPending(page.id) != nil, "Правка без версии — снимок сразу")
         #expect(try mac.versionList(page.id).count == 1)
-        #expect(try mac.recorder.recordPending(page.id) == nil, "Без новых правок второй снимок не нужен")
+        #expect(try await mac.recorder.recordPending(page.id) == nil, "Без новых правок второй снимок не нужен")
         #expect(try mac.versionList(page.id).count == 1)
+    }
+
+    @Test("Снимок по запросу и при закрытии окна — на очереди записывателя, а не на главном потоке; выход ждёт снимков")
+    func onDemandRecordsOffMainThread() async throws {
+        let threads = ThreadLog()
+        mac.recorder.onRecorded = { _ in threads.record(Thread.isMainThread) }
+        mac.recorder.start()
+        let page = try mac.page("По запросу", texts: ["а"])
+        #expect(try await mac.recorder.recordPending(page.id) != nil)
+        try mac.setText("б", ofBlock: try #require(try mac.blocks(page.id).first).id)
+        await mac.recorder.recordAllDue()
+        try mac.setText("в", ofBlock: try #require(try mac.blocks(page.id).first).id)
+        mac.recorder.recordAllDueBeforeQuit()
+        #expect(try mac.versionList(page.id).count == 3)
+        let onMain = threads.values
+        #expect(onMain.prefix(2) == [false, false], "Снимок по запросу или при закрытии окна — на главном потоке: \(onMain)")
     }
 
     @Test("Запись версии по таймеру — не на главном потоке")

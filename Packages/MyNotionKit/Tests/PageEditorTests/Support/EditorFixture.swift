@@ -14,6 +14,7 @@ final class EditorFixture {
         var indent: Int = 0
         var checked: Bool = false
         var link: UUID?
+        var props: BlockProps = .empty
 
         static func paragraph(_ text: String = "") -> Spec { Spec(kind: .paragraph, text: text) }
         static func heading(_ level: Int, _ text: String) -> Spec {
@@ -49,7 +50,7 @@ final class EditorFixture {
             for spec in specs {
                 key = .between(key, nil)
                 try tx.insertBlock(Block(pageId: page.id, kind: spec.kind, text: InlineText(spec.text), indent: spec.indent,
-                                         isChecked: spec.checked, linkedPageId: spec.link, sortKey: key!))
+                                         isChecked: spec.checked, linkedPageId: spec.link, sortKey: key!, props: spec.props))
             }
             return page.id
         }

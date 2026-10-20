@@ -1,3 +1,4 @@
+import Foundation
 import GRDB
 
 /// Упорядоченный список миграций схемы. Каждая — один шаг версии; уже выпущенные шаги не меняются.
@@ -18,6 +19,7 @@ public struct SchemaMigrations: Sendable {
         Step(version: "v5", migrate: addSyncBookkeeping),
         Step(version: "v6", migrate: addRichBlocks),
         Step(version: "v7", migrate: addPagesNavigation),
+        Step(version: "v8", migrate: indexVersionFilesAndMoves),
     ])
 
     /// Та же схема плюс ещё один шаг — для проверки миграций.
@@ -262,6 +264,38 @@ private func addPagesNavigation(_ db: Database) throws {
         ALTER TABLE window_state ADD COLUMN tabs TEXT;
         ALTER TABLE window_state ADD COLUMN collapsedSidebarSections TEXT NOT NULL DEFAULT '[]';
         """)
+}
+
+/// v8. `page_version_file` — файлы, на которые ссылаются хранимые версии: сборщик сирот их не стирает, пока жива версия
+/// (восстановление вернёт блок с файлом). Записи для уже сохранённых версий — по снимкам: файл версии — тот, чей id есть
+/// в её снимке. `block.movedFrom` — пометка «Переместить в» из `props`, с индексом: восстановление версии ищет копии
+/// своих блоков по id, без полного прохода по блокам. `page_version.isBeforeRestore` — снимок «до восстановления»:
+/// прореживание не отдаёт его версии «после» того же часа или дня.
+private func indexVersionFilesAndMoves(_ db: Database) throws {
+    try db.execute(sql: """
+        CREATE TABLE page_version_file (
+            versionId TEXT NOT NULL,
+            fileId TEXT NOT NULL,
+            PRIMARY KEY (versionId, fileId)
+        );
+        CREATE INDEX page_version_file_by_file ON page_version_file(fileId);
+        ALTER TABLE page_version ADD COLUMN isBeforeRestore BOOLEAN NOT NULL DEFAULT 0;
+
+        ALTER TABLE block ADD COLUMN movedFrom TEXT
+            GENERATED ALWAYS AS (CASE WHEN json_valid(props) THEN json_extract(props, '$.movedFrom') END) VIRTUAL;
+        CREATE INDEX block_by_moved_from ON block(movedFrom) WHERE movedFrom IS NOT NULL;
+        """)
+    let fileIds = try String.fetchAll(db, sql: "SELECT id FROM attachment")
+    guard !fileIds.isEmpty else { return }
+    for row in try Row.fetchAll(db, sql: "SELECT id, snapshot FROM page_version") {
+        let data: Data = row["snapshot"]
+        guard let json = try? (data as NSData).decompressed(using: .lzfse) as Data else { continue }
+        let text = String(decoding: json, as: UTF8.self).uppercased()
+        for fileId in fileIds where text.contains(fileId.uppercased()) {
+            try db.execute(sql: "INSERT OR IGNORE INTO page_version_file (versionId, fileId) VALUES (?, ?)",
+                           arguments: [row["id"] as String, fileId])
+        }
+    }
 }
 
 private func addSidebarCollapsed(_ db: Database) throws {

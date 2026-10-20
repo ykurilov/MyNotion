@@ -8,14 +8,17 @@ extension MainWindowModel {
     var versions: AppPageVersions { library.versions }
 
     /// Открыть историю: правки страницы — в базу и в свежую версию, чтобы первой строкой был текущий вид.
+    /// Снимок пишет очередь записывателя, окно её не ждёт.
     func showVersionHistory(_ pageId: UUID) {
         openDocuments.saveAll()
-        do {
-            try versions.recorder.recordPending(pageId)
-            guard let page = try store.pageContent(pageId)?.page else { return }
-            versionHistory = try VersionHistoryModel(pageId: pageId, page: page, versions: versions.versions)
-        } catch {
-            showVersionError("Не удалось открыть историю версий: \(SaveStatus.reason(for: error))")
+        Task { @MainActor in
+            do {
+                try await versions.recorder.recordPending(pageId)
+                guard let page = try store.pageContent(pageId)?.page else { return }
+                versionHistory = try VersionHistoryModel(pageId: pageId, page: page, versions: versions.versions)
+            } catch {
+                showVersionError("Не удалось открыть историю версий: \(SaveStatus.reason(for: error))")
+            }
         }
     }
 
@@ -27,12 +30,14 @@ extension MainWindowModel {
     func restoreVersion(_ versionId: UUID, ofPage pageId: UUID) {
         versionHistory = nil
         openDocuments.saveAll()
-        do {
-            try VersionRestorer(recorder: versions.recorder, versions: versions.versions, operations: treeOperations)
-                .restore(versionId: versionId, ofPage: pageId)
-            restoredVersionPageId = pageId
-        } catch {
-            showVersionError("Не удалось восстановить версию: \(SaveStatus.reason(for: error))")
+        let restorer = VersionRestorer(recorder: versions.recorder, versions: versions.versions, operations: treeOperations)
+        Task { @MainActor in
+            do {
+                try await restorer.restore(versionId: versionId, ofPage: pageId)
+                restoredVersionPageId = pageId
+            } catch {
+                showVersionError("Не удалось восстановить версию: \(SaveStatus.reason(for: error))")
+            }
         }
     }
 

@@ -94,6 +94,12 @@ final class TabsNavigationTests: XCTestCase {
         app = library.launchApp()
         XCTAssertTrue(waitForTabs(app, ["Дельта", "Альфа", "Гамма"], active: "Альфа", timeout: 10))
         XCTAssertTrue(waitForBreadcrumb(app, "Альфа"))
+
+        // «Показать все» и сразу ⌘Q: вкладка «Недавние» без редактора тоже записывается при выходе.
+        app.buttons["recents-show-all"].click()
+        app.quit()
+        app = library.launchApp()
+        XCTAssertTrue(waitForTabs(app, ["Дельта", "Недавние", "Гамма"], active: "Недавние", timeout: 10))
         app.terminate()
     }
 

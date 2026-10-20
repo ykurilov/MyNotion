@@ -141,6 +141,11 @@ public struct PageFieldClocks: Sendable, Hashable, Codable {
         }
     }
 
+    /// Все проставленные метки.
+    public var all: [HybridTimestamp] {
+        [title, icon, placement, trashedAt, cover, isFullWidth, isSmallText, favorite, visitedAt, isTemplate].compactMap { $0 }
+    }
+
     public subscript(field: Page.Field) -> HybridTimestamp? {
         switch field {
         case .title: title

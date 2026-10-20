@@ -44,19 +44,32 @@ public final class PageCoverOperations {
     }
 
     /// «Загрузить»: картинка из Finder (выбор файла или перетаскивание). Не картинка или больше 100 МБ — ошибка
-    /// до копирования, обложка прежняя.
-    public func setImageCover(from url: URL, on pageId: UUID) throws {
+    /// до копирования, обложка прежняя. Копия — вне главного потока, как вставка файла 002 (`progress` — доля
+    /// скопированного, зовётся с очереди копии); обложка — одной правкой с отменой, когда копия готова.
+    public func setImageCover(from url: URL, on pageId: UUID, progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws {
+        let ref = try await importCoverImage(from: url, progress: progress)
+        try setFileCover(ref, on: pageId)
+    }
+
+    /// Проверка и копия картинки обложки в хранилище файлов 002 — вне главного потока; обложку не меняет.
+    public func importCoverImage(from url: URL, progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> AttachmentRef {
         let name = url.lastPathComponent
-        let values = try? url.resourceValues(forKeys: [.contentTypeKey, .fileSizeKey])
-        let type = values?.contentType ?? UTType(filenameExtension: url.pathExtension)
-        guard let type, type.conforms(to: .image) else { throw PageCoverError.notImage(name: name) }
-        guard (values?.fileSize ?? 0) <= AttachmentRef.maximumByteCount else { throw PageCoverError.tooLarge(name: name) }
-        let ref: AttachmentRef
-        do {
-            ref = try attachments.importFile(at: url)
-        } catch AttachmentError.tooLarge {
-            throw PageCoverError.tooLarge(name: name)
-        }
+        let attachments = attachments
+        return try await Task.detached(priority: .userInitiated) {
+            let values = try? url.resourceValues(forKeys: [.contentTypeKey, .fileSizeKey])
+            let type = values?.contentType ?? UTType(filenameExtension: url.pathExtension)
+            guard let type, type.conforms(to: .image) else { throw PageCoverError.notImage(name: name) }
+            guard (values?.fileSize ?? 0) <= AttachmentRef.maximumByteCount else { throw PageCoverError.tooLarge(name: name) }
+            do {
+                return try attachments.importFile(at: url, into: attachments.reserveFileImport(at: url), progress: progress)
+            } catch AttachmentError.tooLarge {
+                throw PageCoverError.tooLarge(name: name)
+            }
+        }.value
+    }
+
+    /// Обложка — уже скопированная картинка.
+    public func setFileCover(_ ref: AttachmentRef, on pageId: UUID) throws {
         try tree.setCover(pageId, to: PageCover(source: .file(ref)))
     }
 

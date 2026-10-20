@@ -54,6 +54,18 @@ struct SyncPayloadV3Tests {
         #expect(change.value == .cover(PageCover(source: .gallery("future_9"), offset: 1)))
     }
 
+    @Test("Обложка неизвестного вида (от новой версии) не роняет пачку: хранится и уходит дальше как есть")
+    func unknownCoverSourceKeepsBatch() throws {
+        let cover = #"{"offset":0.3,"source":{"unsplash":{"author":"Ann","id":"x1"}}}"#
+        let json = #"{"entity":"page","field":"cover","hlc":"\#(hlc)","id":"\#(pageId)","value":\#(cover)}"#
+        let title = #"{"entity":"page","field":"title","hlc":"\#(hlc)","id":"\#(pageId)","value":"Рядом"}"#
+        let changes = try SyncJSON.decoder().decode([SyncChange].self, from: Data("[\(json),\(title)]".utf8))
+        #expect(changes.count == 2)
+        guard case .cover(let decoded?) = changes[0].value else { Issue.record("не обложка"); return }
+        #expect(decoded.attachment == nil && decoded.offset == 0.3)
+        #expect(try encoded(.cover(decoded)) == "cover {\"value\":\(cover)}")
+    }
+
     @Test("Пачка v2 читается как раньше")
     func readsV2Batch() throws {
         let key = SymmetricKey(size: .bits256)

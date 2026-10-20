@@ -21,8 +21,9 @@ public struct VersionDueMark: Sendable, Hashable {
     public let deviceName: String
 }
 
-/// Версии страниц на этом Mac: таблицы `page_version` и `page_version_due`. Пишет мимо транзакций записей и подписчиков:
-/// версии не синхронизируются и не меняют страниц (research R11).
+/// Версии страниц на этом Mac: таблицы `page_version`, `page_version_file` и `page_version_due`. Пишет мимо транзакций
+/// записей и подписчиков: версии не синхронизируются и не меняют страниц (research R11). Файлы версии (`page_version_file`)
+/// сборщик сирот не стирает, пока версия хранится.
 public final class PageVersionStore: Sendable {
     public let store: NotesStore
 
@@ -73,6 +74,10 @@ public final class PageVersionStore: Sendable {
                 INSERT INTO page_version (id, pageId, createdAt, deviceName, snapshot, summary, byteCount) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, arguments: [info.id.versionKey, pageId.versionKey, createdAt, deviceName, data,
                                  String(decoding: try JSONEncoder().encode(summary), as: UTF8.self), data.count])
+            for fileId in snapshot.fileIds {
+                try db.execute(sql: "INSERT OR IGNORE INTO page_version_file (versionId, fileId) VALUES (?, ?)",
+                               arguments: [info.id.versionKey, fileId.versionKey])
+            }
             try db.execute(sql: "DELETE FROM page_version_due WHERE pageId = ? AND lastChangeAt <= ?", arguments: [pageId.versionKey, createdAt])
         }
         return info
@@ -84,7 +89,15 @@ public final class PageVersionStore: Sendable {
         try database.write { db in
             for id in versionIds {
                 try db.execute(sql: "DELETE FROM page_version WHERE id = ?", arguments: [id.versionKey])
+                try db.execute(sql: "DELETE FROM page_version_file WHERE versionId = ?", arguments: [id.versionKey])
             }
+        }
+    }
+
+    /// Версия — вид страницы перед восстановлением другой версии: прореживание держит её отдельно от остальных.
+    public func markBeforeRestore(_ versionId: UUID) throws {
+        try database.write { db in
+            try db.execute(sql: "UPDATE page_version SET isBeforeRestore = 1 WHERE id = ?", arguments: [versionId.versionKey])
         }
     }
 
@@ -92,9 +105,9 @@ public final class PageVersionStore: Sendable {
     public func allVersionStamps() throws -> [UUID: [VersionStamp]] {
         try database.read { db in
             var result: [UUID: [VersionStamp]] = [:]
-            for row in try Row.fetchAll(db, sql: "SELECT id, pageId, createdAt FROM page_version") {
+            for row in try Row.fetchAll(db, sql: "SELECT id, pageId, createdAt, isBeforeRestore FROM page_version") {
                 guard let id = UUID(uuidString: row["id"]), let pageId = UUID(uuidString: row["pageId"]) else { continue }
-                result[pageId, default: []].append(VersionStamp(id: id, createdAt: row["createdAt"]))
+                result[pageId, default: []].append(VersionStamp(id: id, createdAt: row["createdAt"], isBeforeRestore: row["isBeforeRestore"]))
             }
             return result
         }
@@ -146,6 +159,9 @@ public final class PageVersionStore: Sendable {
 
     static func erase(pages pageIds: [UUID], in db: Database) throws {
         for pageId in pageIds {
+            try db.execute(sql: """
+                DELETE FROM page_version_file WHERE versionId IN (SELECT id FROM page_version WHERE pageId = ?)
+                """, arguments: [pageId.versionKey])
             try db.execute(sql: "DELETE FROM page_version WHERE pageId = ?", arguments: [pageId.versionKey])
             try db.execute(sql: "DELETE FROM page_version_due WHERE pageId = ?", arguments: [pageId.versionKey])
         }
@@ -161,14 +177,16 @@ public final class PageVersionStore: Sendable {
     }
 }
 
-/// id и время версии — всё, что нужно прореживанию.
+/// id, время версии и пометка «до восстановления» — всё, что нужно прореживанию.
 public struct VersionStamp: Sendable, Hashable {
     public let id: UUID
     public let createdAt: Date
+    public let isBeforeRestore: Bool
 
-    public init(id: UUID, createdAt: Date) {
+    public init(id: UUID, createdAt: Date, isBeforeRestore: Bool = false) {
         self.id = id
         self.createdAt = createdAt
+        self.isBeforeRestore = isBeforeRestore
     }
 }
 

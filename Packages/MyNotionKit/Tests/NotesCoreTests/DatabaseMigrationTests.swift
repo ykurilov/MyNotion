@@ -234,7 +234,7 @@ struct SchemaV6MigrationTests {
 
         let database = try AppDatabase.open(at: folder.databaseURL)
         defer { database.close() }
-        #expect(try database.appliedSchemaVersion() == "v7", "через v6 до текущей схемы: читает текущий код")
+        #expect(try database.appliedSchemaVersion() == "v8", "через v6 до текущей схемы: читает текущий код")
         let store = NotesStore(database: database, clock: HybridLogicalClock(deviceId: device))
         let blocks = try #require(try store.pageContent(pageId)).blocks
         #expect(blocks.map(\.id) == blockIds)
@@ -385,7 +385,7 @@ struct SchemaV7MigrationTests {
         try makeV6Library(at: folder.databaseURL)
         let database = try AppDatabase.open(at: folder.databaseURL)
         defer { database.close() }
-        #expect(try database.appliedSchemaVersion() == "v7")
+        #expect(try database.appliedSchemaVersion() == "v8")
         let store = NotesStore(database: database, clock: HybridLogicalClock(deviceId: device))
         let content = try #require(try store.pageContent(pageId))
         #expect(content.page.title == "Эталон v6")
@@ -469,5 +469,60 @@ struct SchemaV7MigrationTests {
         #expect(try store.appMeta("backlinks.built") == "1")
         try store.setAppMeta("backlinks.built", nil)
         #expect(try store.appMeta("backlinks.built") == nil)
+    }
+}
+
+@Suite("Миграция v7 → v8")
+struct SchemaV8MigrationTests {
+    static let upToV7 = SchemaMigrations(steps: Array(SchemaMigrations.current.steps.prefix { $0.version != "v8" }))
+    let pageId = UUID.timeOrdered()
+    let device = UUID()
+
+    @Test("Эталон v7 → v8: файлы сохранённых версий — в page_version_file; пометка переноса — в индексе block.movedFrom")
+    func migratesV7Library() throws {
+        let folder = try TemporaryFolder()
+        let fileInVersion = UUID.timeOrdered().uuidString.lowercased()
+        let otherFile = UUID.timeOrdered().uuidString.lowercased()
+        let movedFrom = UUID.timeOrdered().uuidString.lowercased()
+        let movedBlock = UUID.timeOrdered().uuidString.lowercased()
+        do {
+            let old = try AppDatabase.open(at: folder.databaseURL, migrations: Self.upToV7)
+            defer { old.close() }
+            #expect(try old.appliedSchemaVersion() == "v7")
+            let snapshot = Data(#"{"snapshotVersion":1,"blocks":[{"props":{"attachment":{"id":"\#(fileInVersion.uppercased())"}}}]}"#.utf8)
+            let compressed = try (snapshot as NSData).compressed(using: .lzfse) as Data
+            try old.dbWriter.write { db in
+                try db.execute(sql: """
+                    INSERT INTO page (id, title, sortKey, createdAt, updatedAt, fieldClocks) VALUES (?, 'v7', 'm', ?, ?, '{}')
+                    """, arguments: [pageId.databaseText, Date(), Date()])
+                try db.execute(sql: """
+                    INSERT INTO block (id, pageId, kind, text, sortKey, props, fieldClocks) VALUES (?, ?, 'paragraph', '', 'm', ?, '{}')
+                    """, arguments: [movedBlock, pageId.databaseText, #"{"movedFrom":"\#(movedFrom)"}"#])
+                try db.execute(sql: """
+                    INSERT INTO block (id, pageId, kind, text, sortKey, props, fieldClocks) VALUES (?, ?, 'paragraph', '', 'n', 'не JSON', '{}')
+                    """, arguments: [UUID.timeOrdered().databaseText, pageId.databaseText])
+                for file in [fileInVersion, otherFile] {
+                    try db.execute(sql: "INSERT INTO attachment (id, ref, state) VALUES (?, '{}', 'local')", arguments: [file])
+                }
+                try db.execute(sql: """
+                    INSERT INTO page_version (id, pageId, createdAt, deviceName, snapshot, byteCount) VALUES ('v1', ?, ?, 'Mac A', ?, ?)
+                    """, arguments: [pageId.databaseText, Date(), compressed, compressed.count])
+            }
+        }
+        let database = try AppDatabase.open(at: folder.databaseURL)
+        defer { database.close() }
+        #expect(try database.appliedSchemaVersion() == "v8")
+        let (files, moved, plan) = try database.dbWriter.read { db in
+            (try Row.fetchAll(db, sql: "SELECT versionId, fileId FROM page_version_file").map { "\($0["versionId"] as String) \($0["fileId"] as String)" },
+             try String.fetchAll(db, sql: "SELECT id FROM block WHERE movedFrom = ?", arguments: [movedFrom]),
+             try Row.fetchAll(db, sql: "EXPLAIN QUERY PLAN " + NotesTransaction.movedFromSQL(count: 2),
+                              arguments: [movedFrom, movedFrom, pageId.databaseText]).map { $0["detail"] as String })
+        }
+        #expect(files == ["v1 \(fileInVersion)"])
+        #expect(moved == [movedBlock])
+        #expect(plan.contains { $0.contains("block_by_moved_from") }, "Поиск перенесённых — по индексу: \(plan)")
+        try database.dbWriter.write { try $0.execute(sql: "DELETE FROM block WHERE props = 'не JSON'") }
+        let store = NotesStore(database: database, clock: HybridLogicalClock(deviceId: device))
+        #expect(try store.pageContent(pageId)?.blocks.map(\.id.databaseText) == [movedBlock], "Блоки читаются и с новой колонкой")
     }
 }

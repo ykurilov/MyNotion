@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import Synchronization
 import Testing
 @testable import Attachments
 @testable import NotesCore
@@ -40,6 +41,12 @@ struct PageCoverOperationsTests {
         return try action()
     }
 
+    private func step<T>(_ action: () async throws -> T) async rethrows -> T {
+        undoManager.beginUndoGrouping()
+        defer { undoManager.endUndoGrouping() }
+        return try await action()
+    }
+
     @Test("Из галереи: обложка по id, сдвиг по умолчанию 0,5; меняется только поле cover")
     func galleryCover() throws {
         let recorder = CoverRecordingHook()
@@ -72,11 +79,23 @@ struct PageCoverOperationsTests {
                                      "gradients_2", "gradients_11", "gradients_10", "gradients_5", "gradients_3"])
     }
 
+    @Test("Своя картинка копируется не на главном потоке, с ходом копирования; обложка — когда копия готова")
+    func imageCoverCopiesOffMain() async throws {
+        let picture = try folder.file("Большая.png", CoverTestFolder.png(width: 400, height: 300))
+        let threads = Mutex<[Bool]>([])
+        try await step { try await covers.setImageCover(from: picture, on: pageId) { _ in threads.withLock { $0.append(Thread.isMainThread) } } }
+        let seen = threads.withLock { $0 }
+        #expect(!seen.isEmpty, "Ход копирования не сообщался")
+        #expect(seen.allSatisfy { !$0 }, "Копия шла на главном потоке")
+        #expect(try stored().cover?.attachment?.sha256.isEmpty == false, "Обложка — с SHA-256 готовой копии")
+        #expect(undoManager.undoActionName == "Обложка")
+    }
+
     @Test("Своя картинка — копия в хранилище файлов 002, обложка ссылается на неё")
-    func imageCover() throws {
+    func imageCover() async throws {
         let picture = try folder.file("Закат.png", CoverTestFolder.png(width: 40, height: 20))
 
-        try step { try covers.setImageCover(from: picture, on: pageId) }
+        try await step { try await covers.setImageCover(from: picture, on: pageId) }
 
         let cover = try #require(try stored().cover)
         let ref = try #require(cover.attachment)
@@ -88,12 +107,12 @@ struct PageCoverOperationsTests {
     }
 
     @Test("Не картинка — ошибка, обложка прежняя; больше 100 МБ — ошибка, обложка прежняя, файл не копируется")
-    func rejectsNonImageAndTooLarge() throws {
+    func rejectsNonImageAndTooLarge() async throws {
         try step { try covers.setGalleryCover("solid_red", on: pageId) }
         let text = try folder.file("заметка.txt", Data("не картинка".utf8))
-        #expect(throws: PageCoverError.notImage(name: "заметка.txt")) { try covers.setImageCover(from: text, on: pageId) }
+        await #expect(throws: PageCoverError.notImage(name: "заметка.txt")) { try await covers.setImageCover(from: text, on: pageId) }
         let huge = try folder.sparseFile("огромная.png", byteCount: AttachmentRef.maximumByteCount + 1)
-        #expect(throws: PageCoverError.tooLarge(name: "огромная.png")) { try covers.setImageCover(from: huge, on: pageId) }
+        await #expect(throws: PageCoverError.tooLarge(name: "огромная.png")) { try await covers.setImageCover(from: huge, on: pageId) }
 
         #expect(try stored().cover == PageCover(source: .gallery("solid_red")))
         #expect(try attachments.allRecords().isEmpty)
@@ -117,10 +136,10 @@ struct PageCoverOperationsTests {
     }
 
     @Test("Каждая правка — один шаг ⌘Z: галерея → своя → сдвиг → убрать и обратно")
-    func eachEditIsOneUndoStep() throws {
+    func eachEditIsOneUndoStep() async throws {
         let picture = try folder.file("фото.png", CoverTestFolder.png(width: 30, height: 30))
         try step { try covers.setGalleryCover("solid_blue", on: pageId) }
-        try step { try covers.setImageCover(from: picture, on: pageId) }
+        try await step { try await covers.setImageCover(from: picture, on: pageId) }
         let imageCover = try #require(try stored().cover)
         try step { try covers.reposition(pageId, offset: 0.9) }
         try step { try covers.removeCover(from: pageId) }
@@ -143,9 +162,9 @@ struct PageCoverOperationsTests {
     }
 
     @Test("«Убрать» не стирает файл: он сирота с отметкой времени и возвращается ⌘Z; чужая ссылка держит его")
-    func removedFileStaysWhileReferenced() throws {
+    func removedFileStaysWhileReferenced() async throws {
         let picture = try folder.file("фото.png", CoverTestFolder.png(width: 30, height: 30))
-        try step { try covers.setImageCover(from: picture, on: pageId) }
+        try await step { try await covers.setImageCover(from: picture, on: pageId) }
         let ref = try #require(try stored().cover?.attachment)
         // Та же картинка — обложка второй страницы (например, копии страницы).
         let otherId = try store.write { transaction in
