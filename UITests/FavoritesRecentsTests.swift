@@ -31,7 +31,7 @@ final class FavoritesRecentsTests: XCTestCase {
         let menuButton = treeRow(app, "Бета").descendants(matching: .any).matching(identifier: "page-tree-menu").firstMatch
         XCTAssertTrue(menuButton.waitForExistence(timeout: 5), "При наведении на строку нет кнопки «•••»")
         menuButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
-        app.menuItems["Добавить в избранное"].click()
+        app.chooseRowMenuItem("favorite")
         XCTAssertTrue(waitForTitles(app, in: "favorites", ["Гамма", "Альфа", "Бета"]))
 
         // Перетащить «Бету» в начало раздела.

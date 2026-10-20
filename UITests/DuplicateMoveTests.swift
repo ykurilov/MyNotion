@@ -69,8 +69,7 @@ final class DuplicateMoveTests: XCTestCase {
         // «Переместить в» из меню строки панели: «цель (1)» → внутрь «исходная (1)».
         // Меню строки — правой кнопкой (то же, что «•••» строки).
         treeRow(app, "Копии: цель (1)").coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).rightClick()
-        XCTAssertTrue(app.menuItems["Переместить в"].waitForExistence(timeout: 5), "В меню строки нет «Переместить в»")
-        app.menuItems["Переместить в"].click()
+        app.chooseRowMenuItem("moveTo")
         XCTAssertTrue(field.waitForExistence(timeout: 5), "Меню строки не открыло «Переместить в…»")
         app.typeText("исходная (1)")
         XCTAssertTrue(pickerRow(app, "Копии: исходная (1)").waitForExistence(timeout: 5))

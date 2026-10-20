@@ -44,8 +44,7 @@ final class BacklinksTests: XCTestCase {
         XCTAssertTrue(sourceRow.waitForExistence(timeout: 5), "В панели нет строки «Ссылки: Г»")
         scrollIntoView(app, sourceRow)
         sourceRow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).rightClick()
-        XCTAssertTrue(app.menuItems["Удалить в корзину"].waitForExistence(timeout: 5), "В меню строки нет «Удалить в корзину»")
-        app.menuItems["Удалить в корзину"].click()
+        app.chooseRowMenuItem("trash")
         XCTAssertEqual(currentTitle(app), "Ссылки: цель")
         waitForRow(app, "1 обратная ссылка")
 
