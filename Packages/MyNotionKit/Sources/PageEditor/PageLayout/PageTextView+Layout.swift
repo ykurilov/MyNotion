@@ -19,6 +19,12 @@ extension PageTextView {
         layoutColumn()
     }
 
+    /// Вид в месте «под названием» шапки (US5: строка обратных ссылок); `nil` — место пустое и высоты не занимает.
+    public func setUnderTitle(_ view: NSView?, height: CGFloat) {
+        header.setUnderTitle(view, height: height)
+        layoutColumn()
+    }
+
     /// Сменить вид страницы без пересоздания редактора: ширина колонки — сразу, шрифты текста — на месте, в тех же
     /// атрибутах (виды 002 не пересоздаются). Черновик этапа 0 (проба T003): шкала видов 002 и набора — в US1.
     public func applyLayout(_ settings: PageLayoutSettings) {

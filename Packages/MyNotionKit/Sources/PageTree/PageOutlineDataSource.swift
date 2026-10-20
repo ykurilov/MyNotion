@@ -15,6 +15,10 @@ public struct PageTreeActions {
     public var collapsedPagesChanged: (Set<UUID>) -> Void
     /// Щелчок по иконке строки: открыть окно выбора иконки под этим видом (FR-034).
     public var chooseIcon: (UUID, NSView) -> Void
+    /// Обработчики пунктов меню строки историй 003 по местам (избранное, дублирование, перенос, вкладка, шаблон).
+    public var rowMenuHandlers: [PageRowMenuSlot: (UUID) -> Void] = [:]
+    /// Страница — шаблон, в избранном: для названий пунктов меню строки.
+    public var pageFlags: (UUID) -> (isTemplate: Bool, isFavorite: Bool) = { _ in (false, false) }
 
     public init(
         select: @escaping (UUID) -> Void,
@@ -281,15 +285,17 @@ final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineV
     }
 
     func pageMenu(for pageId: UUID) -> NSMenu {
-        let menu = NSMenu()
-        menu.addItem(PageMenuItem(title: "Переименовать") { [weak self] in
+        var handlers = actions.rowMenuHandlers
+        handlers[.rename] = { [weak self] pageId in
             guard let self, let outlineView = self.outlineView else { return }
             self.beginRenaming(row: outlineView.row(forItem: self.item(for: pageId)))
-        })
-        menu.addItem(PageMenuItem(title: "Добавить подстраницу") { [weak self] in self?.actions.addSubpage(pageId) })
-        menu.addItem(.separator())
-        menu.addItem(PageMenuItem(title: "Удалить в корзину") { [weak self] in self?.actions.moveToTrash(pageId) })
-        return menu
+        }
+        handlers[.addSubpage] = { [weak self] in self?.actions.addSubpage($0) }
+        handlers[.trash] = { [weak self] in self?.actions.moveToTrash($0) }
+        let flags = actions.pageFlags(pageId)
+        return PageRowMenu.make(items: PageRowMenuItem.all,
+                                context: PageRowMenuContext(pageId: pageId, isTemplate: flags.isTemplate, isFavorite: flags.isFavorite),
+                                handlers: handlers)
     }
 }
 

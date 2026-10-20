@@ -37,6 +37,13 @@ struct GalleryCatalogTests {
         for scene in required { #expect(scenes.contains(scene), "\(scene)") }
     }
 
+    @Test("Страницы и навигация (003): верхняя полоса с «•••» и открытое меню «•••» — в обеих темах")
+    func pagesNavigationStatesPresent() {
+        for scene in [GalleryScene.pageTopBar, .pageMenu] {
+            #expect(scenes.contains(scene), "\(scene)")
+        }
+    }
+
     @Test("Снимки блоков 002 собираются из описателей типов: по состоянию на каждый образец")
     func kindSamplesFromDescriptors() {
         let samples = BlockKinds.gallerySamples

@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import Navigation
 import NotesCore
 import Observation
 import PageEditor
@@ -29,6 +30,8 @@ final class MainWindowModel {
     private(set) var blockReveal: BlockReveal?
     /// Поле поиска вверху боковой панели и его выдача (FR-018).
     @ObservationIgnored private(set) var search: PageSearchController!
+    /// Вкладки окна (003, research R5). Этап 0: одна вкладка — поведение 002; новую вкладку и полосу включает US3.
+    @ObservationIgnored private(set) var tabs: WindowTabs!
 
     /// `opening` — страница нового окна; `nil` — последняя открытая (вид окна в базе) или первая в дереве.
     init(library: PagesLibrary, opening pageId: UUID?) {
@@ -44,11 +47,19 @@ final class MainWindowModel {
             self?.loadError = "Не удалось отменить: \(SaveStatus.reason(for: error))"
         }
         search = PageSearchController(store: library.store, tree: { [weak library] in library?.tree ?? PageTreeSnapshot(allPages: []) },
-                                      open: { [weak self] in self?.select($0) })
-        search.openResult = { [weak self] result in self?.select(result.pageId, revealing: result.blockId) }
+                                      open: { [weak self] in self?.open(PageOpenRequest.fromClick($0)) })
+        search.openResult = { [weak self] result in
+            self?.open(PageOpenRequest.fromClick(result.pageId, revealing: result.blockId))
+        }
         library.register(self)
         let tree = library.tree
         let lastOpen = (pageId ?? windowState?.openPageId).flatMap { tree.page($0)?.id }
+        tabs = WindowTabs(state: windowState?.tabs, openPageId: lastOpen)
+        // Хранение вкладок — в `window_state.tabs`, только на этом Mac.
+        tabs.onChange = { [weak self] in
+            guard let self else { return }
+            saveWindowState { $0.tabs = self.tabs.savedState }
+        }
         if let pageId = lastOpen ?? tree.children(of: nil).first?.id {
             open(pageId, focus: .body, remember: false)
         }
@@ -88,6 +99,14 @@ final class MainWindowModel {
     }
 
     // MARK: Действия
+
+    /// Просьба открыть страницу из панели, поиска, ссылки (с ⌘ — в новой вкладке). Пока вкладок не видно (до US3),
+    /// всё открывается в активной.
+    func open(_ request: PageOpenRequest, focus: PageTextView.InitialFocus = .body) {
+        select(request.pageId, focus: focus)
+        guard let blockId = request.revealBlockId, openPageId == request.pageId else { return }
+        blockReveal = BlockReveal(blockId: blockId, token: (blockReveal?.token ?? 0) + 1)
+    }
 
     func select(_ pageId: UUID?, focus: PageTextView.InitialFocus = .body) {
         guard let pageId, pageId != openPageId else { return }
@@ -283,6 +302,8 @@ final class MainWindowModel {
             initialFocus = focus
             blockReveal = nil
             openDocument = document
+            // Активная вкладка открыла страницу: событие «ушли / открыта» (запись недавних — US2).
+            tabs.open(PageOpenRequest(pageId: pageId))
             loadError = nil
             // Файлы открытой страницы — первыми в очереди скачивания (FR-120).
             library.sync.prioritizeFiles(onPage: pageId)

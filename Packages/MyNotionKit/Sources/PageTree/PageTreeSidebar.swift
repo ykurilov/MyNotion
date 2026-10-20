@@ -22,13 +22,16 @@ public struct PageTreeSidebar<SearchField: View>: View {
     /// Значок синхронизации внизу (FR-022); `nil` — синхронизация выключена, строки нет.
     let syncBadge: SyncBadgeState?
     let openSyncSettings: () -> Void
+    /// Разделы над «Страницами» (003): по порядку описателей `SidebarSection`.
+    let sections: [SidebarSectionContent]
 
     @State private var trashPanel = TrashPanelController()
 
     public init(tree: PageTreeSnapshot, treeRevision: Int, collapsedPageIds: Set<UUID>, selectedPageId: UUID?,
                 liveTitle: String?, trashEntries: [Page], actions: PageTreeActions, trashActions: TrashActions,
                 newPage: @escaping () -> Void, syncBadge: SyncBadgeState? = nil,
-                openSyncSettings: @escaping () -> Void = {}, @ViewBuilder searchField: () -> SearchField) {
+                openSyncSettings: @escaping () -> Void = {}, sections: [SidebarSectionContent] = [],
+                @ViewBuilder searchField: () -> SearchField) {
         self.tree = tree
         self.treeRevision = treeRevision
         self.collapsedPageIds = collapsedPageIds
@@ -40,6 +43,7 @@ public struct PageTreeSidebar<SearchField: View>: View {
         self.newPage = newPage
         self.syncBadge = syncBadge
         self.openSyncSettings = openSyncSettings
+        self.sections = sections
         self.searchField = searchField()
     }
 
@@ -53,7 +57,11 @@ public struct PageTreeSidebar<SearchField: View>: View {
                     .padding(.top, Metrics.SearchField.topSpacing)
                     .padding(.bottom, Metrics.SearchField.bottomSpacing)
             }
-            groupHeader("Страницы")
+            ForEach(SidebarSection.ordered(sections.map(\.section)).filter { $0.id != .pages }) { section in
+                groupHeader(section.title)
+                sections.first { $0.id == section.id }?.content
+            }
+            groupHeader(SidebarSection.pages.title)
             PageOutline(tree: tree, treeRevision: treeRevision, collapsedPageIds: collapsedPageIds,
                         selectedPageId: selectedPageId, liveTitle: liveTitle, actions: actions)
             footerDivider

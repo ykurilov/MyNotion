@@ -66,6 +66,10 @@ public enum GalleryScene: Hashable, Sendable {
     case saveErrorBanner
     /// Верхняя полоса с длинным путём страницы четвёртого уровня.
     case longBreadcrumb
+    /// Верхняя полоса страницы справа: «•••» (003, этап 0; «☆» добавляет US2).
+    case pageTopBar
+    /// Открытое меню «•••» страницы: поле «Найти действие…», пункты, подвал «Изменено…» (003, этап 0).
+    case pageMenu
     /// Синхронизация между Mac (US5): значок, «Две версии», настройки подключения, уведомление.
     case sync(GallerySync)
     /// Импорт из Notion (US6): карточка хода, вопрос о повторе той же выгрузки, отчёт.
@@ -255,6 +259,10 @@ public enum GalleryCatalog {
                      "Верхняя полоса с длинным путём страницы четвёртого уровня", section: "Страница", narrowToo: true),
         GalleryState("save-error-banner", .saveErrorBanner,
                      "Полоса «Изменения не сохранены…» над страницей", section: "Страница", narrowToo: true),
+        GalleryState("page-top-bar", .pageTopBar,
+                     "Верхняя полоса страницы: путь слева, «•••» справа", section: "Страницы и навигация"),
+        GalleryState("page-menu", .pageMenu,
+                     "Меню «•••»: «Найти действие…», «Удалить в корзину», подвал «Изменено…, N слов»", section: "Страницы и навигация"),
     ]
 
     private static let blockStates: [GalleryState] = textBlockKinds.flatMap { kind in

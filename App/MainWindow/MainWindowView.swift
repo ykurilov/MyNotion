@@ -1,4 +1,5 @@
 import EmojiPicker
+import Navigation
 import NotesCore
 import PageEditor
 import PageSearch
@@ -207,7 +208,7 @@ private struct PagesWindow: View {
             trashEntries: model.trashEntries,
             actions: PageTreeActions(
                 // Фокус остаётся в дереве: стрелки, Enter и ⌘⌫ дальше работают там.
-                select: { model.select($0, focus: .unchanged) },
+                select: { model.open(PageOpenRequest.fromClick($0), focus: .unchanged) },
                 rename: { model.rename($0, to: $1) },
                 move: { model.move($0, toParent: $1, at: $2) },
                 moveToTrash: { model.moveToTrash($0) },
@@ -296,14 +297,15 @@ private struct PagesWindow: View {
                 ancestorTitles: model.ancestorTitles(of: document.pageId),
                 initialFocus: model.initialFocus,
                 linkedPages: pages,
-                onOpenPage: { model.select($0) },
+                onOpenPage: { model.open(PageOpenRequest.fromClick($0)) },
                 onSubpageRequest: { model.handleSubpageRequest($0, inPage: document.pageId) },
                 onSetIcon: { model.setIcon(document.pageId, to: $0) },
                 onResolveConflict: { model.resolveConflict($0, in: document) },
                 blockViewState: model.blockViewState,
                 blockReveal: model.blockReveal,
                 onReady: onEditorReady,
-                mentions: mentionSettings(pages: pages)
+                mentions: mentionSettings(pages: pages),
+                pageMenuItems: PageMenuItems.all(for: model, pageId: document.pageId)
             )
             // Новый документ — новый редактор: страницу перечитали после операции с деревом.
             .id(ObjectIdentifier(document))

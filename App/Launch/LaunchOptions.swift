@@ -11,6 +11,8 @@ struct LaunchOptions {
     var generatesVisualSample = false
     /// `--generate-rich-sample`: добавить в открытую базу «богатую» страницу на 1 000 блоков (quickstart.md) и открыть её.
     var generatesRichSample = false
+    /// `--generate-003-sample`: добавить в открытую базу дополнения 003 (quickstart.md, «Эталон»; каждая история — свою часть).
+    var generates003Sample = false
     /// `--launch-report <путь>`: записать время запуска и память в покое.
     var launchReportURL: URL?
     /// `--window-snapshot <путь>`: когда страница готова, снять окно в PNG и выйти (снимок не требует экрана).
@@ -61,6 +63,7 @@ struct LaunchOptions {
             case "--generate-reference-library": referenceLibraryURL = remaining.popFirst().map(Self.fileURL)
             case "--generate-visual-sample": generatesVisualSample = true
             case "--generate-rich-sample": generatesRichSample = true
+            case "--generate-003-sample": generates003Sample = true
             case "--launch-report": launchReportURL = remaining.popFirst().map(Self.fileURL)
             case "--window-snapshot": windowSnapshotURL = remaining.popFirst().map(Self.fileURL)
             case "--typing-benchmark": typingBenchmarkURL = remaining.popFirst().map(Self.fileURL)

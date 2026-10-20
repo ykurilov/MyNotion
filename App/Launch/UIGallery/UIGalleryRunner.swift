@@ -381,6 +381,15 @@ final class UIGalleryRunner {
         case .longBreadcrumb:
             await open(library.deepPage)
 
+        case .pageTopBar:
+            await open(library.sample.page.id)
+
+        case .pageMenu:
+            await open(library.sample.page.id)
+            guard let button = Self.view(identified: "page-menu", in: window) as? NSButton else { return "нет кнопки «•••»" }
+            button.performClick(nil)
+            await settle()
+
         case .notionImport(let state):
             guard let controller = AppDelegate.importController else { return "импорт из Notion не подключён" }
             await open(library.sample.page.id)
@@ -538,6 +547,16 @@ final class UIGalleryRunner {
         await settle()
         isTrashShown = GalleryInput.trashPopoverWindow != nil
         return true
+    }
+
+    /// Вид окна по метке доступности.
+    static func view(identified identifier: String, in window: NSWindow) -> NSView? {
+        func find(_ view: NSView) -> NSView? {
+            if view.accessibilityIdentifier() == identifier { return view }
+            for subview in view.subviews { if let found = find(subview) { return found } }
+            return nil
+        }
+        return window.contentView.flatMap(find)
     }
 
     private func settle() async {
