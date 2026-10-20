@@ -42,9 +42,10 @@ final class BacklinksAddon: PageHeaderAddon {
         if let changeObserver { NotificationCenter.default.removeObserver(changeObserver) }
     }
 
-    /// Сигнал подписчика индекса после фиксации записи (поток записи) — на главный поток уведомлением.
+    /// Сигнал подписчика индекса после фиксации записи (поток записи) — на главный поток уведомлением, не дожидаясь его:
+    /// синхронная доставка держала бы поток записи, пока главный ждёт запись (взаимная блокировка).
     nonisolated static func linksDidChange(_ targets: BacklinkTargets) {
-        NotificationCenter.default.post(name: .backlinksDidChange, object: targets)
+        DispatchQueue.main.async { NotificationCenter.default.post(name: .backlinksDidChange, object: targets) }
     }
 
     func install(in textView: PageTextView) {

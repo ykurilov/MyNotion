@@ -36,7 +36,7 @@ struct NoLossRestoreTests {
     }
 
     @Test("Восстановить версию → ⌘Z: страница как до восстановления; ⇧⌘Z: как в версии")
-    func restoreThenUndoOnRichPage() throws {
+    func restoreThenUndoOnRichPage() async throws {
         let mac = try VersionsTestMac()
         mac.recorder.start()
         let pageId = try RichPageGenerator(parts: [Self.part]).ensure(in: mac.store)
@@ -48,7 +48,7 @@ struct NoLossRestoreTests {
             $0.isSmallText = true
         }
         mac.clock.advance(by: 61)
-        let version = try #require(try mac.recorder.recordPending(pageId) ?? mac.versionList(pageId).first)
+        let version = try #require(try await mac.recorder.recordPending(pageId) ?? mac.versionList(pageId).first)
         let asInVersion = try fingerprint(mac, pageId)
 
         let blocks = try mac.blocks(pageId)
@@ -66,7 +66,7 @@ struct NoLossRestoreTests {
         #expect(beforeRestore != asInVersion)
 
         let restorer = VersionRestorer(recorder: mac.recorder, versions: mac.versions, operations: mac.tree)
-        try mac.undoable { try restorer.restore(versionId: version.id, ofPage: pageId) }
+        try await mac.undoable { try await restorer.restore(versionId: version.id, ofPage: pageId) }
         let restored = try fingerprint(mac, pageId)
         #expect(restored.title == asInVersion.title && restored.cover == asInVersion.cover)
         #expect(restored.blocks.map { $0[0] } == asInVersion.blocks.map { $0[0] }, "Блоки версии вернулись с прежними id")
