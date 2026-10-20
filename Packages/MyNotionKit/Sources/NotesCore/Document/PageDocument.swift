@@ -610,7 +610,11 @@ public final class PageDocument {
         for orphan in ordered(orphans) {
             if let anchor = anchor(of: orphan, pageIds: pageIds) { anchored[anchor, default: []].append(orphan) } else { atEnd.append(orphan) }
         }
-        blocks = pageFlow.flatMap { [$0] + (anchored[$0.id] ?? []) } + atEnd
+        if anchored.isEmpty, atEnd.isEmpty {
+            blocks = pageFlow
+        } else {
+            blocks = pageFlow.flatMap { [$0] + (anchored[$0.id] ?? []) } + atEnd
+        }
         reindex()
     }
 
