@@ -145,6 +145,13 @@ public struct BlockProps: Sendable, Hashable, Codable {
         set { values["widthRatio"] = newValue.map(JSONValue.number) }
     }
 
+    /// Копия, перенесённая «Переместить в» на другую страницу (003, research R8): id исходного блока. Нужен
+    /// восстановлению версии исходной страницы.
+    public var movedFrom: UUID? {
+        get { values["movedFrom"]?.string.flatMap(UUID.init(uuidString:)) }
+        set { values["movedFrom"] = newValue.map { .string($0.uuidString.lowercased()) } }
+    }
+
     private func decoded<T: Decodable>(_ key: String) -> T? {
         guard let value = values[key], let data = try? JSONEncoder().encode(value) else { return nil }
         return try? JSONDecoder().decode(T.self, from: data)

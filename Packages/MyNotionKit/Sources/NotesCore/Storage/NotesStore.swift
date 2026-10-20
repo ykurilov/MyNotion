@@ -69,6 +69,25 @@ public final class NotesStore: Sendable {
         try database.dbWriter.write { db in try state.save(in: db) }
     }
 
+    // MARK: Локальные отметки (app_meta, без меток часов и подписчиков)
+
+    /// Отметка этого Mac по ключу, например «индекс обратных ссылок построен».
+    public func appMeta(_ key: String) throws -> String? {
+        try database.dbWriter.read { db in try String.fetchOne(db, sql: "SELECT value FROM app_meta WHERE key = ?", arguments: [key]) }
+    }
+
+    /// Поставить отметку; `nil` — убрать.
+    public func setAppMeta(_ key: String, _ value: String?) throws {
+        try database.dbWriter.write { db in
+            if let value {
+                try db.execute(sql: "INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                               arguments: [key, value])
+            } else {
+                try db.execute(sql: "DELETE FROM app_meta WHERE key = ?", arguments: [key])
+            }
+        }
+    }
+
     // MARK: Запись
 
     /// Одна транзакция: всё внутри `body` и записи подписчиков фиксируются вместе или не фиксируются вовсе.

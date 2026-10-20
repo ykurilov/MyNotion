@@ -234,7 +234,7 @@ struct SchemaV6MigrationTests {
 
         let database = try AppDatabase.open(at: folder.databaseURL)
         defer { database.close() }
-        #expect(try database.appliedSchemaVersion() == "v6")
+        #expect(try database.appliedSchemaVersion() == "v7", "через v6 до текущей схемы: читает текущий код")
         let store = NotesStore(database: database, clock: HybridLogicalClock(deviceId: device))
         let blocks = try #require(try store.pageContent(pageId)).blocks
         #expect(blocks.map(\.id) == blockIds)
@@ -342,4 +342,132 @@ struct SchemaV6MigrationTests {
 
 private func outboxCount(_ database: AppDatabase) throws -> Int {
     try database.dbWriter.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM outbox_entry") ?? 0 }
+}
+
+@Suite("Миграция v6 → v7")
+struct SchemaV7MigrationTests {
+    static let upToV6 = SchemaMigrations(steps: Array(SchemaMigrations.current.steps.prefix { $0.version != "v7" }))
+    let pageId = UUID.timeOrdered()
+    let blockId = UUID.timeOrdered()
+    let device = UUID()
+
+    /// Эталон v6: страница с меткой часов, блок-картинка, вложение, напоминание, исходящая пачка, вид окна — записаны так,
+    /// как их пишет 002.
+    func makeV6Library(at url: URL) throws {
+        let database = try AppDatabase.open(at: url, migrations: Self.upToV6)
+        defer { database.close() }
+        #expect(try database.appliedSchemaVersion() == "v6")
+        let stamp = HybridTimestamp(wallMillis: 1_760_000_000_000, counter: 1, deviceId: device).description
+        try database.dbWriter.write { db in
+            try db.execute(sql: """
+                INSERT INTO page (id, title, icon, parentId, sortKey, trashedAt, createdAt, updatedAt, fieldClocks)
+                VALUES (?, 'Эталон v6', '📘', NULL, 'm', NULL, '2026-10-01 10:00:00', '2026-10-01 10:00:00',
+                        '{"icon":"\(stamp)","placement":"\(stamp)","title":"\(stamp)","trashedAt":"\(stamp)"}')
+                """, arguments: [pageId.databaseText])
+            try db.execute(sql: """
+                INSERT INTO block (id, pageId, kind, text, sortKey, props, fieldClocks)
+                VALUES (?, ?, 'image', '', 'm', '{"widthRatio":0.5}', '{"kindAndIndent":"\(stamp)","placement":"\(stamp)","text":"\(stamp)"}')
+                """, arguments: [blockId.databaseText, pageId.databaseText])
+            try db.execute(sql: "INSERT INTO attachment (id, ref, state) VALUES ('a1', '{}', 'local')")
+            try db.execute(sql: "INSERT INTO reminder_index (mentionId, pageId, blockId, fireAt) VALUES ('m1', ?, ?, '2026-11-01 09:00:00')",
+                           arguments: [pageId.databaseText, blockId.databaseText])
+            try db.execute(sql: "INSERT INTO reminder_state (mentionId, doneAt, doneClock) VALUES ('m1', NULL, ?)", arguments: [stamp])
+            try db.execute(sql: "INSERT INTO outbox_entry (id, createdAt, payload) VALUES ('e1', '2026-10-02 10:00:00', ?)",
+                           arguments: [Data(#"[{"entity":"page"}]"#.utf8)])
+            try db.execute(sql: "INSERT INTO window_state (windowId, openPageId) VALUES (?, ?)",
+                           arguments: [WindowState.mainWindowId.databaseText, pageId.databaseText])
+        }
+    }
+
+    @Test("Эталон v6 → v7: страницы, блоки, вложения, напоминания и очередь на месте; новые поля — по умолчанию")
+    func migratesV6Library() throws {
+        let folder = try TemporaryFolder()
+        try makeV6Library(at: folder.databaseURL)
+        let database = try AppDatabase.open(at: folder.databaseURL)
+        defer { database.close() }
+        #expect(try database.appliedSchemaVersion() == "v7")
+        let store = NotesStore(database: database, clock: HybridLogicalClock(deviceId: device))
+        let content = try #require(try store.pageContent(pageId))
+        #expect(content.page.title == "Эталон v6")
+        #expect(content.page.icon == "📘")
+        #expect(content.blocks.map(\.id) == [blockId])
+        #expect(content.blocks.first?.kind == .image)
+        let page = content.page
+        #expect(page.cover == nil && !page.isFullWidth && !page.isSmallText && page.favorite == nil && page.visitedAt == nil && !page.isTemplate)
+        let stamp = HybridTimestamp(wallMillis: 1_760_000_000_000, counter: 1, deviceId: device)
+        #expect(page.fieldClocks.title == stamp && page.fieldClocks.placement == stamp)
+        #expect([page.fieldClocks.cover, page.fieldClocks.isFullWidth, page.fieldClocks.isSmallText, page.fieldClocks.favorite,
+                 page.fieldClocks.visitedAt, page.fieldClocks.isTemplate].allSatisfy { $0 == nil })
+        #expect(try outboxCount(database) == 1)
+
+        let window = try #require(try store.windowState(WindowState.mainWindowId))
+        #expect(window.openPageId == pageId)
+        #expect(window.tabs == nil && window.collapsedSidebarSections.isEmpty)
+
+        let (tables, pageColumns, windowColumns, indexes, counts, pageLinkRows) = try database.dbWriter.read { db in
+            (try String.fetchSet(db, sql: "SELECT name FROM sqlite_master WHERE type = 'table'"),
+             try Row.fetchAll(db, sql: "PRAGMA table_info(page)").map { "\($0["name"] as String) \($0["type"] as String) \($0["notnull"] as Int) \(($0["dflt_value"] as String?) ?? "-")" },
+             try String.fetchSet(db, sql: "SELECT name FROM pragma_table_info('window_state')"),
+             try Row.fetchAll(db, sql: "SELECT name, sql FROM sqlite_master WHERE type = 'index'").map { "\($0["name"] as String): \(($0["sql"] as String?) ?? "")" },
+             try ["attachment", "reminder_index", "reminder_state"].map { try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \($0)") ?? 0 },
+             try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM page_link") ?? -1)
+        }
+        #expect(Set(["page_link", "page_version", "page_version_due", "app_meta"]).isSubset(of: tables))
+        #expect(pageColumns.contains("cover TEXT 0 -"))
+        #expect(pageColumns.contains("isFullWidth BOOLEAN 1 0"))
+        #expect(pageColumns.contains("isSmallText BOOLEAN 1 0"))
+        #expect(pageColumns.contains("isTemplate BOOLEAN 1 0"))
+        #expect(pageColumns.contains("favorite TEXT 0 -"))
+        #expect(pageColumns.contains("visitedAt DATETIME 0 -"))
+        #expect(windowColumns.isSuperset(of: ["tabs", "collapsedSidebarSections"]))
+        #expect(indexes.contains { $0.hasPrefix("page_by_favorite:") && $0.contains("WHERE favorite IS NOT NULL") })
+        #expect(indexes.contains { $0.hasPrefix("page_by_visit:") && $0.contains("WHERE visitedAt IS NOT NULL") })
+        #expect(indexes.contains { $0.hasPrefix("page_link_by_target:") })
+        #expect(indexes.contains { $0.hasPrefix("page_version_by_page:") })
+        #expect(counts == [1, 1, 1], "вложения и напоминания на месте")
+        #expect(pageLinkRows == 0, "индекс обратных ссылок заполняется позже, в фоне (research R10)")
+    }
+
+    @Test("Перед v7 — копия MyNotion.backup-v6.sqlite, из неё база восстанавливается целиком")
+    func backupAndRestore() throws {
+        let folder = try TemporaryFolder()
+        try makeV6Library(at: folder.databaseURL)
+        let before = try { let db = try AppDatabase.open(at: folder.databaseURL, migrations: Self.upToV6); defer { db.close() }; return try SchemaV6MigrationTests.dump(db) }()
+
+        try AppDatabase.open(at: folder.databaseURL).close()
+        let backup = AppDatabase.backupURL(for: folder.databaseURL, version: "v6")
+        #expect(backup.lastPathComponent == "MyNotion.backup-v6.sqlite")
+        #expect(FileManager.default.fileExists(atPath: backup.path))
+
+        try AppDatabase.restore(backup: backup, over: folder.databaseURL)
+        let restored = try AppDatabase.open(at: folder.databaseURL, migrations: Self.upToV6)
+        defer { restored.close() }
+        #expect(try restored.appliedSchemaVersion() == "v6")
+        #expect(try SchemaV6MigrationTests.dump(restored) == before)
+    }
+
+    @Test("Повтор v7 ничего не меняет")
+    func secondOpenChangesNothing() throws {
+        let folder = try TemporaryFolder()
+        try makeV6Library(at: folder.databaseURL)
+        let first = try AppDatabase.open(at: folder.databaseURL)
+        let afterFirst = try SchemaV6MigrationTests.dump(first)
+        first.close()
+        let second = try AppDatabase.open(at: folder.databaseURL)
+        defer { second.close() }
+        #expect(try SchemaV6MigrationTests.dump(second) == afterFirst)
+    }
+
+    @Test("Отметки app_meta: ключ — значение, локально")
+    func appMetaStoresLocalMarks() throws {
+        let folder = try TemporaryFolder()
+        let database = try AppDatabase.open(at: folder.databaseURL)
+        defer { database.close() }
+        let store = NotesStore(database: database, clock: HybridLogicalClock(deviceId: device))
+        #expect(try store.appMeta("backlinks.built") == nil)
+        try store.setAppMeta("backlinks.built", "1")
+        #expect(try store.appMeta("backlinks.built") == "1")
+        try store.setAppMeta("backlinks.built", nil)
+        #expect(try store.appMeta("backlinks.built") == nil)
+    }
 }

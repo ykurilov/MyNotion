@@ -291,32 +291,11 @@ public final class PageTreeOperations {
         guard let index = flow.firstIndex(where: { $0.id == anchor.id }) else { return ChildrenMove() }
         let children = flow[(index + 1)...].prefix { $0.indent > anchor.indent }
         guard !children.isEmpty else { return ChildrenMove() }
-        let flows = Dictionary(grouping: blocks.filter { $0.containerId != nil }, by: \.containerId)
-            .mapValues { $0.sorted(by: flowOrder) }
-
+        let copy = BlockCopier.copy(Array(children), pageBlocks: blocks, into: pageId, indentBase: anchor.indent + 1)
         var move = ChildrenMove()
-        var copies: [Block] = []
-        var newIds: [UUID: UUID] = [:]
-        func copy(_ block: Block, sortKey: FractionalSortKey, indent: Int, containerId: UUID?) {
-            let copied = Block(pageId: pageId, kind: block.kind, text: block.text, indent: indent, isChecked: block.isChecked,
-                               linkedPageId: block.linkedPageId, sortKey: sortKey, containerId: containerId, color: block.color,
-                               props: block.props)
-            newIds[block.id] = copied.id
-            move.originals.append(block)
-            copies.append(copied)
-            for inner in flows[block.id] ?? [] {
-                copy(inner, sortKey: inner.sortKey, indent: inner.indent, containerId: copied.id)
-            }
-        }
-        var key: FractionalSortKey?
-        for child in children {
-            key = .between(key, nil)
-            copy(child, sortKey: key!, indent: max(child.indent - anchor.indent - 1, 0), containerId: nil)
-        }
-        // Ячейка таблицы помнит свой столбец по id: у копии — копия столбца.
-        for index in copies.indices {
-            if let column = copies[index].props.columnId, let copied = newIds[column] { copies[index].props.columnId = copied }
-        }
+        move.originals = copy.originals
+        let copies = copy.blocks
+        let newIds = copy.newIds
         move.copiedIds = newIds
 
         for original in move.originals.reversed() { try transaction.deleteBlock(original.id) }
@@ -386,7 +365,7 @@ public final class PageTreeOperations {
     }
 
     private static func flowOrder(_ lhs: Block, _ rhs: Block) -> Bool {
-        lhs.sortKey != rhs.sortKey ? lhs.sortKey < rhs.sortKey : lhs.id.uuidString < rhs.id.uuidString
+        BlockCopier.flowOrder(lhs, rhs)
     }
 
     /// Новое место страницы; отмена ставит её точно на прежнее.
@@ -418,8 +397,9 @@ public final class PageTreeOperations {
     }
 
     /// Одна транзакция; после неё — набор затронутых страниц для окна (`notify: false` — без `onChange`).
+    /// Истории пишут свои операции в файлах-расширениях `PageTreeOperations+<Тема>.swift` через `perform` и `registerUndo`.
     @discardableResult
-    private func perform<T>(notify: Bool = true, _ body: (NotesTransaction) throws -> T) throws -> T {
+    func perform<T>(notify: Bool = true, _ body: (NotesTransaction) throws -> T) throws -> T {
         var touched: Set<UUID> = []
         let result = try store.write { transaction in
             let result = try body(transaction)
@@ -438,7 +418,7 @@ public final class PageTreeOperations {
         return result
     }
 
-    private func registerUndo(_ actionName: String, _ inverse: @escaping @MainActor (PageTreeOperations) throws -> Void) {
+    func registerUndo(_ actionName: String, _ inverse: @escaping @MainActor (PageTreeOperations) throws -> Void) {
         guard let undoManager else { return }
         undoManager.registerUndo(withTarget: self) { operations in
             MainActor.assumeIsolated {

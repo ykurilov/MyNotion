@@ -12,8 +12,9 @@ public struct SyncBatch: Sendable, Hashable, Codable {
     public var changes: [SyncChange]
 
     /// 2 — блоки 002: поля `placement`, `color`, `props`, новые типы и оформления, сущность `reminder`
-    /// (contracts/sync-and-files-api.md). Пачки версии 1 читаются.
-    public static let currentFormatVersion = 2
+    /// (contracts/sync-and-files-api.md). 3 — поля страницы 003: обложка, вид, избранное, открытие, шаблон
+    /// (contracts/sync-v3-and-export.md). Пачки версий 1 и 2 читаются.
+    public static let currentFormatVersion = 3
 
     public init(formatVersion: Int = SyncBatch.currentFormatVersion, deviceId: String, deviceName: String,
                 changes: [SyncChange]) {
@@ -64,6 +65,14 @@ public struct SyncChange: Sendable, Hashable, Codable {
         case trashedAt(Date?)
         /// Стёрта навсегда.
         case erased
+        // Страница, формат 3
+        case cover(PageCover?)
+        case isFullWidth(Bool)
+        case isSmallText(Bool)
+        /// Ключ порядка в «Избранном» (строка дробного ключа); `nil` — не в избранном.
+        case favorite(String?)
+        case visitedAt(Date?)
+        case isTemplate(Bool)
         // Блок
         case text(InlineText)
         case kindAndIndent(kind: BlockKind, indent: Int, linkedPageId: UUID?)
@@ -87,6 +96,12 @@ public struct SyncChange: Sendable, Hashable, Codable {
             case .placement: "placement"
             case .trashedAt: "trashedAt"
             case .erased: "erased"
+            case .cover: "cover"
+            case .isFullWidth: "isFullWidth"
+            case .isSmallText: "isSmallText"
+            case .favorite: "favorite"
+            case .visitedAt: "visitedAt"
+            case .isTemplate: "isTemplate"
             case .text: "text"
             case .kindAndIndent: "kindAndIndent"
             case .isChecked: "isChecked"
@@ -130,6 +145,12 @@ public struct SyncChange: Sendable, Hashable, Codable {
         case "doneAt": value = .doneAt(try container.decodeIfPresent(Date.self, forKey: .value))
         case "trashedAt": value = .trashedAt(try container.decodeIfPresent(Date.self, forKey: .value))
         case "erased": value = .erased
+        case "cover": value = .cover(try container.decodeIfPresent(PageCover.self, forKey: .value))
+        case "isFullWidth": value = .isFullWidth(try container.decode(Bool.self, forKey: .value))
+        case "isSmallText": value = .isSmallText(try container.decode(Bool.self, forKey: .value))
+        case "favorite": value = .favorite(try container.decodeIfPresent(String.self, forKey: .value))
+        case "visitedAt": value = .visitedAt(try container.decodeIfPresent(Date.self, forKey: .value))
+        case "isTemplate": value = .isTemplate(try container.decode(Bool.self, forKey: .value))
         case "text": value = .text(try container.decode(InlineText.self, forKey: .value))
         case "kindAndIndent":
             let kind = try container.nestedContainer(keyedBy: KindKeys.self, forKey: .value)
@@ -163,6 +184,10 @@ public struct SyncChange: Sendable, Hashable, Codable {
             try placement.encode(sortKey, forKey: .sortKey)
         case .trashedAt(let date): try container.encode(date, forKey: .value)
         case .erased, .deleted: break
+        case .cover(let cover): try container.encode(cover, forKey: .value)
+        case .isFullWidth(let value), .isSmallText(let value), .isTemplate(let value): try container.encode(value, forKey: .value)
+        case .favorite(let key): try container.encode(key, forKey: .value)
+        case .visitedAt(let date): try container.encode(date, forKey: .value)
         case .text(let text): try container.encode(text, forKey: .value)
         case .kindAndIndent(let kind, let indent, let linkedPageId):
             var nested = container.nestedContainer(keyedBy: KindKeys.self, forKey: .value)

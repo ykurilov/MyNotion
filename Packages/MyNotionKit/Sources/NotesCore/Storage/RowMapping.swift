@@ -66,7 +66,9 @@ enum JSONColumn {
 
 extension PageFieldClocks {
     var databaseJSON: String {
-        JSONColumn.encodeClocks([("title", title), ("icon", icon), ("placement", placement), ("trashedAt", trashedAt)])
+        JSONColumn.encodeClocks([("title", title), ("icon", icon), ("placement", placement), ("trashedAt", trashedAt),
+                                 ("cover", cover), ("isFullWidth", isFullWidth), ("isSmallText", isSmallText), ("favorite", favorite),
+                                 ("visitedAt", visitedAt), ("isTemplate", isTemplate)])
     }
 }
 
@@ -88,6 +90,12 @@ extension Page {
             trashedAt: row["trashedAt"],
             createdAt: row["createdAt"],
             updatedAt: row["updatedAt"],
+            cover: try (row["cover"] as String?).map { try JSONDecoder().decode(PageCover.self, from: Data($0.utf8)) },
+            isFullWidth: row["isFullWidth"],
+            isSmallText: row["isSmallText"],
+            favorite: (row["favorite"] as String?).flatMap(FractionalSortKey.init(rawValue:)),
+            visitedAt: row["visitedAt"],
+            isTemplate: row["isTemplate"],
             fieldClocks: try RowDecoding.json(PageFieldClocks.self, row, "fieldClocks")
         )
     }
@@ -95,11 +103,13 @@ extension Page {
     func insert(into db: Database) throws {
         try db.cachedStatement(
             sql: """
-                INSERT INTO page (id, title, icon, parentId, sortKey, trashedAt, createdAt, updatedAt, fieldClocks)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO page (id, title, icon, parentId, sortKey, trashedAt, createdAt, updatedAt, cover, isFullWidth, isSmallText,
+                                  favorite, visitedAt, isTemplate, fieldClocks)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """
         ).execute(arguments: [id.databaseText, title, icon, parentId?.databaseText, sortKey.rawValue,
-                        trashedAt, createdAt, updatedAt, fieldClocks.databaseJSON]
+                        trashedAt, createdAt, updatedAt, try cover.map(JSONColumn.encode), isFullWidth, isSmallText,
+                        favorite?.rawValue, visitedAt, isTemplate, fieldClocks.databaseJSON]
         )
     }
 
@@ -107,11 +117,13 @@ extension Page {
         try db.cachedStatement(
             sql: """
                 UPDATE page SET title = ?, icon = ?, parentId = ?, sortKey = ?, trashedAt = ?,
-                    updatedAt = ?, fieldClocks = ?
+                    updatedAt = ?, cover = ?, isFullWidth = ?, isSmallText = ?, favorite = ?, visitedAt = ?, isTemplate = ?,
+                    fieldClocks = ?
                 WHERE id = ?
                 """
         ).execute(arguments: [title, icon, parentId?.databaseText, sortKey.rawValue, trashedAt,
-                        updatedAt, fieldClocks.databaseJSON, id.databaseText]
+                        updatedAt, try cover.map(JSONColumn.encode), isFullWidth, isSmallText, favorite?.rawValue, visitedAt, isTemplate,
+                        fieldClocks.databaseJSON, id.databaseText]
         )
     }
 }
@@ -204,12 +216,19 @@ extension Conflict {
 extension WindowState {
     init(row: Row) throws {
         let collapsed = try RowDecoding.json([UUID].self, row, "collapsedPageIds")
+        // Вкладки и свёрнутые разделы — вид этого Mac: испорченная или незнакомая запись читается как «нет».
+        let tabs = (row["tabs"] as String?).flatMap { try? JSONDecoder().decode(TabsState.self, from: Data($0.utf8)) }
+        let sections = (row["collapsedSidebarSections"] as String?)
+            .flatMap { try? JSONDecoder().decode([String].self, from: Data($0.utf8)) }?
+            .compactMap(SidebarSectionID.init(rawValue:)) ?? []
         self.init(
             windowId: try RowDecoding.uuid(row, "windowId"),
             openPageId: RowDecoding.optionalUUID(row, "openPageId"),
             collapsedPageIds: Set(collapsed),
             sidebarWidth: row["sidebarWidth"],
-            isSidebarCollapsed: row["isSidebarCollapsed"]
+            isSidebarCollapsed: row["isSidebarCollapsed"],
+            tabs: tabs,
+            collapsedSidebarSections: Set(sections)
         )
     }
 
@@ -217,14 +236,17 @@ extension WindowState {
         let collapsed = collapsedPageIds.map(\.databaseText).sorted()
         try db.execute(
             sql: """
-                INSERT INTO window_state (windowId, openPageId, collapsedPageIds, sidebarWidth, isSidebarCollapsed)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO window_state (windowId, openPageId, collapsedPageIds, sidebarWidth, isSidebarCollapsed, tabs,
+                                          collapsedSidebarSections)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(windowId) DO UPDATE SET openPageId = excluded.openPageId,
                     collapsedPageIds = excluded.collapsedPageIds, sidebarWidth = excluded.sidebarWidth,
-                    isSidebarCollapsed = excluded.isSidebarCollapsed
+                    isSidebarCollapsed = excluded.isSidebarCollapsed, tabs = excluded.tabs,
+                    collapsedSidebarSections = excluded.collapsedSidebarSections
                 """,
             arguments: [windowId.databaseText, openPageId?.databaseText, try JSONColumn.encode(collapsed), sidebarWidth,
-                        isSidebarCollapsed]
+                        isSidebarCollapsed, try tabs.map(JSONColumn.encode),
+                        try JSONColumn.encode(collapsedSidebarSections.map(\.rawValue).sorted())]
         )
     }
 }
