@@ -1,4 +1,5 @@
 extension PagesNavigationSample {
-    /// 200 версий у «богатой» страницы — US6: заготовка этапа 0, история заменяет этот файл своей частью.
+    /// Версии пишет не ядро: 200 версий у «богатой» страницы и страница «Замер: история версий» — `PageVersionsSample`
+    /// (модуль PageVersions), приложение зовёт его по `--generate-003-sample`.
     static let versions: Part? = nil
 }

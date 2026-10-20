@@ -87,6 +87,8 @@ public enum GalleryScene: Hashable, Sendable {
     /// Вкладки окна (US3): полоса с 1, 3 и 12 вкладками, «×» под мышью, панель спрятана, «Открыть в новой вкладке»,
     /// «Недавние» во вкладке, заглушка «Страница в корзине».
     case tabs(GalleryTabs)
+    /// История версий (US6).
+    case versionHistory(GalleryVersionHistory)
 }
 
 public enum GalleryMarkdownExport: String, Hashable, Sendable, CaseIterable {
@@ -178,6 +180,20 @@ public enum GalleryTheme: String, Hashable, Sendable, CaseIterable, Codable {
     public var title: String { self == .light ? "светлая" : "тёмная" }
 }
 
+/// История версий (US6; сверка — `notion-version-*.png`).
+public enum GalleryVersionHistory: CaseIterable, Sendable {
+    /// Список «1 минута», выбрана прошлая версия: справа она с подсветкой отличий.
+    case list
+    /// Группировка «15 минут».
+    case grouped
+    /// Раскрытая версия: «← Все версии» и что менялось.
+    case details
+    /// Окно «Что будет восстановлено».
+    case restoreDialog
+    /// Полоса «Страница восстановлена» над страницей.
+    case restoredBanner
+}
+
 /// Состояния разделов «Недавние» и «Избранное» (US2).
 public enum GallerySidebarSections: CaseIterable, Sendable {
     /// Пять недавних со строкой «Показать все» и избранное, у одной избранной раскрыты подстраницы.
@@ -228,7 +244,19 @@ public struct GalleryShot: Hashable, Sendable {
 public enum GalleryCatalog {
     /// Все состояния по порядку съёмки.
     public static let states: [GalleryState] = pageStates + blockStates + kindSampleStates + inlineAtomStates + editingStates + sidebarStates
-        + trashStates + importStates + exportStates + syncStates + tabsStates
+        + trashStates + importStates + exportStates + syncStates + tabsStates + versionHistoryStates
+
+    /// История версий (US6, contracts/pages-ui.md, «История версий»).
+    static let versionHistoryStates: [GalleryState] = [
+        GalleryState("version-history-list", .versionHistory(.list), "«История версий»: список, прошлая версия с подсветкой отличий",
+                     section: "История версий", narrowToo: true),
+        GalleryState("version-history-grouped", .versionHistory(.grouped), "Группировка «15 минут»", section: "История версий"),
+        GalleryState("version-history-details", .versionHistory(.details), "Раскрытая версия: что менялось", section: "История версий"),
+        GalleryState("version-history-restore", .versionHistory(.restoreDialog), "Окно «Что будет восстановлено»",
+                     section: "История версий"),
+        GalleryState("version-restored-banner", .versionHistory(.restoredBanner), "После восстановления: полоса «Страница восстановлена»",
+                     section: "История версий"),
+    ]
 
     /// Вкладки окна (US3, contracts/pages-ui.md, «Верхняя полоса окна»; сверка — снимок Notion 7.39 `notion-sidebar-tabs-topbar.png`).
     static let tabsStates: [GalleryState] = [

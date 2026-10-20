@@ -6,6 +6,7 @@ import Observation
 import PageEditor
 import PageSearch
 import PageTree
+import PageVersions
 import VisualStyle
 
 /// Общее для всех окон приложения (FR-029): база, открытые страницы, дерево, корзина и синхронизация.
@@ -36,6 +37,8 @@ final class PagesLibrary {
     @ObservationIgnored let reminders: ReminderNotifications
     /// Синхронизация между Mac (US5); выключена — ничего не делает.
     @ObservationIgnored private(set) var sync: SyncController!
+    /// История версий страниц (003, US6).
+    @ObservationIgnored private(set) var versions: AppPageVersions!
     /// Окно, открытое при запуске: его ждут замеры, галерея и снимки окна.
     @ObservationIgnored private(set) var firstWindow: MainWindowModel!
     @ObservationIgnored private var isFirstWindowClaimed = false
@@ -47,7 +50,7 @@ final class PagesLibrary {
         weak var model: MainWindowModel?
     }
 
-    init(store: NotesStore, startsSync: Bool = true, reminders: ReminderNotifications) {
+    init(store: NotesStore, startsSync: Bool = true, reminders: ReminderNotifications, versionTiming: PageVersionRecorder.Timing = .standard) {
         self.store = store
         self.reminders = reminders
         attachments = AttachmentStore(store: store, folder: AttachmentStore.folder(forDatabaseAt: store.database.url))
@@ -57,6 +60,7 @@ final class PagesLibrary {
         reloadTree()
         sync = SyncController(store: store, openDocuments: openDocuments, attachments: attachments, startsEngine: startsSync)
         sync.onRemoteChange = { [weak self] _ in self?.remoteChangesApplied() }
+        versions = AppPageVersions(store: store, deviceName: sync.deviceName, timing: versionTiming)
         firstWindow = MainWindowModel(library: self, opening: nil, restoresTabs: true)
         reminders.openBlock = { [weak self] pageId, blockId in self?.openBlock(blockId, inPage: pageId) }
     }

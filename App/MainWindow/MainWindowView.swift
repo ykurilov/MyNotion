@@ -45,6 +45,8 @@ struct MainWindowView: View {
     /// Замеры, галерея и снимки идут в первом окне — других окон в служебных запусках нет.
     private func editorReady(_ model: MainWindowModel?) {
         if options.presence == .background { BackgroundWindows.shared.orderInMainWindow() }
+        // Запись версий и прореживание — после готовности редактора (research R11).
+        if case .success(let library) = library { library.versions.editorReady() }
         // Напоминания ставятся после готовности редактора, не при запуске (research R11); служебные запуски — без них.
         if options.allowsSync, case .success(let library) = library { library.reminders.start() }
         LaunchMilestones.editorReady(reportTo: options.launchReportURL)
@@ -198,6 +200,7 @@ private struct PagesWindow: View {
                                  open: { model.openInNewTab($0) }, dismiss: { model.isNewTabSearchShown = false })
             }
         }
+        .overlay { VersionHistoryOverlay(model: model, mentions: mentionSettings(pages: linkedPages)) }
         .modalCard(isPresented: model.isSyncSettingsShown) {
             SyncSettingsView(controller: model.syncSettingsPreview ?? model.sync) { model.isSyncSettingsShown = false }
         }
@@ -378,6 +381,11 @@ private struct PagesWindow: View {
             )
             // Новый документ — новый редактор: страницу перечитали после операции с деревом.
             .id(ObjectIdentifier(document))
+            .overlay(alignment: .top) {
+                if model.showsRestoredBanner {
+                    VersionRestoredBanner { model.restoredVersionPageId = nil }.padding(.top, Metrics.Page.topBarHeight)
+                }
+            }
         } else if let trashed = model.activeTabTrashedPage {
             TrashedPageView(page: trashed) { model.restoreActiveTabPage() }
                 .onAppear { DispatchQueue.main.async { onEditorReady() } }

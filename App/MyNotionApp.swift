@@ -44,7 +44,8 @@ struct MyNotionApp: App {
             reminders.installIndex()
             if options.uiGalleryURL != nil { galleryLibrary = try UIGalleryRunner.prepareLibrary(in: store) }
             // Служебные запуски (галерея, замеры, снимки) с сервером не связываются.
-            let pages = PagesLibrary(store: store, startsSync: options.allowsSync, reminders: reminders)
+            let pages = PagesLibrary(store: store, startsSync: options.allowsSync, reminders: reminders, versionTiming: options.versionTiming)
+            if options.generates003Sample { PageVersionsSampleLaunch.ensure(in: pages) }
             if options.uiGalleryURL != nil || options.generatesRichSample || options.generates003Sample {
                 SampleMedia.materialize(in: store, attachments: pages.attachments)
             }
@@ -215,7 +216,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let library = Self.library, !library.saveAll() else { return .terminateNow }
+        guard let library = Self.library else { return .terminateNow }
+        defer { library.versions.recordAllDue() }
+        guard !library.saveAll() else { return .terminateNow }
         if Self.presence == .background {
             // Служебный запуск окон с вопросами не показывает: база у него своя или эталонная.
             FileHandle.standardError.write(Data("Выход без сохранения: записать правки на диск не удалось\n".utf8))
