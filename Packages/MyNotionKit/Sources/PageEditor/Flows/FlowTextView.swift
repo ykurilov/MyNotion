@@ -95,6 +95,7 @@ extension PageTextView {
         embeddedViews.setHeight(height, of: blockId, width: width)
         relayoutParagraph(ofBlock: blockId)
         blockViews.update()
+        keepScrollAnchor()
     }
 
     /// Переложить абзац блока: высота его вида поменялась.

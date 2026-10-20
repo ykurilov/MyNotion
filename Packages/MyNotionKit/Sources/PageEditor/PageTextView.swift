@@ -37,6 +37,9 @@ public class PageTextView: NSTextView {
     /// Место прокрутки вкладки, на которое встать при показе (US3); возвращается до первой отрисовки.
     var pendingScrollPlace: TabScroll?
     private var didRestoreScrollPlace = false
+    /// Возвращённое место держится, пока раскладка выше него уточняется (`keepScrollAnchor`).
+    var scrollAnchor: ScrollAnchor?
+    var isKeepingScrollAnchor = false
     /// Страница показана и принимает ввод.
     public var onReady: (@MainActor () -> Void)?
     /// Отмена, когда окна нет или оно своей не даёт (проверки без приложения).
@@ -275,6 +278,7 @@ public class PageTextView: NSTextView {
     }
 
     public override func didChangeText() {
+        scrollAnchor = nil
         super.didChangeText()
         // Посреди набора с помощью IME текст ещё не окончательный.
         guard !hasMarkedText() else { return }
@@ -873,10 +877,11 @@ public class PageTextView: NSTextView {
         NSPoint(x: column.left, y: header.frame.maxY)
     }
 
-    /// После раскладки видимой области — виды блоков на свои абзацы.
+    /// После раскладки видимой области — виды блоков на свои абзацы, возвращённое место прокрутки — на своё.
     public override func layout() {
         super.layout()
         blockViews.update()
+        keepScrollAnchor()
     }
 
     public override func viewDidMoveToSuperview() {
@@ -1100,7 +1105,6 @@ public class PageTextView: NSTextView {
     private func restorePendingScrollPlace() -> Bool {
         guard let place = pendingScrollPlace else { return didRestoreScrollPlace }
         pendingScrollPlace = nil
-        layoutSubtreeIfNeeded()
         restoreScrollPlace(place)
         didRestoreScrollPlace = true
         return true

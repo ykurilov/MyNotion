@@ -484,9 +484,10 @@ final class MainWindowModel {
     private func tabsDidChange() {
         tabsRevision += 1
         guard restoresTabs, !isTabsSavePending else { return }
-        // Запись — после показа страницы: на пути переключения вкладки она не нужна.
+        // Запись — после показа страницы и одна на серию переключений: на пути переключения вкладки она не нужна.
+        // Выход, уход в фон и закрытие окна записывают вкладки сразу (`saveTabs`).
         isTabsSavePending = true
-        DispatchQueue.main.async { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(500)) { [weak self] in
             guard let self else { return }
             isTabsSavePending = false
             saveWindowState { $0.tabs = self.tabs.savedState }
@@ -544,7 +545,13 @@ final class MainWindowModel {
             library.versions.pageOpened(pageId)
             // Файлы открытой страницы — первыми в очереди скачивания (FR-120).
             library.sync.prioritizeFiles(onPage: pageId)
-            if remember { saveWindowState { $0.openPageId = pageId } }
+            // Запись — после показа страницы: на пути перехода она не нужна (как запись вкладок).
+            if remember {
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, openDocument?.pageId == pageId else { return }
+                    saveWindowState { $0.openPageId = pageId }
+                }
+            }
         } catch NotesStoreError.pageNotFound {
             // Страница стёрта: вкладка показывает «Недавние».
             if openDocument != nil { closeOpenDocument() }

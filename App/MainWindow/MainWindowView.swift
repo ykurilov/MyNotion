@@ -397,8 +397,6 @@ private struct PagesWindow: View {
                 templates: TemplateSettings(templates: model.templateChoices(forPage: document.pageId),
                                             choose: { model.fillOpenPage(document.pageId, fromTemplate: $0) })
             )
-            // Новый документ — новый редактор: страницу перечитали после операции с деревом.
-            .id(ObjectIdentifier(document))
             .overlay(alignment: .top) {
                 if model.showsRestoredBanner {
                     VersionRestoredBanner { model.restoredVersionPageId = nil }.padding(.top, Metrics.Page.topBarHeight)

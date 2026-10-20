@@ -56,6 +56,55 @@ struct PageScrollPlaceTests {
         #expect(reopened.textView.selectedRange().location > 0, "курсор — у блока сверху, а не в начале страницы")
     }
 
+    @Test("Выше блока у верха вид узнал свою высоту уже после возврата места — блок остаётся на месте")
+    func placeHoldsWhileLayoutAboveSettles() throws {
+        let fixture = try longPage()
+        let ids = fixture.document.blocks.map(\.id)
+        // Колонки в середине страницы, видимая область — чуть ниже них: вид колонок в запасе над ней.
+        fixture.step { _ = fixture.textView.placeBlocks([ids[101]], besideRightOf: ids[100]) }
+        _ = try fixture.savedBlocks()
+        try scroll(fixture, to: 3_000)
+        let listIndex = try #require(fixture.document.blocks.firstIndex { $0.kind == .columnList })
+        let listTop = try #require(fixture.textView.paragraphTop(ofBlockAt: listIndex))
+        try scroll(fixture, to: listTop + 400)
+        let place = PageScrollPlace()
+        place.attach(fixture.textView)
+        let saved = try #require(place.current())
+
+        let reopened = try EditorFixture(reopening: fixture)
+        reopened.window.displayIfNeeded()
+        reopened.textView.restoreScrollPlace(saved)
+        // Вид колонок выше видимой области стал выше на 300 точек — раскладка над блоком уточнилась.
+        let list = try #require(reopened.document.blocks.first { $0.kind == .columnList }).id
+        let width = reopened.textView.textContainer?.size.width ?? 0
+        let estimated = reopened.textView.embeddedViews.height(of: list, width: width) ?? 0
+        reopened.textView.embeddedViewHeightDidChange(list, height: estimated + 300, width: width)
+        reopened.window.displayIfNeeded()
+
+        place.attach(reopened.textView)
+        let restored = try #require(place.current())
+        #expect(restored.blockId == saved.blockId)
+        #expect(abs(restored.offset - saved.offset) <= 1, "сдвиг был \(saved.offset), стал \(restored.offset)")
+    }
+
+    @Test("Человек прокрутил сам — якорь отпущен: перекладка выше больше не двигает страницу")
+    func ownScrollReleasesAnchor() throws {
+        let fixture = try longPage()
+        try scroll(fixture, to: 3_000)
+        let place = PageScrollPlace()
+        place.attach(fixture.textView)
+        let saved = try #require(place.current())
+
+        let reopened = try EditorFixture(reopening: fixture)
+        reopened.window.displayIfNeeded()
+        reopened.textView.restoreScrollPlace(saved)
+        try scroll(reopened, to: 1_000)
+        let top = visibleTop(reopened)
+        reopened.textView.layoutSubtreeIfNeeded()
+        reopened.window.displayIfNeeded()
+        #expect(visibleTop(reopened) == top, "страница стоит там, куда её прокрутили")
+    }
+
     @Test("Блока больше нет — страница остаётся сверху, без ошибки")
     func missingBlockKeepsTop() throws {
         let fixture = try longPage()

@@ -447,12 +447,12 @@ public final class PageTextStorageMapper: NSObject {
     // MARK: Вид
 
     static func paragraphAttributes(of block: Block) -> [NSAttributedString.Key: Any] {
-        var attributes: [NSAttributedString.Key: Any] = [
-            .blockID: block.id,
-            .blockKind: block.kind.rawValue,
-            .blockIndent: block.indent,
-            .blockChecked: block.isChecked,
-        ]
+        // Место сразу под все атрибуты абзаца и оформления: словарь не перестраивается по ходу (открытие страницы).
+        var attributes = [NSAttributedString.Key: Any](minimumCapacity: 12)
+        attributes[.blockID] = block.id
+        attributes[.blockKind] = block.kind.rawValue
+        attributes[.blockIndent] = block.indent
+        attributes[.blockChecked] = block.isChecked
         attributes[.blockLinkedPage] = block.linkedPageId
         if !block.color.isNone { attributes[.blockColor] = block.color }
         if !block.props.isEmpty { attributes[.blockProps] = block.props }
@@ -491,31 +491,58 @@ public final class PageTextStorageMapper: NSObject {
     }
 
     static func baseAttributes(for block: Block, after previous: BlockKind? = nil) -> [NSAttributedString.Key: Any] {
-        let style = textStyle(of: block.kind)
-        let line = Typography.line(for: style)
-        let spacing = Metrics.block(style)
-        let descriptor = block.kind.descriptor
-        let paragraphStyle = (line.paragraphStyle.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
-        if let lineHeight = descriptor.lineHeight {
-            paragraphStyle.minimumLineHeight = lineHeight
-            paragraphStyle.maximumLineHeight = lineHeight
-        }
-        paragraphStyle.paragraphSpacingBefore = spacingBefore(block.kind, after: previous)
-        paragraphStyle.paragraphSpacing = descriptor.bottomSpacing ?? max(0, spacing.height - line.lineHeight - spacing.topSpacing)
-        let marker: CGFloat = block.kind.hasMarkerColumn ? Metrics.BlockMarker.textInset : descriptor.leadingInset
-        let indent = CGFloat(block.indent) * Metrics.Page.indentPerLevel + marker
-        paragraphStyle.firstLineHeadIndent = indent
-        paragraphStyle.headIndent = indent
-
+        let look = paragraphLook(of: block.kind, indent: block.indent, spacingBefore: spacingBefore(block.kind, after: previous))
         var attributes = paragraphAttributes(of: block)
-        attributes[.font] = line.font
+        attributes[.font] = look.font
         attributes[.foregroundColor] = Palette.notionText(block.color.text?.tone)
-        attributes[.paragraphStyle] = paragraphStyle
+        attributes[.paragraphStyle] = look.paragraphStyle
         if block.kind == .checkbox, block.isChecked {
             attributes[.foregroundColor] = Palette.textSecondary
             attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
         }
         return attributes
+    }
+
+    private struct ParagraphStyleKey: Hashable {
+        let kind: BlockKind
+        let indent: Int
+        let spacingBefore: CGFloat
+    }
+
+    /// Шрифт и оформление абзаца блока.
+    private struct ParagraphLook {
+        let font: NSFont
+        let paragraphStyle: NSParagraphStyle
+    }
+
+    /// Готовые шрифты и оформления абзацев: одно на тип, вложенность и отступ сверху. Сборка своих на каждый блок была
+    /// заметной частью открытия страницы (профиль переключения вкладок, 003). Оформление не меняют на месте — только копию.
+    nonisolated(unsafe) private static var paragraphLooks: [ParagraphStyleKey: ParagraphLook] = [:]
+    private static let paragraphLooksLock = NSLock()
+
+    private static func paragraphLook(of kind: BlockKind, indent level: Int, spacingBefore: CGFloat) -> ParagraphLook {
+        let key = ParagraphStyleKey(kind: kind, indent: level, spacingBefore: spacingBefore)
+        paragraphLooksLock.lock()
+        defer { paragraphLooksLock.unlock() }
+        if let known = paragraphLooks[key] { return known }
+        let style = textStyle(of: kind)
+        let line = Typography.line(for: style)
+        let spacing = Metrics.block(style)
+        let descriptor = kind.descriptor
+        let paragraphStyle = (line.paragraphStyle.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
+        if let lineHeight = descriptor.lineHeight {
+            paragraphStyle.minimumLineHeight = lineHeight
+            paragraphStyle.maximumLineHeight = lineHeight
+        }
+        paragraphStyle.paragraphSpacingBefore = spacingBefore
+        paragraphStyle.paragraphSpacing = descriptor.bottomSpacing ?? max(0, spacing.height - line.lineHeight - spacing.topSpacing)
+        let marker: CGFloat = kind.hasMarkerColumn ? Metrics.BlockMarker.textInset : descriptor.leadingInset
+        let indent = CGFloat(level) * Metrics.Page.indentPerLevel + marker
+        paragraphStyle.firstLineHeadIndent = indent
+        paragraphStyle.headIndent = indent
+        let look = ParagraphLook(font: line.font, paragraphStyle: paragraphStyle.copy() as? NSParagraphStyle ?? paragraphStyle)
+        paragraphLooks[key] = look
+        return look
     }
 
     /// Абзац блока: текст с оформлением и, если нужно, перевод строки с атрибутами того же абзаца.

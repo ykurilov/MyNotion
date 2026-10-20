@@ -7,7 +7,7 @@ import PageEditor
 /// Замер вкладок (US3, T056; SC-201, SC-202): флаг `--tabs-benchmark <отчёт>`, сборка Release, эталонная база.
 /// 20 вкладок с «богатыми» страницами 002 (образец и 19 копий ветки), у каждой своё место прокрутки:
 /// 100 переключений по кругу, 10 «назад» и 10 «вперёд» — от команды до готовности редактора и перерисовки окна;
-/// место прокрутки после возврата то же; память с одной вкладкой и с двадцатью после переключений.
+/// место прокрутки после возврата на вкладку и «назад» то же; живая куча с одной вкладкой и с двадцатью после переключений.
 /// В конце в базе остаются 10 вкладок — тест запускает приложение ещё раз и мерит запуск с ними.
 @MainActor
 enum TabsBenchmark {
@@ -31,9 +31,14 @@ enum TabsBenchmark {
         var switchP95Ms: Double?
         var backP95Ms: Double?
         var forwardP95Ms: Double?
+        /// След процесса — для сведения: его гуляние от прогона к прогону (до ±10 МБ) — страницы распределителя,
+        /// освобождённые, но не отданные системе.
         var memoryOneTabMB: Double?
         var memoryTwentyTabsMB: Double?
-        /// Возвратов на вкладку, где блок у верха тот же, что был при уходе, — из скольких проверено.
+        /// Живая куча (занято распределителем): по ней сравнивается одна вкладка с двадцатью.
+        var heapOneTabMB: Double?
+        var heapTwentyTabsMB: Double?
+        /// Возвратов на вкладку и «назад», где блок у верха тот же, что был при уходе, — из скольких проверено.
         var scrollRestored = 0
         var scrollChecked = 0
         var error: String?
@@ -91,6 +96,7 @@ enum TabsBenchmark {
         }
         try await Task.sleep(for: .seconds(2))
         report.memoryOneTabMB = footprintMB()
+        report.heapOneTabMB = heapInUseMB()
 
         // 20 вкладок: каждую открыть один раз и прокрутить на своё место.
         try await show(TabsState(active: 0, items: pages.map { Tab(pageId: $0) }), in: model)
@@ -112,6 +118,7 @@ enum TabsBenchmark {
         }
         try await Task.sleep(for: .seconds(2))
         report.memoryTwentyTabsMB = footprintMB()
+        report.heapTwentyTabsMB = heapInUseMB()
 
         // «Назад» и «вперёд» по страницам эталона в одной вкладке.
         let textPages = model.tree.pagesInTreeOrder.map(\.id).filter { !pages.contains($0) }.prefix(historySteps)
@@ -122,6 +129,10 @@ enum TabsBenchmark {
         for _ in 0..<historySteps {
             guard model.canGoBack else { break }
             report.backMs.append(try await measure(in: model) { model.goBack() })
+            if let expected = model.tabs.activeTab.scroll {
+                report.scrollChecked += 1
+                if model.scrollPlace.current()?.blockId == expected.blockId { report.scrollRestored += 1 }
+            }
         }
         for _ in 0..<historySteps {
             guard model.canGoForward else { break }
@@ -169,6 +180,12 @@ enum TabsBenchmark {
         scrollView.contentView.scroll(to: NSPoint(x: 0, y: y))
         scrollView.reflectScrolledClipView(scrollView.contentView)
         window.displayIfNeeded()
+    }
+
+    private static func heapInUseMB() -> Double {
+        var stats = malloc_statistics_t()
+        malloc_zone_statistics(nil, &stats)
+        return Double(stats.size_in_use) / 1_048_576
     }
 
     private static func footprintMB() -> Double? {
