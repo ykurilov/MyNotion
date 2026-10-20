@@ -34,6 +34,15 @@ enum GalleryTabsScene {
             markVisited(pages.prefix(8), in: model)
             model.showRecentPages()
         case .trashedPage:
+            // Состояние «пустая корзина» раньше в полной галерее опустошает корзину — страница с иконкой кладётся заново.
+            if !model.library.trashedPagesById.values.contains(where: { $0.icon != nil }) {
+                _ = try? model.store.write { transaction in
+                    var page = try transaction.createPage(title: "Цели на год", icon: "🎯")
+                    page.trashedAt = Date()
+                    return try transaction.updatePage(page)
+                }
+                model.library.reloadTree()
+            }
             guard let trashed = model.library.trashedPagesById.values.first(where: { $0.icon != nil }) else { return "нет страницы в корзине" }
             install([sample, trashed.id], active: 1, in: model)
         }
