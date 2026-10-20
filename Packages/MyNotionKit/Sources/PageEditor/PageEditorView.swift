@@ -232,11 +232,14 @@ struct PageTextEditor: NSViewRepresentable {
     /// на системные уведомления блоком, который держит вид, и отписывает при снятии вида с родителя: вид, отпущенный
     /// вместе с родителем, оставался подписанным. У окна вне экрана (служебные запуски) виды абзацев TextKit живут
     /// дольше страницы — без раскладки и рисунка они почти ничего не весят.
+    /// Прокрутка внутри страницы (блок кода с длинными строками) своих частей — вида прокрутки, вида в нём и полос —
+    /// не отдаёт: на снятие `contentView` AppKit бросает исключение. Их содержимое снимается, сами они уходят с прокруткой.
     static func detachSubviews(of view: NSView) {
+        let keepsParts = view is NSScrollView || view is NSClipView
         for subview in view.subviews.reversed() {
             detachSubviews(of: subview)
             clearContents(of: subview.layer)
-            subview.removeFromSuperview()
+            if !keepsParts { subview.removeFromSuperview() }
         }
     }
 }

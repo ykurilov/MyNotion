@@ -15,7 +15,10 @@ enum GalleryVersionHistoryScene {
         model.library.reloadTree()
         model.select(pageId)
         try? await Task.sleep(for: .milliseconds(300))
+        model.versionHistory = nil
         model.showVersionHistory(pageId)
+        // История открывается после снимка «как сейчас» на очереди записи — ждём её, а не проверяем сразу.
+        for _ in 0..<50 where model.versionHistory == nil { try? await Task.sleep(for: .milliseconds(100)) }
         guard let history = model.versionHistory, history.rows.count > 3 else { return "история не открылась" }
         // Прошлая версия: с подсветкой отличий от текущей.
         history.select(history.rows[3].id)

@@ -427,6 +427,11 @@ public final class NotesTransaction {
         try db.execute(sql: sql, arguments: StatementArguments(arguments.map(\.databaseValue)))
     }
 
+    /// Запрос подписчика с ответом — первая колонка строками (например, `DELETE … RETURNING`).
+    public func fetchTexts(sql: String, arguments: [SQLValue] = []) throws -> [String] {
+        try String.fetchAll(db, sql: sql, arguments: StatementArguments(arguments.map(\.databaseValue)))
+    }
+
     // MARK: Правила
 
     /// «У страницы всегда есть хотя бы один блок (пустой абзац)».

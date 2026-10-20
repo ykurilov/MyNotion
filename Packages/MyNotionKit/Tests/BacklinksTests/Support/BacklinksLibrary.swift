@@ -10,11 +10,12 @@ final class BacklinksLibrary {
     private let folder: TemporaryFolder
 
     /// `indexBuilt` — отметка «индекс построен» уже стоит (новая база: строить нечего).
-    init(indexBuilt: Bool = true) throws {
+    /// `onLinksChange` — сигнал подписчика «у этих страниц могли смениться обратные ссылки».
+    init(indexBuilt: Bool = true, onLinksChange: (@Sendable (BacklinkTargets) -> Void)? = nil) throws {
         folder = try TemporaryFolder()
         let database = try AppDatabase.open(at: folder.databaseURL)
         store = NotesStore(database: database, clock: HybridLogicalClock(deviceId: UUID()))
-        store.addWriteHook(PageLinkIndexer())
+        store.addWriteHook(PageLinkIndexer(onLinksChange: onLinksChange))
         if indexBuilt { try store.setAppMeta(BacklinkIndexBuild.builtKey, "1") }
     }
 

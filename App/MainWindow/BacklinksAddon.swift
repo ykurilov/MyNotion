@@ -9,6 +9,8 @@ import VisualStyle
 extension Notification.Name {
     /// Первое заполнение индекса обратных ссылок закончилось: открытые страницы перечитывают счёт.
     static let backlinkIndexDidBuild = Notification.Name("cloud.kurilov.mynotion.backlinkIndexDidBuild")
+    /// Запись сменила обратные ссылки у страниц (`object` — `BacklinkTargets`): их открытые страницы перечитывают счёт.
+    static let backlinksDidChange = Notification.Name("cloud.kurilov.mynotion.backlinksDidChange")
 }
 
 /// Строка «↗ N обратных ссылок» под названием открытой страницы (US5; contracts/pages-ui.md, «Обратные ссылки»).
@@ -23,6 +25,7 @@ final class BacklinksAddon: PageHeaderAddon {
     private var loadTask: Task<Void, Never>?
     private let list = BacklinksListPresenter()
     nonisolated(unsafe) private var buildObserver: NSObjectProtocol?
+    nonisolated(unsafe) private var changeObserver: NSObjectProtocol?
 
     static func factory(_ model: MainWindowModel) -> PageHeaderAddonFactory {
         { [weak model] document in BacklinksAddon(model: model, pageId: document.pageId) }
@@ -36,11 +39,25 @@ final class BacklinksAddon: PageHeaderAddon {
     deinit {
         loadTask?.cancel()
         if let buildObserver { NotificationCenter.default.removeObserver(buildObserver) }
+        if let changeObserver { NotificationCenter.default.removeObserver(changeObserver) }
+    }
+
+    /// Сигнал подписчика индекса после фиксации записи (поток записи) — на главный поток уведомлением, не дожидаясь его:
+    /// синхронная доставка держала бы поток записи, пока главный ждёт запись (взаимная блокировка).
+    nonisolated static func linksDidChange(_ targets: BacklinkTargets) {
+        DispatchQueue.main.async { NotificationCenter.default.post(name: .backlinksDidChange, object: targets) }
     }
 
     func install(in textView: PageTextView) {
         self.textView = textView
         buildObserver = NotificationCenter.default.addObserver(forName: .backlinkIndexDidBuild, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reload() }
+        }
+        // Ссылку добавили или убрали на другой странице (или в другом окне, или с другого Mac) — счёт сразу, как в Notion.
+        let pageId = pageId
+        changeObserver = NotificationCenter.default.addObserver(forName: .backlinksDidChange, object: nil, queue: .main) { [weak self] note in
+            guard let targets = note.object as? BacklinkTargets else { return }
+            if case .pages(let pages) = targets, !pages.contains(pageId) { return }
             MainActor.assumeIsolated { self?.reload() }
         }
         reload()

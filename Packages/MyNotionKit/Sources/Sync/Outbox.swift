@@ -115,7 +115,9 @@ struct OutboxRecorder: NotesWriteHook {
         let outgoing = try ChangeEncoding.outgoing(changes, in: transaction)
         guard !outgoing.isEmpty else { return }
         try Outbox.enqueue(outgoing, in: transaction.database)
-        transaction.afterCommit { NotificationCenter.default.post(name: Outbox.didEnqueue, object: nil) }
+        // Не дожидаясь главного потока: его подписчик (`queue: .main`) держал бы поток записи, пока главный, в свою
+        // очередь, ждёт запись (копия ветки с очереди записи при включённой синхронизации — взаимная блокировка).
+        transaction.afterCommit { DispatchQueue.main.async { NotificationCenter.default.post(name: Outbox.didEnqueue, object: nil) } }
     }
 }
 

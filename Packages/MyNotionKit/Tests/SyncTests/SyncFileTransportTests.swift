@@ -86,10 +86,11 @@ struct SyncFileTransportTests {
         defer { mac.stop() }
         try await waitUntil { work.runs == 1 }
 
-        // Старая очередь не слушает отмену и ещё работает.
+        // Старая очередь не слушает отмену и ещё работает. Новый цикл дошёл до очереди файлов — спросил, есть ли работа.
+        let checksBeforeRestart = work.checks
         mac.stop()
         mac.start()
-        try await waitUntil { mac.engine.status == .ready }
+        try await waitUntil { work.checks > checksBeforeRestart }
         try await Task.sleep(for: .milliseconds(100))
         #expect(work.runs == 1)
 
@@ -104,8 +105,11 @@ struct SyncFileTransportTests {
         work.finish()
     }
 
+    /// Срок — только защита от зависания, скорость он не меряет. В полном прогоне главный поток делят сотни тестов
+    /// редактора, и каждый переход на него ждёт очереди: один `connectFirst` идёт 17 с вместо 0,01 с, весь тест — 20 с
+    /// вместо 0,25 с. Пяти секунд на ожидание там не хватало (CancellationError), хотя очередь файлов работала верно.
     private func waitUntil(_ condition: @MainActor () -> Bool) async throws {
-        let deadline = ContinuousClock.now + .seconds(5)
+        let deadline = ContinuousClock.now + .seconds(60)
         while await !condition() {
             guard ContinuousClock.now < deadline else { throw CancellationError() }
             try await Task.sleep(for: .milliseconds(10))
@@ -130,20 +134,15 @@ private final class StubFileWork: SyncFileWork, @unchecked Sendable {
         }
     }
 
-    nonisolated func run() async {
-        await MainActor.run {
-            runs += 1
-            concurrentRuns += 1
-            maxConcurrentRuns = max(maxConcurrentRuns, concurrentRuns)
-            isRunning = true
-        }
-        await withCheckedContinuation { continuation in
-            Task { @MainActor in self.releases.append(continuation) }
-        }
-        await MainActor.run {
-            concurrentRuns -= 1
-            isRunning = concurrentRuns > 0
-        }
+    /// Счёт и ожидание `finish()` — в одном ходе главного потока: тест, увидевший новый запуск, может сразу его отпустить.
+    func run() async {
+        runs += 1
+        concurrentRuns += 1
+        maxConcurrentRuns = max(maxConcurrentRuns, concurrentRuns)
+        isRunning = true
+        await withCheckedContinuation { releases.append($0) }
+        concurrentRuns -= 1
+        isRunning = concurrentRuns > 0
     }
 
     func finish() {
