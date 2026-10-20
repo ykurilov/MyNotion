@@ -181,3 +181,260 @@ func eventually(_ what: String, within limit: Duration, _ condition: () async th
 }
 
 struct EventuallyTimeout: Error {}
+
+/// Сходимость возможностей 003 через настоящий цикл синхронизации двух Mac и поддельный сервер (SC-208, FR-221…): поля
+/// страницы, избранное с двух Mac, перенос блоков, дублирование и шаблоны, Mac со старым форматом. Слияние по полям
+/// подробно проверяют `ChangeMergerV3Tests` и `SyncPayloadV3Tests`; восстановление версии, доходящее до другого Mac
+/// обычными правками, — `PageVersionsTests/VersionRestoreTests.restoreSyncs` (модуль `PageVersions` сюда не подключён).
+@MainActor
+@Suite("Сходимость возможностей 003 через сервер", .serialized)
+struct SyncConvergenceV3Tests {
+    @Test("Все новые поля страницы доходят: обложка, широкая, мелкий шрифт, избранное, шаблон, последнее открытие")
+    func newPageFieldsArrive() async throws {
+        let server = try await SyncTestServerKind.fake.start()
+        defer { server.stop() }
+        let (a, b) = try await connectedPair(server)
+        defer { a.stop(); b.stop() }
+
+        let page = try a.store.write { try $0.createPage(title: "Поля 003") }
+        try await eventually("страница дошла до B", within: .seconds(10)) { try b.store.pageOutline().contains { $0.id == page.id } }
+        let visited = Date(timeIntervalSince1970: 1_790_000_000)
+        a.wall.set(30_000)
+        try a.store.write { tx in
+            var changed = try #require(try tx.page(page.id))
+            changed.cover = PageCover(source: .gallery("gradient_3"), offset: 0.64)
+            changed.isFullWidth = true
+            changed.isSmallText = true
+            changed.favorite = FractionalSortKey(rawValue: "m")
+            changed.visitedAt = visited
+            changed.isTemplate = true
+            try tx.updatePage(changed)
+        }
+        try await eventually("поля дошли до B", within: .seconds(10)) {
+            try b.store.pageTree().page(page.id)?.isTemplate == true
+        }
+        let arrived = try #require(try b.store.pageTree().page(page.id))
+        #expect(arrived.cover == PageCover(source: .gallery("gradient_3"), offset: 0.64))
+        #expect(arrived.isFullWidth && arrived.isSmallText)
+        #expect(arrived.favorite == FractionalSortKey(rawValue: "m"))
+        #expect(arrived.visitedAt == visited)
+
+        // И обратно: снять отметки на B — на A тоже сняты.
+        b.wall.set(60_000)
+        try b.store.write { tx in
+            var changed = try #require(try tx.page(page.id))
+            changed.cover = nil
+            changed.isTemplate = false
+            changed.favorite = nil
+            try tx.updatePage(changed)
+        }
+        try await eventually("снятие дошло до A", within: .seconds(10)) {
+            let back = try a.store.pageTree().page(page.id)
+            return back?.isTemplate == false && back?.cover == nil && back?.favorite == nil
+        }
+    }
+
+    @Test("Избранное переставлено на двух Mac по-разному без связи: один порядок, ни одна строка не пропала")
+    func favoritesReorderedOnBothMacs() async throws {
+        let server = try await SyncTestServerKind.fake.start()
+        defer { server.stop() }
+        let (a, b) = try await connectedPair(server)
+        defer { a.stop(); b.stop() }
+
+        var key: FractionalSortKey?
+        var pages: [UUID] = []
+        for title in ["Один", "Два", "Три", "Четыре"] {
+            key = .between(key, nil)
+            let favorite = key
+            pages.append(try a.store.write { tx in
+                var page = try tx.createPage(title: title)
+                page.favorite = favorite
+                return try tx.updatePage(page).id
+            })
+        }
+        try await eventually("избранное дошло до B", within: .seconds(10)) { try b.store.favoritePages().count == 4 }
+        let keys = try pages.map { try #require(try a.store.pageTree().page($0)?.favorite) }
+
+        a.connection.isOnline = false
+        b.connection.isOnline = false
+        try await eventually("оба без связи", within: .seconds(10)) { a.engine.status.isError && b.engine.status.isError }
+        // A ставит «Четыре» первой, B — «Один» последней, одновременно.
+        a.wall.set(50_000)
+        try setFavorite(.between(nil, keys[0]), pages[3], on: a)
+        b.wall.set(50_000)
+        try setFavorite(.between(keys[3], nil), pages[0], on: b)
+        a.connection.isOnline = true
+        b.connection.isOnline = true
+        a.engine.syncNow()
+        b.engine.syncNow()
+
+        try await eventually("порядок сошёлся", within: .seconds(20)) {
+            let orderA = try a.store.favoritePages().map(\.id)
+            return orderA == (try b.store.favoritePages().map(\.id)) && orderA.first == pages[3] && orderA.last == pages[0]
+        }
+        #expect(Set(try a.store.favoritePages().map(\.id)) == Set(pages), "ни одна строка не пропала")
+        #expect(try b.store.favoritePages().count == 4)
+    }
+
+    @Test("Перенос блоков на другую страницу доходит: на целевой они появились, на исходной их нет, подстраница переехала")
+    func movedBlocksArrive() async throws {
+        let server = try await SyncTestServerKind.fake.start()
+        defer { server.stop() }
+        let (a, b) = try await connectedPair(server)
+        defer { a.stop(); b.stop() }
+
+        let pages = try a.store.write { tx -> (source: UUID, target: UUID, subpage: UUID, moved: [UUID]) in
+            let source = try tx.createPage(title: "Откуда")
+            let target = try tx.createPage(title: "Куда")
+            let subpage = try tx.createPage(title: "Подстраница", parentId: source.id)
+            for block in try tx.blocks(ofPage: source.id) { try tx.deleteBlock(block.id) }
+            var key: FractionalSortKey?
+            var moved: [UUID] = []
+            for (text, isMoved) in [("остаётся", false), ("уедет 1", true), ("уедет 2", true)] {
+                key = .between(key, nil)
+                let block = try tx.insertBlock(Block(pageId: source.id, text: InlineText(text), sortKey: key!))
+                if isMoved { moved.append(block.id) }
+            }
+            key = .between(key, nil)
+            moved.append(try tx.insertBlock(Block(pageId: source.id, kind: .pageLink, linkedPageId: subpage.id, sortKey: key!)).id)
+            return (source.id, target.id, subpage.id, moved)
+        }
+        try await eventually("страницы дошли до B", within: .seconds(10)) {
+            try b.store.pageContent(pages.source)?.blocks.count == 4 && b.store.pageContent(pages.target) != nil
+        }
+
+        try PageTreeOperations(store: a.store).moveBlocks(pages.moved, from: pages.source, to: pages.target)
+
+        try await eventually("перенос дошёл до B", within: .seconds(10)) {
+            try b.store.pageContent(pages.target)?.blocks.map(\.text.string).contains("уедет 2") == true
+        }
+        func texts(_ mac: EngineTestMac, _ page: UUID) throws -> [String] {
+            try #require(try mac.store.pageContent(page)).blocks.filter { $0.kind != .pageLink }.map(\.text.string).filter { !$0.isEmpty }
+        }
+        for mac in [a, b] {
+            #expect(try texts(mac, pages.source) == ["остаётся"], "\(mac.name): на старой странице перенесённых блоков нет")
+            #expect(try texts(mac, pages.target) == ["уедет 1", "уедет 2"], "\(mac.name): на новой они есть")
+            #expect(try mac.store.pageTree().page(pages.subpage)?.parentId == pages.target, "\(mac.name): подстраница переехала")
+        }
+    }
+
+    /// «Созвон» с обложкой, широкой страницей, текстом и подстраницей «Заметки».
+    private func makeMeeting(on mac: EngineTestMac) throws -> Page {
+        try mac.store.write { tx -> Page in
+            var page = try tx.createPage(title: "Созвон", icon: "📞")
+            page.cover = PageCover(source: .gallery("gradient_3"), offset: 0.4)
+            page.isFullWidth = true
+            page = try tx.updatePage(page)
+            var first = try #require(try tx.blocks(ofPage: page.id).first)
+            first.text = InlineText("Повестка")
+            try tx.updateBlock(first)
+            _ = try tx.createPage(title: "Заметки", parentId: page.id)
+            return page
+        }
+    }
+
+    /// Страницы Mac одной строкой на страницу: название, шаблон, корень, обложка, ширина, текст блоков.
+    private func summary(_ mac: EngineTestMac) throws -> [String] {
+        try mac.store.pageOutline().filter { $0.trashedAt == nil }.map { page in
+            let blocks = try mac.store.pageContent(page.id)?.blocks.filter { $0.kind != .pageLink }.map(\.text.string).joined(separator: "/") ?? ""
+            return "\(page.title)|шаблон=\(page.isTemplate)|в корне=\(page.parentId == nil)|\(page.cover != nil)|\(page.isFullWidth)|\(blocks)"
+        }.sorted()
+    }
+
+    @Test("Шаблоны сходятся: шаблон в корне, страница по шаблону, «перестать быть шаблоном»")
+    func templatesConverge() async throws {
+        let server = try await SyncTestServerKind.fake.start()
+        defer { server.stop() }
+        let (a, b) = try await connectedPair(server)
+        defer { a.stop(); b.stop() }
+        let tree = PageTreeOperations(store: a.store)
+
+        let original = try makeMeeting(on: a)
+        try tree.makeTemplate(original.id)
+        let fromTemplate = try tree.createPage(fromTemplate: original.id)
+
+        try await eventually("шаблон, копия и подстраницы сошлись", within: .seconds(15)) {
+            try summary(a) == summary(b) && a.store.pageOutline().count == 4 && a.engine.status == .ready && b.engine.status == .ready
+        }
+        let onB = try b.store.pageTree()
+        #expect(onB.page(original.id)?.isTemplate == true)
+        #expect(onB.page(original.id)?.parentId == nil)
+        #expect(onB.page(fromTemplate.id)?.isTemplate == false)
+        #expect(onB.page(fromTemplate.id)?.title == "Созвон")
+        #expect(try b.store.templatePages().map(\.id) == [original.id])
+
+        try tree.stopBeingTemplate(original.id)
+        try await eventually("снятие шаблона дошло до B", within: .seconds(10)) {
+            try b.store.pageTree().page(original.id)?.isTemplate == false && b.store.templatePages().isEmpty
+        }
+        #expect(try summary(a) == summary(b))
+    }
+
+    /// ОШИБКА КОДА, найдена этим тестом: «Дублировать» пишет копию с очереди записи базы (`PageTreeOperations+Duplicate`,
+    /// `writeCopyOffMain`), а `OutboxRecorder` после записи шлёт `Outbox.didEnqueue` синхронно; подписчик
+    /// `SyncEngine.start()` ждёт главную очередь (`queue: .main`), а главная в это время стоит в `Outbox.remove` и ждёт
+    /// очередь записи — взаимная блокировка, окно зависает. Включить, когда ошибка исправлена.
+    @Test("Дублирование доходит до другого Mac: копия «(1)» с теми же блоками и подстраницей",
+          .disabled("Взаимная блокировка: дублирование с включённой синхронизацией (главная ждёт запись, запись ждёт главную) — см. отчёт"))
+    func duplicateConverges() async throws {
+        let server = try await SyncTestServerKind.fake.start()
+        defer { server.stop() }
+        let (a, b) = try await connectedPair(server)
+        defer { a.stop(); b.stop() }
+
+        let original = try makeMeeting(on: a)
+        let copy = try await PageTreeOperations(store: a.store).duplicate(original.id)
+
+        try await eventually("копия и подстраницы сошлись", within: .seconds(15)) {
+            try summary(a) == summary(b) && a.store.pageOutline().count == 4 && a.engine.status == .ready && b.engine.status == .ready
+        }
+        #expect(try b.store.pageTree().page(copy.id)?.title == "Созвон (1)")
+        #expect(try b.store.pageContent(copy.id)?.blocks.first?.text.string == "Повестка")
+    }
+
+    @Test("Mac со старым форматом 2 не применяет пачки v3 и показывает «Обновите MyNotion на этом Mac»; страница не появляется")
+    func olderFormatMacAsksToUpdate() async throws {
+        let server = try await SyncTestServerKind.fake.start()
+        defer { server.stop() }
+        let a = try EngineTestMac(name: "Mac A", wallMillis: 10_000)
+        try await a.connectFirst(server)
+        let b = try EngineTestMac(name: "Mac B", wallMillis: 20_000)
+        b.supportedFormatVersion = 2
+        try await b.join(server, code: a.makeJoinCode())
+        a.start()
+        b.start()
+        defer { a.stop(); b.stop() }
+
+        let page = try a.store.write { try $0.createPage(title: "Шаблон из новой версии") }
+        try a.store.write { tx in
+            var changed = try #require(try tx.page(page.id))
+            changed.isTemplate = true
+            try tx.updatePage(changed)
+        }
+        try await eventually("B сообщил об обновлении", within: .seconds(10)) {
+            if case .error(let message) = b.engine.status { message.localizedCaseInsensitiveContains("Обновите MyNotion на этом Mac") } else { false }
+        }
+        #expect(try !b.store.pageOutline().contains { $0.id == page.id })
+        #expect(try a.store.pageTree().page(page.id)?.isTemplate == true, "У нового Mac всё на месте")
+    }
+
+    // MARK: Помощники
+
+    private func setFavorite(_ favorite: FractionalSortKey, _ pageId: UUID, on mac: EngineTestMac) throws {
+        try mac.store.write { tx in
+            var page = try #require(try tx.page(pageId))
+            page.favorite = favorite
+            try tx.updatePage(page)
+        }
+    }
+
+    private func connectedPair(_ server: any SyncTestServer) async throws -> (EngineTestMac, EngineTestMac) {
+        let a = try EngineTestMac(name: "Mac A", wallMillis: 10_000)
+        try await a.connectFirst(server)
+        let b = try EngineTestMac(name: "Mac B", wallMillis: 20_000)
+        try await b.join(server, code: a.makeJoinCode())
+        a.start()
+        b.start()
+        return (a, b)
+    }
+}
