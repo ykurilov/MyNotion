@@ -21,14 +21,16 @@ final class FavoritesRecentsTests: XCTestCase {
         // ☆ у открытой «Гаммы», потом у «Альфы».
         star(app).click()
         XCTAssertTrue(waitForTitles(app, in: "favorites", ["Гамма"]))
-        treeRow(app, "Альфа").click()
+        rowMiddle(app, "Альфа").click()
+        waitForStar(app, page: "Альфа", label: "Добавить в избранное")
         star(app).click()
         XCTAssertTrue(waitForTitles(app, in: "favorites", ["Гамма", "Альфа"]))
 
         // «Добавить в избранное» в меню строки панели — у «Беты».
-        let beta = treeRow(app, "Бета")
-        beta.hover()
-        beta.buttons["page-tree-menu"].click()
+        rowMiddle(app, "Бета").hover()
+        let menuButton = treeRow(app, "Бета").descendants(matching: .any).matching(identifier: "page-tree-menu").firstMatch
+        XCTAssertTrue(menuButton.waitForExistence(timeout: 5), "При наведении на строку нет кнопки «•••»")
+        menuButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
         app.menuItems["Добавить в избранное"].click()
         XCTAssertTrue(waitForTitles(app, in: "favorites", ["Гамма", "Альфа", "Бета"]))
 
@@ -37,11 +39,13 @@ final class FavoritesRecentsTests: XCTestCase {
         XCTAssertTrue(waitForTitles(app, in: "favorites", ["Бета", "Гамма", "Альфа"]))
 
         // ☆ ещё раз у открытой «Альфы» — убрана.
+        rowMiddle(app, "Альфа").click()
+        waitForStar(app, page: "Альфа", label: "Убрать из избранного")
         star(app).click()
         XCTAssertTrue(waitForTitles(app, in: "favorites", ["Бета", "Гамма"]))
 
         // «Бета» в корзину — пропала из избранного; вернули — на своём месте.
-        treeRow(app, "Бета").click()
+        rowMiddle(app, "Бета").click()
         app.outlines["page-tree"].typeKey(.delete, modifierFlags: .command)
         XCTAssertTrue(waitForTitles(app, in: "favorites", ["Гамма"]))
         app.buttons["sidebar-trash"].click()
@@ -69,7 +73,7 @@ final class FavoritesRecentsTests: XCTestCase {
 
         // Каждую страницу держим открытой по 3 с: меньше двух секунд страница в недавние не попадает.
         for title in titles {
-            treeRow(app, title).click()
+            rowMiddle(app, title).click()
             Thread.sleep(forTimeInterval: 3)
         }
         XCTAssertTrue(waitForTitles(app, in: "recents", ["Шесть", "Пять", "Четыре", "Три", "Два"]))
@@ -109,6 +113,23 @@ final class FavoritesRecentsTests: XCTestCase {
         let star = app.buttons["page-favorite-star"]
         XCTAssertTrue(star.waitForExistence(timeout: 5), "В верхней полосе нет ☆")
         return star
+    }
+
+    /// Середина строки — куда кликает человек. Клик по самому элементу строки XCUITest наводит на край (как в PageTreeTests).
+    /// Ждёт, пока открылась страница `page` и ☆ показывает нужное состояние: щелчок раньше времени попал бы по прошлой странице.
+    @MainActor
+    private func waitForStar(_ app: XCUIApplication, page: String, label: String) {
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline {
+            if app.textFields["page-title"].value as? String == page, app.buttons["page-favorite-star"].label == label { return }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        XCTFail("Ждали страницу «\(page)» с ☆ «\(label)», есть «\(app.textFields["page-title"].value as? String ?? "nil")» и «\(app.buttons["page-favorite-star"].label)»")
+    }
+
+    @MainActor
+    private func rowMiddle(_ app: XCUIApplication, _ title: String) -> XCUICoordinate {
+        treeRow(app, title).coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
     }
 
     @MainActor

@@ -5,7 +5,7 @@ import Foundation
 extension PageTreeOperations {
     /// В конец избранного. Уже в избранном — ничего не меняется.
     public func addToFavorites(_ pageId: UUID) throws {
-        let added = try perform { transaction in
+        let added = try performFavoriteChange { transaction in
             guard var page = try transaction.page(pageId) else { throw NotesStoreError.pageNotFound(pageId) }
             guard page.favorite == nil else { return false }
             let lastKey = try transaction.allPages().compactMap(\.favorite).max()
@@ -19,7 +19,7 @@ extension PageTreeOperations {
 
     /// Убрать из избранного. Отмена возвращает прежний ключ, то есть прежнее место.
     public func removeFromFavorites(_ pageId: UUID) throws {
-        let oldKey = try perform { transaction -> FractionalSortKey? in
+        let oldKey = try performFavoriteChange { transaction -> FractionalSortKey? in
             guard var page = try transaction.page(pageId) else { throw NotesStoreError.pageNotFound(pageId) }
             guard let oldKey = page.favorite else { return nil }
             page.favorite = nil
@@ -32,7 +32,7 @@ extension PageTreeOperations {
 
     /// Поставить избранную страницу на место `index` среди остальных видимых избранных (за краем — в конец).
     public func moveFavorite(_ pageId: UUID, toIndex index: Int) throws {
-        let oldKey = try perform { transaction -> FractionalSortKey in
+        let oldKey = try performFavoriteChange { transaction -> FractionalSortKey in
             let all = try transaction.allPages()
             guard let page = all.first(where: { $0.id == pageId }), let oldKey = page.favorite else {
                 throw NotesStoreError.invalidPage("страницы нет в избранном")
@@ -53,9 +53,17 @@ extension PageTreeOperations {
         registerUndo("Перестановка избранного") { try $0.setFavoriteKey(oldKey, of: pageId, actionName: "Перестановка избранного") }
     }
 
+    /// Избранное не меняет содержимое страницы: дерево перечитывается, а открытый документ остаётся как есть
+    /// (иначе ☆ пересоздавала бы редактор и сбрасывала курсор и прокрутку).
+    private func performFavoriteChange<T>(_ body: (NotesTransaction) throws -> T) throws -> T {
+        let result = try perform(notify: false, body)
+        onChange?([])
+        return result
+    }
+
     /// Вернуть точный ключ (отмена и её повтор): место и принадлежность избранному — как были.
     private func setFavoriteKey(_ key: FractionalSortKey?, of pageId: UUID, actionName: String) throws {
-        let oldKey = try perform { transaction -> FractionalSortKey? in
+        let oldKey = try performFavoriteChange { transaction -> FractionalSortKey? in
             guard var page = try transaction.page(pageId) else { throw NotesStoreError.pageNotFound(pageId) }
             let oldKey = page.favorite
             page.favorite = key
