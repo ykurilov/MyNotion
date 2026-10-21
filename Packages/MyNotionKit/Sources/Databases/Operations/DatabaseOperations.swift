@@ -18,7 +18,9 @@ public struct CreatedDatabase: Sendable, Hashable {
 public final class DatabaseOperations {
     public let store: NotesStore
     public weak var undoManager: UndoManager?
-    /// После каждой успешной операции, в том числе отмены: какие страницы она затронула (базы и строки).
+    /// После каждой успешной операции, в том числе отмены: чьи записи страниц или блоков она изменила (новая строка,
+    /// название, корзина, блок базы в хозяине) — дереву и открытым страницам. Ячейки, свойства и виды сюда не входят:
+    /// их ловят открытые таблицы по `didChange`, а страница базы не перечитывается из-за правки своей таблицы.
     public var onChange: ((Set<UUID>) -> Void)?
     /// Отмена не удалась (например, строку уже стёрли навсегда).
     public var onUndoFailure: ((any Error) -> Void)?
@@ -32,14 +34,16 @@ public final class DatabaseOperations {
     @discardableResult
     public func perform<T>(_ actionName: String, _ body: (NotesTransaction) throws -> (T, inverse: @MainActor (DatabaseOperations) throws -> Void)) throws -> T {
         var touched: Set<UUID> = []
+        var pages: Set<UUID> = []
         let (result, inverse) = try store.write { transaction in
             let outcome = try body(transaction)
             touched = Self.touchedPages(transaction.changes)
+            pages = Self.touchedPageRecords(transaction.changes)
             return outcome
         }
         registerUndo(actionName, inverse)
         Self.announce(touched)
-        onChange?(touched)
+        if !pages.isEmpty { onChange?(pages) }
         return result
     }
 
@@ -61,6 +65,18 @@ public final class DatabaseOperations {
             }
         }
         undoManager.setActionName(actionName)
+    }
+
+    /// Страницы, чьи записи или блоки изменились.
+    nonisolated static func touchedPageRecords(_ changes: NotesChanges) -> Set<UUID> {
+        var touched = Set(changes.pages.map(\.page.id)).union(changes.erasedPageIds)
+        for change in changes.blocks {
+            switch change {
+            case .saved(let block, _, _): touched.insert(block.pageId)
+            case .erased(_, let pageId): touched.insert(pageId)
+            }
+        }
+        return touched
     }
 
     nonisolated static func touchedPages(_ changes: NotesChanges) -> Set<UUID> {
@@ -86,7 +102,10 @@ public final class DatabaseOperations {
     @discardableResult
     public func createDatabase(in parentId: UUID?, isInline: Bool, title: String = "", linkAt placement: SubpageLinkPlacement? = nil) throws -> CreatedDatabase {
         let (created, replaced) = try perform(isInline ? "Новая встроенная база" : "Новая база") { transaction -> ((CreatedDatabase, Block?), inverse: @MainActor (DatabaseOperations) throws -> Void) in
-            let page = try transaction.createPage(title: title, parentId: parentId)
+            var page = try transaction.createPage(title: title, parentId: parentId)
+            // Страница-база — во всю ширину окна, как у Notion 7.39 (`notion-db-fullpage-open-from-inline.png`).
+            page.isFullWidth = true
+            page = try transaction.updatePage(page)
             // У страницы-базы своих блоков нет: её содержимое — строки.
             for block in try transaction.blocks(ofPage: page.id) { try transaction.deleteBlock(block.id) }
             try transaction.saveDatabase(DatabaseSchema(pageId: page.id, isInline: isInline))

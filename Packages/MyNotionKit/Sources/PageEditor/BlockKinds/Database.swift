@@ -18,3 +18,14 @@ extension BlockKindDescriptor {
         return descriptor
     }()
 }
+
+extension PageTextView {
+    /// Высота блока базы сменилась (строки добавились, «Загрузить ещё», окно стало выше): переложить его строку,
+    /// не пересоздавая вид (выбор ячейки и правка остаются). Не правка — без ⌘Z.
+    public func relayoutDatabaseBlock(_ blockId: UUID) {
+        invalidateAttachmentLayout(ofBlock: blockId)
+    }
+
+    /// Верх текста страницы под шапкой (название, свойства) — от него база на всю страницу считает свою высоту.
+    public var bodyTop: CGFloat { textContainerInset.height }
+}

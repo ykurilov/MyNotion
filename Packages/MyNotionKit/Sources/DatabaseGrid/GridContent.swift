@@ -53,9 +53,27 @@ public final class GridContent {
 
     public var rowCount: Int { min(rowIds.count, loadLimit ?? .max) }
 
+    private var indexById: [UUID: Int]?
+
+    /// Место строки в виде (среди всех строк запроса, не только показанных).
+    public func rowIndex(of rowId: UUID) -> Int? {
+        if indexById == nil { indexById = Dictionary(rowIds.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first }) }
+        return indexById?[rowId]
+    }
+
+    /// Ширина колонки на время протяжки края (записывается в вид по отпусканию).
+    public func setWidth(_ width: CGFloat, column: Int) {
+        guard columns.indices.contains(column) else { return }
+        columns[column].width = width
+    }
+
+    /// Строка на месте `index` среди показанных.
+    public func rowId(at index: Int) -> UUID? { index >= 0 && index < rowCount ? rowIds[index] : nil }
+
     /// Новый итог запроса вида или новые колонки: прочитанное сбрасывается.
     public func replace(rowIds: [UUID], columns: [GridColumn]? = nil, catalog: DatabaseCatalog? = nil) {
         self.rowIds = rowIds
+        indexById = nil
         if let columns { self.columns = columns }
         if let catalog { self.catalog = catalog }
         chunks = [:]

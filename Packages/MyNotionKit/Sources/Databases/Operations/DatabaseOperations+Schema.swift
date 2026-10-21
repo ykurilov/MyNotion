@@ -210,15 +210,17 @@ extension DatabaseOperations {
     /// Правка, которая может ничего не изменить: без изменений (`nil` вместо обратной операции) шага отмены нет.
     func performChange(_ actionName: String, _ body: (NotesTransaction) throws -> (@MainActor (DatabaseOperations) throws -> Void)?) throws {
         var touched: Set<UUID> = []
+        var pages: Set<UUID> = []
         let inverse = try store.write { transaction in
             let inverse = try body(transaction)
             touched = Self.touchedPages(transaction.changes)
+            pages = Self.touchedPageRecords(transaction.changes)
             return inverse
         }
         guard let inverse else { return }
         registerUndo(actionName, inverse)
         Self.announce(touched)
-        onChange?(touched)
+        if !pages.isEmpty { onChange?(pages) }
     }
 
     nonisolated static func requireProperty(_ id: UUID, _ transaction: NotesTransaction) throws -> DatabaseProperty {

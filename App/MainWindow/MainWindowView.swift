@@ -391,7 +391,7 @@ private struct PagesWindow: View {
                 topBarAccessory: AnyView(FavoriteStarButton(isFavorite: model.isFavorite(document.pageId)) {
                     model.toggleFavorite(document.pageId)
                 }),
-                headerAddons: [PageCoverAddon.factory(model), BacklinksAddon.factory(model)],
+                headerAddons: [PageCoverAddon.factory(model), BacklinksAddon.factory(model), DatabasePageAddon.factory()],
                 scrollPlace: model.scrollPlace,
                 restoringScroll: model.restoringScroll,
                 templates: TemplateSettings(templates: model.templateChoices(forPage: document.pageId),
