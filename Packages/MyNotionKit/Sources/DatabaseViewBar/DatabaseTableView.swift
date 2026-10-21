@@ -41,6 +41,9 @@ public final class DatabaseTableView: NSView, NSTextFieldDelegate {
         self.mode = mode
         grid = DatabaseGridView(controller: controller, scrollsVertically: mode == .page)
         super.init(frame: .zero)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.group)
+        setAccessibilityLabel("База данных")
         setAccessibilityIdentifier(mode == .inline ? "database-inline" : "database-page")
         if mode == .inline {
             titleField.font = .systemFont(ofSize: 20, weight: .bold)
