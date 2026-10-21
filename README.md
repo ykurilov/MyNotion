@@ -156,6 +156,8 @@ scripts/imac/sync-memory-check.sh                # память в покое с
 4. UI-тесты без окна пароля: `sudo automationmodetool enable-automationmode-without-authentication`.
 5. Первый `uitest` — смотреть экран: если macOS спросит, разрешить «UITests-Runner» / Xcode управлять компьютером («Универсальный доступ»), разрешить.
 
+Пузырёк раскладки под курсором (у iMac несколько раскладок) XCUITest принимает за чужой диалог — `uitest` и `sync-live-check` выключают его сами (`TSMLanguageIndicatorEnabled`, без sudo).
+
 Проверка: `scripts/imac/run-on-imac.sh status`. Чего не хватает, сценарии говорят сами — понятным сообщением до сборки. Если UI-тесты из SSH всё равно не идут, запасной прогон через Терминал iMac: `MYNOTION_UITEST_VIA_TERMINAL=1` перед командой (`lock -- 'MYNOTION_UITEST_VIA_TERMINAL=1 zsh scripts/imac/on-imac.sh uitest …'`).
 
 ### Запасной путь: виртуальный Mac
