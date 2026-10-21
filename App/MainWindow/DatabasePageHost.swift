@@ -42,6 +42,7 @@ final class DatabaseBlockViewFactory: BlockViewFactory {
         // Меню колонки, «+» и окно «Свойства» (T039); «•••» шапки — пока окно «Свойства» (настройки вида — US3).
         let menus = PropertyMenuPresenter(store: library.store, operations: model.databaseOperations, databaseId: databaseId,
                                           viewId: controller.viewId)
+        menus.columnRect = { [weak view] propertyId in view?.columnHeaderRect(propertyId) }
         view.onColumnMenu = { property, rect, host in menus.showColumnMenu(for: property.id, below: rect, in: host) }
         view.onAddProperty = { rect, host in menus.showAddProperty(below: rect, in: host) }
         view.onViewSettings = { rect, host in menus.showPropertiesWindow(below: rect, in: host) }

@@ -54,9 +54,14 @@ struct PropertyMenuCommandsTests {
     @Test("Вставить слева и справа — «Свойство» рядом с колонкой; окна пунктов — у презентера")
     func insertBeside() throws {
         let note = try operations.addProperty(to: base.databaseId, name: "Заметка", kind: .text)
-        #expect(try commands.perform(.insertRight, on: note) == .done)
-        #expect(try commands.perform(.insertLeft, on: note) == .done)
+        // Как у Notion: новая колонка сразу открывает окно имени и типа под собой.
+        guard case .configureNew(let right) = try commands.perform(.insertRight, on: note),
+              case .configureNew(let left) = try commands.perform(.insertLeft, on: note) else {
+            Issue.record("вставка не открыла окно новой колонки")
+            return
+        }
         #expect(try names() == ["Название", "Свойство 1", "Заметка", "Свойство"])
+        #expect(try store.write { [try $0.property(right)?.name, try $0.property(left)?.name] } == ["Свойство", "Свойство 1"])
         #expect(try columns().count == 4)
         #expect(try commands.perform(.editProperty, on: note) == .openEditPanel)
         #expect(try commands.perform(.changeType, on: note) == .openTypeList)

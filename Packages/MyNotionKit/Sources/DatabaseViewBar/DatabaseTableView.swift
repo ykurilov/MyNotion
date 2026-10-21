@@ -145,6 +145,11 @@ public final class DatabaseTableView: NSView, NSTextFieldDelegate {
         onHeightChange?()
     }
 
+    /// Рамка шапки колонки свойства в координатах базы (окно новой колонки встаёт под ней).
+    public func columnHeaderRect(_ propertyId: UUID) -> NSRect? {
+        grid.headerRect(of: propertyId).map { convert($0, from: grid) }
+    }
+
     /// Высота базы в странице при ширине `width`; на всю страницу — `available` (сетка листается сама).
     public func fittingHeight(available: CGFloat? = nil) -> CGFloat {
         if mode == .page, let available { return max(available, ViewBarView.height + 140) }

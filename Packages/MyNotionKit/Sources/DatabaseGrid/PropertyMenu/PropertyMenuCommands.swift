@@ -8,6 +8,8 @@ public enum PropertyMenuOutcome: Sendable, Hashable {
     case openEditPanel
     case openTypeList
     case confirmDelete
+    /// Новая колонка («Вставить слева / справа»): под ней окно имени и типа, как у Notion.
+    case configureNew(UUID)
 }
 
 /// Пункты US1 меню колонки и их действия над базой (contracts/database-ui.md, «Меню колонки»): окна рисует
@@ -49,8 +51,8 @@ public struct PropertyMenuCommands {
         case .delete: return .confirmDelete
         case .insertLeft, .insertRight:
             guard let viewId else { return .done }
-            try operations.insertProperty(beside: property.id, side: slot == .insertLeft ? .left : .right, in: viewId)
-            return .done
+            let inserted = try operations.insertProperty(beside: property.id, side: slot == .insertLeft ? .left : .right, in: viewId)
+            return .configureNew(inserted.id)
         case .duplicate:
             try operations.duplicateProperty(property.id, in: viewId)
             return .done

@@ -119,6 +119,12 @@ public final class DatabaseGridView: NSView {
         content.prefetch(around: visibleRows)
     }
 
+    /// Рамка шапки колонки свойства в координатах сетки; колонки нет в виде — `nil`.
+    public func headerRect(of propertyId: UUID) -> NSRect? {
+        guard let column = content.columns.firstIndex(where: { $0.property.id == propertyId }) else { return nil }
+        return convert(headerView.columnRect(column), from: headerView)
+    }
+
     /// Перерисовать строку (уже перечитанную).
     public func redrawRow(_ index: Int) {
         documentView.setNeedsDisplay(rows: index..<index + 1)
