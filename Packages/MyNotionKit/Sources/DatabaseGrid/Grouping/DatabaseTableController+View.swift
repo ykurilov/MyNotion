@@ -50,6 +50,7 @@ extension DatabaseTableController {
         guard viewId != self.viewId else { return }
         self.viewId = viewId
         search = nil
+        searchBase = nil
         extraLoaded = 0
         reload()
     }
@@ -60,7 +61,14 @@ extension DatabaseTableController {
         let next = text == nil ? nil : trimmed ?? ""
         guard next != search else { return }
         search = next
-        reload()
+        if next == nil { searchBase = nil }
+        showRows()
+    }
+
+    /// Поле поиска открыли: прочитать вид и текст строк заранее, чтобы первый символ не ждал чтения.
+    public func prepareSearch() {
+        guard searchBase == nil else { return }
+        searchBase = (try? ViewQuery.searchBase(viewId, in: store)) ?? nil
     }
 
     /// Найденное для подсветки: непустой поиск.

@@ -28,6 +28,8 @@ public final class DatabaseTableController {
     /// Итоги пересчитаны.
     public var onTotalsChange: (() -> Void)?
     var totalsTask: Task<Void, Never>?
+    /// Поиск открыт: вид без поиска и текст строк для поиска (каждый символ сужает их без запроса к базе).
+    var searchBase: (presentation: ViewPresentation, index: ViewSearchIndex)?
 
     /// Строки или колонки сменились — перерисовать (и пересчитать высоту встроенной базы).
     public var onReload: (() -> Void)?
@@ -80,7 +82,21 @@ public final class DatabaseTableController {
 
     /// Перечитать вид: схема, колонки, строки.
     public func reload() {
-        guard let opened = try? ViewQuery.present(viewId, in: store, search: search) else { return }
+        // Правка базы или вида: прочитанное для поиска устарело.
+        searchBase = nil
+        showRows()
+    }
+
+    /// Строки вида заново: с поиском — сужением готового итога, без — запросом.
+    func showRows() {
+        let presented: ViewPresentation?
+        if let search, !search.isEmpty {
+            if searchBase == nil { searchBase = (try? ViewQuery.searchBase(viewId, in: store)) ?? nil }
+            presented = searchBase.map { $0.index.filter($0.presentation, search: search) }
+        } else {
+            presented = try? ViewQuery.present(viewId, in: store)
+        }
+        guard let opened = presented else { return }
         view = opened.view
         catalog = opened.catalog
         content.loadLimit = shownLimit

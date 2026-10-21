@@ -81,6 +81,8 @@ final class DatabaseViewPerformanceTests: XCTestCase {
         var searches: [Double] = []
         let word = Array("отчёт")
         for round in 0..<4 {
+            // Лупа: поле открылось — текст строк для поиска читается заранее.
+            controller.prepareSearch()
             for length in 1...word.count {
                 var start = now()
                 _ = try ViewQuery.present(viewId, in: store, search: String(word.prefix(length)))

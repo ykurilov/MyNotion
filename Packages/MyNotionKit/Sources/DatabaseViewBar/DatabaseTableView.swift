@@ -158,7 +158,10 @@ public final class DatabaseTableView: NSView, NSTextFieldDelegate {
             .create: { [weak self] _ in self?.createRowAtTop() },
             .filter: { [weak self] button in self?.filterPressed(button) },
             .sort: { [weak self] button in self?.command(.sorts, from: button) },
-            .search: { [weak self] _ in self?.viewBar.setSearching(true) },
+            .search: { [weak self] _ in
+                self?.viewBar.setSearching(true)
+                self?.controller.prepareSearch()
+            },
             .settings: { [weak self] button in self?.command(.settings(selectName: false), from: button) },
         ]
         if mode == .inline { actions[.openFullPage] = { [weak self] _ in self?.onOpenAsPage?() } }

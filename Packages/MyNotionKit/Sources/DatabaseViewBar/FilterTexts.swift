@@ -101,7 +101,7 @@ public enum FilterTexts {
         guard needsValue(condition.op) else { return ("\(property.name): \(title(of: condition.op, kind: property.kind).lowercased())", true) }
         guard let value = valueText(condition, catalog: catalog) else { return (property.name, false) }
         let prefix: String = switch condition.op {
-        case .is, .equals: ""
+        case .is, .equals, .isRelativeToToday: ""
         case .contains where property.kind == .multiSelect: ""
         case .isNot: "не "
         default: title(of: condition.op, kind: property.kind).lowercased() + " "

@@ -89,7 +89,7 @@ struct FilterValueModelTests {
         #expect(FilterValues.relative(direction: "next", count: 0, unit: "day") == ["direction": "next", "count": 1, "unit": "day"])
     }
 
-    @Test("Смена условия: значение остаётся, если подходит; «пусто» стирает; «Относительно сегодня» — «Этот неделя»")
+    @Test("Смена условия: значение остаётся, если подходит; «пусто» стирает; «Относительно сегодня» — «Эта неделя»")
     func changingOperator() throws {
         let catalog = try t.catalog()
         let text = FilterCondition(propertyId: t.text.id, op: .contains, value: "отч")
@@ -99,7 +99,7 @@ struct FilterValueModelTests {
         #expect(FilterValues.changingOperator(date, to: .isBefore, catalog: catalog).value == ["relative": "today"])
         #expect(FilterValues.changingOperator(date, to: .isBetween, catalog: catalog).value == .null)
         let relative = FilterValues.changingOperator(date, to: .isRelativeToToday, catalog: catalog)
-        #expect(FilterTexts.chipText(relative, catalog: catalog).text == "Срок: относительно сегодня Этот неделя")
+        #expect(FilterTexts.chipText(relative, catalog: catalog).text == "Срок: Эта неделя")
         #expect(FilterValues.changingOperator(relative, to: .isAfter, catalog: catalog).value == .null)
         let status = FilterCondition(propertyId: t.status.id, op: .is, value: [.string(UUID().uuidString)])
         #expect(FilterValues.changingOperator(status, to: .isInGroup, catalog: catalog).value == .null)

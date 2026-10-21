@@ -307,4 +307,16 @@ struct ViewSettingsOperationsTests {
         try t.quiet.setVisible(t.text.id, false, in: t.base.viewId)
         #expect(try t.shownTitles(search: "отчёт") == ["Отчёт за месяц"])
     }
+
+    @Test("Поиск по готовому тексту строк — те же строки и группы, что запрос SQL")
+    func searchIndexMatchesSQL() throws {
+        try t.quiet.group(by: t.select.id, in: t.base.viewId)
+        let base = try #require(try ViewQuery.searchBase(t.base.viewId, in: t.store, now: ISO8601DateFormatter().date(from: "2026-10-21T12:00:00Z")!))
+        for word in ["отчет", "ОТЧЁТ", "срочно", "согл", "высокий", "яблоко", "нет такого"] {
+            let filtered = base.index.filter(base.presentation, search: word)
+            let sql = try t.present(search: word)
+            #expect(filtered.rowIds == sql.rowIds, "«\(word)»")
+            #expect(filtered.groups?.map(\.rowIds) == sql.groups?.map(\.rowIds), "«\(word)»")
+        }
+    }
 }
