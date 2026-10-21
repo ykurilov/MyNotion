@@ -3,6 +3,8 @@ import NotesCore
 
 /// Страница выгрузки, прочитанная и разобранная, но ещё не записанная в базу.
 struct PlannedPage: Sendable {
+    /// Id страницы в MyNotion: известен до записи, чтобы связи и схема своей выгрузки ссылались на новые страницы.
+    var id = UUID.timeOrdered()
     /// Путь файла от корня выгрузки без расширения, в одной форме Юникода: по нему находятся ссылки.
     let key: String
     let file: URL
@@ -17,6 +19,18 @@ struct PlannedPage: Sendable {
     var unknownCodeLanguages: [String] = []
     var parent: Int?
     var children: [Int] = []
+    /// База (004): CSV вида `Задачи <id>.csv` рядом с полной таблицей — порядок видимых колонок.
+    var viewFile: URL?
+    /// Своя выгрузка MyNotion: `Задачи.mynotion-database.json` рядом с CSV (contracts/sync-v4-and-export.md).
+    var schemaFile: URL?
+    /// Таблица базы целиком: первая строка — названия колонок.
+    var csvRows: [[String]] = []
+    /// Строка базы: названия колонок, чьи строки «Свойство: значение» под названием отрезаются от тела.
+    var propertyNames: Set<String> = []
+    /// Отрезанные строки свойств строки базы: название → значение.
+    var propertyLines: [String: String] = [:]
+    /// Ключ порядка строки своей выгрузки (по схеме); `nil` — по порядку среди соседей.
+    var sortKey: FractionalSortKey?
 }
 
 /// Выгрузка целиком: страницы, верхний уровень и как найти страницу по ссылке.
@@ -24,7 +38,7 @@ struct NotionExportPlan {
     var pages: [PlannedPage] = []
     var roots: [Int] = []
     fileprivate var pageByKey: [String: Int] = [:]
-    fileprivate var pageByNotionId: [String: Int] = [:]
+    fileprivate(set) var pageByNotionId: [String: Int] = [:]
 
     /// Ссылка `path` из страницы `source`: путь от папки её файла.
     func page(atPath path: String, from source: Int) -> Int? {
@@ -58,6 +72,7 @@ struct NotionExportReader {
         var plan = NotionExportPlan()
         plan.roots = try readFolder(root, relative: [], parent: nil, into: &plan)
         guard !plan.pages.isEmpty else { throw NotionImportError.notAnExport }
+        try readTables(of: &plan)
         try parseContents(of: &plan, progress: progress)
         orderChildrenByLinks(in: &plan)
         return plan
@@ -84,14 +99,26 @@ struct NotionExportReader {
         // У базы данных Notion два файла: вид `Задачи <id>.csv` и полная таблица `Задачи <id>_all.csv`. Берётся полная.
         var pageFiles: [(stem: String, file: URL, isTable: Bool)] = []
         var tableIndexByStem: [String: Int] = [:]
+        var viewFiles: [String: URL] = [:]
+        var schemaFiles: [String: URL] = [:]
         for file in files {
             let name = file.lastPathComponent
+            if name.hasSuffix(Self.schemaSuffix) {
+                schemaFiles[Self.normalized(String(name.dropLast(Self.schemaSuffix.count)))] = file
+                continue
+            }
             switch file.pathExtension.lowercased() {
             case "md": pageFiles.append((Self.stem(of: name), file, false))
             case "csv":
                 let stem = Self.stem(of: name)
+                let isAll = name.lowercased().hasSuffix("_all.csv")
                 if let existing = tableIndexByStem[stem] {
-                    if name.lowercased().hasSuffix("_all.csv") { pageFiles[existing].file = file }
+                    if isAll {
+                        viewFiles[stem] = pageFiles[existing].file
+                        pageFiles[existing].file = file
+                    } else {
+                        viewFiles[stem] = file
+                    }
                 } else {
                     tableIndexByStem[stem] = pageFiles.count
                     pageFiles.append((stem, file, true))
@@ -107,7 +134,12 @@ struct NotionExportReader {
             let title = Self.title(fromStem: stem)
             let index = plan.pages.count
             let key = Self.normalized((relative + [stem]).joined(separator: "/"))
-            plan.pages.append(PlannedPage(key: key, file: file, isTable: isTable, title: title, parent: parent))
+            var page = PlannedPage(key: key, file: file, isTable: isTable, title: title, parent: parent)
+            if isTable {
+                page.viewFile = viewFiles[stem]
+                page.schemaFile = schemaFiles[Self.normalized(stem)]
+            }
+            plan.pages.append(page)
             plan.pageByKey[key] = index
             if let id = Self.notionId(in: stem) { plan.pageByNotionId[id] = index }
             result.append(index)
@@ -125,6 +157,24 @@ struct NotionExportReader {
             result += try readFolder(subfolder, relative: relative + [subfolder.lastPathComponent], parent: parent, into: &plan)
         }
         return result
+    }
+
+    // MARK: Таблицы баз
+
+    /// Таблицы баз читаются до разбора страниц: их строкам нужны названия колонок, чтобы отрезать строки свойств.
+    private func readTables(of plan: inout NotionExportPlan) throws {
+        for index in plan.pages.indices where plan.pages[index].isTable {
+            try Task.checkCancellation()
+            let file = plan.pages[index].file
+            guard let text = try? String(contentsOf: file, encoding: .utf8) else {
+                throw NotionImportError.cannotRead("файл «\(file.lastPathComponent)» не читается")
+            }
+            plan.pages[index].csvRows = NotionCSV.rows(text)
+            let names = Set((plan.pages[index].csvRows.first ?? []).dropFirst().map { $0.trimmingCharacters(in: .whitespaces) })
+            for child in plan.pages[index].children where !plan.pages[child].isTable {
+                plan.pages[child].propertyNames = names
+            }
+        }
     }
 
     // MARK: Содержимое
@@ -145,25 +195,25 @@ struct NotionExportReader {
     }
 
     private static func parse(_ page: PlannedPage) throws -> PlannedPage {
+        // Таблица — база (004): её прочитал `readTables`, строки и свойства собирает `NotionDatabaseReader`.
+        guard !page.isTable else { return page }
         var page = page
-        let text: String
+        var text: String
         do {
             text = try String(contentsOf: page.file, encoding: .utf8)
         } catch {
             throw NotionImportError.cannotRead("файл «\(page.file.lastPathComponent)» не читается")
         }
-        if page.isTable {
-            page.blocks = NotionCSV.paragraphs(text).map { ParsedBlock(kind: .paragraph, text: InlineText($0)) }
-            page.simplifications = [.table: 1]
-        } else {
-            let parsed = NotionMarkdownParser().parse(text)
-            if let title = parsed.title { page.title = title }
-            page.icon = parsed.icon
-            page.cover = parsed.cover
-            page.blocks = parsed.blocks
-            page.simplifications = parsed.simplifications
-            page.unknownCodeLanguages = parsed.unknownCodeLanguages
+        if !page.propertyNames.isEmpty {
+            (text, page.propertyLines) = RowPropertyLines.cut(from: text, names: page.propertyNames)
         }
+        let parsed = NotionMarkdownParser().parse(text)
+        if let title = parsed.title { page.title = title }
+        page.icon = parsed.icon
+        page.cover = parsed.cover
+        page.blocks = parsed.blocks
+        page.simplifications = parsed.simplifications
+        page.unknownCodeLanguages = parsed.unknownCodeLanguages
         return page
     }
 
@@ -189,6 +239,9 @@ struct NotionExportReader {
     }
 
     // MARK: Имена
+
+    /// Схема базы своей выгрузки рядом с её CSV.
+    static let schemaSuffix = ".mynotion-database.json"
 
     static func normalized(_ text: String) -> String {
         text.precomposedStringWithCanonicalMapping

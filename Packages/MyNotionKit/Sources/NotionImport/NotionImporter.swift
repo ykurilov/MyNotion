@@ -42,15 +42,18 @@ public struct NotionImportReport: Sendable, Equatable {
     public var simplified: [SimplifiedPage]
     /// Потери самого формата выгрузки — не по страницам.
     public var notices: [String]
+    /// Базы (004): по базе — строки, угаданные типы, что перенесено не целиком.
+    public var databases: [DatabaseImportSummary]
 
     public init(rootPageId: UUID, rootTitle: String, pageCount: Int, blockCount: Int, simplified: [SimplifiedPage],
-                notices: [String] = [Self.markdownLossNotice, Self.coverLossNotice]) {
+                notices: [String] = [Self.markdownLossNotice, Self.coverLossNotice], databases: [DatabaseImportSummary] = []) {
         self.rootPageId = rootPageId
         self.rootTitle = rootTitle
         self.pageCount = pageCount
         self.blockCount = blockCount
         self.simplified = simplified
         self.notices = notices
+        self.databases = databases
     }
 }
 
@@ -103,6 +106,10 @@ public struct NotionImporter: Sendable {
     /// Сколько блоков пишется одной транзакцией: короткие транзакции не держат базу, и правка открытой страницы
     /// не ждёт конца импорта. Страница целиком всегда в одной транзакции.
     var maxBlocksPerTransaction = 1_000
+    /// Сколько связей строк баз пишется одной транзакцией.
+    var maxLinksPerTransaction = 2_000
+    /// Для тестов: упасть после стольких записанных строк баз (откат ветки с базами).
+    var failAfterDatabaseRows: Int?
 
     public init(store: NotesStore, now: @escaping @Sendable () -> Date = { Date() }, attachments: (any NotionAttachmentImporting)? = nil) {
         self.store = store
@@ -126,11 +133,12 @@ public struct NotionImporter: Sendable {
         var plan = try NotionExportReader().read(export.contentRoot) { done, total in
             progress?(NotionImportProgress(phase: .reading, done: done, total: total))
         }
+        let databases = try NotionDatabaseReader().read(&plan)
         try copyAttachments(in: &plan, root: export.contentRoot)
         let log = ImportRunLog(store: store)
         let startedAt = now()
         let rootTitle = "Импорт из Notion — " + Self.dateTitle(startedAt)
-        let pageIds = plan.pages.map { _ in UUID.timeOrdered() }
+        let pageIds = plan.pages.map(\.id)
         let rootId = UUID.timeOrdered()
         let runId = UUID.timeOrdered()
 
@@ -152,13 +160,18 @@ public struct NotionImporter: Sendable {
         }
 
         do {
-            let written = try writePages(of: plan, ids: pageIds, rootId: rootId, startedAt: startedAt, progress: progress)
+            let written = try writePages(of: plan, databases: databases, ids: pageIds, rootId: rootId, startedAt: startedAt,
+                                         progress: progress)
+            try writeDatabaseLinks(databases, ids: pageIds)
             let simplified = Self.simplifiedPages(in: plan)
             try store.write { transaction in
                 try log.finish(id: runId, at: now(), importedPages: plan.pages.count, simplified: simplified, in: transaction)
             }
+            var notices = [NotionImportReport.markdownLossNotice, NotionImportReport.coverLossNotice]
+            if databases.values.contains(where: \.isFromNotion) { notices += NotionDatabaseReader.notionNotices }
+            let summaries = Self.databaseOrder(in: plan).compactMap { databases[$0]?.summary }
             return NotionImportReport(rootPageId: rootId, rootTitle: rootTitle, pageCount: plan.pages.count,
-                                      blockCount: written, simplified: simplified)
+                                      blockCount: written, simplified: simplified, notices: notices, databases: summaries)
         } catch {
             if rollsBackOnFailure {
                 // Не откатилось (например, диск всё ещё полон) — журнал остаётся running, и ветку сотрёт следующий запуск.
@@ -247,8 +260,10 @@ public struct NotionImporter: Sendable {
     // MARK: Запись
 
     /// Страницы в порядке дерева (родитель раньше подстраниц), пачками не больше `maxBlocksPerTransaction` блоков.
-    private func writePages(of plan: NotionExportPlan, ids: [UUID], rootId: UUID, startedAt: Date,
+    private func writePages(of plan: NotionExportPlan, databases: [Int: PlannedDatabase], ids: [UUID], rootId: UUID, startedAt: Date,
                             progress: (@Sendable (NotionImportProgress) -> Void)?) throws -> Int {
+        var rowsByPage: [Int: PlannedRow] = [:]
+        for database in databases.values { for row in database.rows { rowsByPage[row.pageIndex] = row } }
         var order: [Int] = []
         func visit(_ indices: [Int]) {
             for index in indices {
@@ -264,38 +279,128 @@ public struct NotionImporter: Sendable {
             var key: FractionalSortKey?
             for index in siblings {
                 key = .between(key, nil)
-                sortKeys[index] = key
+                sortKeys[index] = plan.pages[index].sortKey ?? key
             }
         }
 
         var written = 0
+        var writtenRows = 0
         var position = 0
         while position < order.count {
             try Task.checkCancellation()
             var batch: [(Int, [Block])] = []
-            var batchBlocks = 0
+            var batchWeight = 0
             while position < order.count {
                 let index = order[position]
-                let blocks = Self.blocks(for: index, in: plan, ids: ids)
-                if !batch.isEmpty, batchBlocks + blocks.count > maxBlocksPerTransaction { break }
+                let blocks = Self.blocks(for: index, in: plan, databases: databases, ids: ids)
+                // Ячейки строки весят как блоки: транзакция с базой не длиннее обычной.
+                let weight = blocks.count + (rowsByPage[index]?.cells.count ?? 0)
+                if !batch.isEmpty, batchWeight + weight > maxBlocksPerTransaction { break }
                 batch.append((index, blocks))
-                batchBlocks += blocks.count
+                batchWeight += weight
                 position += 1
             }
             try store.write { transaction in
                 for (index, blocks) in batch {
                     let planned = plan.pages[index]
+                    let row = rowsByPage[index]
+                    // Ячейки — раньше страницы: запись ячейки сдвигает «изменено» строки, а оно — из выгрузки.
+                    for cell in row?.cells ?? [] { try transaction.setCell(rowId: ids[index], propertyId: cell.propertyId, value: cell.value) }
                     try transaction.insertPage(Page(id: ids[index], title: planned.title, icon: planned.icon,
                                                     parentId: planned.parent.map { ids[$0] } ?? rootId,
-                                                    sortKey: sortKeys[index]!, createdAt: startedAt, updatedAt: startedAt,
-                                                    cover: Self.cover(of: planned)))
+                                                    sortKey: sortKeys[index]!, createdAt: row?.createdAt ?? startedAt,
+                                                    updatedAt: row?.updatedAt ?? row?.createdAt ?? startedAt,
+                                                    cover: Self.cover(of: planned), isTemplate: row?.isTemplate ?? false))
+                    if let database = databases[index] { try Self.writeSchema(of: database, in: transaction) }
                     for block in blocks { try transaction.insertBlock(block) }
+                    if row != nil {
+                        writtenRows += 1
+                        if let limit = failAfterDatabaseRows, writtenRows >= limit { throw NotionImportError.cannotWrite("проверка отката") }
+                    }
                 }
             }
-            written += batchBlocks
+            written += batch.reduce(0) { $0 + $1.1.count }
             progress?(NotionImportProgress(phase: .writing, done: position, total: order.count))
         }
         return written
+    }
+
+    // MARK: Базы
+
+    /// Схема базы — в той же транзакции, что её страница: база, свойства, варианты, виды.
+    private static func writeSchema(of database: PlannedDatabase, in transaction: NotesTransaction) throws {
+        var schema = database.schema
+        // Шаблон по умолчанию — когда шаблоны уже записаны (`writeDatabaseLinks`).
+        schema.defaultTemplateId = nil
+        try transaction.saveDatabase(schema)
+        for property in database.properties { try transaction.saveProperty(property) }
+        for option in database.options { try transaction.saveOption(option) }
+        for view in database.views { try transaction.saveView(view) }
+    }
+
+    /// Второй проход, когда все строки записаны: связи, ручной порядок строк в видах, шаблон по умолчанию.
+    /// Связь пары хранится у свойства с меньшим id (data-model.md, `db_relation_link`): сторона с большим id пишет
+    /// свои связи, только если у меньшей их в плане нет (пара ведёт на базу вне выгрузки).
+    private func writeDatabaseLinks(_ databases: [Int: PlannedDatabase], ids: [UUID]) throws {
+        let planned = Set(databases.values.flatMap { database in
+            database.rows.flatMap { $0.relations.map(\.propertyId) }
+        })
+        let properties = Dictionary(databases.values.flatMap(\.properties).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var links: [RelationLink] = []
+        for database in databases.values.sorted(by: { $0.pageIndex < $1.pageIndex }) {
+            for row in database.rows {
+                let rowId = ids[row.pageIndex]
+                for (propertyId, targets) in row.relations {
+                    let paired = properties[propertyId]?.config["pairedPropertyId"]?.string.flatMap(UUID.init(uuidString:))
+                    if let paired, paired < propertyId {
+                        guard !planned.contains(paired) else { continue }
+                        for target in targets {
+                            links.append(RelationLink(propertyId: paired, rowId: target, targetRowId: rowId, sortKey: .between(nil, nil)))
+                        }
+                        continue
+                    }
+                    var key: FractionalSortKey?
+                    for target in targets {
+                        key = .between(key, nil)
+                        links.append(RelationLink(propertyId: propertyId, rowId: rowId, targetRowId: target, sortKey: key!))
+                    }
+                }
+            }
+        }
+        var position = 0
+        while position < links.count {
+            try Task.checkCancellation()
+            let batch = links[position..<min(position + maxLinksPerTransaction, links.count)]
+            try store.write { transaction in
+                for link in batch where try transaction.page(link.targetRowId) != nil && transaction.page(link.rowId) != nil {
+                    try transaction.saveRelationLink(link)
+                }
+            }
+            position += batch.count
+        }
+        let finishing = databases.values.filter { !$0.rowOrders.isEmpty || $0.schema.defaultTemplateId != nil }
+        guard !finishing.isEmpty else { return }
+        try store.write { transaction in
+            for database in finishing {
+                for order in database.rowOrders { try transaction.setRowOrder(viewId: order.viewId, rowId: order.rowId, sortKey: order.sortKey) }
+                if let template = database.schema.defaultTemplateId, try transaction.page(template) != nil {
+                    try transaction.saveDatabase(database.schema)
+                }
+            }
+        }
+    }
+
+    /// Базы в порядке дерева выгрузки — для отчёта.
+    private static func databaseOrder(in plan: NotionExportPlan) -> [Int] {
+        var result: [Int] = []
+        func visit(_ indices: [Int]) {
+            for index in indices {
+                if plan.pages[index].isTable { result.append(index) }
+                visit(plan.pages[index].children)
+            }
+        }
+        visit(plan.roots)
+        return result
     }
 
     /// Обложка страницы из комментария своей выгрузки; картинка — только скопированная.
@@ -309,9 +414,11 @@ public struct NotionImporter: Sendable {
 
     /// Блоки страницы для базы: ссылки на найденные страницы — pageLink, на ненайденные — абзац с названием;
     /// подстраницы без ссылки в тексте получают ссылку в конце (подстраница и ссылка на неё — пара, data-model.md).
-    private static func blocks(for index: Int, in plan: NotionExportPlan, ids: [UUID]) -> [Block] {
+    private static func blocks(for index: Int, in plan: NotionExportPlan, databases: [Int: PlannedDatabase], ids: [UUID]) -> [Block] {
         let page = plan.pages[index]
         let pageId = ids[index]
+        // У страницы-базы своих блоков нет: её содержимое — строки (data-model.md).
+        if databases[index] != nil { return [] }
         var result: [Block] = []
         var sortKey: FractionalSortKey?
         var linkedChildren: Set<Int> = []
@@ -353,7 +460,9 @@ public struct NotionImporter: Sendable {
             }
             if let target = NotionExportReader.linkedPage(block, from: index, in: plan) {
                 if page.children.contains(target) { linkedChildren.insert(target) }
-                append(.pageLink, link: ids[target])
+                // Встроенная база — блок `database` на месте ссылки на её CSV.
+                let isInline = databases[target]?.schema.isInline == true && plan.pages[target].parent == index
+                append(isInline ? .database : .pageLink, link: ids[target])
             } else if block.kind == .pageLink {
                 append(.paragraph, block.text)
             } else if let url = block.standaloneURL, block.kind == .paragraph, ["http", "https"].contains(url.scheme?.lowercased()) {
