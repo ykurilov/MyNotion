@@ -100,6 +100,7 @@ public final class DatabaseGridView: NSView {
         scrollView.frame = bounds
         documentView.updateSize(minimumWidth: scrollView.contentSize.width)
         headerView.frame = NSRect(x: 0, y: 0, width: documentView.frame.width, height: Metrics.DatabaseGrid.headerHeight)
+        updateStickyHeader()
         editor?.frame = documentView.cellRect(row: editor?.position.row ?? 0, column: editor?.position.column ?? 0)
     }
 
@@ -117,6 +118,12 @@ public final class DatabaseGridView: NSView {
         headerView.needsDisplay = true
         hoverControls.update()
         content.prefetch(around: visibleRows)
+    }
+
+    /// Рамка шапки колонки свойства в координатах сетки; колонки нет в виде — `nil`.
+    public func headerRect(of propertyId: UUID) -> NSRect? {
+        guard let column = content.columns.firstIndex(where: { $0.property.id == propertyId }) else { return nil }
+        return convert(headerView.columnRect(column), from: headerView)
     }
 
     /// Перерисовать строку (уже перечитанную).
@@ -149,14 +156,33 @@ public final class DatabaseGridView: NSView {
         scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 
-    /// Ячейка в видимой части: своя прокрутка и прокрутка страницы.
+    /// Ячейка в видимой части: своя прокрутка (вбок) и прокрутка страницы (вниз и вверх — с запасом под липкую шапку).
     func reveal(_ position: CellPosition) {
-        documentView.scrollToVisible(documentView.cellRect(row: position.row, column: position.column).insetBy(dx: 0, dy: -4))
+        let cell = documentView.cellRect(row: position.row, column: position.column)
+        documentView.scrollToVisible(cell.insetBy(dx: 0, dy: -4))
+        if let outer = scrollView.enclosingScrollView?.documentView {
+            let rect = outer.convert(cell, from: documentView)
+            outer.scrollToVisible(NSRect(x: rect.minX, y: rect.minY - Metrics.DatabaseGrid.headerHeight - 4, width: 1,
+                                         height: rect.height + Metrics.DatabaseGrid.headerHeight + 8))
+        }
+    }
+
+    /// Липкая шапка (Notion): таблица в прокрутке страницы ушла верхом за край — шапка колонок держится у верха видимой
+    /// части, пока видна хоть одна строка.
+    func updateStickyHeader() {
+        guard !scrollsVertically else { return }
+        let top = max(0, visibleRect.minY)
+        let limit = max(0, documentView.rowsHeight - 2 * Metrics.DatabaseGrid.headerHeight)
+        let y = visibleRect.isEmpty ? 0 : min(top, limit)
+        if headerView.frame.minY != y {
+            headerView.setFrameOrigin(NSPoint(x: headerView.frame.minX, y: y))
+        }
     }
 
     @objc private func visibleAreaChanged() {
         content.prefetch(around: visibleRows)
         hoverControls.update()
+        updateStickyHeader()
     }
 
     /// Прокрутка страницы (встроенная база): дочитать строки, которые она открыла.

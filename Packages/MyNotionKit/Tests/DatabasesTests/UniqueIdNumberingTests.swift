@@ -61,4 +61,26 @@ struct UniqueIdNumberingTests {
                                       to: base.databaseId, in: base.viewId)
         #expect(try number(row, id.id) == 1)
     }
+
+    @Test("Префикс ID (Notion «Prefix»): настройка свойства, номер показывается «ЗАД-1»; ⌘Z возвращает прежний")
+    func prefix() throws {
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        let id = try operations.addProperty(to: base.databaseId, name: "ID", kind: .uniqueId)
+        let row = try operations.addRow(to: base.databaseId, in: base.viewId)
+        operations.undoManager = undo
+        undo.beginUndoGrouping()
+        try operations.setPropertyConfig(id.id, ["prefix": "ЗАД"])
+        undo.endUndoGrouping()
+        func shown() throws -> String {
+            let catalog = try DatabaseCatalog.read(base.databaseId, in: store)
+            let property = try #require(catalog.propertiesById[id.id])
+            return PropertyTypes.type(for: .uniqueId).displayText(try store.write { try $0.cell(rowId: row, propertyId: id.id)?.value },
+                                                                   in: catalog.context(for: property))
+        }
+        #expect(try shown() == "ЗАД-1")
+        undo.undo()
+        #expect(try shown() == "1")
+    }
 }
+

@@ -21,6 +21,8 @@ public final class PropertyMenuPresenter {
 
     /// Где встаёт панель «Изменить свойство» из меню колонки; `nil` — вид, у которого открыто меню.
     public weak var panelHost: NSView?
+    /// Рамка шапки колонки свойства в координатах вида, где открыто меню: под ней — окно новой колонки.
+    public var columnRect: ((UUID) -> NSRect?)?
 
     public init(store: NotesStore, operations: DatabaseOperations, databaseId: UUID, viewId: UUID?) {
         commands = PropertyMenuCommands(store: store, operations: operations, databaseId: databaseId, viewId: viewId)
@@ -70,6 +72,10 @@ public final class PropertyMenuPresenter {
         case .confirmDelete:
             menuCard.close()
             confirmDelete(property)
+        case .configureNew(let newId):
+            menuCard.close()
+            guard let view = anchorView, let rect = columnRect?(newId), let created = self.property(newId) else { return }
+            showNewColumn(created, below: rect, in: view)
         case .done:
             menuCard.close()
         }
@@ -105,15 +111,36 @@ public final class PropertyMenuPresenter {
     /// «+» в шапке и «+ Добавить свойство» страницы строки: поле «Название свойства…» и типы в две колонки с поиском;
     /// выбор типа создаёт свойство (колонка — в конце видов) и закрывает окно.
     public func showAddProperty(below rect: NSRect, in view: NSView) {
+        showNameAndType(below: rect, in: view, name: "", current: nil) { [weak self] name, kind in
+            guard let self, let kind else { return }
+            Self.attempt { try self.commands.addProperty(named: name, kind: kind) }
+        }
+    }
+
+    /// «Вставить слева / справа»: под новой колонкой — её имя (выделено) и типы; выбор типа меняет его, Enter без
+    /// выбора оставляет «Текст».
+    func showNewColumn(_ property: DatabaseProperty, below rect: NSRect, in view: NSView) {
+        showNameAndType(below: rect, in: view, name: property.name, current: property.kind) { [weak self] name, kind in
+            guard let self, let current = self.property(property.id) else { return }
+            Self.attempt { try self.commands.rename(current, to: name) }
+            if let kind, kind != current.kind, let renamed = self.property(property.id) {
+                Self.attempt { try self.commands.changeType(renamed, to: kind) }
+            }
+        }
+    }
+
+    /// Окно «имя и тип»: `finish` получает имя и выбранный тип (`nil` — Enter без выбора у существующего свойства).
+    private func showNameAndType(below rect: NSRect, in view: NSView, name initialName: String, current: PropertyKind?,
+                                 finish: @escaping (String, PropertyKind?) -> Void) {
         anchorView = view
-        let name = PropertyPopupField(text: "", placeholder: "Название свойства…", icon: "face.smiling", identifier: "add-property-name")
+        let name = PropertyPopupField(text: initialName, placeholder: "Название свойства…", icon: "face.smiling", identifier: "add-property-name")
         let commands = commands
-        let chooser = PropertyTypeChooserView(columns: 2, current: nil, caption: "Тип") { query in
+        let chooser = PropertyTypeChooserView(columns: 2, current: current, caption: "Тип") { query in
             (try? commands.typeRows(matching: query)) ?? []
         }
         chooser.list.onChoose = { [weak self, weak name] kind in
             guard let self else { return }
-            Self.attempt { try self.commands.addProperty(named: name?.text ?? "", kind: kind) }
+            finish(name?.text ?? "", kind)
             self.menuCard.close()
         }
         chooser.onCancel = { [weak self] in self?.menuCard.close() }
@@ -124,8 +151,8 @@ public final class PropertyMenuPresenter {
                 self.menuCard.close()
                 return true
             case #selector(NSResponder.insertNewline(_:)):
-                // Enter без выбранного типа — «Текст», как первый в списке.
-                if !chooser.list.handle(command) { chooser.list.onChoose?(.text) }
+                // Enter без выбранного типа — «Текст» у нового, прежний тип у вставленной колонки.
+                if !chooser.list.handle(command) { chooser.list.onChoose?(current ?? .text) }
                 return true
             default:
                 return chooser.list.handle(command)
@@ -210,6 +237,12 @@ public final class PropertyMenuPresenter {
             Self.attempt { try self.commands.delete(property) }
         }
         let size = NSSize(width: PropertyPopupMetrics.confirmWidth, height: confirm.fittingHeight)
+        // Под вопросом окно затемнено, как у Notion; щелчок по затемнению — «Отмена».
+        let dimming = PopupDimmingView(frame: content.bounds)
+        dimming.autoresizingMask = [.width, .height]
+        dimming.onClick = { [weak self] in self?.confirmCard.close() }
+        content.addSubview(dimming)
+        confirmCard.onClose = { [weak dimming] in dimming?.removeFromSuperview() }
         let point = NSPoint(x: content.bounds.midX - size.width / 2, y: content.bounds.midY + size.height / 2)
         confirmCard.show(confirm, size: size, from: content.convert(point, to: nil), in: content)
         confirm.window?.makeFirstResponder(confirm)
@@ -336,4 +369,25 @@ final class EditPropertyPanel: NSView {
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
     }
+}
+
+/// Затемнение окна под вопросом (Notion 7.39, `notion-delete-property-confirm.png`).
+@MainActor
+final class PopupDimmingView: NSView {
+    var onClick: (() -> Void)?
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        setAccessibilityIdentifier("popup-dimming")
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
+
+    override func draw(_ dirtyRect: NSRect) {
+        Palette.modalBackdrop.setFill()
+        dirtyRect.fill()
+    }
+
+    override func mouseDown(with event: NSEvent) { onClick?() }
 }

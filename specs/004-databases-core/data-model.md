@@ -54,7 +54,7 @@
 | relation | `targetDatabaseId`, `limit`: `one` \| `none`, `pairedPropertyId?` (ответное свойство в той базе) |
 | rollup | `relationPropertyId`, `targetPropertyId`, `calculation` (contracts/property-types.md) , `numberFormat?`, `dateFormat?` |
 | formula | `expression` (текст формулы с `prop("…")` по id внутри, показ — по именам), `numberFormat?`, `dateFormat?` |
-| uniqueId | `prefix?` (только если Notion 7.39 его даёт — проверяет US1) |
+| uniqueId | `prefix?` — текст перед номером («ЗАД-12»), пусто — без префикса (Notion «Prefix», notion.com/help/unique-id) |
 | остальные | `{}` |
 
 ## db_select_option — вариант выбора, множественного выбора и статуса
