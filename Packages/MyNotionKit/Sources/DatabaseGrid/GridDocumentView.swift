@@ -301,6 +301,7 @@ final class GridDocumentView: NSView, NSMenuItemValidation {
             openButton.isHidden = true
         }
         if let hoverCell, grid?.editor == nil, let column = content.columns[safe: hoverCell.column],
+           Self.linkKinds.contains(column.property.kind),
            let action = GridCellTypes.type(for: column.property.kind).hoverAction(cellValue(hoverCell)) {
             let cell = cellRect(row: hoverCell.row, column: hoverCell.column)
             linkButton.action = #selector(openHoveredLink)
@@ -311,6 +312,9 @@ final class GridDocumentView: NSView, NSMenuItemValidation {
             linkButton.isHidden = true
         }
     }
+
+    /// Типы с кнопкой при наведении: значение читается, только когда мышь над такой ячейкой.
+    static let linkKinds: Set<PropertyKind> = [.url, .email, .phone]
 
     private func cellValue(_ position: CellPosition) -> JSONValue? {
         guard let rowId = content.rowId(at: position.row), let property = content.columns[safe: position.column]?.property else { return nil }
