@@ -5,7 +5,7 @@ import XCTest
 /// Два Mac вживую (quickstart.md, US5): два экземпляра MyNotion со своими базами против локального сервера синхронизации.
 /// Первый подключается токеном устройства и пишет код подключения, второй подключается этим кодом.
 /// Правка в открытой странице одного появляется в открытой странице другого не позже чем через 10 с (SC-007).
-/// Запускается сценарием `scripts/vm/sync-live-check.sh`: он поднимает сервер в виртуальном Mac и кладёт
+/// Запускается сценарием `scripts/imac/sync-live-check.sh` (запасной — `scripts/vm/…`): он поднимает сервер на iMac и кладёт
 /// в `/tmp/mn-sync-live` адрес сервера, токен первого устройства и копию приложения со своим bundle id.
 final class SyncTwoMacsUITests: XCTestCase {
     private let live = URL(fileURLWithPath: "/tmp/mn-sync-live", isDirectory: true)
@@ -13,7 +13,7 @@ final class SyncTwoMacsUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         guard FileManager.default.fileExists(atPath: live.appendingPathComponent("server-url").path) else {
-            throw XCTSkip("Нет локального сервера: запустите scripts/vm/sync-live-check.sh")
+            throw XCTSkip("Нет локального сервера: запустите scripts/imac/sync-live-check.sh")
         }
     }
 
