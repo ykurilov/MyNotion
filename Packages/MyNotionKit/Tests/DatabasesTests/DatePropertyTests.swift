@@ -62,14 +62,18 @@ struct DatePropertyTests {
     @Test("Ввод текстом: «21.10.2026», «21.10.2026 15:15», «October 21, 2026»; мусор — не принимается")
     func typedDate() {
         var value = DateCellValue(day: day(2026, 1, 1), timeZone: zone)
-        #expect(value.type("21.10.2026", forEnd: false))
+        let first = value.type("21.10.2026", forEnd: false)
+        #expect(first)
         #expect(value.json["start"] == "2026-10-21")
-        #expect(value.type("21.10.2026 15:15", forEnd: false))
+        let second = value.type("21.10.2026 15:15", forEnd: false)
+        #expect(second)
         #expect(value.json["start"] == "2026-10-21T15:15")
         #expect(value.json["hasTime"] == true)
-        #expect(value.type("October 22, 2026", forEnd: false))
+        let third = value.type("October 22, 2026", forEnd: false)
+        #expect(third)
         #expect(value.json["start"] == "2026-10-22T15:15", "без времени в тексте — время прежнее")
-        #expect(value.type("завтра в обед", forEnd: false) == false)
+        let garbage = value.type("завтра в обед", forEnd: false)
+        #expect(garbage == false)
     }
 
     @Test("Календарь — 6 недель с понедельника; октябрь 2026 начинается с 28 сентября")

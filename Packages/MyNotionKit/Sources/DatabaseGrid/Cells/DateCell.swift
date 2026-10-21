@@ -9,8 +9,6 @@ import VisualStyle
 @MainActor
 final class DateCellView: NSView, CellPopupContent {
     nonisolated static let factory = CellPopupFactory(kinds: [.date]) { DateCellView(context: $0) }
-    /// Первое «Напомнить» — спросить разрешение macOS на уведомления (ставит приложение, `ReminderNotifications`).
-    static var requestReminderPermission: (@MainActor () -> Void)?
 
     static let width: CGFloat = 264
 
@@ -124,7 +122,7 @@ final class DateCellView: NSView, CellPopupContent {
     // MARK: Правка
 
     /// Изменить значение и сразу записать.
-    private func edit(_ change: (inout DateCellValue) -> Void) {
+    func edit(_ change: (inout DateCellValue) -> Void) {
         var next = value ?? DateCellValue(day: DateParts(Date(), calendar: calendar), timeZone: TimeZone.current.identifier)
         change(&next)
         write(next)
@@ -194,7 +192,7 @@ final class DateCellView: NSView, CellPopupContent {
 
     // MARK: Подменю
 
-    private func showFormats() {
+    func showFormats() {
         guard let property = context.freshContext()?.property else { return }
         let current = property.config["dateFormat"]?.string ?? DateDisplayFormat.full.rawValue
         let list = ChoiceListView(items: DateDisplayFormat.allCases.map { .init(id: $0.rawValue, title: $0.title) }, checked: current,
@@ -218,7 +216,7 @@ final class DateCellView: NSView, CellPopupContent {
         list.onChoose = { [weak self] id in
             guard let self else { return }
             let reminder = DateReminder(rawValue: id)
-            if reminder != nil, self.value?.reminder == nil { Self.requestReminderPermission?() }
+            if reminder != nil, self.value?.reminder == nil { DateReminderPermission.request?() }
             self.edit { $0.reminder = reminder }
             self.submenu.close()
         }
@@ -442,4 +440,10 @@ final class CalendarGridView: NSView {
         guard let index = days.indices.first(where: { rect(ofIndex: $0).contains(point) }) else { return }
         onPick?(days[index])
     }
+}
+
+/// Первое «Напомнить» в окне даты — спросить разрешение macOS на уведомления (ставит приложение, `ReminderNotifications`).
+@MainActor
+public enum DateReminderPermission {
+    public static var request: (@MainActor () -> Void)?
 }

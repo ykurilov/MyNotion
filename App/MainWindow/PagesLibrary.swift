@@ -1,5 +1,6 @@
 import AppKit
 import Attachments
+import DatabaseGrid
 import Databases
 import Foundation
 import NotesCore
@@ -68,12 +69,20 @@ final class PagesLibrary {
         versions = AppPageVersions(store: store, deviceName: sync.deviceName, timing: versionTiming)
         firstWindow = MainWindowModel(library: self, opening: nil, restoresTabs: true)
         reminders.openBlock = { [weak self] pageId, blockId in self?.openBlock(blockId, inPage: pageId) }
+        // Первое «Напомнить» в окне даты ячейки — разрешение macOS, как у дат в тексте.
+        DateReminderPermission.request = { [reminders] in Task { _ = await reminders.requestPermission() } }
     }
 
     /// Щелчок по уведомлению: страница в окне, где работают, курсор — у блока с датой; свёрнутые предки раскрываются.
     func openBlock(_ blockId: UUID, inPage pageId: UUID) {
-        guard tree.page(pageId) != nil else { return }
         let window = activeWindow ?? firstWindow
+        // Напоминание ячейки даты (US2): строки базы в дереве нет — строка открывается на всю страницу.
+        if tree.page(pageId) == nil {
+            guard (try? store.write({ try $0.page(pageId) })) != nil else { return }
+            window?.openRow(pageId, mode: .fullPage)
+            window?.window?.makeKeyAndOrderFront(nil)
+            return
+        }
         window?.select(pageId, revealing: blockId)
         window?.window?.makeKeyAndOrderFront(nil)
     }

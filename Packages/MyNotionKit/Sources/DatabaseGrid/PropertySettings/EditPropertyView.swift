@@ -113,6 +113,12 @@ final class EditPropertyView: NSView {
                 let view = settings.makeView(PropertyTypeSettingsContext(property: property, store: commands.store,
                                                                          operations: commands.operations, viewId: commands.viewId))
                 stack.append(view, height: view.fittingSize.height)
+                (view as? PropertyTypeSettingsResizing)?.onHeightChange = { [weak self, weak view] in
+                    guard let self, let view else { return }
+                    self.stack.setHeight(view.fittingSize.height, of: view)
+                    self.needsLayout = true
+                    self.onResize?()
+                }
             case .wrapText:
                 continue
             case .duplicate, .delete:

@@ -74,6 +74,19 @@ final class OptionPickerView: NSView, CellPopupContent {
 
     func focusFirstField() { searchBox.focus() }
 
+    /// Галерея: меню «⋯» первого варианта списка.
+    func showMenuForFirstOption() {
+        guard let option = list.options.first, let row = list.rowView(of: option.id) else { return }
+        showMenu(for: option, besides: row)
+    }
+
+    /// Галерея: набрать текст в поиске.
+    func search(_ text: String) {
+        searchBox.text = text
+        highlighted = 0
+        reload()
+    }
+
     // MARK: Данные
 
     private var query: String { searchBox.text }
@@ -190,7 +203,7 @@ final class OptionPickerView: NSView, CellPopupContent {
         reload()
     }
 
-    private func showMenu(for option: SelectOption, besides row: NSView) {
+    func showMenu(for option: SelectOption, besides row: NSView) {
         let menu = OptionMenuView(option: option)
         let operations = context.operations
         let context = context

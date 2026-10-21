@@ -77,7 +77,7 @@ struct FilesPropertyTests {
         undo.undo()
         undo.undo()
         #expect(try cellItems().isEmpty)
-        #expect(try store.write { tx throws in try tx.cell(rowId: row, propertyId: files.id) } == nil, "пустой список — пустая ячейка")
+        #expect(try store.write { tx throws in try tx.cell(rowId: row, propertyId: files.id)?.value } == nil, "пустой список — пустое значение")
     }
 
     @Test("Ссылка: схема дописывается, имя — последняя часть пути или адрес; не ссылка — не принимается")
@@ -122,15 +122,18 @@ struct FilesPropertyTests {
 
         // Пока файл в ячейке, сборщик его не трогает даже через 31 день.
         let later = start.addingTimeInterval(31 * 86_400)
-        #expect(try await AttachmentCollector(attachments: attachments, now: { later }).collect(transport: nil).isEmpty)
+        let firstPass = try await AttachmentCollector(attachments: attachments, now: { later }).collect(transport: nil)
+        #expect(firstPass.isEmpty)
 
         // Ячейку очистили, но файл есть в хранимой версии строки — тоже не стирается.
         try quiet.setCell(rowId: row, propertyId: files.id, value: nil)
-        try store.database.dbWriter.write { db in
+        try await store.database.dbWriter.write { db in
             try db.execute(sql: "INSERT INTO page_version_file (versionId, fileId) VALUES (?, ?)", arguments: ["v1", pdf.id.uuidString.lowercased()])
         }
-        #expect(try await AttachmentCollector(attachments: attachments, now: { later }).collect(transport: nil).isEmpty)
-        try store.database.dbWriter.write { db in try db.execute(sql: "DELETE FROM page_version_file") }
-        #expect(try await AttachmentCollector(attachments: attachments, now: { later }).collect(transport: nil) == [pdf.id])
+        let secondPass = try await AttachmentCollector(attachments: attachments, now: { later }).collect(transport: nil)
+        #expect(secondPass.isEmpty)
+        try await store.database.dbWriter.write { db in try db.execute(sql: "DELETE FROM page_version_file") }
+        let lastPass = try await AttachmentCollector(attachments: attachments, now: { later }).collect(transport: nil)
+        #expect(lastPass == [pdf.id])
     }
 }

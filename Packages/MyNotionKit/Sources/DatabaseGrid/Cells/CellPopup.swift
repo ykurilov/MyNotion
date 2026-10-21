@@ -382,3 +382,18 @@ final class PopupToggleRow: NSView {
 final class FlippedView: NSView {
     override var isFlipped: Bool { true }
 }
+
+/// Состояния галереи окон ячеек (US2, T074): открытое окно доводится до нужного вида.
+@MainActor
+public enum CellPopupGallery {
+    /// Меню «⋯» первого варианта в окне выбора.
+    public static func openOptionMenu() { (CellPopupHost.shared.content as? OptionPickerView)?.showMenuForFirstOption() }
+
+    /// Текст в поиске окна выбора.
+    public static func search(_ text: String) { (CellPopupHost.shared.content as? OptionPickerView)?.search(text) }
+
+    /// Подменю «Формат даты» окна даты.
+    public static func openDateFormats() { (CellPopupHost.shared.content as? DateCellView)?.showFormats() }
+
+    public static func close() { CellPopupHost.shared.close() }
+}

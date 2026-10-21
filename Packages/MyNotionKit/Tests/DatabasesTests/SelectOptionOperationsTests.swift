@@ -27,6 +27,7 @@ struct SelectOptionOperationsTests {
         operations = DatabaseOperations(store: store, undoManager: undo)
         quiet = DatabaseOperations(store: store)
         base = try quiet.createDatabase(in: nil, isInline: false, title: "Задачи")
+        let quiet = quiet, base = base
         rows = try (0..<3).map { _ in try quiet.addRow(to: base.databaseId, in: base.viewId, at: .bottom) }
     }
 

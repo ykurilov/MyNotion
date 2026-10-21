@@ -29,6 +29,12 @@ public enum NumberDisplay {
         ("uruguayanPeso", "Уругвайское песо"), ("peruvianSol", "Перуанский соль"),
     ].map { Format(id: $0.0, title: $0.1, code: NumberType.currencies[$0.0]) }
 
+    /// Число без разделителей и лишних нулей («Разделить на 100»).
+    public static func plain(_ number: Double) -> String { NumberType.plain(number) }
+
+    /// Число из поля: точка или запятая.
+    public static func parse(_ text: String) -> Double? { NumberType.parse(text) }
+
     public static func format(_ id: String?) -> Format { formats.first { $0.id == id } ?? formats[0] }
 
     /// «Знаки после запятой»: «По умолчанию» и 0…8.
