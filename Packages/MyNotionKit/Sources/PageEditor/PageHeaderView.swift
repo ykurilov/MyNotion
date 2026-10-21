@@ -26,8 +26,8 @@ public final class PageHeaderView: NSView, NSTextFieldDelegate {
     }
     /// Место «кнопки»: по порядку слева направо; первой — «Добавить иконку».
     private(set) var buttons: [PageHeaderButton] = []
-    /// Место «под названием» и его высота.
-    private(set) var underTitle: (view: NSView, height: CGFloat)?
+    /// Место «под названием»: виды сверху вниз по `order` и их высоты (у строки базы — свойства и обратные ссылки).
+    private(set) var underTitle: [(order: Int, view: NSView, height: CGFloat)] = []
     /// Над шапкой обложка: иконка заходит на неё серединой, без иконки название ближе к обложке (как у Notion).
     var hasCover = false {
         didSet { if hasCover != oldValue { needsLayout = true } }
@@ -90,17 +90,22 @@ public final class PageHeaderView: NSView, NSTextFieldDelegate {
         updateButtons()
     }
 
-    /// Вид в месте «под названием» (US5: строка обратных ссылок); `nil` — место пустое.
-    func setUnderTitle(_ view: NSView?, height: CGFloat) {
-        if underTitle?.view !== view { underTitle?.view.removeFromSuperview() }
+    /// Вид в месте «под названием» (US5: строка обратных ссылок; 004: свойства строки базы, `order` −1 — выше);
+    /// `nil` — вида с этим `order` нет.
+    func setUnderTitle(_ view: NSView?, height: CGFloat, order: Int = 0) {
+        if let index = underTitle.firstIndex(where: { $0.order == order }) {
+            if underTitle[index].view !== view { underTitle[index].view.removeFromSuperview() }
+            underTitle.remove(at: index)
+        }
         if let view {
             if view.superview !== self { addSubview(view) }
-            underTitle = (view, height)
-        } else {
-            underTitle = nil
+            underTitle.append((order, view, height))
+            underTitle.sort { $0.order < $1.order }
         }
         needsLayout = true
     }
+
+    private var underTitleHeight: CGFloat { underTitle.reduce(0) { $0 + $1.height } }
 
     private func updateButtons() {
         for button in buttons { button.isHidden = !button.isAvailable || !isHovered }
@@ -124,7 +129,7 @@ public final class PageHeaderView: NSView, NSTextFieldDelegate {
     }
 
     func height(forWidth width: CGFloat) -> CGFloat {
-        titleTop + titleHeight(forWidth: width) + (underTitle?.height ?? 0) + Metrics.Page.titleToFirstBlockSpacing
+        titleTop + titleHeight(forWidth: width) + underTitleHeight + Metrics.Page.titleToFirstBlockSpacing
     }
 
     public override func layout() {
@@ -139,9 +144,12 @@ public final class PageHeaderView: NSView, NSTextFieldDelegate {
             x += button.fittingWidth + metrics.spacing
         }
         // Подложка строки выступает левее названия на её поле — текст стоит под началом названия (как у кнопок выше).
-        let underTitleInset = underTitle?.view is BacklinksRow ? Metrics.BacklinksRow.horizontalPadding - Metrics.Page.emptyHintCaretGap : 0
-        underTitle?.view.frame = NSRect(x: -underTitleInset, y: titleField.frame.maxY, width: bounds.width + underTitleInset,
-                                        height: underTitle?.height ?? 0)
+        var y = titleField.frame.maxY
+        for item in underTitle {
+            let inset = item.view is BacklinksRow ? Metrics.BacklinksRow.horizontalPadding - Metrics.Page.emptyHintCaretGap : 0
+            item.view.frame = NSRect(x: -inset, y: y, width: bounds.width + inset, height: item.height)
+            y += item.height
+        }
     }
 
     public override func updateTrackingAreas() {
