@@ -217,6 +217,7 @@ extension DatabaseOperations {
         }
         guard let inverse else { return }
         registerUndo(actionName, inverse)
+        Self.announce(touched)
         onChange?(touched)
     }
 

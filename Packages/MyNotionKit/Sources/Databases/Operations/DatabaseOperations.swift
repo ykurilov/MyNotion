@@ -38,8 +38,19 @@ public final class DatabaseOperations {
             return outcome
         }
         registerUndo(actionName, inverse)
+        Self.announce(touched)
         onChange?(touched)
         return result
+    }
+
+    /// Правка баз в любом окне (и её отмена) или правки с другого Mac: открытые таблицы и страницы строк перечитывают
+    /// своё. `userInfo[touchedKey]` — затронутые базы и строки (`Set<UUID>`); без него — перечитать всё.
+    public static let didChange = Notification.Name("DatabaseOperations.didChange")
+    public static let touchedKey = "touched"
+
+    /// Сообщить открытым видам баз: `nil` — изменилось неизвестно что (правки с другого Mac).
+    public static func announce(_ touched: Set<UUID>?) {
+        NotificationCenter.default.post(name: didChange, object: nil, userInfo: touched.map { [touchedKey: $0] })
     }
 
     public func registerUndo(_ actionName: String, _ inverse: @escaping @MainActor (DatabaseOperations) throws -> Void) {
