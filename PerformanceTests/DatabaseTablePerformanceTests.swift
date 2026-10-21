@@ -90,6 +90,7 @@ final class DatabaseTablePerformanceTests: XCTestCase {
             Таблица US1: открытие «Задачи» p95 \(ProbeEditor.format(ProbeEditor.p95(opens))) мс (предел 50); правка текста \
             p95 \(ProbeEditor.format(ProbeEditor.p95(edits))) мс, флажок p95 \(ProbeEditor.format(ProbeEditor.p95(toggles))) мс (предел 50); \
             смена типа на 10 000 строк \(ProbeEditor.format(typeChange)) мс (предел 2000)
+            Открытия по кругам: \(opens.map(ProbeEditor.format).joined(separator: ", ")) мс; части худшего: \(openParts.max { $0.reduce(0, +) < $1.reduce(0, +) }.map { $0.map(ProbeEditor.format).joined(separator: " / ") } ?? "")
             Открытие по частям (контроллер, вид, показ, рисование), медианы: \((0..<4).map { index in ProbeEditor.format(ProbeEditor.median(openParts.map { $0[index] })) }.joined(separator: " / ")) мс
             Снимок: \(shotPath)
             """
