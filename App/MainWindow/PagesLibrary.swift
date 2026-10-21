@@ -1,5 +1,6 @@
 import AppKit
 import Attachments
+import Databases
 import Foundation
 import NotesCore
 import Observation
@@ -59,6 +60,8 @@ final class PagesLibrary {
         try? attachments.abandonInterruptedCopies()
         openDocuments = OpenDocuments(store: store)
         MediaBlocks.install(AppMediaServices(attachments: attachments, openDocuments: openDocuments))
+        // 004: таблица встроенной базы и страницы-базы (US1).
+        DatabaseBlockViewFactory.install(library: self)
         reloadTree()
         sync = SyncController(store: store, openDocuments: openDocuments, attachments: attachments, startsEngine: startsSync)
         sync.onRemoteChange = { [weak self] _ in self?.remoteChangesApplied() }
@@ -171,6 +174,8 @@ final class PagesLibrary {
     /// Правки с другого Mac легли в базу; открытые страницы их уже приняли (research R5).
     private func remoteChangesApplied() {
         reloadTree()
+        // Ячейки, свойства, виды с другого Mac: открытые таблицы перечитывают себя.
+        DatabaseOperations.announce(nil)
         for window in windowModels { window.remoteChangesApplied() }
     }
 }

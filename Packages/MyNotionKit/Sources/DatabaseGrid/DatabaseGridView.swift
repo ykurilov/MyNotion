@@ -1,5 +1,4 @@
 import AppKit
-import CoreText
 import Databases
 import NotesCore
 import VisualStyle
@@ -8,6 +7,8 @@ import VisualStyle
 /// полосе — слой документа делится AppKit на плитки, при прокрутке дорисовываются только открывшиеся; текст —
 /// Core Text через кэш строк. Шапка колонок закреплена сверху (плавающий вид прокрутки).
 /// Встроенная база (`scrollsVertically == false`) — та же сетка высотой по строкам, вертикальная прокрутка — у страницы.
+/// Поведение (US1, contracts/database-ui.md, «Ячейки и клавиши»): выделение ячеек, правка на месте, клавиши и буфер,
+/// шапка (меню колонки, протяжка края, перестановка, «+»), наведение строки («+», «⠿», флажок, «ОТКРЫТЬ»).
 @MainActor
 public final class DatabaseGridView: NSView {
     public let content: GridContent
@@ -15,6 +16,34 @@ public final class DatabaseGridView: NSView {
     let documentView: GridDocumentView
     let headerView: GridHeaderView
     public let scrollsVertically: Bool
+    /// Таблица вида с правками; без неё (пробы) сетка только рисует.
+    public weak var controller: DatabaseTableController?
+
+    /// Выбранные ячейки; `nil` — ничего.
+    public internal(set) var selection: CellSelection? { didSet { if selection != oldValue { documentView.selectionDidChange(from: oldValue) } } }
+    /// Строки, отмеченные флажками (полоса «N выбрано»).
+    public internal(set) var selectedRows: Set<Int> = [] {
+        didSet {
+            guard selectedRows != oldValue else { return }
+            documentView.needsDisplay = true
+            onRowSelectionChange?(selectedRows)
+        }
+    }
+    /// Правка ячейки на месте; `nil` — не правится.
+    var editor: CellEditorOverlay?
+    let hoverControls = RowHoverControls()
+
+    /// Щелчок по шапке колонки: меню колонки под ней (`rect` — в координатах сетки).
+    public var onColumnMenu: ((DatabaseProperty, NSRect) -> Void)?
+    /// «+» в шапке: новое свойство.
+    public var onAddProperty: ((NSRect) -> Void)?
+    /// «•••» в шапке: настройки вида.
+    public var onViewSettings: ((NSRect) -> Void)?
+    /// Правый щелчок по строке и щелчок по «⠿»: меню строки у точки (в координатах сетки).
+    public var onRowMenu: ((Int, NSPoint) -> Void)?
+    public var onRowSelectionChange: ((Set<Int>) -> Void)?
+    /// Сколько строк «+ Новая строка» внизу (0 — нет, у проб).
+    public var showsNewRowButton: Bool { controller != nil }
 
     public init(content: GridContent, scrollsVertically: Bool = true) {
         self.content = content
@@ -23,10 +52,16 @@ public final class DatabaseGridView: NSView {
         documentView = GridDocumentView(content: content)
         headerView = GridHeaderView(content: content)
         super.init(frame: .zero)
+        documentView.grid = self
+        headerView.grid = self
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = scrollsVertically
         scrollView.hasHorizontalScroller = true
         scrollView.autohidesScrollers = true
+        // Полосы поверх таблицы, как у страницы: без серого угла между ними.
+        scrollView.scrollerStyle = .overlay
+        // Шапка — плавающий вид прокрутки: без обрезки она вылезла бы за правый край таблицы.
+        scrollView.clipsToBounds = true
         scrollView.verticalScrollElasticity = scrollsVertically ? .automatic : .none
         scrollView.documentView = documentView
         scrollView.addFloatingSubview(headerView, for: .vertical)
@@ -35,6 +70,18 @@ public final class DatabaseGridView: NSView {
         NotificationCenter.default.addObserver(self, selector: #selector(visibleAreaChanged), name: NSView.boundsDidChangeNotification,
                                                object: scrollView.contentView)
         content.onRowsLoaded = { [weak self] rows in self?.documentView.setNeedsDisplay(rows: rows) }
+        hoverControls.grid = self
+        setAccessibilityElement(true)
+        setAccessibilityRole(.group)
+        setAccessibilityLabel("Таблица базы")
+        setAccessibilityIdentifier("database-grid")
+        reloadData()
+    }
+
+    /// Сетка таблицы вида с правками.
+    public convenience init(controller: DatabaseTableController, scrollsVertically: Bool) {
+        self.init(content: controller.content, scrollsVertically: scrollsVertically)
+        self.controller = controller
         reloadData()
     }
 
@@ -43,23 +90,38 @@ public final class DatabaseGridView: NSView {
 
     public override var isFlipped: Bool { true }
 
-    /// Высота всей таблицы (шапка и строки) — для встроенной базы.
-    public var fittingHeight: CGFloat { Metrics.DatabaseGrid.headerHeight + CGFloat(content.rowCount) * Metrics.DatabaseGrid.rowHeight + 1 }
+    /// Высота всей таблицы (шапка, строки и «+ Новая строка») — для встроенной базы и страницы базы.
+    public var fittingHeight: CGFloat { documentView.tableHeight + 1 }
+    /// Ширина таблицы по колонкам (без «+» и «•••»).
+    public var tableWidth: CGFloat { documentView.tableWidth }
 
     public override func layout() {
         super.layout()
         scrollView.frame = bounds
         documentView.updateSize(minimumWidth: scrollView.contentSize.width)
         headerView.frame = NSRect(x: 0, y: 0, width: documentView.frame.width, height: Metrics.DatabaseGrid.headerHeight)
+        editor?.frame = documentView.cellRect(row: editor?.position.row ?? 0, column: editor?.position.column ?? 0)
     }
 
     /// Новые строки или колонки: перерисовать всё.
     public func reloadData() {
+        if let selection, selection.focus.row >= content.rowCount || selection.focus.column >= content.columns.count {
+            self.selection = content.rowCount > 0 && !content.columns.isEmpty
+                ? CellSelection(CellPosition(row: min(selection.focus.row, content.rowCount - 1), column: min(selection.focus.column, content.columns.count - 1)))
+                : nil
+        }
+        selectedRows = selectedRows.filter { $0 < content.rowCount }
         documentView.updateSize(minimumWidth: scrollView.contentSize.width)
         headerView.frame = NSRect(x: 0, y: 0, width: documentView.frame.width, height: Metrics.DatabaseGrid.headerHeight)
         documentView.needsDisplay = true
         headerView.needsDisplay = true
+        hoverControls.update()
         content.prefetch(around: visibleRows)
+    }
+
+    /// Перерисовать строку (уже перечитанную).
+    public func redrawRow(_ index: Int) {
+        documentView.setNeedsDisplay(rows: index..<index + 1)
     }
 
     /// Перечитать и перерисовать строку.
@@ -68,8 +130,12 @@ public final class DatabaseGridView: NSView {
         documentView.setNeedsDisplay(rows: index..<index + 1)
     }
 
-    /// Строки в видимой части.
-    public var visibleRows: Range<Int> { documentView.rows(in: scrollView.documentVisibleRect) }
+    /// Строки в видимой части — с учётом прокрутки страницы у встроенной базы.
+    /// Вне окна видимой части ещё нет: тогда — первый экран, а не вся таблица (иначе чтение заранее заказало бы все строки).
+    public var visibleRows: Range<Int> {
+        guard window != nil else { return 0..<min(content.rowCount, 40) }
+        return documentView.rows(in: documentView.visibleRect)
+    }
 
     /// Рамка ячейки в координатах сетки (для проб и редактора ячейки).
     public func cellRect(row: Int, column: Int) -> NSRect {
@@ -83,8 +149,209 @@ public final class DatabaseGridView: NSView {
         scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 
+    /// Ячейка в видимой части: своя прокрутка и прокрутка страницы.
+    func reveal(_ position: CellPosition) {
+        documentView.scrollToVisible(documentView.cellRect(row: position.row, column: position.column).insetBy(dx: 0, dy: -4))
+    }
+
     @objc private func visibleAreaChanged() {
         content.prefetch(around: visibleRows)
+        hoverControls.update()
+    }
+
+    /// Прокрутка страницы (встроенная база): дочитать строки, которые она открыла.
+    private var outerObserver: NSObjectProtocol?
+
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let outerObserver { NotificationCenter.default.removeObserver(outerObserver) }
+        outerObserver = nil
+        guard window != nil else {
+            hoverControls.removeFromSuperview()
+            return
+        }
+        if let outer = scrollView.enclosingScrollView {
+            outer.contentView.postsBoundsChangedNotifications = true
+            outerObserver = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: outer.contentView,
+                                                                   queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.visibleAreaChanged() }
+            }
+        }
+        content.prefetch(around: visibleRows)
+    }
+
+    // MARK: Выделение и правка
+
+    /// Выбрать ячейку (щелчок, переход клавишами) и сделать сетку получателем клавиш.
+    public func select(_ position: CellPosition, extending: Bool = false) {
+        guard position.row < content.rowCount, position.column < content.columns.count else { return }
+        commitEditing(then: nil)
+        if extending, var current = selection {
+            current.extend(to: position)
+            selection = current
+        } else {
+            selection = CellSelection(position)
+        }
+        selectedRows = []
+        window?.makeFirstResponder(documentView)
+        reveal(position)
+    }
+
+    var bounds2D: GridBounds { GridBounds(rows: content.rowCount, columns: content.columns.count) }
+
+    /// Начать правку выбранной ячейки на месте; `replacingWith` — первая буква вместо содержимого.
+    public func beginEditing(replacingWith text: String? = nil) {
+        guard let controller, let position = selection?.focus, let column = content.columns[safe: position.column] else { return }
+        switch CellKind.for(column.property.kind).editing {
+        case .toggle:
+            if text == nil { controller.toggleCheckbox(row: position.row, column: position.column) }
+            return
+        case .inPlace: break
+        case .popup, .none: return
+        }
+        editor?.removeFromSuperview()
+        let initial = text ?? controller.editingText(row: position.row, column: position.column)
+        let overlay = CellEditorOverlay(position: position, text: initial, alignsRight: column.alignsRight,
+                                        isTitle: column.property.kind == .title)
+        overlay.frame = documentView.cellRect(row: position.row, column: position.column)
+        overlay.onCommand = { [weak self] command in self?.commitEditing(then: command) }
+        documentView.addSubview(overlay)
+        editor = overlay
+        reveal(position)
+        overlay.focus(in: window)
+        documentView.setNeedsDisplay(rows: position.row..<position.row + 1)
+    }
+
+    /// Закончить правку: значение записывается одним шагом, ячейка остаётся выбранной (Esc) или выбор шагает.
+    func commitEditing(then move: CellMove?) {
+        guard let overlay = editor else { return }
+        editor = nil
+        let position = overlay.position
+        let text = overlay.text
+        let changed = overlay.isEdited
+        overlay.removeFromSuperview()
+        window?.makeFirstResponder(documentView)
+        if changed { controller?.commitText(text, row: position.row, column: position.column) }
+        if let move {
+            selection = CellSelection(position).moved(move, extending: false, in: bounds2D)
+            if let focus = selection?.focus { reveal(focus) }
+        } else {
+            selection = CellSelection(position)
+        }
+        documentView.setNeedsDisplay(rows: position.row..<position.row + 1)
+    }
+
+    /// Правка шла, ячейку закрыли без команды (щелчок мимо, переход на другую страницу): значение записывается.
+    func editorDidLoseFocus() { commitEditing(then: nil) }
+
+    /// Команда клавиатуры на выбранной ячейке.
+    func perform(_ command: CellCommand) -> Bool {
+        switch command {
+        case .move(let move, let extending):
+            guard let selection else {
+                if content.rowCount > 0, !content.columns.isEmpty { self.selection = CellSelection(CellPosition(row: 0, column: 0)) }
+                return true
+            }
+            self.selection = selection.moved(move, extending: extending, in: bounds2D)
+            if let focus = self.selection?.focus { reveal(focus) }
+        case .beginEditing(let text):
+            guard selection != nil else { return false }
+            beginEditing(replacingWith: text)
+        case .commit(let move): commitEditing(then: move)
+        case .selectRow:
+            guard let row = selection?.focus.row else { return false }
+            selection = nil
+            selectedRows = [row]
+        case .selectAll: selectAll()
+        case .copy: copySelection()
+        case .cut:
+            copySelection()
+            eraseSelection()
+        case .paste: pasteClipboard()
+        case .erase:
+            if !selectedRows.isEmpty {
+                controller?.trashRows(selectedRows.sorted())
+                selectedRows = []
+            } else {
+                eraseSelection()
+            }
+        case .duplicateRows:
+            let rows = selectedRows.isEmpty ? selection.map { Array($0.rows) } ?? [] : selectedRows.sorted()
+            guard !rows.isEmpty else { return false }
+            controller?.duplicateRows(rows)
+        case .openInNewTab:
+            guard let row = selection?.focus.row ?? selectedRows.min() else { return false }
+            controller?.openRow(row, inNewTab: true)
+        case .none: return false
+        }
+        return true
+    }
+
+    func selectAll() {
+        selection = CellSelection.all(in: bounds2D)
+        selectedRows = []
+    }
+
+    func copySelection() {
+        guard let controller, let selection else { return }
+        CellClipboard.write(controller.copyValues(selection))
+    }
+
+    func eraseSelection() {
+        guard let selection else { return }
+        controller?.erase(selection)
+    }
+
+    func pasteClipboard() {
+        guard let controller, let selection else { return }
+        let values = CellClipboard.read()
+        guard !values.isEmpty else { return }
+        controller.paste(values, at: selection)
+        // Выделение — вставленный блок (как в Notion и Numbers).
+        if values.count > 1 || (values.first?.count ?? 0) > 1 {
+            var pasted = CellSelection(selection.topLeft)
+            pasted.extend(to: CellPosition(row: min(selection.topLeft.row + values.count - 1, content.rowCount - 1),
+                                           column: min(selection.topLeft.column + (values.map(\.count).max() ?? 1) - 1, content.columns.count - 1)))
+            self.selection = pasted
+        }
+    }
+
+    /// Новая строка «+ Новая строка»: в конце, курсор в названии.
+    func addRowAtBottom() {
+        guard let controller, let row = controller.addRow(at: .bottom) else { return }
+        select(CellPosition(row: row, column: 0))
+        beginEditing()
+    }
+
+    /// «+» при наведении: строка под этой, курсор в названии.
+    func addRow(after row: Int) {
+        guard let controller, let rowId = content.rowId(at: row), let index = controller.addRow(at: .after(rowId)) else { return }
+        select(CellPosition(row: index, column: 0))
+        beginEditing()
+    }
+
+    /// Флажок строки при наведении.
+    func toggleRowSelection(_ row: Int) {
+        selection = nil
+        if selectedRows.contains(row) { selectedRows.remove(row) } else { selectedRows.insert(row) }
+    }
+
+    /// Мышь над строкой (галерея и сценарии): «ОТКРЫТЬ» и ручки, как при наведении.
+    public func showHover(row: Int) {
+        documentView.hover(at: NSPoint(x: 40, y: documentView.rowRect(row).midY))
+    }
+
+    /// Протяжка от ячейки до ячейки (галерея и сценарии).
+    public func selectRange(from start: CellPosition, to end: CellPosition) {
+        select(start)
+        select(end, extending: true)
+    }
+
+    /// Снять выделение (Esc в полосе «N выбрано», щелчок мимо таблицы).
+    public func clearSelection() {
+        commitEditing(then: nil)
+        selection = nil
+        selectedRows = []
     }
 }
 
@@ -92,241 +359,5 @@ public final class DatabaseGridView: NSView {
 final class PassThroughScrollView: NSScrollView {
     override func scrollWheel(with event: NSEvent) {
         if abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX) { nextResponder?.scrollWheel(with: event) } else { super.scrollWheel(with: event) }
-    }
-}
-
-/// Документ сетки: строки под шапкой, каждая рисуется в своей полосе.
-@MainActor
-final class GridDocumentView: NSView {
-    let content: GridContent
-    let text = GridTextRenderer()
-
-    init(content: GridContent) {
-        self.content = content
-        super.init(frame: .zero)
-        wantsLayer = true
-        layerContentsRedrawPolicy = .onSetNeedsDisplay
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
-
-    override var isFlipped: Bool { true }
-    override var isOpaque: Bool { false }
-
-    var tableWidth: CGFloat { content.columns.reduce(0) { $0 + $1.width } }
-
-    func updateSize(minimumWidth: CGFloat) {
-        let height = Metrics.DatabaseGrid.headerHeight + CGFloat(content.rowCount) * Metrics.DatabaseGrid.rowHeight + 1
-        let size = NSSize(width: max(tableWidth + 1, minimumWidth), height: height)
-        if frame.size != size { setFrameSize(size) }
-    }
-
-    func rows(in rect: NSRect) -> Range<Int> {
-        let rowHeight = Metrics.DatabaseGrid.rowHeight
-        let top = max(0, Int(((rect.minY - Metrics.DatabaseGrid.headerHeight) / rowHeight).rounded(.down)))
-        let bottom = min(content.rowCount, Int(((rect.maxY - Metrics.DatabaseGrid.headerHeight) / rowHeight).rounded(.up)))
-        return top < bottom ? top..<bottom : top..<top
-    }
-
-    func rowRect(_ index: Int) -> NSRect {
-        NSRect(x: 0, y: Metrics.DatabaseGrid.headerHeight + CGFloat(index) * Metrics.DatabaseGrid.rowHeight, width: bounds.width,
-               height: Metrics.DatabaseGrid.rowHeight)
-    }
-
-    func cellRect(row: Int, column: Int) -> NSRect {
-        let x = content.columns.prefix(column).reduce(0) { $0 + $1.width }
-        var rect = rowRect(row)
-        rect.origin.x = x
-        rect.size.width = content.columns[column].width
-        return rect
-    }
-
-    func setNeedsDisplay(rows: Range<Int>) {
-        guard !rows.isEmpty else { return }
-        let rect = rowRect(rows.lowerBound).union(rowRect(rows.upperBound - 1))
-        setNeedsDisplay(rect)
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        guard let context = NSGraphicsContext.current?.cgContext else { return }
-        let rows = rows(in: dirtyRect)
-        let lineColor = Palette.databaseGridLine.cgColor
-        context.setFillColor(lineColor)
-        let lineWidth = Metrics.DatabaseGrid.lineWidth
-        let tableWidth = tableWidth
-        // Колонки, попавшие в полосу.
-        var columnRanges: [(index: Int, minX: CGFloat, width: CGFloat)] = []
-        var x: CGFloat = 0
-        for (index, column) in content.columns.enumerated() {
-            if x + column.width >= dirtyRect.minX, x <= dirtyRect.maxX { columnRanges.append((index, x, column.width)) }
-            x += column.width
-        }
-        for index in rows {
-            let rect = rowRect(index)
-            context.fill(CGRect(x: 0, y: rect.maxY - lineWidth, width: tableWidth, height: lineWidth))
-            guard let row = content.row(at: index) else { continue }
-            for (column, minX, width) in columnRanges {
-                let cell = CGRect(x: minX, y: rect.minY, width: width, height: rect.height - lineWidth)
-                if column > 0 { context.fill(CGRect(x: minX, y: rect.minY, width: lineWidth, height: rect.height)) }
-                draw(row.cells[column], in: cell, column: content.columns[column], icon: column == 0 ? row.icon : nil, context: context)
-            }
-            context.setFillColor(lineColor)
-        }
-        // Правая граница последней колонки.
-        if tableWidth >= dirtyRect.minX, tableWidth <= dirtyRect.maxX, let first = rows.first, let last = rows.last {
-            context.fill(CGRect(x: tableWidth, y: rowRect(first).minY, width: lineWidth, height: rowRect(last).maxY - rowRect(first).minY))
-        }
-    }
-
-    private func draw(_ cell: CellPresentation, in rect: CGRect, column: GridColumn, icon: String?, context: CGContext) {
-        let padding = Metrics.DatabaseGrid.cellHorizontalPadding
-        let inner = rect.insetBy(dx: padding, dy: 0)
-        switch cell {
-        case .empty: break
-        case .text(let string):
-            var textRect = inner
-            if let icon {
-                text.draw(icon, in: textRect, color: Palette.textPrimary, alignment: .left, context: context)
-                textRect.origin.x += 22
-                textRect.size.width -= 22
-            }
-            text.draw(string, in: textRect, color: Palette.textPrimary, alignment: column.alignsRight ? .right : .left,
-                      weight: column.property.kind == .title ? .medium : .regular, context: context)
-        case .checkbox(let checked):
-            let size = Metrics.DatabaseGrid.checkboxSize
-            let box = CGRect(x: inner.minX, y: rect.midY - size / 2, width: size, height: size)
-            let path = CGPath(roundedRect: box, cornerWidth: Metrics.DatabaseGrid.checkboxCornerRadius,
-                              cornerHeight: Metrics.DatabaseGrid.checkboxCornerRadius, transform: nil)
-            context.addPath(path)
-            if checked {
-                context.setFillColor(Palette.checkboxChecked.cgColor)
-                context.fillPath()
-                context.setStrokeColor(Palette.checkboxCheckmark.cgColor)
-                context.setLineWidth(1.6)
-                context.move(to: CGPoint(x: box.minX + 3.5, y: box.midY))
-                context.addLine(to: CGPoint(x: box.minX + 6.8, y: box.maxY - 4))
-                context.addLine(to: CGPoint(x: box.maxX - 3.2, y: box.minY + 4))
-                context.strokePath()
-            } else {
-                context.setStrokeColor(Palette.textSecondary.cgColor)
-                context.setLineWidth(1.2)
-                context.strokePath()
-            }
-        case .chips(let chips):
-            var chipX = inner.minX
-            let height = Metrics.DatabaseGrid.chipHeight
-            for chip in chips {
-                guard chipX < inner.maxX - 12 else { break }
-                let textWidth = min(text.width(chip.title, size: Metrics.DatabaseGrid.chipFontSize), inner.maxX - chipX - 2 * Metrics.DatabaseGrid.chipHorizontalPadding)
-                let chipRect = CGRect(x: chipX, y: rect.midY - height / 2, width: textWidth + 2 * Metrics.DatabaseGrid.chipHorizontalPadding, height: height)
-                context.addPath(CGPath(roundedRect: chipRect, cornerWidth: Metrics.DatabaseGrid.chipCornerRadius,
-                                       cornerHeight: Metrics.DatabaseGrid.chipCornerRadius, transform: nil))
-                context.setFillColor(Palette.optionChipBackground(chip.color.rawValue).cgColor)
-                context.fillPath()
-                text.draw(chip.title, in: chipRect.insetBy(dx: Metrics.DatabaseGrid.chipHorizontalPadding, dy: 0), color: Palette.optionChipText,
-                          alignment: .left, context: context)
-                chipX = chipRect.maxX + Metrics.DatabaseGrid.chipSpacing
-            }
-        }
-    }
-}
-
-/// Шапка колонок: название свойства серым.
-@MainActor
-final class GridHeaderView: NSView {
-    let content: GridContent
-    let text = GridTextRenderer()
-
-    init(content: GridContent) {
-        self.content = content
-        super.init(frame: .zero)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
-
-    override var isFlipped: Bool { true }
-
-    override func draw(_ dirtyRect: NSRect) {
-        guard let context = NSGraphicsContext.current?.cgContext else { return }
-        context.setFillColor(Palette.pageBackground.cgColor)
-        context.fill(bounds)
-        context.setFillColor(Palette.databaseGridLine.cgColor)
-        let line = Metrics.DatabaseGrid.lineWidth
-        var x: CGFloat = 0
-        for (index, column) in content.columns.enumerated() {
-            if index > 0 { context.fill(CGRect(x: x, y: 0, width: line, height: bounds.height)) }
-            text.draw(column.property.name, in: CGRect(x: x + Metrics.DatabaseGrid.cellHorizontalPadding, y: 0,
-                                                       width: column.width - 2 * Metrics.DatabaseGrid.cellHorizontalPadding, height: bounds.height),
-                      color: Palette.textSecondary, alignment: .left, context: context)
-            context.setFillColor(Palette.databaseGridLine.cgColor)
-            x += column.width
-        }
-        context.fill(CGRect(x: 0, y: 0, width: x, height: line))
-        context.fill(CGRect(x: 0, y: bounds.height - line, width: x, height: line))
-    }
-}
-
-/// Текст ячеек Core Text: строки `CTLine` кэшируются по тексту, цвету и начертанию; длинный текст обрезается «…».
-@MainActor
-final class GridTextRenderer {
-    enum Alignment { case left, right }
-
-    private struct Key: Hashable {
-        let text: String
-        let weight: NSFont.Weight.RawValue
-        let width: Int
-    }
-
-    private var lines: [Key: CTLine] = [:]
-    private var widths: [String: CGFloat] = [:]
-    private var fonts: [NSFont.Weight.RawValue: NSFont] = [:]
-
-    private func font(_ weight: NSFont.Weight) -> NSFont {
-        if let font = fonts[weight.rawValue] { return font }
-        let font = NSFont.systemFont(ofSize: Metrics.DatabaseGrid.fontSize, weight: weight)
-        fonts[weight.rawValue] = font
-        return font
-    }
-
-    func width(_ text: String, size: CGFloat) -> CGFloat {
-        if let width = widths[text] { return width }
-        let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: [.font: font(.regular)]))
-        let width = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
-        if widths.count > 20_000 { widths.removeAll() }
-        widths[text] = width
-        return width
-    }
-
-    func draw(_ text: String, in rect: CGRect, color: NSColor, alignment: Alignment, weight: NSFont.Weight = .regular, context: CGContext) {
-        guard rect.width > 4, !text.isEmpty else { return }
-        let key = Key(text: text, weight: weight.rawValue, width: Int(rect.width))
-        let line: CTLine
-        if let cached = lines[key] {
-            line = cached
-        } else {
-            // Цвет — из контекста (`foregroundColorFromContext`): одна строка служит обеим темам и всем цветам.
-            let attributed = NSAttributedString(string: text.replacingOccurrences(of: "\n", with: " "),
-                                                attributes: [.font: font(weight), NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String): true])
-            let full = CTLineCreateWithAttributedString(attributed)
-            let ellipsis = CTLineCreateWithAttributedString(NSAttributedString(string: "…", attributes: [.font: font(weight),
-                NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String): true]))
-            line = CTLineCreateTruncatedLine(full, Double(rect.width), .end, ellipsis) ?? full
-            if lines.count > 20_000 { lines.removeAll() }
-            lines[key] = line
-        }
-        var ascent: CGFloat = 0, descent: CGFloat = 0
-        let width = CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, nil))
-        let x = alignment == .right ? rect.maxX - width : rect.minX
-        // Вид перевёрнут: Core Text рисует снизу вверх — переворачиваем на время строки.
-        context.saveGState()
-        context.setFillColor(color.cgColor)
-        context.textMatrix = .identity
-        context.translateBy(x: x, y: rect.midY + (ascent - descent) / 2)
-        context.scaleBy(x: 1, y: -1)
-        context.textPosition = .zero
-        CTLineDraw(line, context)
-        context.restoreGState()
     }
 }

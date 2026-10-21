@@ -105,6 +105,9 @@ public enum GalleryDatabases: Hashable, Sendable, CaseIterable {
     case empty
     /// Таблица эталона баз: «Задачи», все типы свойств, плашки вариантов.
     case sampleTable
+    // US1: таблица в работе.
+    case inlineEmpty, inlineOverview, rowHover, cellSelection, cellEditing, columnMenu, typePicker, editProperty, propertiesWindow,
+         deleteConfirm, rowMenu, rowPage, sidePeek, centerPeek
 }
 
 public enum GalleryMarkdownExport: String, Hashable, Sendable, CaseIterable {
@@ -279,6 +282,20 @@ public enum GalleryCatalog {
     static let databaseStates: [GalleryState] = [
         GalleryState("database-empty", .databases(.empty), "Новая база: вид «Таблица», колонка «Название», строк нет", section: "Базы"),
         GalleryState("database-sample-table", .databases(.sampleTable), "Таблица эталона «Задачи»: все типы, плашки, флажки, даты", section: "Базы"),
+        GalleryState("database-inline-empty", .databases(.inlineEmpty), "Встроенная база в странице: серое «Новая база», колонка «Название»", section: "Базы"),
+        GalleryState("database-inline-overview", .databases(.inlineOverview), "«Обзор»: встроенная база по пределу 50 и «Загрузить ещё»", section: "Базы"),
+        GalleryState("database-row-hover", .databases(.rowHover), "Наведение строки: «+», «⠿», флажок слева, «ОТКРЫТЬ» у названия", section: "Базы"),
+        GalleryState("database-cell-selection", .databases(.cellSelection), "Выделение ячеек прямоугольником (⇧-стрелки, протяжка)", section: "Базы"),
+        GalleryState("database-cell-editing", .databases(.cellEditing), "Правка ячейки названия на месте", section: "Базы"),
+        GalleryState("database-column-menu", .databases(.columnMenu), "Меню колонки: имя, «Изменить свойство», «Сменить тип», вставить, дублировать, удалить", section: "Базы"),
+        GalleryState("database-type-picker", .databases(.typePicker), "«+» в шапке: «Название свойства…» и типы в две колонки", section: "Базы"),
+        GalleryState("database-edit-property", .databases(.editProperty), "Панель «Изменить свойство» справа", section: "Базы"),
+        GalleryState("database-properties-window", .databases(.propertiesWindow), "Окно «Свойства» базы с «Удалёнными свойствами»", section: "Базы"),
+        GalleryState("database-delete-confirm", .databases(.deleteConfirm), "Подтверждение удаления свойства", section: "Базы"),
+        GalleryState("database-row-menu", .databases(.rowMenu), "Меню строки (правый щелчок)", section: "Базы"),
+        GalleryState("database-row-page", .databases(.rowPage), "Строка на всю страницу: свойства под названием, «+ Добавить свойство»", section: "Базы"),
+        GalleryState("database-side-peek", .databases(.sidePeek), "Строка сбоку: таблица слева рабочая", section: "Базы"),
+        GalleryState("database-center-peek", .databases(.centerPeek), "Строка по центру поверх затемнения", section: "Базы"),
     ]
 
     /// Обратные ссылки (US5, contracts/pages-ui.md, «Обратные ссылки»): строка под названием и список источников.

@@ -145,6 +145,8 @@ targets:
       - package: MyNotionKit
         product: DatabaseGrid
       - package: MyNotionKit
+        product: DatabaseViewBar
+      - package: MyNotionKit
         product: Formulas
     settings:
       base:
