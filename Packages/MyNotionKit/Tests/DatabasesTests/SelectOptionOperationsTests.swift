@@ -265,4 +265,22 @@ struct SelectOptionOperationsTests {
         try quiet.pickOption(b.id, rowId: rows[1], propertyId: select.id)
         #expect(try cell(rows[1], select.id) == id(a))
     }
+
+    @Test("Новый вариант в середине списка (статус) сдвигает место у ячеек после него — как полный пересчёт")
+    func newOptionShiftsPositions() throws {
+        let status = try quiet.addProperty(to: base.databaseId, name: "Статус", kind: .status)
+        let list = try options(status.id)
+        for (row, option) in zip(rows, list) { try quiet.setCell(rowId: row, propertyId: status.id, value: id(option)) }
+        _ = try quiet.createOption(in: status.id, named: "Отложено", group: .todo)
+        func sortNumbers() throws -> [Double?] {
+            try store.database.dbWriter.read { db in
+                try rows.map { row in
+                    try Double.fetchOne(db, sql: "SELECT sortNumber FROM db_cell WHERE rowId = ? AND propertyId = ?",
+                                        arguments: [row.databaseText, status.id.databaseText])
+                }
+            }
+        }
+        // «Не начато» 0, «Отложено» 1, «В работе» 2, «Готово» 3.
+        #expect(try sortNumbers() == [0, 2, 3])
+    }
 }

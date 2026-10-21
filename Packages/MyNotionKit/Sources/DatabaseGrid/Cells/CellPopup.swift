@@ -105,9 +105,10 @@ final class CellPopupHost {
 
     private func place() {
         guard let content, let (rect, view) = anchor, let windowContent = view.window?.contentView else { return }
+        // Координаты окна (снизу вверх): окно встаёт левым верхним углом под нижний край ячейки.
         let inWindow = view.convert(rect, to: nil)
-        let point = NSPoint(x: inWindow.minX, y: inWindow.maxY)
-        card.show(content, size: content.preferredSize, from: windowContent.convert(point, from: nil), in: windowContent)
+        let point = NSPoint(x: inWindow.minX, y: inWindow.minY - Metrics.PopupMenu.anchorSpacing)
+        card.show(content, size: content.preferredSize, from: point, in: windowContent)
     }
 
     func close() { card.close() }

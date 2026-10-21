@@ -3,10 +3,11 @@ import XCTest
 
 /// Выбор, статус, дата вживую (T068, spec US2): вариант из ячейки по Enter, несколько вариантов множественного выбора,
 /// статус с тремя группами по умолчанию, дата текстом с концом и напоминанием за день; перезапуск — всё на месте.
-/// Сетка рисуется сама — щелчки по местам ячеек от рамки сетки («Название» 280, остальные колонки 200, строки 33).
+/// Сетка рисуется сама — щелчки по местам ячеек от рамки сетки («Название» 280, строки 33). Новые колонки сужаются
+/// протяжкой края до 110: окно на iMac узкое, все колонки должны быть видны.
 final class SelectStatusDateTests: XCTestCase {
     private var library: UITestLibrary!
-    static let header: CGFloat = 33, rowHeight: CGFloat = 33, titleWidth: CGFloat = 280, columnWidth: CGFloat = 200
+    static let header: CGFloat = 33, rowHeight: CGFloat = 33, titleWidth: CGFloat = 280, columnWidth: CGFloat = 110
 
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -25,6 +26,7 @@ final class SelectStatusDateTests: XCTestCase {
         app.typeKey(.return, modifierFlags: [])
         let grid = app.descendants(matching: .any).matching(identifier: "database-grid").element(boundBy: 0)
         XCTAssertTrue(grid.waitForExistence(timeout: 5))
+        app.activate()
 
         addColumn(app, grid: grid, index: 1, name: "Тип", type: "select")
         addColumn(app, grid: grid, index: 2, name: "Теги", type: "multiSelect")
@@ -42,15 +44,15 @@ final class SelectStatusDateTests: XCTestCase {
 
         // Выбор: щелчок — окно, набор и Enter создают вариант и выбирают его, окно закрывается.
         cell(grid, row: 0, column: 1).click()
-        XCTAssertTrue(app.descendants(matching: .any)["option-picker"].waitForExistence(timeout: 5), "Нет окна выбора")
+        XCTAssertTrue(app.descendants(matching: .any)["option-search"].waitForExistence(timeout: 5), "Нет окна выбора")
         app.typeText("Баг")
         app.typeKey(.return, modifierFlags: [])
         XCTAssertTrue(waitUntil { (try? self.chosen("Тип")) == ["Баг"] }, "Выбор: \(String(describing: try? chosen("Тип")))")
-        XCTAssertTrue(waitUntil { !app.descendants(matching: .any)["option-picker"].exists }, "Окно выбора не закрылось")
+        XCTAssertTrue(waitUntil { !app.descendants(matching: .any)["option-search"].exists }, "Окно выбора не закрылось")
 
         // Множественный: два варианта подряд, окно остаётся; Esc закрывает.
         cell(grid, row: 0, column: 2).click()
-        XCTAssertTrue(app.descendants(matching: .any)["option-picker"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["option-search"].waitForExistence(timeout: 5))
         app.typeText("Срочно")
         app.typeKey(.return, modifierFlags: [])
         app.typeText("Потом")
@@ -67,7 +69,7 @@ final class SelectStatusDateTests: XCTestCase {
 
         // Дата: текстом, «Дата окончания», «Напомнить › За 1 день».
         cell(grid, row: 0, column: 4).click()
-        XCTAssertTrue(app.descendants(matching: .any)["date-popup"].waitForExistence(timeout: 5), "Нет окна даты")
+        XCTAssertTrue(app.descendants(matching: .any)["date-start-field"].waitForExistence(timeout: 5), "Нет окна даты")
         app.typeText("21.10.2030")
         app.typeKey(.return, modifierFlags: [])
         XCTAssertTrue(waitUntil { (try? self.dateValue())?.contains("\"start\":\"2030-10-21\"") == true }, "Дата: \(String(describing: try? dateValue()))")
@@ -109,6 +111,11 @@ final class SelectStatusDateTests: XCTestCase {
         XCTAssertTrue(item.waitForExistence(timeout: 5), "Нет типа \(type)")
         item.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
         app.typeKey(.escape, modifierFlags: [])
+        // Новая колонка — 200; край тянется до 110.
+        let left = Self.titleWidth + CGFloat(index - 1) * Self.columnWidth
+        let origin = grid.coordinate(withNormalizedOffset: .zero)
+        origin.withOffset(CGVector(dx: left + 199, dy: Self.header / 2))
+            .press(forDuration: 0.2, thenDragTo: origin.withOffset(CGVector(dx: left + Self.columnWidth - 1, dy: Self.header / 2)))
     }
 
     private func waitUntil(timeout: TimeInterval = 5, _ condition: () -> Bool) -> Bool {

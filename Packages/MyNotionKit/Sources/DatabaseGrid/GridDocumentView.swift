@@ -248,6 +248,8 @@ final class GridDocumentView: NSView, NSMenuItemValidation {
                     chipX += width + Metrics.DatabaseGrid.chipSpacing
                     continue
                 }
+                // Плашка почти не влезает — не рисуется (текст не налезает на соседнюю колонку).
+                guard inner.maxX - chipX - 2 * Metrics.DatabaseGrid.chipHorizontalPadding > 12 else { break }
                 let textWidth = min(text.width(chip.title, size: Metrics.DatabaseGrid.chipFontSize), inner.maxX - chipX - 2 * Metrics.DatabaseGrid.chipHorizontalPadding)
                 let chipRect = CGRect(x: chipX, y: rect.midY - height / 2, width: textWidth + 2 * Metrics.DatabaseGrid.chipHorizontalPadding, height: height)
                 context.addPath(CGPath(roundedRect: chipRect, cornerWidth: Metrics.DatabaseGrid.chipCornerRadius,
