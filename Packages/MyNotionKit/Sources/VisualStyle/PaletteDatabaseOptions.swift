@@ -1,8 +1,10 @@
 import AppKit
 
 extension Palette {
-    /// Фон плашки варианта выбора и статуса — 10 цветов Notion 7.39 в обеих темах (contracts/property-types.md, «Цвета
-    /// вариантов»; ≈ — уточняет US2 по снимкам `visual-reference/`). Имена — как у `OptionColor` в модели.
+    /// Фон плашки варианта выбора и статуса — 10 цветов Notion 7.39 (contracts/property-types.md, «Цвета вариантов»).
+    /// Тёмная тема — пиксели образцов цветов со снимка `visual-reference/notion-select-option-colors.png` (21.10.2026;
+    /// фон плашки «Срочно» совпадает с образцом «Orange»). Светлая — ≈ цвета Notion: снимков светлой темы в сверке нет.
+    /// Имена — как у `OptionColor` в модели.
     public static func optionChipBackground(_ color: String) -> NSColor {
         optionChipBackgrounds[color] ?? optionChipBackgrounds["default"]!
     }
@@ -16,16 +18,16 @@ extension Palette {
                                                      dark: NSColor(srgbRed: 0x2C / 255, green: 0x2C / 255, blue: 0x2B / 255, alpha: 1))
 
     private static let optionChipBackgrounds: [String: NSColor] = [
-        "default": themedColor(light: rgb(227, 226, 224, 0.5), dark: rgb(90, 90, 90, 0.5)),
-        "gray": themedColor(light: rgb(227, 226, 224), dark: rgb(90, 90, 90)),
-        "brown": themedColor(light: rgb(238, 224, 218), dark: rgb(96, 59, 44)),
-        "orange": themedColor(light: rgb(250, 222, 201), dark: rgb(133, 76, 29)),
-        "yellow": themedColor(light: rgb(253, 236, 200), dark: rgb(137, 99, 42)),
-        "green": themedColor(light: rgb(219, 237, 219), dark: rgb(43, 89, 63)),
-        "blue": themedColor(light: rgb(211, 229, 239), dark: rgb(40, 69, 108)),
-        "purple": themedColor(light: rgb(232, 222, 238), dark: rgb(73, 47, 100)),
-        "pink": themedColor(light: rgb(245, 224, 233), dark: rgb(105, 49, 76)),
-        "red": themedColor(light: rgb(255, 226, 221), dark: rgb(110, 54, 48)),
+        "default": themedColor(light: rgb(206, 205, 202, 0.5), dark: rgb(55, 55, 54)),
+        "gray": themedColor(light: rgb(227, 226, 224), dark: rgb(104, 103, 98)),
+        "brown": themedColor(light: rgb(238, 224, 218), dark: rgb(117, 91, 72)),
+        "orange": themedColor(light: rgb(250, 222, 201), dark: rgb(142, 88, 53)),
+        "yellow": themedColor(light: rgb(253, 236, 200), dark: rgb(137, 106, 44)),
+        "green": themedColor(light: rgb(219, 237, 219), dark: rgb(63, 111, 84)),
+        "blue": themedColor(light: rgb(211, 229, 239), dark: rgb(59, 101, 145)),
+        "purple": themedColor(light: rgb(232, 222, 238), dark: rgb(110, 84, 130)),
+        "pink": themedColor(light: rgb(245, 224, 233), dark: rgb(130, 78, 103)),
+        "red": themedColor(light: rgb(255, 226, 221), dark: rgb(152, 79, 73)),
     ]
 
     private static func rgb(_ red: CGFloat, _ green: CGFloat, _ blue: CGFloat, _ alpha: CGFloat = 1) -> NSColor {

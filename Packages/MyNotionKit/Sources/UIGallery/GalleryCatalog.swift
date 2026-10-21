@@ -95,6 +95,16 @@ public enum GalleryScene: Hashable, Sendable {
     case templates(GalleryTemplates)
     /// Обратные ссылки (US5): строка «↗ 3 обратные ссылки» под названием и открытый список источников.
     case backlinks(GalleryBacklinks)
+    /// Базы (004): пустая новая база и таблица эталона; истории 004 добавляют свои состояния.
+    case databases(GalleryDatabases)
+}
+
+/// Базы данных (004, contracts/database-ui.md).
+public enum GalleryDatabases: Hashable, Sendable, CaseIterable {
+    /// Новая база: вид «Таблица», одна колонка «Название», строк нет.
+    case empty
+    /// Таблица эталона баз: «Задачи», все типы свойств, плашки вариантов.
+    case sampleTable
 }
 
 public enum GalleryMarkdownExport: String, Hashable, Sendable, CaseIterable {
@@ -263,6 +273,13 @@ public enum GalleryCatalog {
     /// Все состояния по порядку съёмки.
     public static let states: [GalleryState] = pageStates + blockStates + kindSampleStates + inlineAtomStates + editingStates + sidebarStates
         + trashStates + importStates + exportStates + syncStates + tabsStates + copiesStates + versionHistoryStates + templatesStates + backlinksStates
+        + databaseStates
+
+    /// Базы (004): этап 0 — пустая база и таблица эталона; истории добавляют свои строки в конец списка.
+    static let databaseStates: [GalleryState] = [
+        GalleryState("database-empty", .databases(.empty), "Новая база: вид «Таблица», колонка «Название», строк нет", section: "Базы"),
+        GalleryState("database-sample-table", .databases(.sampleTable), "Таблица эталона «Задачи»: все типы, плашки, флажки, даты", section: "Базы"),
+    ]
 
     /// Обратные ссылки (US5, contracts/pages-ui.md, «Обратные ссылки»): строка под названием и список источников.
     static let backlinksStates: [GalleryState] = [
