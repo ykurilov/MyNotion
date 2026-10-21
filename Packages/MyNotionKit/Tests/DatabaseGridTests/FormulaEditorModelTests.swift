@@ -84,7 +84,7 @@ struct FormulaEditorModelTests {
         #expect(deadline.title.hasPrefix("Срок"))
         #expect(editor.inserting(deadline).text.hasPrefix(#"prop("Срок"#))
         editor.edit("", caret: 0)
-        #expect(editor.sections.map(\.title) == ["Свойства", "Встроенные", "Логика", "Числа", "Текст", "Даты", "Списки", "Страницы"])
+        #expect(editor.sections.map(\.title) == ["Свойства", "Встроенные", "Общие", "Текст", "Числа", "Даты", "Списки", "Страницы"])
         #expect(!(editor.sections[0].items.contains { $0.title == "Итог" }), "сама себя в списке не показывает")
     }
 

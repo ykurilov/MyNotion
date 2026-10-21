@@ -468,7 +468,7 @@ public final class FormulaEditorView: NSView, NSTextViewDelegate, NSTableViewDat
         case .builtin(let symbol): ["true", "false", "and", "or", "not", ">", ">=", "<", "<=", "==", "!="].contains(symbol) ? "checkmark.square" : "number"
         case .function(let name):
             switch FormulaFunctionCatalog.byName[name]?.section {
-            case .logic?: "checkmark.square"
+            case .general?: "function"
             case .numbers?: "number"
             case .text?: "textformat"
             case .dates?: "calendar"

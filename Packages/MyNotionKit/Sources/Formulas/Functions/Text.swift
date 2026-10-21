@@ -141,7 +141,7 @@ extension FormulaFunctions {
             let matches = try regex(arguments.text(1) ?? "").matches(in: text, range: NSRange(text.startIndex..., in: text))
             return .list(matches.compactMap { Range($0.range, in: text).map { .text(String(text[$0])) } })
         },
-        FormulaFunctionInfo("format", .text, "format(значение)", "Любое значение в текст.",
+        FormulaFunctionInfo("format", .general, "format(значение)", "Любое значение в текст.",
                             [FormulaExample("format(1234)", "1234"), FormulaExample("format(true)", "true")],
                             typing: { call in try call.arity(1...1); _ = try call.type(0); return .text },
                             .eager { arguments, evaluator in .text(FormulaText.format(arguments[0], context: evaluator.context)) }),

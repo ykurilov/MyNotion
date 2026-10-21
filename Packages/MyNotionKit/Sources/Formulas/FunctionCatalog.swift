@@ -1,8 +1,9 @@
-/// Раздел списка редактора (contracts/formulas.md, «Функции»).
+/// Раздел списка редактора — как у Notion 7.39 (General, Text, Number, Date, List; `notion-formula-functions-general.png`).
 public enum FormulaSection: String, CaseIterable, Sendable {
-    case logic = "Логика"
-    case numbers = "Числа"
+    /// Логика, `length`, `format`, `let`, `lets`.
+    case general = "Общие"
     case text = "Текст"
+    case numbers = "Числа"
     case dates = "Даты"
     case lists = "Списки"
     case pages = "Страницы"
@@ -57,7 +58,7 @@ public struct FormulaBuiltin: Sendable, Hashable {
 
 /// Все функции по разделам: каждый раздел — свой файл в `Functions/`.
 public enum FormulaFunctionCatalog {
-    public static let all: [FormulaFunctionInfo] = FormulaFunctions.logic + FormulaFunctions.numbers + FormulaFunctions.text
+    public static let all: [FormulaFunctionInfo] = FormulaFunctions.logic + FormulaFunctions.text + FormulaFunctions.numbers
         + FormulaFunctions.dates + FormulaFunctions.lists + FormulaFunctions.pages
 
     /// По имени; у общих имён (`length`, `concat`, `sum` …) — первая по разделам, она умеет все свои типы.
@@ -74,7 +75,7 @@ public enum FormulaFunctionCatalog {
 
     /// Имена, которые Notion показывает в нескольких разделах.
     static let sharedNames: [(String, Set<FormulaSection>)] = [
-        ("length", [.text, .lists]), ("concat", [.text, .lists]), ("join", [.text, .lists]),
+        ("length", [.general, .text, .lists]), ("concat", [.text, .lists]), ("join", [.text, .lists]),
         ("sum", [.numbers, .lists]), ("min", [.numbers, .lists]), ("max", [.numbers, .lists]),
         ("mean", [.numbers, .lists]), ("median", [.numbers, .lists]),
     ]

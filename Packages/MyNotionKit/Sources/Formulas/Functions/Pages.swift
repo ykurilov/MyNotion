@@ -27,7 +27,7 @@ extension FormulaFunctions {
                                 if case .page(let row)? = arguments.first { return .text(compactId(row)) }
                                 return .text(compactId(evaluator.rowId))
                             }),
-        FormulaFunctionInfo("let", .pages, "let(имя, значение, выражение)", "Переменная: имя получает значение, выражение его использует.",
+        FormulaFunctionInfo("let", .general, "let(имя, значение, выражение)", "Переменная: имя получает значение, выражение его использует.",
                             [FormulaExample("let(x, 5, x * 2)", "10")],
                             typing: { call in
                                 try call.arity(3...3)
@@ -37,7 +37,7 @@ extension FormulaFunctions {
                             .lazy { arguments, evaluator in
                                 try evaluator.with([try variable(arguments[0]): try evaluator.value(of: arguments[1])]).value(of: arguments[2])
                             }),
-        FormulaFunctionInfo("lets", .pages, "lets(имя, значение, имя2, значение2, …, выражение)", "Несколько переменных подряд; следующая видит предыдущие.",
+        FormulaFunctionInfo("lets", .general, "lets(имя, значение, имя2, значение2, …, выражение)", "Несколько переменных подряд; следующая видит предыдущие.",
                             [FormulaExample("lets(a, 2, b, a + 3, a * b)", "10")],
                             typing: { call in
                                 try call.arity(3...Int.max)

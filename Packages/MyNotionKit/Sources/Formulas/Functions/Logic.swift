@@ -1,6 +1,6 @@
 extension FormulaFunctions {
     static let logic: [FormulaFunctionInfo] = [
-        FormulaFunctionInfo("if", .logic, "if(условие, еслиДа, еслиНет)",
+        FormulaFunctionInfo("if", .general, "if(условие, еслиДа, еслиНет)",
                             "Если условие истинно — второе значение, иначе третье.",
                             [FormulaExample(#"if(true, 1, 2)"#, "1"), FormulaExample(#"if(5 > 10, "больше", "меньше")"#, "меньше")],
                             typing: { call in
@@ -11,7 +11,7 @@ extension FormulaFunctions {
                             .lazy { arguments, evaluator in
                                 try evaluator.value(of: arguments[0]).isTrue ? try evaluator.value(of: arguments[1]) : try evaluator.value(of: arguments[2])
                             }),
-        FormulaFunctionInfo("ifs", .logic, "ifs(условие, значение, условие2, значение2, …, иначе)",
+        FormulaFunctionInfo("ifs", .general, "ifs(условие, значение, условие2, значение2, …, иначе)",
                             "Значение при первом истинном условии; если ни одно не истинно — последнее. Замена вложенным if().",
                             [FormulaExample("ifs(true, 1, true, 2, 3)", "1"), FormulaExample("ifs(false, 1, false, 2, 3)", "3")],
                             typing: { call in
@@ -32,28 +32,28 @@ extension FormulaFunctions {
                                 }
                                 return try evaluator.value(of: arguments[arguments.count - 1])
                             }),
-        FormulaFunctionInfo("and", .logic, "and(условие, условие, …)", "Истина, если истинны все условия. То же — and и &&.",
+        FormulaFunctionInfo("and", .general, "and(условие, условие, …)", "Истина, если истинны все условия. То же — and и &&.",
                             [FormulaExample("and(true, false)", "false"), FormulaExample("and(true, true)", "true")],
                             typing: { call in try call.arity(2...Int.max); for i in 0..<call.count { _ = try call.type(i) }; return .bool },
                             .eager { arguments, _ in .bool(arguments.allSatisfy(\.isTrue)) }),
-        FormulaFunctionInfo("or", .logic, "or(условие, условие, …)", "Истина, если истинно хотя бы одно условие. То же — or и ||.",
+        FormulaFunctionInfo("or", .general, "or(условие, условие, …)", "Истина, если истинно хотя бы одно условие. То же — or и ||.",
                             [FormulaExample("or(true, false)", "true"), FormulaExample("or(false, false)", "false")],
                             typing: { call in try call.arity(2...Int.max); for i in 0..<call.count { _ = try call.type(i) }; return .bool },
                             .eager { arguments, _ in .bool(arguments.contains(where: \.isTrue)) }),
-        FormulaFunctionInfo("not", .logic, "not(условие)", "Обратное значение условия. То же — not и !.",
+        FormulaFunctionInfo("not", .general, "not(условие)", "Обратное значение условия. То же — not и !.",
                             [FormulaExample("not(true)", "false"), FormulaExample("not(empty(\"\"))", "false")],
                             typing: { call in try call.arity(1...1); _ = try call.type(0); return .bool },
                             .eager { arguments, _ in .bool(!arguments[0].isTrue) }),
-        FormulaFunctionInfo("empty", .logic, "empty(значение)",
+        FormulaFunctionInfo("empty", .general, "empty(значение)",
                             "Истина, если значение пустое: пусто, 0, \"\", [] и снятый флажок.",
                             [FormulaExample("empty(\"\")", "true"), FormulaExample("empty(0)", "true"), FormulaExample("empty([1])", "false")],
                             typing: { call in try call.arity(0...1); if call.count == 1 { _ = try call.type(0) }; return .bool },
                             .eager { arguments, _ in .bool(!(arguments.first?.isTrue ?? false)) }),
-        FormulaFunctionInfo("equal", .logic, "equal(значение, значение)", "Истина, если значения равны. То же — ==.",
+        FormulaFunctionInfo("equal", .general, "equal(значение, значение)", "Истина, если значения равны. То же — ==.",
                             [FormulaExample("equal(1, 1)", "true"), FormulaExample(#"equal("a", "b")"#, "false")],
                             typing: { call in try call.arity(2...2); _ = try call.type(0); _ = try call.type(1); return .bool },
                             .eager { arguments, _ in .bool(arguments[0] == arguments[1]) }),
-        FormulaFunctionInfo("unequal", .logic, "unequal(значение, значение)", "Истина, если значения различаются. То же — !=.",
+        FormulaFunctionInfo("unequal", .general, "unequal(значение, значение)", "Истина, если значения различаются. То же — !=.",
                             [FormulaExample("unequal(1, 2)", "true"), FormulaExample(#"unequal("a", "a")"#, "false")],
                             typing: { call in try call.arity(2...2); _ = try call.type(0); _ = try call.type(1); return .bool },
                             .eager { arguments, _ in .bool(arguments[0] != arguments[1]) }),
