@@ -28,7 +28,7 @@ require_gui_session() {
 require_ui_automation() {
   DevToolsSecurity -status 2>/dev/null | grep -q 'enabled' \
     || fail "На iMac выключен режим разработчика: нужно один раз 'sudo DevToolsSecurity -enable'."
-  automationmodetool 2>/dev/null | grep -q 'DOES NOT REQUIRE' \
+  automationmodetool 2>/dev/null | grep -qi 'does not require' \
     || fail "На iMac режим автоматизации UI просит пароль: нужно один раз 'sudo automationmodetool enable-automationmode-without-authentication'."
 }
 
