@@ -15,7 +15,9 @@ if [[ ${MN_ON_IMAC:-} != 1 ]]; then
   cd $REPO; stage=$(mktemp -d /tmp/mynotion-imac.XXXXXX); rc=0
   imac-run --gui --no-fallback --no-setup --wait ${MYNOTION_IMAC_WAIT:-1800} --fetch build/imac-sync-live --out $stage \
     -- 'MN_ON_IMAC=1 zsh scripts/imac/sync-live-check.sh' || rc=$?
-  if [[ -d $stage/build/imac-sync-live ]]; then rm -rf $OUT; mkdir -p ${OUT:h}; mv $stage/build/imac-sync-live $OUT; print -- "Итог: $OUT"; fi
+  # openrsync кладёт итоги под полным путём копии на iMac — ищем папку, где бы она ни оказалась.
+  src=($stage/build/imac-sync-live(N/) $stage/**/build/imac-sync-live(N/D))
+  if (( $#src )); then rm -rf $OUT; mkdir -p ${OUT:h}; mv $src[1] $OUT; print -- "Итог: $OUT"; fi
   rm -rf $stage; exit $rc
 fi
 

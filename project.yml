@@ -17,6 +17,8 @@ settings:
     CODE_SIGN_IDENTITY: "-"
     CODE_SIGN_STYLE: Manual
     ENABLE_USER_SCRIPT_SANDBOXING: YES
+    # xcodegen до 2.46 ставил это сам; без него у тестовых целей пустое имя модуля.
+    PRODUCT_NAME: $(TARGET_NAME)
 packages:
   MyNotionKit:
     path: Packages/MyNotionKit

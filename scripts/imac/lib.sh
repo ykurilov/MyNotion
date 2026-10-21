@@ -30,6 +30,10 @@ require_ui_automation() {
     || fail "На iMac выключен режим разработчика: нужно один раз 'sudo DevToolsSecurity -enable'."
   automationmodetool 2>/dev/null | grep -qi 'does not require' \
     || fail "На iMac режим автоматизации UI просит пароль: нужно один раз 'sudo automationmodetool enable-automationmode-without-authentication'."
+  # У iMac несколько раскладок: macOS показывает под курсором пузырёк раскладки, XCUITest принимает его
+  # за чужой диалог и не может щёлкнуть в поле. Подсказка выключается (только у пользователя, без sudo).
+  [[ $(defaults read kCFPreferencesAnyApplication TSMLanguageIndicatorEnabled 2>/dev/null) == 0 ]] \
+    || defaults write kCFPreferencesAnyApplication TSMLanguageIndicatorEnabled -bool false
 }
 
 # Сборка приложения: build_app <Debug|Release> <папка сборки>; путь к .app — в APP.

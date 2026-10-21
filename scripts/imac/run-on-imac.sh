@@ -26,10 +26,12 @@ on_imac_gui() { imac-run --gui --no-fallback --no-setup --wait $WAIT "$@"; }
 # Одна строка для imac-run (одна строка — команда оболочки на iMac).
 inner() { print -r -- "zsh scripts/imac/on-imac.sh ${(j: :)${(q)@}}"; }
 
-# Итоги imac-run кладёт в <out>/<путь в проекте>; переносим папку туда, куда просили.
+# Итоги imac-run кладёт в <out>/<путь в проекте>, а openrsync (rsync в macOS) не понимает отметку «./»
+# и кладёт их под полным путём копии на iMac — ищем папку, где бы она ни оказалась, и переносим, куда просили.
 fetch_to() {
-  local stage=$1 rel=$2 out=$3
-  if [[ -d $stage/$rel ]]; then rm -rf $out; mkdir -p ${out:h}; mv $stage/$rel $out; fi
+  local stage=$1 rel=$2 out=$3 src
+  src=($stage/$rel(N/) $stage/**/$rel(N/D))
+  if (( $#src )); then rm -rf $out; mkdir -p ${out:h}; mv $src[1] $out; fi
   rm -rf $stage
 }
 
