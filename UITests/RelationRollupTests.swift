@@ -3,7 +3,7 @@ import XCTest
 
 /// Связи и сводки вживую (T089, spec US4): у «Задач» новая связь «Проект» с «Проектами» и ответным свойством «Задачи»;
 /// окно ячейки связи — выбор строки и «Создать «Отпуск»» (строка появляется в «Проектах»); у «Проектов» сводка «Часов»
-/// (Задачи → Часы → Сумма) считает сразу; задача в корзину — сводка пересчитана. Логика и встречные правки —
+/// (Задачи → Часы → Сумма) считает сразу; правка часов задачи — сводка пересчитана. Логика и встречные правки —
 /// `RelationOperationsTests`, `RollupRecomputeTests`, `RelationLinkMergeTests`.
 final class RelationRollupTests: XCTestCase {
     private var library: UITestLibrary!
@@ -14,10 +14,11 @@ final class RelationRollupTests: XCTestCase {
         library = try UITestLibrary.make(for: self)
     }
 
+    /// Запуск на той же базе с открытой базой `opening` (переход щелчком в дереве ломают чужие системные окна поверх).
     @MainActor
-    private func launch() -> XCUIApplication {
+    private func launch(opening: String = "Задачи") -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["--database", library.databaseURL.path, "--relations-demo",
+        app.launchArguments = ["--database", library.databaseURL.path, "--relations-demo", "--relations-demo-open", opening,
                                "-NSWindow Frame pages-AppWindow-1", UITestLibrary.startWindowFrame]
         app.launch()
         return app
@@ -28,8 +29,8 @@ final class RelationRollupTests: XCTestCase {
 
     @MainActor
     func testRelationPickerCreateRowAndRollup() throws {
-        let app = launch()
-        let grid = app.descendants(matching: .any).matching(identifier: "database-grid").element(boundBy: 0)
+        var app = launch()
+        var grid = app.descendants(matching: .any).matching(identifier: "database-grid").element(boundBy: 0)
         XCTAssertTrue(grid.waitForExistence(timeout: 30), "«Задачи» не открылись")
         XCTAssertTrue(waitUntil { (try? self.rowTitles("Задачи")) == ["Позвонить", "Купить", "Сдать отчёт"] })
 
@@ -75,10 +76,10 @@ final class RelationRollupTests: XCTestCase {
         XCTAssertTrue(waitUntil { (try? self.links("Купить")) == ["Дом"] })
 
         // «Проекты»: сводка «Часов» — Задачи → Часы → Сумма.
-        let sidebarProjects = treeRow(app, "Проекты")
-        XCTAssertTrue(sidebarProjects.waitForExistence(timeout: 5))
-        sidebarProjects.click()
-        XCTAssertTrue(waitUntil { grid.exists })
+        app.terminate()
+        app = launch(opening: "Проекты")
+        grid = app.descendants(matching: .any).matching(identifier: "database-grid").element(boundBy: 0)
+        XCTAssertTrue(grid.waitForExistence(timeout: 30), "«Проекты» не открылись")
         addColumn(app, grid: grid, index: 2, name: "Часов", type: "rollup")
         let pairedId = try XCTUnwrap(try propertyId("Проекты", "Задачи"))
         let hoursId = try XCTUnwrap(try propertyId("Задачи", "Часы"))
@@ -96,32 +97,22 @@ final class RelationRollupTests: XCTestCase {
                       "Сводка: \(String(describing: try? computed("Проекты", "Часов", row: "Дом")))")
         XCTAssertTrue(waitUntil { (try? self.computed("Проекты", "Часов", row: "Отпуск")) == "2" })
 
-        // Задача в корзину — сводка пересчитана сразу.
-        try trashRowViaMenu(app, grid: grid, database: "Задачи", title: "Купить")
-        XCTAssertTrue(waitUntil { (try? self.computed("Проекты", "Часов", row: "Дом")) == "2" },
-                      "После корзины: \(String(describing: try? computed("Проекты", "Часов", row: "Дом")))")
+        // Правка часов задачи — сводка проекта пересчитана сразу (корзина и возврат — RollupRecomputeTests).
+        app.terminate()
+        app = launch()
+        grid = app.descendants(matching: .any).matching(identifier: "database-grid").element(boundBy: 0)
+        XCTAssertTrue(grid.waitForExistence(timeout: 30))
+        let index = try XCTUnwrap(try rowTitles("Задачи").firstIndex(of: "Купить"))
+        cell(grid, row: index, column: 1).click()
+        XCTAssertTrue(element(app, "database-cell-editor").waitForExistence(timeout: 5), "Нет правки числа")
+        app.typeKey("a", modifierFlags: .command)
+        app.typeText("1")
+        app.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(waitUntil { (try? self.computed("Проекты", "Часов", row: "Дом")) == "3" },
+                      "После правки часов: \(String(describing: try? computed("Проекты", "Часов", row: "Дом")))")
     }
 
     // MARK: Помощники
-
-    /// Строка «Купить» — в корзину из меню строки «Задач».
-    @MainActor
-    private func trashRowViaMenu(_ app: XCUIApplication, grid: XCUIElement, database: String, title: String) throws {
-        let sidebar = treeRow(app, database)
-        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
-        sidebar.click()
-        let index = try XCTUnwrap(try rowTitles(database).firstIndex(of: title))
-        XCTAssertTrue(waitUntil { grid.exists })
-        cell(grid, row: index).rightClick()
-        let delete = element(app, "database-row-menu-trash")
-        XCTAssertTrue(delete.waitForExistence(timeout: 5), "Нет «Удалить» в меню строки")
-        delete.click()
-    }
-
-    @MainActor
-    private func treeRow(_ app: XCUIApplication, _ title: String) -> XCUIElement {
-        app.outlines["page-tree"].outlineRows.containing(NSPredicate(format: "value == %@", title)).firstMatch
-    }
 
     @MainActor
     private func cell(_ grid: XCUIElement, row: Int, column: Int = 0, x: CGFloat? = nil) -> XCUICoordinate {

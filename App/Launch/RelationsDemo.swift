@@ -4,17 +4,20 @@ import NotesCore
 
 /// `--relations-demo` (US4, T089): базы «Проекты» (Дом, Работа) и «Задачи» (Позвонить 2 ч, Купить 3 ч, Сдать отчёт 4 ч)
 /// без связей; открыты «Задачи». `linked` — сразу связь «Проект» ↔ «Задачи» и сводка «Часов» (сумма часов) у «Проектов».
-/// Повторный запуск на той же базе ничего не добавляет.
+/// Повторный запуск на той же базе ничего не добавляет; `opening` — какую базу открыть.
 @MainActor
 enum RelationsDemo {
-    static func editorReady(model: MainWindowModel, linked: Bool) {
+    static func editorReady(model: MainWindowModel, linked: Bool, opening title: String) {
         do {
-            let existing = try model.store.write { tx in
-                try tx.fetchTexts(sql: "SELECT p.id FROM page p JOIN db_database d ON d.pageId = p.id WHERE p.title = 'Задачи' AND p.trashedAt IS NULL")
-            }.first.flatMap(UUID.init(uuidString:))
-            let tasks = try existing ?? makeDatabases(model.store, linked: linked)
+            func database(_ title: String) throws -> UUID? {
+                try model.store.write { tx in
+                    try tx.fetchTexts(sql: "SELECT p.id FROM page p JOIN db_database d ON d.pageId = p.id WHERE p.title = ? AND p.trashedAt IS NULL",
+                                      arguments: [.text(title)])
+                }.first.flatMap(UUID.init(uuidString:))
+            }
+            if try database("Задачи") == nil { _ = try makeDatabases(model.store, linked: linked) }
             model.library.reloadTree()
-            model.select(tasks)
+            if let opened = try database(title) { model.select(opened) }
         } catch {
             FileHandle.standardError.write(Data("Связи: база не записалась: \(error)\n".utf8))
         }

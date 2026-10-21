@@ -47,6 +47,8 @@ struct LaunchOptions {
     /// `--relations-demo-linked`: то же, и сразу связь «Проект» ↔ «Задачи» (Позвонить, Купить → Дом; Сдать отчёт → Работа)
     /// и сводка «Часов» у «Проектов» (живая проверка двух Mac, US4).
     var linksRelationsDemo = false
+    /// `--relations-demo-open <название>`: после демо открыть эту базу вместо «Задач».
+    var relationsDemoDatabase: String?
     /// `--ui-gallery <папка>`: на временной базе снять все состояния интерфейса в PNG и выйти.
     var uiGalleryURL: URL?
     /// `--ui-gallery-only <часть имени>`: снять только состояния, в имени которых есть эта строка.
@@ -91,6 +93,7 @@ struct LaunchOptions {
             case "--formula-editor-demo": opensFormulaEditorDemo = true
             case "--relations-demo": opensRelationsDemo = true
             case "--relations-demo-linked": (opensRelationsDemo, linksRelationsDemo) = (true, true)
+            case "--relations-demo-open": relationsDemoDatabase = remaining.popFirst()
             case "--generate-versions-sample": generatesVersionsSample = true
             case "--versions-quick": versionTiming = PageVersionRecorder.Timing(minimumInterval: 2, quietPeriod: 1)
             case "--launch-report": launchReportURL = remaining.popFirst().map(Self.fileURL)
