@@ -157,7 +157,11 @@ private struct VersionListPanel: View {
 
 private struct GroupingButtonFrame: PreferenceKey {
     static let defaultValue: CGRect = .zero
-    static func reduce(value: inout CGRect, nextValue: () -> CGRect) { value = nextValue() }
+    /// Соседи без кнопки отдают пустую рамку — она не должна затирать рамку кнопки.
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        let next = nextValue()
+        if next != .zero { value = next }
+    }
 }
 
 /// «Группировать: 1 мин ▾» — серая подпись, значение цветом текста, стрелка вниз (как «Group by 1m ▾» у Notion).

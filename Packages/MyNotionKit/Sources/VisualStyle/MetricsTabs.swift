@@ -19,11 +19,11 @@ extension Metrics {
         /// Вкладка: 199 и линия справа; когда не влезают — сжимаются поровну до `minimumTabWidth`.
         public static let tabWidth: CGFloat = 199
         public static let minimumTabWidth: CGFloat = 40
-        /// Иконка ≈ 15 с 16 от левого края, название — с 16 без иконки и с 39 с иконкой; шрифт 14.
+        /// Иконка ≈ 15 с 16 от левого края, название — с 16 без иконки и с 39 с иконкой; шрифт 13 (замер 21.10.2026).
         public static let contentInset: CGFloat = 16
         public static let iconSize: CGFloat = 15
         public static let iconTitleGap: CGFloat = 8
-        public static let titleFontSize: CGFloat = 14
+        public static let titleFontSize: CGFloat = 13
         /// «×» ≈ 9,5 × 9,5, серединой в 17 от правого края вкладки; кнопка вокруг — 20.
         public static let closeCenterFromTrailing: CGFloat = 17
         public static let closeSymbolSize: CGFloat = 10

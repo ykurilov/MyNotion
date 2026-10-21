@@ -335,10 +335,10 @@ final class SidebarScrollView: NSScrollView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         fade.frame = bounds
-        // Слой не перевёрнут: верх вида — y = 1.
+        // Слой вида прокрутки перевёрнут, как его содержимое: верх вида — y = 0 (проверено по снимку галереи).
         let solid = min(1, Metrics.Sidebar.scrollTopFadeHeight / bounds.height)
-        fade.startPoint = CGPoint(x: 0.5, y: 1)
-        fade.endPoint = CGPoint(x: 0.5, y: 1 - solid)
+        fade.startPoint = CGPoint(x: 0.5, y: 0)
+        fade.endPoint = CGPoint(x: 0.5, y: solid)
         if layer?.mask !== fade { layer?.mask = fade }
         CATransaction.commit()
     }

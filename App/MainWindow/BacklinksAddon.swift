@@ -168,6 +168,8 @@ private struct BacklinksListView: View {
             }
             .padding(6)
         }
+        // Полоса прокрутки — только когда строки не влезают: иначе она отнимает место у пути.
+        .scrollIndicators(CGFloat(rows.count) * Metrics.BacklinksRow.listRowHeight + 12 > Metrics.BacklinksRow.listMaxHeight ? .automatic : .never)
         .accessibilityIdentifier("backlinks-list")
     }
 }
@@ -210,6 +212,7 @@ private struct BacklinkListRowView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .focusEffectDisabled()
         .onHover { isHovered = $0 }
         .accessibilityIdentifier("backlink-item")
         .accessibilityLabel(row.title)

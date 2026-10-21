@@ -157,7 +157,9 @@ struct SidebarGeometryTests {
         scroll.layoutSubtreeIfNeeded()
         #expect(scroll.isTopFaded, "прокрученный список не гаснет сверху")
         let mask = try #require(scroll.layer?.mask as? CAGradientLayer)
-        #expect(abs((mask.startPoint.y - mask.endPoint.y) * scroll.bounds.height - Metrics.Sidebar.scrollTopFadeHeight) < 0.5)
+        // Слой перевёрнут: верх — y = 0; прозрачно у верха, сплошь — с 34.
+        #expect(mask.startPoint.y == 0)
+        #expect(abs(mask.endPoint.y * scroll.bounds.height - Metrics.Sidebar.scrollTopFadeHeight) < 0.5)
         scroll.contentView.scroll(to: .zero)
         scroll.layoutSubtreeIfNeeded()
         #expect(!scroll.isTopFaded)
