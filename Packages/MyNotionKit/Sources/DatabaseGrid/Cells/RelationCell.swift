@@ -94,11 +94,8 @@ final class RelationCellView: NSView, CellPopupContent {
         }
         rebuildRows(selectedCount: selected.count)
         needsLayout = true
-        // Карточку переставлять, только когда сменилась высота.
-        if preferredSize.height != shownHeight {
-            shownHeight = preferredSize.height
-            context.resize()
-        }
+        // Высота окна — по первому списку и дальше не меняется: новая карточка забирала бы клавиши у поиска.
+        if shownHeight == 0 { shownHeight = min(Self.maxHeight, PropertyPopupMetrics.searchBlockHeight + max(listHeight, 4 * PropertyPopupMetrics.rowHeight)) }
     }
 
     private func rebuildRows(selectedCount: Int) {
@@ -144,9 +141,7 @@ final class RelationCellView: NSView, CellPopupContent {
         rows.reduce(2 * Metrics.PopupMenu.verticalPadding) { $0 + ($1 is PropertyPopupCaption ? PropertyPopupMetrics.captionHeight : PropertyPopupMetrics.rowHeight) }
     }
 
-    var preferredSize: NSSize {
-        NSSize(width: Self.width, height: min(Self.maxHeight, PropertyPopupMetrics.searchBlockHeight + max(listHeight, PropertyPopupMetrics.rowHeight)))
-    }
+    var preferredSize: NSSize { NSSize(width: Self.width, height: shownHeight) }
 
     override var fittingSize: NSSize { preferredSize }
 
@@ -199,6 +194,7 @@ final class RelationCellView: NSView, CellPopupContent {
         guard case .selected(let related)? = entries[safe: sender.tag] else { return }
         context.attempt { try context.operations.unlinkRow(context.rowId, through: context.propertyId, from: related.id) }
         reloadEntries()
+        refocus()
     }
 
     /// После выбора: лимит «1 страница» — окно закрывается (как Notion), иначе поиск очищается и список обновляется.
@@ -210,6 +206,16 @@ final class RelationCellView: NSView, CellPopupContent {
         query = ""
         search.field.stringValue = ""
         reloadEntries()
+        refocus()
+    }
+
+    /// После правки таблица перечитывается и может забрать клавиши у окна связи — вернуть их полю поиска.
+    private func refocus() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let window = self.window else { return }
+            window.makeKey()
+            if !self.search.isFocused { self.focusFirstField() }
+        }
     }
 
     private func handle(_ command: Selector) -> Bool {
