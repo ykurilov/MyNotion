@@ -39,6 +39,12 @@ final class DatabaseBlockViewFactory: BlockViewFactory {
             resolve()?.openRow(rowId, mode: openMode ?? controller.openMode, inNewTab: inNewTab)
         }
         view.onOpenAsPage = { resolve()?.open(PageOpenRequest(pageId: databaseId)) }
+        // Меню колонки, «+» и окно «Свойства» (T039); «•••» шапки — пока окно «Свойства» (настройки вида — US3).
+        let menus = PropertyMenuPresenter(store: library.store, operations: model.databaseOperations, databaseId: databaseId,
+                                          viewId: controller.viewId)
+        view.onColumnMenu = { property, rect, host in menus.showColumnMenu(for: property.id, below: rect, in: host) }
+        view.onAddProperty = { rect, host in menus.showAddProperty(below: rect, in: host) }
+        view.onViewSettings = { rect, host in menus.showPropertiesWindow(below: rect, in: host) }
         var actions = RowMenuActions()
         actions.isFavorite = { resolve()?.isFavorite($0) ?? false }
         actions.toggleFavorite = { resolve()?.toggleFavorite($0) }
@@ -104,4 +110,14 @@ final class DatabasePageAddon: PageHeaderAddon {
     }
 
     func pageDidChange(_ page: Page, in textView: PageTextView) {}
+}
+
+extension MainWindowModel {
+    /// «+ Добавить свойство» на странице строки: окно типов под кнопкой, свойство — в базу строки.
+    func addRowProperty(_ rowId: UUID, anchor: NSView) {
+        guard let databaseId = try? store.write({ try $0.page(rowId)?.parentId }) else { return }
+        let menus = PropertyMenuPresenter(store: store, operations: databaseOperations, databaseId: databaseId, viewId: nil)
+        rowPropertyMenus = menus
+        menus.showAddProperty(below: anchor.bounds, in: anchor)
+    }
 }
