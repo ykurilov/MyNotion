@@ -53,15 +53,6 @@ final class DatabaseBlockViewFactory: BlockViewFactory {
         view.rowMenuActions = actions
         weak var textView = context.textView
         view.onHeightChange = { textView?.relayoutDatabaseBlock(block.id) }
-        if mode == .page, let scrollView = context.textView?.enclosingScrollView {
-            // Окно стало выше или ниже — таблица на всю страницу тоже.
-            scrollView.postsFrameChangedNotifications = true
-            nonisolated(unsafe) weak var resizedText = context.textView
-            let blockId = block.id
-            view.hostState = NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: scrollView, queue: .main) { _ in
-                MainActor.assumeIsolated { resizedText?.relayoutDatabaseBlock(blockId) }
-            }
-        }
         views.setObject(view, forKey: block.id as NSUUID)
         return view
     }
@@ -69,21 +60,17 @@ final class DatabaseBlockViewFactory: BlockViewFactory {
     func height(for block: Block, width: CGFloat) -> CGFloat? { nil }
 
     func height(for block: Block, width: CGFloat, context: BlockViewContext) -> CGFloat? {
-        if DatabasePageContent.isFullPage(block) {
-            // Таблица — до низа окна: страница под ней не листается, листается сетка.
-            let visible = context.textView?.enclosingScrollView?.contentSize.height ?? 700
-            let top = context.textView?.bodyTop ?? 0
-            return max(320, visible - top - Metrics.Page.bottomPadding)
-        }
         if let view = views.object(forKey: block.id as NSUUID) { return view.fittingHeight() }
         // До показа: строк — по пределу загрузки, без чтения ячеек.
         guard let library, let databaseId = block.linkedPageId else { return nil }
-        let count = (try? library.store.write { tx in
+        let count = ((try? library.store.write { tx in
             try tx.fetchTexts(sql: "SELECT COUNT(*) FROM page WHERE parentId = ? AND trashedAt IS NULL AND isTemplate = 0",
                               arguments: [.text(databaseId.uuidString.lowercased())]).first.flatMap(Int.init)
-        }) ?? 0
+        }) ?? nil) ?? 0
+        // Страница-база — все строки (листается страница), встроенная — по пределу загрузки 50.
+        if DatabasePageContent.isFullPage(block) { return DatabaseTableView.height(rows: count, hasMore: false, mode: .page) }
         let limit = 50
-        return DatabaseTableView.height(rows: min(count ?? 0, limit), hasMore: (count ?? 0) > limit, mode: .inline)
+        return DatabaseTableView.height(rows: min(count, limit), hasMore: count > limit, mode: .inline)
     }
 
     private func model(for window: NSWindow?) -> MainWindowModel? {

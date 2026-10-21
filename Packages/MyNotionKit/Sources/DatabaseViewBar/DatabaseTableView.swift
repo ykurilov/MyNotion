@@ -39,7 +39,8 @@ public final class DatabaseTableView: NSView, NSTextFieldDelegate {
     public init(controller: DatabaseTableController, mode: Mode) {
         self.controller = controller
         self.mode = mode
-        grid = DatabaseGridView(controller: controller, scrollsVertically: mode == .page)
+        // И на всю страницу таблица — часть страницы: листается страница, название уезжает, шапка колонок липнет (Notion).
+        grid = DatabaseGridView(controller: controller, scrollsVertically: false)
         super.init(frame: .zero)
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
@@ -150,10 +151,9 @@ public final class DatabaseTableView: NSView, NSTextFieldDelegate {
         grid.headerRect(of: propertyId).map { convert($0, from: grid) }
     }
 
-    /// Высота базы в странице при ширине `width`; на всю страницу — `available` (сетка листается сама).
-    public func fittingHeight(available: CGFloat? = nil) -> CGFloat {
-        if mode == .page, let available { return max(available, ViewBarView.height + 140) }
-        return Self.height(rows: controller.content.rowCount, hasMore: controller.hasMoreRows, mode: mode, barSharesTitleRow: barSharesTitleRow)
+    /// Высота базы в странице: все показанные строки (у встроенной — по пределу загрузки).
+    public func fittingHeight() -> CGFloat {
+        Self.height(rows: controller.content.rowCount, hasMore: controller.hasMoreRows, mode: mode, barSharesTitleRow: barSharesTitleRow)
     }
 
     /// У встроенной базы с одним видом кнопки строки вида — в строке названия (Notion 7.39, `notion-inline-db-new.png`).
@@ -182,8 +182,7 @@ public final class DatabaseTableView: NSView, NSTextFieldDelegate {
         }
         selectionBar.frame = viewBar.frame
         let loadMore = loadMoreButton.isHidden ? 0 : Self.loadMoreHeight
-        let gridHeight = mode == .page ? bounds.height - y : grid.fittingHeight
-        grid.frame = NSRect(x: 0, y: y, width: bounds.width, height: max(0, gridHeight))
+        grid.frame = NSRect(x: 0, y: y, width: bounds.width, height: grid.fittingHeight)
         loadMoreButton.frame = NSRect(x: Metrics.DatabaseGrid.cellHorizontalPadding, y: grid.frame.maxY, width: 160, height: loadMore)
     }
 
