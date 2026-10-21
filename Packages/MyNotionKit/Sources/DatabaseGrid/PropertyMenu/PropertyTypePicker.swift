@@ -29,3 +29,37 @@ public enum PropertyTypePicker {
         return needle.isEmpty ? rows : rows.filter { !$0.isEmpty }
     }
 }
+
+extension PropertyTypePicker {
+    /// Стрелка в списке типов.
+    public enum Direction: Sendable {
+        case up, down, left, right
+    }
+
+    /// Куда встаёт подсветка от типа `kind` по стрелке: ↑↓ — ближайшая строка с доступным типом, та же колонка (нет её
+    /// или серая — соседняя); ←→ — соседняя колонка строки. Края не прокручиваются; без подсветки — первый доступный тип.
+    public static func move(from kind: PropertyKind?, _ direction: Direction, in rows: [[Entry]]) -> PropertyKind? {
+        let firstEnabled = rows.lazy.flatMap { $0 }.first { $0.isEnabled }?.kind
+        guard let kind, let row = rows.firstIndex(where: { $0.contains { $0.kind == kind } }),
+              let column = rows[row].firstIndex(where: { $0.kind == kind }) else { return firstEnabled }
+        switch direction {
+        case .left, .right:
+            let step = direction == .right ? 1 : -1
+            var next = column + step
+            while rows[row].indices.contains(next) {
+                if rows[row][next].isEnabled { return rows[row][next].kind }
+                next += step
+            }
+            return kind
+        case .up, .down:
+            let candidates = direction == .down ? Array(rows.indices.dropFirst(row + 1)) : Array(rows.indices.prefix(row).reversed())
+            for index in candidates {
+                let entries = rows[index]
+                let preferred = min(column, entries.count - 1)
+                if entries.indices.contains(preferred), entries[preferred].isEnabled { return entries[preferred].kind }
+                if let other = entries.first(where: \.isEnabled) { return other.kind }
+            }
+            return kind
+        }
+    }
+}
