@@ -7,8 +7,9 @@ import NotesCore
 /// (`ViewQuerySQL.searchPredicate`): название, текст, ссылка, email, телефон, итоги формул и сводок, названия вариантов,
 /// имена файлов — у видимых свойств; без регистра и «ё».
 public struct ViewSearchIndex: Sendable {
-    /// Сравнимые тексты строки через разделитель (поиск не перескакивает из значения в значение).
-    let texts: [UUID: String]
+    /// Сравнимые тексты строки через разделитель (поиск не перескакивает из значения в значение) — байтами UTF-8:
+    /// тексты уже приведены (`SortableText`), сравнение байтов `memmem` в десятки раз быстрее `String.contains`.
+    let texts: [UUID: [UInt8]]
     static let separator = "\u{1}"
 
     public static func build(view: DatabaseView, catalog: DatabaseCatalog, in db: Database) throws -> ViewSearchIndex {
@@ -40,11 +41,17 @@ public struct ViewSearchIndex: Sendable {
                 break
             }
         }
-        return ViewSearchIndex(texts: parts.mapValues { $0.joined(separator: separator) })
+        return ViewSearchIndex(texts: parts.mapValues { Array($0.joined(separator: separator).utf8) })
     }
 
     public func matches(_ rowId: UUID, needle: String) -> Bool {
-        texts[rowId]?.contains(needle) ?? false
+        var needle = needle
+        return needle.withUTF8 { matches(rowId, bytes: $0) }
+    }
+
+    func matches(_ rowId: UUID, bytes needle: UnsafeBufferPointer<UInt8>) -> Bool {
+        guard let text = texts[rowId] else { return false }
+        return text.withUnsafeBytes { memmem($0.baseAddress, $0.count, needle.baseAddress, needle.count) != nil }
     }
 
     /// Итог вида без поиска, суженный поиском: порядок и группы — те же, у групп — только найденные строки.
@@ -52,7 +59,8 @@ public struct ViewSearchIndex: Sendable {
         let needle = SortableText.make(search.trimmingCharacters(in: .whitespaces))
         guard !needle.isEmpty else { return presentation }
         var result = presentation
-        result.rowIds = presentation.rowIds.filter { matches($0, needle: needle) }
+        var bytes = needle
+        result.rowIds = bytes.withUTF8 { needle in presentation.rowIds.filter { matches($0, bytes: needle) } }
         let found = Set(result.rowIds)
         result.groups = presentation.groups?.map { group in
             var group = group
