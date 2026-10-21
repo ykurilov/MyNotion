@@ -29,10 +29,9 @@ final class DatabaseTablePerformanceTests: XCTestCase {
         var openParts: [[Double]] = []
         var allOpens: [Double] = []
         var table: DatabaseTableView!
-        for round in 0..<12 {
-            window.show(NSView())
-            window.render()
-            window.pump(10)
+        // Как проба сетки этапа 0 (T004): 22 открытия подряд, первые два — прогрев, между ними пауза 30 мс.
+        for round in 0..<22 {
+            window.pump(30)
             var parts: [Double] = []
             let ms = try ProbeEditor.measure {
                 var controller: DatabaseTableController!
