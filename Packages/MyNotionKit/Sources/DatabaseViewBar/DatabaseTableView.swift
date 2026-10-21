@@ -85,6 +85,9 @@ public final class DatabaseTableView: NSView, NSTextFieldDelegate {
 
     private func wire() {
         controller.onReload = { [weak self] in self?.refresh() }
+        controller.onRowsChange = { [weak self] rows in
+            for row in rows { self?.grid.redrawRow(row) }
+        }
         grid.onColumnMenu = { [weak self] property, rect in
             guard let self else { return }
             onColumnMenu?(property, convert(rect, from: grid), self)

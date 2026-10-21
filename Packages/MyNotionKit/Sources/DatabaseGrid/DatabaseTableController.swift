@@ -81,14 +81,36 @@ public final class DatabaseTableController {
         onReload?()
     }
 
+    /// Порядок и состав строк вида зависят от значений: фильтр, сортировка, группа.
+    private var dependsOnValues: Bool {
+        view.filter.map { $0 != .null } == true || !(view.sorts.array ?? []).isEmpty || view.group.map { $0 != .null } == true
+    }
+
+    /// Строки вида, изменённые правкой ячеек.
+    public var onRowsChange: ((Set<Int>) -> Void)?
+
     private func databaseDidChange(_ touched: Set<UUID>?) {
         guard let touched else { return reload() }
-        if touched.contains(databaseId) || touched.contains(where: { content.rowIndex(of: $0) != nil }) { return reload() }
+        if touched.contains(databaseId) { return reload() }
+        let rows = Set(touched.compactMap { content.rowIndex(of: $0) })
+        if !rows.isEmpty {
+            // Правка значений без фильтра и сортировки — перечитать только эти строки, а не весь вид (SC-303).
+            guard !dependsOnValues, Self.rowsStillShown(touched, in: content, store: store) else { return reload() }
+            for row in rows where row < content.rowCount { content.reloadRow(row) }
+            onRowsChange?(rows)
+            return
+        }
         // Строка, которой не было в виде, — новая строка этой базы (её id — ребёнок базы): спросить хранилище дёшево.
         let unknown = touched.subtracting(content.rowIds)
         guard !unknown.isEmpty else { return }
         let parents = (try? store.write { tx in try unknown.compactMap { try tx.page($0)?.parentId } }) ?? []
         if parents.contains(databaseId) { reload() }
+    }
+
+    /// Строки на месте: не ушли в корзину (иначе нужен новый запрос вида).
+    private static func rowsStillShown(_ ids: Set<UUID>, in content: GridContent, store: NotesStore) -> Bool {
+        let shown = ids.filter { content.rowIndex(of: $0) != nil }
+        return (try? store.write { tx in try shown.allSatisfy { try tx.page($0)?.trashedAt == nil } }) ?? false
     }
 
     // MARK: Правки

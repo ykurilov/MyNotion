@@ -115,6 +115,11 @@ public final class DatabaseGridView: NSView {
         content.prefetch(around: visibleRows)
     }
 
+    /// Перерисовать строку (уже перечитанную).
+    public func redrawRow(_ index: Int) {
+        documentView.setNeedsDisplay(rows: index..<index + 1)
+    }
+
     /// Перечитать и перерисовать строку.
     public func reloadRow(at index: Int) {
         content.reloadRow(index)
