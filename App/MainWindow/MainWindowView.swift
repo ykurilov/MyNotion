@@ -187,6 +187,11 @@ private struct PagesWindow: View {
                 // Вкладки — в строке светофора над страницей; при спрятанной панели — за шторкой (US3).
                 tabStrip
                 pageArea
+                    // Строка базы сбоку — над страницей справа, таблица слева рабочая.
+                    .overlay {
+                        RowPeekHost(model: model, mode: .sidePeek, sidebarWidth: model.isSidebarCollapsed ? 0 : model.sidebarWidth + 1,
+                                    mentions: mentionSettings(pages: linkedPages), linkedPages: linkedPages)
+                    }
             }
             .frame(maxWidth: .infinity)
         }
@@ -206,6 +211,8 @@ private struct PagesWindow: View {
                                  open: { model.openInNewTab($0) }, dismiss: { model.isNewTabSearchShown = false })
             }
         }
+        // Строка базы по центру — над всем окном, под историей версий (US1, «Страница строки»).
+        .overlay { RowPeekHost(model: model, mode: .centerPeek, mentions: mentionSettings(pages: linkedPages), linkedPages: linkedPages) }
         .overlay { VersionHistoryOverlay(model: model, mentions: mentionSettings(pages: linkedPages)) }
         .modalCard(isPresented: model.isSyncSettingsShown) {
             SyncSettingsView(controller: model.syncSettingsPreview ?? model.sync) { model.isSyncSettingsShown = false }
@@ -214,6 +221,8 @@ private struct PagesWindow: View {
         // Путь страницы — в самой верхней полосе окна, как в Notion; кнопки окна — над боковой панелью.
         .ignoresSafeArea(.container, edges: .top)
         .onAppear { model.attachUndoManager(undoManager) }
+        // Перешли на другую страницу или вкладку — просмотр строки закрывается, как в Notion.
+        .onChange(of: model.openPageId) { model.closeRowPeek() }
         .onChange(of: undoManager) { _, undoManager in model.attachUndoManager(undoManager) }
         .onDisappear { model.saveAll() }
     }
@@ -391,7 +400,7 @@ private struct PagesWindow: View {
                 topBarAccessory: AnyView(FavoriteStarButton(isFavorite: model.isFavorite(document.pageId)) {
                     model.toggleFavorite(document.pageId)
                 }),
-                headerAddons: [PageCoverAddon.factory(model), BacklinksAddon.factory(model)],
+                headerAddons: [PageCoverAddon.factory(model), model.rowPageAddonFactory(), BacklinksAddon.factory(model)],
                 scrollPlace: model.scrollPlace,
                 restoringScroll: model.restoringScroll,
                 templates: TemplateSettings(templates: model.templateChoices(forPage: document.pageId),
