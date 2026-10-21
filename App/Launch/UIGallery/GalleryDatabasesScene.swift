@@ -16,6 +16,7 @@ enum GalleryDatabasesScene {
 
     static func show(_ kind: GalleryDatabases, model: MainWindowModel, window: NSWindow) async -> String? {
         if GalleryFormulasScene.handles(kind) { return await GalleryFormulasScene.show(kind, model: model, window: window) }
+        if GalleryViewScene.handles(kind) { return await GalleryViewScene.show(kind, model: model, window: window) }
         let store = model.store
         do {
             switch kind {
@@ -123,6 +124,7 @@ enum GalleryDatabasesScene {
         menus = nil
         model.closeRowPeek()
         GalleryFormulasScene.tearDown()
+        GalleryViewScene.tearDown()
         NSApp.windows.filter { $0.isVisible && $0.className.contains("PopupCardPanel") }.forEach { $0.orderOut(nil) }
     }
 
