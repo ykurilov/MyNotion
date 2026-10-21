@@ -257,6 +257,40 @@ extension DatabaseOperations {
         }
     }
 
+    /// «+ Новая группа» у группировки по выбору и статусу: новый вариант свойства («Новая группа», «Новая группа 1»…) в конце
+    /// (у статуса — в «К выполнению»). Название правится в настройках свойства.
+    @discardableResult
+    public func addGroupOption(to propertyId: UUID) throws -> UUID {
+        try perform("Новая группа") { transaction in
+            let property = try Self.requireProperty(propertyId, transaction)
+            let options = try transaction.options(ofProperty: propertyId, includingDeleted: true)
+            let name = Self.freeName("Новая группа", taken: Set(options.filter { $0.deletedAt == nil }.map(\.name)))
+            let colors = OptionColor.allCases.filter { $0.rawValue != options.last?.color }
+            let option = try transaction.saveOption(SelectOption(propertyId: propertyId, name: name, color: colors.randomElement() ?? .default,
+                                                                 sortKey: Self.key(between: options.map(\.sortKey).max(), nil),
+                                                                 statusGroup: property.kind == .status ? .todo : nil))
+            return (option.id, { try $0.setOptionDeleted(option.id) })
+        }
+    }
+
+    /// Отмена «+ Новая группа»: вариант удалён (как удаление варианта — следом `deletedAt`).
+    func setOptionDeleted(_ optionId: UUID) throws {
+        try perform("Новая группа") { transaction in
+            guard var option = try transaction.option(optionId) else { throw NotesStoreError.invalidRecord("варианта нет") }
+            let previous = option.deletedAt
+            option.deletedAt = Date()
+            try transaction.saveOption(option)
+            return ((), { operations in
+                try operations.perform("Новая группа") { transaction in
+                    guard var option = try transaction.option(optionId) else { throw NotesStoreError.invalidRecord("варианта нет") }
+                    option.deletedAt = previous
+                    try transaction.saveOption(option)
+                    return ((), { try $0.setOptionDeleted(optionId) })
+                }
+            })
+        }
+    }
+
     // MARK: Новая строка со значениями вида
 
     /// «+ Новая строка», «Создать» и «+ Новая строка» группы при фильтре или группе: строка сразу получает значения,

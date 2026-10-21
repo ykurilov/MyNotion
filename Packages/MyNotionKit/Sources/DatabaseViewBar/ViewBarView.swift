@@ -23,9 +23,22 @@ public final class ViewBarView: NSView {
     /// Действия кнопок по местам; кнопки без действия нет.
     public var actions: [ViewBarSlot: (NSView) -> Void] = [:] { didSet { rebuild() } }
     public var isInline = false { didSet { rebuild() } }
+    /// Синие значки: фильтр и сортировка вида заданы (Notion — значок синеет).
+    public var activeSlots: Set<ViewBarSlot> = [] { didSet { if activeSlots != oldValue { buttons.forEach { $0.needsDisplay = true } } } }
+    /// Щелчок по вкладке: неактивная — открыть вид, активная — её меню (как у Notion); правый щелчок — меню.
+    public var onSelectTab: ((UUID) -> Void)?
+    public var onTabMenu: ((UUID, NSView) -> Void)?
+    /// «+» после вкладок — новый вид.
+    public var onAddView: ((NSView) -> Void)?
+    /// Поиск в базе: текст поля; `nil` — поле закрыто.
+    public var onSearchChange: ((String?) -> Void)?
+    /// Поле поиска раскрыто (лупа превращается в поле).
+    public private(set) var isSearching = false
 
     private var tabViews: [ViewBarTabView] = []
     private var buttons: [NSView] = []
+    private var addViewButton: ViewBarIconButton?
+    let searchField = ViewBarSearchField()
 
     public override init(frame: NSRect) {
         super.init(frame: frame)
@@ -39,12 +52,29 @@ public final class ViewBarView: NSView {
 
     private func rebuild() {
         (tabViews + buttons).forEach { $0.removeFromSuperview() }
+        addViewButton?.removeFromSuperview()
         tabViews = showsTabs ? tabs.map { tab in
             let view = ViewBarTabView(tab: tab)
             view.isActive = { [weak self] in self?.activeTabId == tab.id }
+            view.onPress = { [weak self, weak view] in
+                guard let self, let view else { return }
+                if activeTabId == tab.id { onTabMenu?(tab.id, view) } else { onSelectTab?(tab.id) }
+            }
+            view.onMenu = { [weak self, weak view] in
+                guard let self, let view else { return }
+                onTabMenu?(tab.id, view)
+            }
             return view
         } : []
         tabViews.forEach(addSubview)
+        if showsTabs, onAddView != nil {
+            let button = ViewBarIconButton(symbol: "plus", tooltip: "Новый вид", identifier: "database-view-add")
+            button.onPress = { [weak self, weak button] in if let button { self?.onAddView?(button) } }
+            addViewButton = button
+            addSubview(button)
+        } else {
+            addViewButton = nil
+        }
         buttons = ViewBarItem.ordered(ViewBarItem.all, isInline: isInline).compactMap { item -> NSView? in
             guard let action = actions[item.slot] else { return nil }
             if item.slot == .create {
@@ -52,12 +82,29 @@ public final class ViewBarView: NSView {
                 button.onPress = { [weak button] in if let button { action(button) } }
                 return button
             }
+            if item.slot == .search, isSearching { return searchField }
             let button = ViewBarIconButton(symbol: item.symbol, tooltip: item.tooltip, identifier: "database-view-bar-\(item.slot)")
             button.onPress = { [weak button] in if let button { action(button) } }
+            let slot = item.slot
+            button.isActive = { [weak self] in self?.activeSlots.contains(slot) == true }
             return button
         }
         buttons.forEach(addSubview)
         needsLayout = true
+    }
+
+    /// Лупа раскрывает поле поиска; «×» и Esc на пустом поле его сворачивают.
+    public func setSearching(_ searching: Bool, text: String = "") {
+        guard searching != isSearching else { return }
+        isSearching = searching
+        searchField.text = text
+        searchField.onChange = { [weak self] text in self?.onSearchChange?(text) }
+        searchField.onClose = { [weak self] in
+            self?.setSearching(false)
+            self?.onSearchChange?(nil)
+        }
+        rebuild()
+        if searching { searchField.focus() }
     }
 
     public override func layout() {
@@ -68,9 +115,10 @@ public final class ViewBarView: NSView {
             tab.frame = NSRect(x: x, y: (bounds.height - 28) / 2, width: width, height: 28)
             x += width + 4
         }
+        addViewButton?.frame = NSRect(x: x, y: (bounds.height - 28) / 2, width: 28, height: 28)
         var right = bounds.width
         for button in buttons.reversed() {
-            let width = (button as? CreateRowButton)?.fittingWidth ?? 28
+            let width = (button as? CreateRowButton)?.fittingWidth ?? (button === searchField ? ViewBarSearchField.width : 28)
             right -= width
             button.frame = NSRect(x: right, y: (bounds.height - 28) / 2, width: width, height: 28)
             right -= button is CreateRowButton ? 8 : 2
@@ -83,6 +131,8 @@ public final class ViewBarView: NSView {
 final class ViewBarTabView: NSView {
     let tab: ViewBarView.Tab
     var isActive: () -> Bool = { false }
+    var onPress: (() -> Void)?
+    var onMenu: (() -> Void)?
     private let font = NSFont.systemFont(ofSize: 14, weight: .medium)
 
     init(tab: ViewBarView.Tab) {
@@ -99,6 +149,16 @@ final class ViewBarTabView: NSView {
 
     override var isFlipped: Bool { true }
     var fittingWidth: CGFloat { 10 + 16 + 6 + (tab.name as NSString).size(withAttributes: [.font: font]).width + 10 }
+
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) {
+        if bounds.contains(convert(event.locationInWindow, from: nil)) { onPress?() }
+    }
+    override func rightMouseDown(with event: NSEvent) { onMenu?() }
+    override func accessibilityPerformPress() -> Bool {
+        onPress?()
+        return true
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         let active = isActive()
@@ -120,6 +180,8 @@ final class ViewBarTabView: NSView {
 final class ViewBarIconButton: NSView {
     let symbol: String
     var onPress: (() -> Void)?
+    /// Синий значок (фильтр или сортировка заданы).
+    var isActive: () -> Bool = { false }
     private var isHovered = false { didSet { needsDisplay = true } }
 
     init(symbol: String, tooltip: String, identifier: String) {
@@ -159,7 +221,9 @@ final class ViewBarIconButton: NSView {
             Palette.hoverBackground.setFill()
             NSBezierPath(roundedRect: bounds, xRadius: 5, yRadius: 5).fill()
         }
-        let configuration = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular).applying(.init(paletteColors: [Palette.textSecondary]))
+        let color = isActive() ? Palette.activeViewControl : Palette.textSecondary
+        let configuration = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular).applying(.init(paletteColors: [color]))
+        setAccessibilityValue(isActive() ? "активен" : nil)
         guard let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?.withSymbolConfiguration(configuration) else { return }
         image.draw(in: NSRect(x: (bounds.width - image.size.width) / 2, y: (bounds.height - image.size.height) / 2, width: image.size.width,
                               height: image.size.height))

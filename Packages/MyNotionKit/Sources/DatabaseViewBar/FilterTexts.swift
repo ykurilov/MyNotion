@@ -74,10 +74,17 @@ public enum FilterTexts {
 
     static func dateText(_ value: JSONValue, op: FilterOperator) -> String? {
         if op == .isRelativeToToday {
-            let direction = relativeDirections.first { $0.key == value["direction"]?.string }?.title ?? "Этот"
-            let unit = relativeUnits.first { $0.key == value["unit"]?.string }?.title.lowercased() ?? "неделя"
+            let unit = value["unit"]?.string ?? "week"
             let count = Int(value["count"]?.number ?? 1)
-            return direction == "Этот" ? "\(direction) \(unit)" : "\(direction) \(count) \(unit)"
+            let forms: [String: (String, String, String)] = ["day": ("день", "дня", "дней"), "week": ("неделя", "недели", "недель"),
+                                                             "month": ("месяц", "месяца", "месяцев"), "year": ("год", "года", "лет")]
+            switch value["direction"]?.string {
+            case "past", "next":
+                let word = forms[unit].map { plural(count, $0.0, $0.1, $0.2) } ?? unit
+                return (value["direction"]?.string == "past" ? "Прошлые" : "Следующие") + " \(count) \(word)"
+            default:
+                return ["day": "Сегодня", "week": "Эта неделя", "month": "Этот месяц", "year": "Этот год"][unit] ?? "Эта неделя"
+            }
         }
         if op == .isBetween, let start = value["start"]?["exact"]?.string ?? value["start"]?.string,
            let end = value["end"]?["exact"]?.string ?? value["end"]?.string {

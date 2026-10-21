@@ -92,5 +92,5 @@ extension PropertyMenuSlot {
     }
 
     /// «›» справа: пункт открывает окно рядом (панель «Изменить свойство», список типов).
-    var opensWindowBeside: Bool { self == .editProperty || self == .changeType }
+    var opensWindowBeside: Bool { [.editProperty, .changeType, .sort, .calculate].contains(self) }
 }

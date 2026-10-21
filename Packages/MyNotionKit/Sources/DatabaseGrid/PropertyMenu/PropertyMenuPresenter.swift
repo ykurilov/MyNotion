@@ -8,7 +8,7 @@ import VisualStyle
 /// после правки базы (`DatabaseOperations.didChange`) открытые окна перечитывают свойство.
 @MainActor
 public final class PropertyMenuPresenter {
-    let commands: PropertyMenuCommands
+    private(set) var commands: PropertyMenuCommands
     private let menuCard = PopupCard()
     private let submenuCard = PopupCard()
     private let confirmCard = PopupCard()
@@ -23,6 +23,15 @@ public final class PropertyMenuPresenter {
     public weak var panelHost: NSView?
     /// Рамка шапки колонки свойства в координатах вида, где открыто меню: под ней — окно новой колонки.
     public var columnRect: ((UUID) -> NSRect?)?
+    /// «Фильтр» меню колонки (US3): плашка добавлена — хозяин открывает её окно у колонки.
+    public var onOpenFilter: ((FilterPath, UUID) -> Void)?
+    private let calculateCard = PopupCard()
+
+    /// Открыт другой вид той же базы: пункты вида правят его.
+    public func setViewId(_ viewId: UUID?) {
+        close()
+        commands.viewId = viewId
+    }
 
     public init(store: NotesStore, operations: DatabaseOperations, databaseId: UUID, viewId: UUID?) {
         commands = PropertyMenuCommands(store: store, operations: operations, databaseId: databaseId, viewId: viewId)
@@ -76,9 +85,78 @@ public final class PropertyMenuPresenter {
             menuCard.close()
             guard let view = anchorView, let rect = columnRect?(newId), let created = self.property(newId) else { return }
             showNewColumn(created, below: rect, in: view)
+        case .openFilter(let path):
+            menuCard.close()
+            onOpenFilter?(path, propertyId)
+        case .openSortMenu:
+            showSortMenu(for: property, besides: row)
+        case .openCalculateMenu:
+            showCalculateMenu(for: property, besides: row)
         case .done:
             menuCard.close()
         }
+    }
+
+    // MARK: Пункты вида (US3)
+
+    /// «Сортировка ›»: А → Я / Я → А (по возрастанию / по убыванию у чисел и дат).
+    private func showSortMenu(for property: DatabaseProperty, besides row: NSView) {
+        let textual: Set<PropertyKind> = [.title, .text, .url, .email, .phone, .select, .multiSelect, .status]
+        let titles = textual.contains(property.kind) ? ("А → Я", "Я → А") : ("По возрастанию", "По убыванию")
+        let entries: [ActionMenuEntry] = [(true, titles.0, "arrow.up"), (false, titles.1, "arrow.down")].map { item in
+            .action(ActionMenuAction(title: item.1, icon: item.2, identifier: item.0 ? "column-sort-ascending" : "column-sort-descending") {
+                [weak self] _ in
+                guard let self, let viewId = commands.viewId else { return }
+                Self.attempt { try self.commands.operations.sort(by: property.id, ascending: item.0, in: viewId) }
+                self.menuCard.close()
+            })
+        }
+        let menu = ActionMenuView(entries: entries, width: 220)
+        submenuCard.show(menu, size: menu.fittingSize, besides: row, gap: 0)
+    }
+
+    /// «Посчитать ›»: Нет, Количество ›, Проценты ›, Ещё › (числа, даты, флажок) — с отметкой выбранного.
+    private func showCalculateMenu(for property: DatabaseProperty, besides row: NSView) {
+        let menu = calculateMenu(for: property) { [weak self] in
+            self?.calculateCard.close()
+            self?.submenuCard.close()
+            self?.menuCard.close()
+        }
+        submenuCard.show(menu, size: menu.fittingSize, besides: row, gap: 0)
+    }
+
+    /// То же меню от строки итогов под колонкой (`rect` — ячейка итога в координатах `view`).
+    public func showCalculateMenu(for propertyId: UUID, below rect: NSRect, in view: NSView) {
+        guard let property = property(propertyId) else { return }
+        let menu = calculateMenu(for: property) { [weak self] in
+            self?.calculateCard.close()
+            self?.submenuCard.close()
+        }
+        show(menu, size: menu.fittingSize, in: submenuCard, below: rect, of: view)
+    }
+
+    private func calculateMenu(for property: DatabaseProperty, done: @escaping @MainActor () -> Void) -> ActionMenuView {
+        let current = commands.viewId.flatMap { id in try? commands.store.write { try $0.view(id) } }?.calculation(of: property.id)
+        let choose: @MainActor (Calculation?) -> Void = { [weak self] calculation in
+            guard let self, let viewId = commands.viewId else { return }
+            Self.attempt { try self.commands.operations.setCalculation(calculation, of: property.id, in: viewId) }
+            done()
+        }
+        var entries: [ActionMenuEntry] = [
+            .action(ActionMenuAction(title: "Нет", icon: current == nil ? "checkmark" : nil, identifier: "calculate-none") { _ in choose(nil) }),
+        ]
+        for section in ColumnTotals.menuSections(for: property.kind) {
+            entries.append(.action(ActionMenuAction(title: section.title, icon: section.items.contains { $0 == current } ? "checkmark" : nil,
+                                                    opensSubmenu: true, identifier: "calculate-\(section.title)") { [weak self] row in
+                let items: [ActionMenuEntry] = section.items.map { calculation in
+                    .action(ActionMenuAction(title: ColumnTotals.menuTitle(calculation), icon: calculation == current ? "checkmark" : nil,
+                                             identifier: "calculate-\(calculation.rawValue)") { _ in choose(calculation) })
+                }
+                let submenu = ActionMenuView(entries: items, width: 220)
+                self?.calculateCard.show(submenu, size: submenu.fittingSize, besides: row, gap: 0)
+            }))
+        }
+        return ActionMenuView(entries: entries, width: 220)
     }
 
     /// «Сменить тип ›»: список типов в две колонки сбоку от пункта; выбор меняет тип и закрывает меню.
@@ -254,6 +332,7 @@ public final class PropertyMenuPresenter {
     public func close() {
         menuCard.close()
         submenuCard.close()
+        calculateCard.close()
         confirmCard.close()
         propertiesCard.close()
         closeEditPanel()

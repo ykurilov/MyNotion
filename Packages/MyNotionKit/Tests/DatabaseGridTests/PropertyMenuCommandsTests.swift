@@ -32,18 +32,39 @@ struct PropertyMenuCommandsTests {
 
     // MARK: Пункты
 
-    @Test("Пункты US1: изменить, сменить тип, вставить слева/справа, дублировать, удалить; пунктов US3 нет")
+    @Test("Пункты US1 и вида (US3): фильтр, сортировка, группировка, посчитать, скрыть, перенос — в средней группе")
     func us1Entries() throws {
         let text = try operations.addProperty(to: base.databaseId, name: "Заметка", kind: .text)
         #expect(commands.entries(for: text).map(\.title) == [
-            "Изменить свойство", "Сменить тип", "—", "Вставить слева", "Вставить справа", "Дублировать свойство", "Удалить свойство",
+            "Изменить свойство", "Сменить тип", "—", "Фильтр", "Сортировка", "Группировка", "Посчитать", "Скрыть", "Переносить текст", "—",
+            "Вставить слева", "Вставить справа", "Дублировать свойство", "Удалить свойство",
         ])
+        // Колонка с переносом — «Не переносить текст».
+        try operations.setWrap(text.id, true, in: base.viewId)
+        #expect(commands.entries(for: text).map(\.title).contains("Не переносить текст"))
+    }
+
+    @Test("Пункты вида: «Фильтр» — плашка и её окно, «Скрыть», «Группировка», перенос; «Сортировка ›» и «Посчитать ›» — подменю")
+    func viewEntries() throws {
+        let text = try operations.addProperty(to: base.databaseId, name: "Заметка", kind: .text)
+        #expect(try commands.perform(.filter, on: text) == .openFilter([0]))
+        #expect(try commands.perform(.sort, on: text) == .openSortMenu)
+        #expect(try commands.perform(.calculate, on: text) == .openCalculateMenu)
+        #expect(try commands.perform(.hide, on: text) == .done)
+        #expect(try !columns().contains(text.id))
+        #expect(try commands.perform(.group, on: text) == .done)
+        #expect(try commands.perform(.wrap, on: text) == .done)
+        let view = try #require(try store.write { try $0.view(base.viewId) })
+        #expect(view.groupSettings?.propertyId == text.id)
+        #expect(view.wraps(text.id))
+        #expect(view.filterNode?.ruleCount == 1)
     }
 
     @Test("«Название»: тип не меняется, не дублируется и не удаляется; без вида вставки нет")
     func titleAndNoView() throws {
         let title = try property("Название")
-        #expect(commands.entries(for: title).map(\.title) == ["Изменить свойство", "—", "Вставить слева", "Вставить справа"])
+        #expect(commands.entries(for: title).map(\.title) == ["Изменить свойство", "—", "Фильтр", "Сортировка", "Группировка", "Посчитать",
+                                                               "Переносить текст", "—", "Вставить слева", "Вставить справа"])
         let text = try operations.addProperty(to: base.databaseId, name: "Заметка", kind: .text)
         let noView = PropertyMenuCommands(store: store, operations: operations, databaseId: base.databaseId, viewId: nil)
         #expect(noView.entries(for: text).map(\.title) == ["Изменить свойство", "Сменить тип", "—", "Дублировать свойство", "Удалить свойство"])
