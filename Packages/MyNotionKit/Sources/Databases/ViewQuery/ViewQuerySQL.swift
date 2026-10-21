@@ -366,7 +366,9 @@ public struct ViewQuerySQL {
             case .select, .status, .multiSelect:
                 let matching = (catalog.options[property.id] ?? []).filter { SortableText.make($0.name).contains(needle) }.map(\.id.databaseText)
                 if property.kind == .multiSelect { multiOptionIds += matching.map { (id, $0) } } else { optionIds += matching }
-            case .uniqueId, .files, .number: otherCells.append(id)
+            // Числа и ID не ищутся (их текст поиска не в индексе — чтение каждой ячейки стоило бы десятки мс на символ);
+            // имена файлов ищутся.
+            case .files: otherCells.append(id)
             default: break
             }
         }

@@ -45,11 +45,10 @@ final class DatabaseViewPerformanceTests: XCTestCase {
             let first = now()
             var start = first
             try body()
-            lap("операция", &start)
+            lap("операция и перечитывание", &start)
             _ = try ViewQuery.present(viewId, in: store)
             lap("запрос", &start)
-            controller.reload()
-            lap("перечитать", &start)
+            // Таблица уже перечитана: операция сообщает о правке (`DatabaseOperations.didChange`), контроллер ловит её сразу.
             window.window.contentView?.layoutSubtreeIfNeeded()
             lap("раскладка", &start)
             window.window.displayIfNeeded()
@@ -64,6 +63,8 @@ final class DatabaseViewPerformanceTests: XCTestCase {
         for round in 0..<12 {
             let on = round % 2 == 0
             filters.append(try change { try operations.setFilter(on ? notDone : nil, of: viewId) })
+            // Правка дошла до таблицы сразу (а не на следующем такте): иначе замер был бы занижен.
+            XCTAssertEqual(controller.content.rowIds.count < DatabaseSampleGenerator.taskCount, on, "Фильтр не перечитал таблицу сразу")
             sorts.append(try change {
                 try operations.setSorts(on ? [SortSpec(propertyId: property("Срок")), SortSpec(propertyId: property("Название"))] : [], of: viewId)
             })
