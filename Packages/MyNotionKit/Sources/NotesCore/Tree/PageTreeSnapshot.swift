@@ -133,12 +133,7 @@ extension NotesStore {
     /// показывает и не читает), но с корзиной целиком; и какие страницы — базы (`true` — встроенная).
     public func treeOutline() throws -> (pages: [Page], databases: [UUID: Bool]) {
         try database.dbWriter.read { db in
-            let pages = try Row.fetchAll(db, sql: """
-                WITH RECURSIVE hidden(id) AS (
-                    SELECT page.id FROM page JOIN db_database ON page.parentId = db_database.pageId
-                    UNION ALL SELECT page.id FROM page JOIN hidden ON page.parentId = hidden.id)
-                SELECT * FROM page WHERE id NOT IN hidden OR trashedAt IS NOT NULL ORDER BY sortKey, id
-                """).map(Page.init(row:))
+            let pages = try Row.fetchAll(db, sql: Self.treeOutlineSQL).map(Page.init(row:))
             var databases: [UUID: Bool] = [:]
             for row in try Row.fetchAll(db, sql: "SELECT pageId, isInline FROM db_database") {
                 if let id = RowDecoding.optionalUUID(row, "pageId") { databases[id] = row["isInline"] }
@@ -146,6 +141,26 @@ extension NotesStore {
             return (pages, databases)
         }
     }
+
+    /// Обход от корней по индексу `page_by_parent`, не спускаясь в базы: строк баз десятки тысяч, и полный проход
+    /// по `page` на холодном диске стоил первому запуску 1,3 с (T030). Корни — страницы без родителя и сироты
+    /// (родитель исчез): различных родителей перебирает «прыжок по индексу», не читая строки баз. Корзина — по
+    /// частичному индексу `page_trashed`, с удалёнными строками баз.
+    static let treeOutlineSQL = """
+        WITH RECURSIVE
+            parents(id) AS (
+                SELECT min(parentId) FROM page WHERE parentId IS NOT NULL
+                UNION ALL SELECT (SELECT min(parentId) FROM page WHERE parentId > parents.id) FROM parents WHERE parents.id IS NOT NULL),
+            shown(id) AS (
+                SELECT id FROM page WHERE parentId IS NULL
+                UNION SELECT page.id FROM parents JOIN page ON page.parentId = parents.id
+                    WHERE NOT EXISTS (SELECT 1 FROM page AS parent WHERE parent.id = parents.id)
+                UNION SELECT page.id FROM shown JOIN page ON page.parentId = shown.id
+                    WHERE shown.id NOT IN (SELECT pageId FROM db_database))
+        SELECT * FROM page WHERE id IN shown
+        UNION SELECT * FROM page WHERE trashedAt IS NOT NULL
+        ORDER BY sortKey, id
+        """
 
     /// Записи корзины: страницы в корзине, чей родитель не в корзине; последние удалённые — сверху.
     public func trashEntries() throws -> [Page] {

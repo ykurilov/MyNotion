@@ -76,7 +76,7 @@ description: "Задачи: базы данных — основа"
 - [x] T027 Реестры: типы в `PK/Sources/DatabaseGrid/Cells/CellKind.swift`, меню колонки `PropertyMenu/PropertyMenuItem.swift`, список типов `PropertyMenu/PropertyTypePicker.swift`, окна настроек `PropertySettings/PropertySettingsPanel.swift`, кнопки строки вида `PK/Sources/DatabaseViewBar/ViewBarItem.swift`, меню строки `DatabaseGrid/RowMenuItem.swift`, места страницы строки `PK/Sources/DatabaseRowPage/RowPagePlaces.swift`; пункт «Выгрузить базу» — место в реестре меню «•••» 003 (T018)
 - [x] T028 [P] Цвета вариантов (10 цветов Notion в обеих темах, со снимков) и размеры сетки в `PK/Sources/VisualStyle/`; плашка варианта `DatabaseGrid/OptionChip.swift` (её берут US2, US3, US4)
 - [x] T029 [P] Состояния галереи «база пустая», «таблица эталона» в `PK/Sources/UIGallery/GalleryCatalog.swift`
-- [ ] T030 Затронутые тесты зелёные (`swift test`); замер запуска, памяти, перехода и вкладок в виртуальном Mac не хуже 003; миграция эталона v9 ≤ 2 с; запись в quickstart.md, раздел «Этап 0»; коммит
+- [x] T030 Затронутые тесты зелёные (`swift test`); замер запуска, памяти, перехода и вкладок в виртуальном Mac не хуже 003; миграция эталона v9 ≤ 2 с; запись в quickstart.md, раздел «Этап 0»; коммит
 
 **Checkpoint**: фундамент готов — волна B стартует.
 
