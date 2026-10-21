@@ -81,12 +81,25 @@ public struct PropertyMenuCommands {
         return true
     }
 
-    /// Сменить тип; `false` — тип тот же.
+    /// Сменить тип; `false` — тип тот же. На большой базе — в фоне (окно не замирает, SC-305), таблица перечитается
+    /// по готовности.
     @discardableResult
     public func changeType(_ property: DatabaseProperty, to kind: PropertyKind) throws -> Bool {
         guard kind != property.kind else { return false }
-        try operations.changeType(property.id, to: kind)
+        if try rowCount() >= DatabaseOperations.backgroundRewriteThreshold {
+            operations.startChangeType(property.id, to: kind)
+        } else {
+            try operations.changeType(property.id, to: kind)
+        }
         return true
+    }
+
+    /// Строк в базе (с корзиной: их значения тоже переводятся).
+    func rowCount() throws -> Int {
+        try store.write { tx in
+            try tx.fetchTexts(sql: "SELECT COUNT(*) FROM page WHERE parentId = ?", arguments: [.text(databaseId.uuidString.lowercased())])
+                .first.flatMap(Int.init) ?? 0
+        }
     }
 
     /// Новое свойство из «+» и окна «Свойства»: имя из поля, пустое — название типа («Число», «Число 1»…), как у Notion.

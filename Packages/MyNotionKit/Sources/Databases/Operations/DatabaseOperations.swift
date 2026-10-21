@@ -22,6 +22,8 @@ public final class DatabaseOperations {
     /// название, корзина, блок базы в хозяине) — дереву и открытым страницам. Ячейки, свойства и виды сюда не входят:
     /// их ловят открытые таблицы по `didChange`, а страница базы не перечитывается из-за правки своей таблицы.
     public var onChange: ((Set<UUID>) -> Void)?
+    /// Идущая фоновая перезапись свойства (большая смена типа и её отмена); следующая ждёт её.
+    public internal(set) var pendingRewrite: Task<Void, any Error>?
     /// Отмена не удалась (например, строку уже стёрли навсегда).
     public var onUndoFailure: ((any Error) -> Void)?
 
