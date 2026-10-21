@@ -14,6 +14,8 @@ struct LaunchOptions {
     var generatesRichSample = false
     /// `--generate-003-sample`: добавить в открытую базу дополнения 003 (quickstart.md, «Эталон»; каждая история — свою часть).
     var generates003Sample = false
+    /// `--generate-004-sample`: добавить в открытую базу эталон баз 004 (quickstart.md, «Эталон», дополнения 004).
+    var generates004Sample = false
     /// `--launch-report <путь>`: записать время запуска и память в покое.
     var launchReportURL: URL?
     /// `--window-snapshot <путь>`: когда страница готова, снять окно в PNG и выйти (снимок не требует экрана).
@@ -77,6 +79,7 @@ struct LaunchOptions {
             case "--generate-visual-sample": generatesVisualSample = true
             case "--generate-rich-sample": generatesRichSample = true
             case "--generate-003-sample": generates003Sample = true
+            case "--generate-004-sample": generates004Sample = true
             case "--generate-versions-sample": generatesVersionsSample = true
             case "--versions-quick": versionTiming = PageVersionRecorder.Timing(minimumInterval: 2, quietPeriod: 1)
             case "--launch-report": launchReportURL = remaining.popFirst().map(Self.fileURL)

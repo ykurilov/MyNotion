@@ -71,6 +71,19 @@ targets:
         product: PagePicker
       - package: MyNotionKit
         product: PageCover
+      # 004: базы данных.
+      - package: MyNotionKit
+        product: Formulas
+      - package: MyNotionKit
+        product: Databases
+      - package: MyNotionKit
+        product: DatabaseGrid
+      - package: MyNotionKit
+        product: DatabaseViewBar
+      - package: MyNotionKit
+        product: DatabaseRowPage
+      - package: MyNotionKit
+        product: NotionSchemaFetch
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion
@@ -126,6 +139,13 @@ targets:
       # US6: замер истории версий и набора во время записи версий.
       - package: MyNotionKit
         product: PageVersions
+      # 004, этап 0: пробы сетки, запроса вида, формул, связей и встроенной базы (research R20).
+      - package: MyNotionKit
+        product: Databases
+      - package: MyNotionKit
+        product: DatabaseGrid
+      - package: MyNotionKit
+        product: Formulas
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion.performancetests

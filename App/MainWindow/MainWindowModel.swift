@@ -1,4 +1,5 @@
 import AppKit
+import Databases
 import Foundation
 import Navigation
 import NotesCore
@@ -16,6 +17,8 @@ import VisualStyle
 final class MainWindowModel {
     @ObservationIgnored let library: PagesLibrary
     @ObservationIgnored let treeOperations: PageTreeOperations
+    /// Операции баз (004): создание из «/», правки схемы и значений — свои шаги ⌘Z в отмене окна.
+    @ObservationIgnored let databaseOperations: DatabaseOperations
     /// Окно «Переместить в…» (US4, `MainWindowModel+Copies`).
     @ObservationIgnored let movePicker = PagePickerController()
     /// Окно на экране: по нему библиотека знает, в каком окне работают сейчас.
@@ -75,6 +78,7 @@ final class MainWindowModel {
         self.library = library
         self.restoresTabs = restoresTabs
         treeOperations = PageTreeOperations(store: library.store)
+        databaseOperations = DatabaseOperations(store: library.store)
         let windowState = try? library.store.windowState(WindowState.mainWindowId)
         collapsedPageIds = windowState?.collapsedPageIds ?? []
         collapsedSections = windowState?.collapsedSidebarSections ?? []
@@ -84,6 +88,10 @@ final class MainWindowModel {
         treeOperations.onIconChange = { [weak library] pageId, _ in library?.iconDidChange(pageId) }
         treeOperations.onAppearanceChange = { [weak library] pageId in library?.appearanceDidChange(pageId) }
         treeOperations.onUndoFailure = { [weak self] error in
+            self?.loadError = "Не удалось отменить: \(SaveStatus.reason(for: error))"
+        }
+        databaseOperations.onChange = { [weak library] touched in library?.treeDidChange(touched) }
+        databaseOperations.onUndoFailure = { [weak self] error in
             self?.loadError = "Не удалось отменить: \(SaveStatus.reason(for: error))"
         }
         search = PageSearchController(store: library.store, tree: { [weak library] in library?.tree ?? PageTreeSnapshot(allPages: []) },
@@ -153,6 +161,7 @@ final class MainWindowModel {
     /// Отмена окна: общая для редактора и дерева.
     func attachUndoManager(_ undoManager: UndoManager?) {
         treeOperations.undoManager = undoManager
+        databaseOperations.undoManager = undoManager
     }
 
     // MARK: Действия
@@ -227,6 +236,12 @@ final class MainWindowModel {
             performTreeOperation { try treeOperations.turnIntoSubpage(blockId, in: pageId) }
         case .moveBlocks(let blockIds, let anchor):
             showMoveBlocksPicker(blockIds, from: pageId, anchor: anchor)
+        case .createDatabase(let placement, let isInline):
+            // Полностраничная открывается, как подстраница; встроенная остаётся блоком на этой странице (вид — US1).
+            if let created = performTreeOperation({ try databaseOperations.createDatabase(in: pageId, isInline: isInline, linkAt: placement) }),
+               !isInline {
+                navigate(to: created.databaseId, focus: .title)
+            }
         }
     }
 

@@ -1,6 +1,7 @@
 import AppKit
 import Attachments
 import Backlinks
+import Databases
 import MarkdownExport
 import NotesCore
 import NotionImport
@@ -99,6 +100,8 @@ struct MyNotionApp: App {
         // Индекс поиска и очередь синхронизации пишутся в той же транзакции, что и записи (research R6, R4) —
         // до первой записи. Пока синхронизация не включена, очередь ничего не пишет.
         store.addWriteHook(SearchIndexer())
+        // 004: сравнимые колонки и строки поиска значений ячеек — в той же транзакции (research R3, R14).
+        store.addWriteHook(CellIndexer())
         // Индекс обратных ссылок — в той же транзакции, что и блок (research R10); после фиксации открытые страницы
         // перечитывают счёт, если их ссылки сменились.
         store.addWriteHook(PageLinkIndexer(onLinksChange: BacklinksAddon.linksDidChange))
@@ -122,6 +125,9 @@ struct MyNotionApp: App {
             // Картинки ветки — те же файлы-образцы, что у картинок «богатой» страницы (`SampleMedia`).
             let imageProps = BlockKinds.richPageParts.first { $0.name == BlockKind.image.rawValue }?.blocks.first?.props ?? .empty
             try PagesNavigationSample(imageProps: imageProps).ensure(in: store)
+        }
+        if options.generates004Sample {
+            try DatabaseSampleGenerator().ensure(in: store)
         }
         if options.generates003Sample || options.generatesVersionsSample {
             // До первого окна: окно открывает страницу образца, как любую страницу базы.

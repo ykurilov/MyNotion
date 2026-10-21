@@ -12,6 +12,8 @@ struct BlockModelTests {
             "paragraph", "heading1", "heading2", "heading3", "bulletItem", "numberedItem", "checkbox", "pageLink",
             "toggle", "quote", "callout", "divider", "code", "equation", "tableOfContents", "image", "file", "video", "bookmark",
             "table", "tableRow", "tableColumn", "tableCell", "columnList", "column",
+            // 004
+            "database",
         ]
         #expect(Set(BlockKind.allCases.map(\.rawValue)) == expected)
     }
@@ -21,7 +23,7 @@ struct BlockModelTests {
         #expect(Set(BlockKind.allCases.filter(\.canHaveChildren)) == [.bulletItem, .numberedItem, .checkbox, .toggle, .callout, .quote])
         #expect(Set(BlockKind.allCases.filter(\.isContainer)) == [.columnList, .column, .table, .tableRow])
         #expect(Set(BlockKind.allCases.filter(\.rendersAsAttachment))
-                == [.divider, .code, .equation, .tableOfContents, .image, .file, .video, .bookmark, .table, .columnList])
+                == [.divider, .code, .equation, .tableOfContents, .image, .file, .video, .bookmark, .table, .columnList, .database])
     }
 
     @Test("props по типам: значения по умолчанию")

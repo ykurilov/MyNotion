@@ -6,8 +6,8 @@ public final class NotesTransaction {
     private let db: Database
     package let clock: HybridLogicalClock
     /// Что изменено в этой транзакции на данный момент.
-    package private(set) var changes = NotesChanges()
-    private var touchedPageIds: Set<UUID> = []
+    package internal(set) var changes = NotesChanges()
+    var touchedPageIds: Set<UUID> = []
     private let keepsDeletionMarks: Bool
 
     init(db: Database, clock: HybridLogicalClock, keepsDeletionMarks: Bool = false) {
@@ -158,6 +158,7 @@ public final class NotesTransaction {
 
     private func erase(_ pageId: UUID, erasedAt: HybridTimestamp, known: ClockKnowledge) throws {
         try db.execute(sql: "DELETE FROM block WHERE pageId = ?", arguments: [pageId.databaseText])
+        try eraseDatabaseRecords(ofPage: pageId)
         try db.execute(sql: "DELETE FROM page WHERE id = ?", arguments: [pageId.databaseText])
         try db.execute(
             sql: "INSERT OR REPLACE INTO page_tombstone (pageId, erasedAt, knownClocks) VALUES (?, ?, ?)",
@@ -427,6 +428,12 @@ public final class NotesTransaction {
         try db.execute(sql: sql, arguments: StatementArguments(arguments.map(\.databaseValue)))
     }
 
+    /// Тот же запрос, но подготовленный один раз на соединение: для одного оператора, который подписчик повторяет
+    /// тысячи раз (итоги формул, сравнимые колонки ячеек).
+    public func executeCached(sql: String, arguments: [SQLValue] = []) throws {
+        try db.cachedStatement(sql: sql).execute(arguments: StatementArguments(arguments.map(\.databaseValue)))
+    }
+
     /// Запрос подписчика с ответом — первая колонка строками (например, `DELETE … RETURNING`).
     public func fetchTexts(sql: String, arguments: [SQLValue] = []) throws -> [String] {
         try String.fetchAll(db, sql: sql, arguments: StatementArguments(arguments.map(\.databaseValue)))
@@ -515,8 +522,8 @@ public final class NotesTransaction {
         if block.isChecked, block.kind != .checkbox {
             throw NotesStoreError.invalidBlock("отметка бывает только у чекбокса")
         }
-        if (block.linkedPageId != nil) != (block.kind == .pageLink) {
-            throw NotesStoreError.invalidBlock("ссылка на подстраницу бывает только у блока-подстраницы, и у него она обязательна")
+        if (block.linkedPageId != nil) != block.kind.linksPage {
+            throw NotesStoreError.invalidBlock("ссылка на страницу бывает только у подстраницы и встроенной базы, и у них она обязательна")
         }
     }
 

@@ -415,6 +415,8 @@ final class UIGalleryRunner {
             return await GalleryVersionHistoryScene.show(kind, model: model)
         case .templates(let kind):
             return await GalleryTemplatesScene.show(kind, model: model, library: library, window: window)
+        case .databases(let kind):
+            return await GalleryDatabasesScene.show(kind, model: model, window: window)
 
         case .movePicker(let kind):
             await open(library.sample.page.id)
@@ -559,6 +561,9 @@ final class UIGalleryRunner {
             GalleryVersionHistoryScene.tearDown(model: model)
         case .templates:
             GalleryTemplatesScene.tearDown(model: model)
+            await settle()
+        case .databases:
+            GalleryDatabasesScene.tearDown()
             await settle()
         case .backlinks(.list):
             NSApp.windows.filter { $0.isVisible && $0.className.contains("PopupCardPanel") }.forEach { $0.orderOut(nil) }

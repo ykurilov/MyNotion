@@ -6,7 +6,7 @@ enum BlockKindRegistry {
         .paragraph, .heading1, .heading2, .heading3, .bulletItem, .numberedItem, .checkbox,
         .toggle, .pageLink, .quote, .callout, .divider, .code, .equation, .tableOfContents,
         .image, .file, .video, .bookmark,
-        .table, .tableRow, .tableColumn, .tableCell, .columnList, .column,
+        .table, .tableRow, .tableColumn, .tableCell, .columnList, .column, .database,
     ]
 
     private static let byKind: [BlockKind: BlockKindDescriptor] = Dictionary(uniqueKeysWithValues: all.map { ($0.kind, $0) })

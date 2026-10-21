@@ -28,6 +28,12 @@ let package = Package(
         .library(name: "Navigation", targets: ["Navigation"]),
         .library(name: "PagePicker", targets: ["PagePicker"]),
         .library(name: "PageCover", targets: ["PageCover"]),
+        .library(name: "Formulas", targets: ["Formulas"]),
+        .library(name: "Databases", targets: ["Databases"]),
+        .library(name: "DatabaseGrid", targets: ["DatabaseGrid"]),
+        .library(name: "DatabaseViewBar", targets: ["DatabaseViewBar"]),
+        .library(name: "DatabaseRowPage", targets: ["DatabaseRowPage"]),
+        .library(name: "NotionSchemaFetch", targets: ["NotionSchemaFetch"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.11.1"),
@@ -74,6 +80,18 @@ let package = Package(
         .target(name: "PagePicker", dependencies: ["NotesCore", "PageSearch", "VisualStyle"]),
         // Обложка: вид, галерея, окно «Сменить обложку», «Переместить» (research R1).
         .target(name: "PageCover", dependencies: ["NotesCore", "Attachments", "VisualStyle"]),
+        // 004 (plan.md, Project Structure). Язык формул: разбор, типы, вычисление — без зависимостей (research R6).
+        .target(name: "Formulas"),
+        // Базы: модели значений 18 типов, операции с отменой, запрос вида, пересчёт, индексы ячеек — без AppKit (R2–R9).
+        .target(name: "Databases", dependencies: ["NotesCore", "Formulas", .product(name: "GRDB", package: "GRDB.swift")]),
+        // Сетка таблицы: видимые строки слоями, ячейки по типам, меню колонки и окна настроек (research R4, R5).
+        .target(name: "DatabaseGrid", dependencies: ["NotesCore", "Databases", "VisualStyle", "Attachments"]),
+        // Строка видов: фильтр, сортировка, поиск, «•••» вида, «Создать ▾».
+        .target(name: "DatabaseViewBar", dependencies: ["Databases", "DatabaseGrid", "VisualStyle"]),
+        // Страница строки: свойства под названием, просмотр сбоку и по центру (research R12).
+        .target(name: "DatabaseRowPage", dependencies: ["Databases", "DatabaseGrid", "PageEditor"]),
+        // Схема баз из Notion по ключу (Q3, research R19): только чтение.
+        .target(name: "NotionSchemaFetch", dependencies: ["Formulas"]),
 
         .testTarget(name: "VisualStyleTests", dependencies: ["VisualStyle"]),
         .testTarget(name: "NotesCoreTests", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
@@ -98,6 +116,12 @@ let package = Package(
         .testTarget(name: "NavigationTests", dependencies: ["Navigation", "NotesCore"]),
         .testTarget(name: "PagePickerTests", dependencies: ["PagePicker", "NotesCore"]),
         .testTarget(name: "PageCoverTests", dependencies: ["PageCover", "NotesCore", "Attachments", "VisualStyle"]),
+        .testTarget(name: "FormulasTests", dependencies: ["Formulas"]),
+        .testTarget(name: "DatabasesTests", dependencies: ["Databases", "NotesCore", "Formulas", "Reminders", .product(name: "GRDB", package: "GRDB.swift")]),
+        .testTarget(name: "DatabaseGridTests", dependencies: ["DatabaseGrid", "DatabaseViewBar", "DatabaseRowPage", "Databases", "NotesCore"]),
+        .testTarget(name: "DatabaseViewBarTests", dependencies: ["DatabaseViewBar", "Databases", "NotesCore"]),
+        .testTarget(name: "DatabaseRowPageTests", dependencies: ["DatabaseRowPage", "Databases", "NotesCore"]),
+        .testTarget(name: "NotionSchemaFetchTests", dependencies: ["NotionSchemaFetch", "Formulas"]),
     ],
     swiftLanguageModes: [.v6]
 )

@@ -337,7 +337,10 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
 
-    func show(_ page: Page, title: String, hasChildren: Bool, isExpanded: Bool) {
+    /// Значок без эмодзи — таблица (у базы), а не лист.
+    private(set) var showsDatabaseGlyph = false
+
+    func show(_ page: Page, title: String, hasChildren: Bool, isExpanded: Bool, isDatabase: Bool = false) {
         if !isRenaming {
             self.title = title
             titleLabel.stringValue = title
@@ -346,6 +349,11 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
         self.isExpanded = isExpanded
         iconLabel.stringValue = page.icon ?? ""
         documentIcon.isHidden = page.icon != nil
+        if isDatabase != showsDatabaseGlyph {
+            showsDatabaseGlyph = isDatabase
+            documentIcon.image = isDatabase ? DatabaseGlyph.image(size: Metrics.Sidebar.rowIconSize)
+                : DocumentGlyph.image(size: Metrics.Sidebar.rowIconSize)
+        }
         setAccessibilityLabel(title)
         updateHoverState()
         updateTitleColor()

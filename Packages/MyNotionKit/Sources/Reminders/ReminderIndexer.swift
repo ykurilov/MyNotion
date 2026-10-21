@@ -48,6 +48,12 @@ public struct ReminderIndexer: NotesWriteHook {
                 indexChanged = indexChanged || db.changesCount > 0
             }
         }
+        // Второй источник (research R16): ячейки «Даты» с напоминанием.
+        for cell in changes.database.cells {
+            guard let property = try transaction.property(cell.propertyId), property.kind == .date else { continue }
+            let reminder = try isInTrash(cell.rowId) ? nil : CellReminder.fireAt(cell.value)
+            indexChanged = try Self.replaceCellReminder(rowId: cell.rowId, propertyId: cell.propertyId, fireAt: reminder, in: db) || indexChanged
+        }
         for change in changes.pages where !change.isNew && change.changedFields.contains(.trashedAt) {
             trashedCache.removeAll()
             indexChanged = try reindexBranch(of: change.page.id, in: transaction) || indexChanged
@@ -77,12 +83,15 @@ public struct ReminderIndexer: NotesWriteHook {
 
     /// Строки индекса блока — ровно `reminders`. `true` — что-то поменялось.
     private static func replaceReminders(ofBlock blockId: UUID, pageId: UUID, with reminders: [(mentionId: UUID, fireAt: Date)],
-                                         in db: Database) throws -> Bool {
-        let kept = reminders.map(\.mentionId.indexText)
-        let marks = kept.isEmpty ? "" : " AND mentionId NOT IN (\(Array(repeating: "?", count: kept.count).joined(separator: ", ")))"
-        try db.execute(sql: "DELETE FROM reminder_index WHERE blockId = ?" + marks,
-                       arguments: StatementArguments([blockId.indexText] + kept))
-        var changed = db.changesCount > 0
+                                         scopedTo cellMention: UUID? = nil, in db: Database) throws -> Bool {
+        var changed = false
+        if cellMention == nil {
+            let kept = reminders.map(\.mentionId.indexText)
+            let marks = kept.isEmpty ? "" : " AND mentionId NOT IN (\(Array(repeating: "?", count: kept.count).joined(separator: ", ")))"
+            try db.execute(sql: "DELETE FROM reminder_index WHERE blockId = ?" + marks,
+                           arguments: StatementArguments([blockId.indexText] + kept))
+            changed = db.changesCount > 0
+        }
         for reminder in reminders {
             let fireAt = ReminderIndex.storedMoment(reminder.fireAt)
             let current = try Row.fetchOne(db, sql: "SELECT blockId, pageId, fireAt FROM reminder_index WHERE mentionId = ?",
@@ -99,6 +108,16 @@ public struct ReminderIndexer: NotesWriteHook {
         return changed
     }
 
+    /// Напоминание ячейки даты: id — UUID v5 из `(строка, свойство)`, `blockId` — свойство. `true` — что-то поменялось.
+    static func replaceCellReminder(rowId: UUID, propertyId: UUID, fireAt: Date?, in db: Database) throws -> Bool {
+        let mentionId = CellReminder.mentionId(rowId: rowId, propertyId: propertyId)
+        guard let fireAt else {
+            try db.execute(sql: "DELETE FROM reminder_index WHERE mentionId = ?", arguments: [mentionId.indexText])
+            return db.changesCount > 0
+        }
+        return try replaceReminders(ofBlock: propertyId, pageId: rowId, with: [(mentionId, fireAt)], scopedTo: mentionId, in: db)
+    }
+
     /// Страницу убрали в корзину или вернули: напоминания её ветки сняты или поставлены заново.
     private func reindexBranch(of pageId: UUID, in transaction: NotesTransaction) throws -> Bool {
         let db = transaction.database
@@ -110,6 +129,14 @@ public struct ReminderIndexer: NotesWriteHook {
         try db.execute(sql: "DELETE FROM reminder_index WHERE pageId IN (\(marks))", arguments: StatementArguments(branch))
         var changed = db.changesCount > 0
         guard try !Self.isInTrash(pageId, in: db) else { return changed }
+        for row in try Row.fetchAll(db, sql: """
+            SELECT c.rowId, c.propertyId, c.value FROM db_cell c JOIN db_property p ON p.id = c.propertyId AND p.type = 'date'
+            WHERE c.rowId IN (\(marks)) AND c.value LIKE '%"reminder"%'
+            """, arguments: StatementArguments(branch)) {
+            guard let rowId = UUID(uuidString: row[0]), let propertyId = UUID(uuidString: row[1]) else { continue }
+            let value = (row[2] as String?).flatMap { try? JSONDecoder().decode(JSONValue.self, from: Data($0.utf8)) }
+            changed = try Self.replaceCellReminder(rowId: rowId, propertyId: propertyId, fireAt: CellReminder.fireAt(value), in: db) || changed
+        }
         // Блоки с напоминанием находятся по записи оформления, не разбирая все блоки ветки.
         let blockIds = try String.fetchAll(db, sql: """
             SELECT id FROM block WHERE pageId IN (\(marks)) AND isDeleted = 0 AND textStyles LIKE '%"reminder"%'

@@ -97,6 +97,7 @@ public struct Outbox: Sendable {
                 changes += ChangeEncoding.fullBlock(block, baseHlc: nil)
             }
         }
+        changes += try DatabaseChangeEncoding.fullRecords(in: transaction)
         changes += try transaction.allReminderStates().map(ChangeEncoding.reminderChange)
         for row in try Row.fetchAll(transaction.database, sql: "SELECT pageId FROM page_tombstone") {
             guard let pageId = UUID(uuidString: row["pageId"]),
@@ -158,6 +159,7 @@ enum ChangeEncoding {
             guard let tombstone = try transaction.tombstone(ofPage: pageId), isMine(tombstone.erasedAt) else { continue }
             result.append(SyncChange(entity: .page, id: pageId, value: .erased, hlc: tombstone.erasedAt, known: tombstone.known))
         }
+        result += try DatabaseChangeEncoding.outgoing(changes.database, in: transaction)
         for state in changes.reminderStates where isMine(state.doneClock) {
             result.append(reminderChange(state))
         }
@@ -169,15 +171,21 @@ enum ChangeEncoding {
         return deduplicated(result)
     }
 
-    /// Одно поле записи правили в транзакции несколько раз — уходит последнее значение.
+    /// Одно поле записи правили в транзакции несколько раз — уходит последнее значение. Ячейки строки — разные
+    /// записи с одним id: их различает свойство.
     private static func deduplicated(_ changes: [SyncChange]) -> [SyncChange] {
+        func key(_ change: SyncChange) -> String {
+            var key = "\(change.entity.rawValue):\(change.id):\(change.value.field)"
+            if change.entity == .cell, case .databaseField(_, let value) = change.value { key += ":\(value["propertyId"]?.string ?? "")" }
+            return key
+        }
         var lastIndex: [String: Int] = [:]
         for (index, change) in changes.enumerated() where change.value.field != "conflictResolved" {
-            lastIndex["\(change.entity.rawValue):\(change.id):\(change.value.field)"] = index
+            lastIndex[key(change)] = index
         }
         return changes.enumerated().compactMap { index, change in
             guard change.value.field != "conflictResolved" else { return change }
-            return lastIndex["\(change.entity.rawValue):\(change.id):\(change.value.field)"] == index ? change : nil
+            return lastIndex[key(change)] == index ? change : nil
         }
     }
 
