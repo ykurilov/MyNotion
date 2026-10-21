@@ -41,7 +41,7 @@ final class DatabaseViewPerformanceTests: XCTestCase {
                 window.render()
             }
         }
-        let notDone = FilterNode.condition(FilterCondition(propertyId: property("Статус"), op: .isNot, value: [.string(doneId.databaseText)]))
+        let notDone = FilterNode.condition(FilterCondition(propertyId: property("Статус"), op: .isNot, value: [.string(doneId.uuidString.lowercased())]))
         var filters: [Double] = [], sorts: [Double] = [], groups: [Double] = [], visibility: [Double] = []
         for round in 0..<12 {
             let on = round % 2 == 0
