@@ -16,7 +16,7 @@ struct FormulaToken: Sendable, Hashable {
 enum FormulaLexer {
     static let symbols = ["==", "!=", ">=", "<=", "&&", "||", "(", ")", "[", "]", ",", ".", "!", "-", "+", "*", "/", "%", "^", ">", "<", "?", ":"]
 
-    static func tokens(_ source: String) throws -> [FormulaToken] {
+    static func tokens(_ source: String) throws(FormulaError) -> [FormulaToken] {
         let characters = Array(source)
         var tokens: [FormulaToken] = []
         var index = 0
@@ -27,7 +27,7 @@ enum FormulaLexer {
                 let start = index
                 index += 2
                 while index + 1 < characters.count, !(characters[index] == "*" && characters[index + 1] == "/") { index += 1 }
-                guard index + 1 < characters.count else { throw FormulaError("Комментарий не закрыт: ожидалось «*/»", at: start..<characters.count) }
+                guard index + 1 < characters.count else { throw FormulaError("Комментарий не закрыт: ожидалось „*/“", at: start..<characters.count) }
                 index += 2
                 continue
             }
@@ -43,7 +43,7 @@ enum FormulaLexer {
                     }
                 }
                 guard let value = Double(String(characters[start..<index])) else {
-                    throw FormulaError("Не число: «\(String(characters[start..<index]))»", at: start..<index)
+                    throw FormulaError("Не число: „\(String(characters[start..<index]))“", at: start..<index)
                 }
                 tokens.append(FormulaToken(kind: .number(value), range: start..<index))
                 continue
@@ -65,7 +65,7 @@ enum FormulaLexer {
                     }
                     index += 1
                 }
-                guard index < characters.count else { throw FormulaError("Текст не закрыт: ожидалась «\"»", at: start..<characters.count) }
+                guard index < characters.count else { throw FormulaError("Текст не закрыт: ожидалась „\"“", at: start..<characters.count) }
                 index += 1
                 tokens.append(FormulaToken(kind: .text(text), range: start..<index))
                 continue
@@ -78,7 +78,7 @@ enum FormulaLexer {
             }
             let rest = String(characters[index..<min(index + 2, characters.count)])
             guard let symbol = symbols.first(where: { rest.hasPrefix($0) }) else {
-                throw FormulaError("Непонятный знак «\(character)»", at: index..<index + 1)
+                throw FormulaError("Непонятный знак „\(character)“", at: index..<index + 1)
             }
             tokens.append(FormulaToken(kind: .symbol(symbol), range: index..<index + symbol.count))
             index += symbol.count

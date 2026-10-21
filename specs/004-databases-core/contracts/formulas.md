@@ -46,11 +46,11 @@
 
 **Числа**: `add`, `subtract`, `multiply`, `divide`, `mod`, `pow`, `abs`, `round`, `ceil`, `floor`, `sqrt`, `cbrt`, `exp`, `ln`, `log10`, `log2`, `sign`, `min`, `max`, `sum`, `mean`, `median`, `pi()`, `e()`, `toNumber(x)`.
 
-**Текст**: `length`, `concat` (тексты и списки), `join(список, разделитель)`, `split(текст, разделитель)`, `substring(текст, от, до?)`, `contains`, `startsWith`, `endsWith`, `lower`, `upper`, `trim`, `repeat`, `padStart`, `padEnd`, `replace`, `replaceAll`, `test`, `match` (регулярные выражения — как у Notion, синтаксис ICU), `format(x)` (любое значение в текст).
+**Текст**: `length`, `concat` (тексты и списки), `join(список, разделитель)`, `split(текст, разделитель)`, `substring(текст, от, до?)`, `contains`, `startsWith`, `endsWith`, `lower`, `upper`, `trim`, `repeat`, `padStart`, `padEnd`, `replace`, `replaceAll`, `test`, `match` (регулярные выражения — как у Notion, синтаксис ICU), `format(x)` (любое значение в текст; дата — как у Notion: `October 21, 2026 17:56`).
 
-**Даты**: `now()`, `today()`, `minute`, `hour`, `day` (день недели, 0 — воскресенье), `date` (число месяца), `week` (ISO), `month` (1–12), `year`, `dateAdd(дата, n, ед)`, `dateSubtract`, `dateBetween(a, b, ед)`, `dateRange(начало, конец)`, `dateStart`, `dateEnd`, `timestamp`, `fromTimestamp`, `formatDate(дата, шаблон)`, `parseDate(текст ISO 8601)`.
+**Даты**: `now()`, `today()`, `minute`, `hour`, `day` (день недели: 1 — понедельник, 7 — воскресенье, как в справке Notion), `date` (число месяца), `week` (ISO), `month` (1–12), `year`, `dateAdd(дата, n, ед)`, `dateSubtract`, `dateBetween(a, b, ед)`, `dateRange(начало, конец)`, `dateStart`, `dateEnd`, `timestamp`, `fromTimestamp`, `formatDate(дата, шаблон)`, `parseDate(текст ISO 8601)`.
 Единицы: `"years"`, `"quarters"`, `"months"`, `"weeks"`, `"days"`, `"hours"`, `"minutes"`, `"seconds"`, `"milliseconds"`.
-Шаблон `formatDate`: `YYYY YY Q MMMM MMM MM M DD D Do dddd ddd d HH H hh h mm m ss s A a` (как Moment.js у Notion); названия месяцев и дней — на языке macOS.
+Шаблон `formatDate`: `YYYY Y YY Q MMMM MMM MM M DD D Do dddd ddd d HH H hh h mm m ss s A a` (как Moment.js у Notion); названия месяцев и дней — на языке macOS.
 
 **Списки**: `at(список, n)`, `first`, `last`, `slice`, `concat`, `sort` (с выражением или без), `reverse`, `unique`, `includes`, `find`, `findIndex`, `filter`, `map`, `some`, `every`, `flat`, `length`, `sum`, `min`, `max`, `mean`, `median`, `join`.
 
@@ -68,7 +68,7 @@
 
 ## Редактор
 
-Окно как у Notion 7.39: поле формулы с подсветкой (свойства — плашками, функции — цветом), слева снизу — список «Свойства», «Встроенные», «Функции» по разделам с поиском по набранному; справа — описание выбранного с синтаксисом и примером; под полем — итог для первой строки вида и ошибка.
+Окно как у Notion 7.39: поле формулы с подсветкой (свойства — плашками, функции — цветом), слева снизу — список «Свойства», «Встроенные» и функции по разделам Notion («Общие», «Текст», «Числа», «Даты», «Списки») с поиском по набранному; справа — описание выбранного с синтаксисом и примером; под полем — итог для первой строки вида и ошибка.
 Ошибки — по-русски, с подчёркиванием места: «Ожидалась „)“», «Нет свойства „Срок“», «Функция dateBetween ждёт дату, а получила текст», «Формула ссылается сама на себя: Итог → Сумма → Итог», «Функция style не поддерживается в MyNotion».
 «Готово» неактивно, пока есть ошибка разбора или круг.
 

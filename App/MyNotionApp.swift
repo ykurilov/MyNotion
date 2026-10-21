@@ -102,6 +102,8 @@ struct MyNotionApp: App {
         store.addWriteHook(SearchIndexer())
         // 004: сравнимые колонки и строки поиска значений ячеек — в той же транзакции (research R3, R14).
         store.addWriteHook(CellIndexer())
+        // 004, US5: зависящие формулы — в той же транзакции; полные пересчёты — в фоне (research R21).
+        let formulas = FormulasAddon.install(on: store)
         // Индекс обратных ссылок — в той же транзакции, что и блок (research R10); после фиксации открытые страницы
         // перечитывают счёт, если их ссылки сменились.
         store.addWriteHook(PageLinkIndexer(onLinksChange: BacklinksAddon.linksDidChange))
@@ -129,6 +131,7 @@ struct MyNotionApp: App {
         if options.generates004Sample {
             try DatabaseSampleGenerator().ensure(in: store)
         }
+        Task { @MainActor in FormulasAddon.start(formulas) }
         if options.generates003Sample || options.generatesVersionsSample {
             // До первого окна: окно открывает страницу образца, как любую страницу базы.
             PageVersionsSampleLaunch.ensure(in: store)

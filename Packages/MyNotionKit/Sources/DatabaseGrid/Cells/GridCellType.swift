@@ -30,7 +30,7 @@ extension GridCellType {
 public enum GridCellTypes {
     static let all: [any GridCellType] = [
         TitleCell(), TextCell(), NumberCell(), CheckboxCell(), URLCell(), EmailCell(), PhoneCell(), CreatedTimeCell(),
-        LastEditedTimeCell(), UniqueIdCell(),
+        LastEditedTimeCell(), UniqueIdCell(), FormulaCell(),
     ]
     private static let byKind: [PropertyKind: any GridCellType] = Dictionary(uniqueKeysWithValues: all.map { ($0.kind, $0) })
 

@@ -39,6 +39,10 @@ public enum CellPresenter {
         case .formula, .rollup:
             guard let value = row.computed[property.id] else { return .empty }
             if case .bool(let flag) = value { return .checkbox(flag) }
+            // Список страниц из связи — плашками, как у связи.
+            if let items = value.array, !items.isEmpty, items.allSatisfy({ $0["id"] != nil }) {
+                return .chips(items.map { CellPresentation.Chip(title: ($0["title"]?.string).flatMap { $0.isEmpty ? nil : $0 } ?? Page.untitledTitle, color: .default) })
+            }
             let text = type.displayText(value, in: context)
             return text.isEmpty ? .empty : .text(text)
         case .select, .status:

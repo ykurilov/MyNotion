@@ -29,7 +29,8 @@ struct ComputedType: PropertyType {
         switch value {
         case .number(let number)?:
             return NumberType.format(number, config: context.config["numberFormat"] ?? .emptyObject, locale: context.locale)
-        case .object?: return DateValues.display(value, in: context)
+        case .object(let object)?: return object["title"]?.string ?? DateValues.display(value, in: context)
+        case .array(let items)?: return items.map { displayText($0, in: context) }.filter { !$0.isEmpty }.joined(separator: ", ")
         default: return csvText(value, in: context)
         }
     }
@@ -39,7 +40,7 @@ struct ComputedType: PropertyType {
         case .number(let number)?: return NumberType.plain(number)
         case .string(let text)?: return text
         case .bool(let flag)?: return flag ? "Yes" : "No"
-        case .object?: return DateValues.csv(value)
+        case .object(let object)?: return object["title"]?.string ?? DateValues.csv(value)
         case .array(let items)?: return items.map { csvText($0, in: context) }.joined(separator: ", ")
         default: return ""
         }

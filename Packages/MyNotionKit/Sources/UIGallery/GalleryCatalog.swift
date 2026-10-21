@@ -108,6 +108,12 @@ public enum GalleryDatabases: Hashable, Sendable, CaseIterable {
     // US1: таблица в работе.
     case inlineEmpty, inlineOverview, rowHover, cellSelection, cellEditing, columnMenu, typePicker, editProperty, propertiesWindow,
          deleteConfirm, rowMenu, rowPage, sidePeek, centerPeek
+    /// US5: редактор формулы — пустой, с итогом, с ошибкой, с кругом; ячейки формул всех типов итога.
+    case formulaEditorEmpty
+    case formulaEditorResult
+    case formulaEditorError
+    case formulaEditorCycle
+    case formulaCells
 }
 
 public enum GalleryMarkdownExport: String, Hashable, Sendable, CaseIterable {
@@ -296,6 +302,16 @@ public enum GalleryCatalog {
         GalleryState("database-row-page", .databases(.rowPage), "Строка на всю страницу: свойства под названием, «+ Добавить свойство»", section: "Базы"),
         GalleryState("database-side-peek", .databases(.sidePeek), "Строка сбоку: таблица слева рабочая", section: "Базы"),
         GalleryState("database-center-peek", .databases(.centerPeek), "Строка по центру поверх затемнения", section: "Базы"),
+        // US5, сверка — `notion-formula-editor*.png`.
+        GalleryState("formula-editor-empty", .databases(.formulaEditorEmpty), "Редактор формулы пустой: «Ваша формула», «Нет итога», список свойств и функций",
+                     section: "Базы"),
+        GalleryState("formula-editor-result", .databases(.formulaEditorResult), "Редактор с формулой: плашка свойства, итог первой строки, «Тип: текст»",
+                     section: "Базы"),
+        GalleryState("formula-editor-error", .databases(.formulaEditorError), "Редактор с ошибкой типов: текст по-русски, место подчёркнуто, «Готово» неактивно",
+                     section: "Базы"),
+        GalleryState("formula-editor-cycle", .databases(.formulaEditorCycle), "Редактор с кругом «Итог → Сумма → Итог», «Готово» неактивно", section: "Базы"),
+        GalleryState("formula-cells", .databases(.formulaCells), "Ячейки формул всех типов итога: число, текст, флажок, дата, список, страницы",
+                     section: "Базы"),
     ]
 
     /// Обратные ссылки (US5, contracts/pages-ui.md, «Обратные ссылки»): строка под названием и список источников.

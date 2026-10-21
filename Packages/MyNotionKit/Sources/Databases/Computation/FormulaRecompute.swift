@@ -33,31 +33,69 @@ public struct FormulaRecompute: Sendable {
     let now: @Sendable () -> Date
     let calendar: Calendar
 
-    /// Формулы базы (все или `propertyIds`); формула с ошибкой разбора пропускается — её не сохранит редактор.
+    /// Формулы базы (все или `propertyIds` и зависящие от них); формула с ошибкой разбора пропускается — её не сохранит
+    /// редактор.
     public init(store: NotesStore, databaseId: UUID, propertyIds: Set<UUID>? = nil, now: @escaping @Sendable () -> Date = Date.init,
                 calendar: Calendar = .current) throws {
+        self.init(store: store, catalog: try DatabaseCatalog.read(databaseId, in: store), propertyIds: propertyIds, now: now, calendar: calendar)
+    }
+
+    /// По уже прочитанной схеме — в транзакции правки (читать через `store` там нельзя).
+    public init(store: NotesStore, catalog: DatabaseCatalog, propertyIds: Set<UUID>? = nil, now: @escaping @Sendable () -> Date = Date.init,
+                calendar: Calendar = .current) {
         self.store = store
-        self.databaseId = databaseId
+        self.databaseId = catalog.databaseId
+        self.catalog = catalog
         self.now = now
         self.calendar = calendar
-        catalog = try DatabaseCatalog.read(databaseId, in: store)
-        formulas = catalog.properties.filter { $0.kind == .formula && (propertyIds?.contains($0.id) ?? true) }.compactMap { property in
+        let all = Self.ordered(catalog.properties.filter { $0.kind == .formula }.compactMap { property in
             guard let text = property.config["expression"]?.string, let expression = try? FormulaParser.parse(text) else { return nil }
             return Formula(property: property, expression: expression)
+        })
+        guard let propertyIds else { formulas = all; return }
+        // Выбранные и все, что от них зависят (по цепочке формул).
+        var chosen = propertyIds.map(\.databaseText).reduce(into: Set<String>()) { $0.insert($1) }
+        var grew = true
+        while grew {
+            grew = false
+            for formula in all where !chosen.contains(formula.property.id.databaseText) && !formula.expression.referencedProperties.isDisjoint(with: chosen) {
+                chosen.insert(formula.property.id.databaseText)
+                grew = true
+            }
         }
+        formulas = all.filter { chosen.contains($0.property.id.databaseText) }
+    }
+
+    /// Формулы по порядку зависимостей: та, от которой зависит другая, — раньше (круг — в прежнем порядке).
+    static func ordered(_ formulas: [Formula]) -> [Formula] {
+        let ids = Set(formulas.map(\.property.id.databaseText))
+        var placed: Set<String> = [], result: [Formula] = [], rest = formulas
+        while !rest.isEmpty {
+            let ready = rest.filter { $0.expression.referencedProperties.intersection(ids).subtracting([$0.property.id.databaseText]).isSubset(of: placed) }
+            let next = ready.isEmpty ? [rest[0]] : ready
+            for formula in next { placed.insert(formula.property.id.databaseText) }
+            result += next
+            rest.removeAll { formula in next.contains { $0.property.id == formula.property.id } }
+        }
+        return result
     }
 
     private var needed: Set<String> { formulas.reduce(into: []) { $0.formUnion($1.expression.referencedProperties) } }
 
-    /// Вычислить итоги строк по прочитанным значениям.
+    /// Вычислить итоги строк по прочитанным значениям; итог формулы сразу виден формулам, что от неё зависят.
     func evaluate(_ rows: [UUID], inputs: FormulaInputs) -> [ComputedValue] {
-        rows.flatMap { row in
-            formulas.map { formula in
+        var inputs = inputs
+        var result: [ComputedValue] = []
+        result.reserveCapacity(rows.count * formulas.count)
+        for row in rows {
+            for formula in formulas {
                 let value = FormulaEvaluator.evaluate(formula.expression, row: row, context: inputs)
-                return ComputedValue(rowId: row, propertyId: formula.property.id, value: FormulaInputs.json(value, calendar: calendar),
-                                     isLive: formula.expression.isLive)
+                inputs.values[row, default: [:]][formula.property.id.databaseText] = value
+                result.append(ComputedValue(rowId: row, propertyId: formula.property.id, value: FormulaInputs.json(value, calendar: calendar, titles: inputs.titles),
+                                            isLive: formula.expression.isLive))
             }
         }
+        return result
     }
 
     /// Правка строк: прочитать, вычислить и записать в транзакции правки.

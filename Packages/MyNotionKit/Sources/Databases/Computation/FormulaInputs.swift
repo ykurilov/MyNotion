@@ -9,6 +9,8 @@ struct FormulaInputs: FormulaContext {
     var values: [UUID: [String: FormulaValue]] = [:]
     /// `updatedAt` строк при чтении — для сверки при записи (R21).
     var stamps: [UUID: String] = [:]
+    /// Названия прочитанных строк — `format` и `join` списка страниц.
+    var titles: [UUID: String] = [:]
     let now: Date
     let calendar: Calendar
 
@@ -23,9 +25,8 @@ struct FormulaInputs: FormulaContext {
         let foreign = needed.subtracting(catalog.properties.map(\.id.databaseText))
         for relation in own where relation.kind == .relation {
             var targets: [UUID: [UUID]] = [:]
-            let paired = relation.config["pairedPropertyId"]?.string.flatMap(UUID.init(uuidString:))
-            let reversed = paired.map { $0.uuidString < relation.id.uuidString } ?? false
-            let (linkProperty, ownColumn, otherColumn) = reversed ? (paired!, "targetRowId", "rowId") : (relation.id, "rowId", "targetRowId")
+            let (linkProperty, ownColumn, otherColumn) = relation.readsLinksReversed ? (relation.pairedRelation!, "targetRowId", "rowId")
+                : (relation.id, "rowId", "targetRowId")
             let marks = Array(repeating: "?", count: rows.count).joined(separator: ",")
             for row in try Row.fetchAll(db, sql: """
                 SELECT l.\(ownColumn), l.\(otherColumn) FROM db_relation_link l JOIN page t ON t.id = l.\(otherColumn)
@@ -36,8 +37,9 @@ struct FormulaInputs: FormulaContext {
             }
             for row in rows { values[row, default: [:]][relation.id.databaseText] = .list((targets[row] ?? []).map(FormulaValue.page)) }
             let targetRows = Array(Set(targets.values.flatMap { $0 }))
-            guard !foreign.isEmpty, !targetRows.isEmpty,
-                  let targetDatabase = relation.config["targetDatabaseId"]?.string.flatMap(UUID.init(uuidString:)) else { continue }
+            guard !targetRows.isEmpty, let targetDatabase = relation.relationTarget else { continue }
+            // Без чужих свойств — только названия (`format`, `join` страниц).
+            guard !foreign.isEmpty else { try readPages(targetRows, catalog: catalog, properties: [], in: db); continue }
             let targetCatalog = try DatabaseCatalog.read(targetDatabase, in: db)
             let targetProperties = targetCatalog.properties.filter { foreign.contains($0.id.databaseText) }
             try readPages(targetRows, catalog: targetCatalog, properties: targetProperties, in: db)
@@ -52,6 +54,7 @@ struct FormulaInputs: FormulaContext {
                                     arguments: StatementArguments(rows.map(\.databaseText))) {
             guard let id = UUID(uuidString: row["id"]) else { continue }
             stamps[id] = row["stamp"]
+            titles[id] = row["title"]
             for property in pageKinds {
                 let value: FormulaValue = switch property.kind {
                 case .title: .text(row["title"])
@@ -119,8 +122,10 @@ struct FormulaInputs: FormulaContext {
         values[rowId]?[propertyId] ?? .empty
     }
 
+    func title(ofPage pageId: UUID) -> String? { titles[pageId] }
+
     /// Итог формулы — JSON для `db_computed`.
-    static func json(_ value: FormulaValue, calendar: Calendar) -> JSONValue? {
+    static func json(_ value: FormulaValue, calendar: Calendar, titles: [UUID: String] = [:]) -> JSONValue? {
         switch value {
         case .empty: return nil
         case .number(let number): return number.isFinite ? .number(number) : nil
@@ -131,8 +136,9 @@ struct FormulaInputs: FormulaContext {
             let day = String(format: "%04d-%02d-%02d", c.year!, c.month!, c.day!)
             return ["start": .string(date.hasTime ? day + String(format: "T%02d:%02d", c.hour!, c.minute!) : day), "hasTime": .bool(date.hasTime),
                     "timeZone": .string(calendar.timeZone.identifier)]
-        case .list(let items): return .array(items.compactMap { json($0, calendar: calendar) })
-        case .page(let id): return ["id": .string(id.databaseText)]
+        case .list(let items): return .array(items.compactMap { json($0, calendar: calendar, titles: titles) })
+        // Название — для показа плашкой, поиска и сортировки без чтения страницы.
+        case .page(let id): return ["id": .string(id.databaseText), "title": .string(titles[id] ?? "")]
         }
     }
 }
