@@ -120,12 +120,13 @@ final class MentionPickerController {
     }
 
     /// Строки окна для набора `query`: страницы, под «@» — ещё даты; набранная дата — первой.
-    func items(for query: String, trigger: MentionTrigger, lookup: (any PageLookup)?, now: Date, calendar: Calendar) -> [MentionPickerItem] {
+    func items(for query: String, trigger: MentionTrigger, lookup: (any PageLookup)?, now: Date, calendar: Calendar,
+               isTemplate: Bool = false) -> [MentionPickerItem] {
         let pages = (lookup?.pages(matching: query, limit: Self.pageLimit) ?? []).map {
             MentionPickerItem(title: $0.title.isEmpty ? Page.untitledTitle : $0.title, icon: $0.icon, path: $0.path, target: .page($0.pageId))
         }
         guard trigger == .at else { return pages }
-        let dates = DateQuery.suggestions(for: query, now: now, calendar: calendar).map {
+        let dates = DateQuery.suggestions(for: query, now: now, calendar: calendar, isTemplate: isTemplate).map {
             MentionPickerItem(title: $0.title, icon: nil, path: [], target: .date($0.mention))
         }
         let typedDate = DateQuery.parse(query, now: now, calendar: calendar) != nil
@@ -136,13 +137,15 @@ final class MentionPickerController {
 extension PageTextView {
     // MARK: Упоминания и даты — доступ хозяина
 
-    /// Названия, иконки и корзина страниц для упоминаний; смена перерисовывает упоминания.
+    /// Названия, иконки и корзина страниц для упоминаний; смена перерисовывает упоминания и подстраницы без страницы.
     public var mentionDirectory: MentionDirectory {
         get { inlineAtoms.directory }
         set {
             guard newValue != inlineAtoms.directory else { return }
             inlineAtoms.directory = newValue
             redrawInlineAtoms()
+            // Строки блоков-подстраниц без страницы показывают её так же, как упоминания.
+            redrawBlockDecorations()
         }
     }
 
@@ -198,7 +201,8 @@ extension PageTextView {
         let anchor = firstRect(forCharacterRange: NSRange(location: location, length: trigger.length), actualRange: nil)
         let picker = mentionPicker
         picker.open(MentionPickerController.Session(trigger: trigger, blockId: block.id, location: location),
-                    items: picker.items(for: "", trigger: trigger, lookup: pageLookup, now: now(), calendar: calendar), below: anchor)
+                    items: picker.items(for: "", trigger: trigger, lookup: pageLookup, now: now(), calendar: calendar,
+                                        isTemplate: document.page.isTemplate), below: anchor)
     }
 
     /// Окно следует за набором: ищет по набранному после «@» и закрывается, если курсор ушёл из абзаца,
@@ -222,7 +226,8 @@ extension PageTextView {
             picker.close()
             return
         }
-        let items = picker.items(for: query, trigger: session.trigger, lookup: pageLookup, now: now(), calendar: calendar)
+        let items = picker.items(for: query, trigger: session.trigger, lookup: pageLookup, now: now(), calendar: calendar,
+                                 isTemplate: document.page.isTemplate)
         if !items.isEmpty {
             picker.update(items: items, matchedQueryLength: query.count)
         } else if session.trigger == .at && DateQuery.mayBecomeDate(query) || query.count - session.matchedQueryLength <= 3 {

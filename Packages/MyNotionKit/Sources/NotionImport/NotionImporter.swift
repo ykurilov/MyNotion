@@ -1,6 +1,7 @@
 import Foundation
 import LinkPreview
 import NotesCore
+import UniformTypeIdentifiers
 
 /// Ход импорта: сначала чтение страниц выгрузки, потом запись в базу.
 public struct NotionImportProgress: Sendable, Equatable {
@@ -31,6 +32,8 @@ public struct SimplifiedPage: Sendable, Hashable, Codable {
 public struct NotionImportReport: Sendable, Equatable {
     /// Цветов и колонок в выгрузке Notion «Markdown & CSV» нет: отчёт называет потерю всегда (research R14, решение Юрия).
     public static let markdownLossNotice = "Цвета и колонки Notion в Markdown не выгружает — они не перенесены"
+    /// Обложек в выгрузке Notion «Markdown & CSV» нет (research R13); своя выгрузка MyNotion их возвращает.
+    public static let coverLossNotice = "Обложки страниц Notion в выгрузку не попадают"
 
     public var rootPageId: UUID
     public var rootTitle: String
@@ -41,7 +44,7 @@ public struct NotionImportReport: Sendable, Equatable {
     public var notices: [String]
 
     public init(rootPageId: UUID, rootTitle: String, pageCount: Int, blockCount: Int, simplified: [SimplifiedPage],
-                notices: [String] = [Self.markdownLossNotice]) {
+                notices: [String] = [Self.markdownLossNotice, Self.coverLossNotice]) {
         self.rootPageId = rootPageId
         self.rootTitle = rootTitle
         self.pageCount = pageCount
@@ -123,7 +126,7 @@ public struct NotionImporter: Sendable {
         var plan = try NotionExportReader().read(export.contentRoot) { done, total in
             progress?(NotionImportProgress(phase: .reading, done: done, total: total))
         }
-        try copyAttachments(in: &plan)
+        try copyAttachments(in: &plan, root: export.contentRoot)
         let log = ImportRunLog(store: store)
         let startedAt = now()
         let rootTitle = "Импорт из Notion — " + Self.dateTitle(startedAt)
@@ -182,15 +185,22 @@ public struct NotionImporter: Sendable {
 
     // MARK: Файлы
 
-    /// Картинки и файлы выгрузки — копиями во вложения (contracts/markdown-and-notion.md). Файла нет, он больше 100 МБ
-    /// или хранилища нет — абзац «[файл: имя]», как в 001, и строка в отчёте.
-    private func copyAttachments(in plan: inout NotionExportPlan) throws {
+    /// Картинки и файлы выгрузки — копиями во вложения (contracts/markdown-and-notion.md). Файла нет, он больше 100 МБ,
+    /// лежит вне папки выгрузки `root` или хранилища нет — абзац «[файл: имя]», как в 001, и строка в отчёте.
+    private func copyAttachments(in plan: inout NotionExportPlan, root: URL) throws {
+        let rootPath = root.standardizedFileURL.resolvingSymlinksInPath().path
         for index in plan.pages.indices {
             let folder = plan.pages[index].file.deletingLastPathComponent()
             var missing = 0
-            func copy(_ path: String) -> (URL, AttachmentRef)? {
+            func copy(_ path: String, imageOnly: Bool = false) -> (URL, AttachmentRef)? {
+                // Путь из текста страницы: `..` и ярлыки не выводят за папку выгрузки.
                 let url = path.split(separator: "/").reduce(folder) { $0.appendingPathComponent(String($1)) }
-                let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize
+                    .standardizedFileURL.resolvingSymlinksInPath()
+                guard url.path.hasPrefix(rootPath + "/") else { return nil }
+                let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentTypeKey, .isRegularFileKey])
+                guard values?.isRegularFile == true else { return nil }
+                if imageOnly, values?.contentType?.conforms(to: .image) != true { return nil }
+                let size = values?.fileSize
                 guard let size, size <= AttachmentRef.maximumByteCount, let ref = try? attachments?.importFile(at: url) else { return nil }
                 return (url, ref)
             }
@@ -223,6 +233,13 @@ public struct NotionImporter: Sendable {
                 }
             }
             try attach(&plan.pages[index].blocks)
+            if case .file(let name)? = plan.pages[index].cover?.source {
+                let stem = plan.pages[index].file.deletingPathExtension().lastPathComponent
+                // Обложка — картинка в папке страницы. Картинки нет, это не картинка или она не копируется — страница
+                // без обложки, как у импорта Notion.
+                let isFileName = !name.contains("/") && name != "." && name != ".."
+                plan.pages[index].coverFile = isFileName ? copy(stem + "/" + name, imageOnly: true)?.1 : nil
+            }
             if missing > 0 { plan.pages[index].simplifications[.file, default: 0] += missing }
         }
     }
@@ -270,7 +287,8 @@ public struct NotionImporter: Sendable {
                     let planned = plan.pages[index]
                     try transaction.insertPage(Page(id: ids[index], title: planned.title, icon: planned.icon,
                                                     parentId: planned.parent.map { ids[$0] } ?? rootId,
-                                                    sortKey: sortKeys[index]!, createdAt: startedAt, updatedAt: startedAt))
+                                                    sortKey: sortKeys[index]!, createdAt: startedAt, updatedAt: startedAt,
+                                                    cover: Self.cover(of: planned)))
                     for block in blocks { try transaction.insertBlock(block) }
                 }
             }
@@ -278,6 +296,15 @@ public struct NotionImporter: Sendable {
             progress?(NotionImportProgress(phase: .writing, done: position, total: order.count))
         }
         return written
+    }
+
+    /// Обложка страницы из комментария своей выгрузки; картинка — только скопированная.
+    private static func cover(of page: PlannedPage) -> PageCover? {
+        switch page.cover?.source {
+        case .gallery(let id)?: PageCover(source: .gallery(id), offset: page.cover!.offset)
+        case .file?: page.coverFile.map { PageCover(source: .file($0), offset: page.cover!.offset) }
+        case nil: nil
+        }
     }
 
     /// Блоки страницы для базы: ссылки на найденные страницы — pageLink, на ненайденные — абзац с названием;

@@ -61,6 +61,16 @@ targets:
         product: Reminders
       - package: MyNotionKit
         product: EmbeddedMedia
+      - package: MyNotionKit
+        product: Backlinks
+      - package: MyNotionKit
+        product: PageVersions
+      - package: MyNotionKit
+        product: Navigation
+      - package: MyNotionKit
+        product: PagePicker
+      - package: MyNotionKit
+        product: PageCover
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion
@@ -110,6 +120,12 @@ targets:
       # Пробы TextKit 2 этапа 0 (research R16) открывают настоящий редактор страницы.
       - package: MyNotionKit
         product: PageEditor
+      # US1: настоящая обложка в пробе вида страницы.
+      - package: MyNotionKit
+        product: PageCover
+      # US6: замер истории версий и набора во время записи версий.
+      - package: MyNotionKit
+        product: PageVersions
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion.performancetests
@@ -155,6 +171,11 @@ schemes:
         - package: MyNotionKit/LinkPreviewTests
         - package: MyNotionKit/RemindersTests
         - package: MyNotionKit/EmbeddedMediaTests
+        - package: MyNotionKit/BacklinksTests
+        - package: MyNotionKit/PageVersionsTests
+        - package: MyNotionKit/NavigationTests
+        - package: MyNotionKit/PagePickerTests
+        - package: MyNotionKit/PageCoverTests
         - UITests
     profile:
       config: Release

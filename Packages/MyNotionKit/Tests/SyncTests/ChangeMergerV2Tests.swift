@@ -171,7 +171,7 @@ struct ChangeMergerV2Tests {
         let table = try sharedTable()
         try update(a, table.cell) { $0.color = BlockColor(text: .blue) }
         let snapshot = try SyncSnapshot.make(seq: 42, from: a.store)
-        #expect(snapshot.formatVersion == 2)
+        #expect(snapshot.formatVersion == SyncBatch.currentFormatVersion)
 
         let fresh = try SyncTestMac(name: "Mac C", wallMillis: 50_000)
         _ = try fresh.store.write { tx in try ChangeMerger(localDeviceName: "Mac C").apply(snapshot, in: tx) }

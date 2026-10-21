@@ -18,23 +18,34 @@ public struct LinkedPage: Sendable, Hashable {
 }
 
 /// Строка блока-подстраницы: значок или эмодзи страницы и подчёркнутое название (contracts/visual-style.md, «Блоки»).
-/// Текста у блока нет: строку целиком рисует фрагмент, щелчок по ней открывает страницу.
+/// Текста у блока нет: строку целиком рисует фрагмент, щелчок по ней открывает страницу. Страницы нет — как у
+/// упоминания: серое зачёркнутое «Удалённая страница» (стёрта, в корзине) или серое «Страница загружается».
 @MainActor
 enum PageLinkPainter {
     static var titleFont: NSFont { Typography.pageLinkTitle.font }
 
-    static func draw(_ page: LinkedPage?, column: CGRect, textStart: CGFloat, baseline: CGFloat, maxX: CGFloat) {
-        drawIcon(page?.icon, in: column, centerY: baseline - titleFont.capHeight / 2)
-        let title = page?.displayTitle ?? Page.untitledTitle
-        let color = page == nil || page?.title.isEmpty == true ? Palette.textSecondary : Palette.textPrimary
-        let line = truncatedLine(title, width: max(0, maxX - textStart))
+    static func draw(_ shown: MentionDisplay, column: CGRect, textStart: CGFloat, baseline: CGFloat, maxX: CGFloat) {
+        drawIcon(shown.icon, in: column, centerY: baseline - titleFont.capHeight / 2)
+        let isPage = shown.state == .page
+        let color = !isPage || shown.title == Page.untitledTitle ? Palette.textSecondary : Palette.textPrimary
+        let line = truncatedLine(shown.title, width: max(0, maxX - textStart))
         BlockDecorationPainter.drawLine(line, color: color, baselineOrigin: CGPoint(x: textStart, y: baseline))
 
         let width = CTLineGetTypographicBounds(line, nil, nil, nil)
-        let underline = CGRect(x: textStart, y: baseline + Metrics.PageLinkBlock.underlineOffset,
-                               width: width, height: Metrics.PageLinkBlock.underlineThickness)
-        Palette.border.setFill()
-        underline.fill()
+        switch shown.state {
+        case .page:
+            let underline = CGRect(x: textStart, y: baseline + Metrics.PageLinkBlock.underlineOffset,
+                                   width: width, height: Metrics.PageLinkBlock.underlineThickness)
+            Palette.border.setFill()
+            underline.fill()
+        case .deleted:
+            let strike = CGRect(x: textStart, y: (baseline - titleFont.xHeight / 2).rounded(),
+                                width: width, height: Metrics.PageLinkBlock.underlineThickness)
+            Palette.textSecondary.setFill()
+            strike.fill()
+        case .loading:
+            break
+        }
     }
 
     /// Эмодзи страницы или значок документа по центру колонки маркера, на высоте середины заглавных букв названия.
@@ -60,9 +71,8 @@ enum PageLinkPainter {
     }
 
     /// Ширина строки блока для щелчка: колонка значка и название.
-    static func clickWidth(_ page: LinkedPage?, line: BlockLine) -> CGFloat {
-        let title = page?.displayTitle ?? Page.untitledTitle
-        let width = CTLineGetTypographicBounds(truncatedLine(title, width: Metrics.Page.columnWidth), nil, nil, nil)
+    static func clickWidth(_ shown: MentionDisplay, line: BlockLine) -> CGFloat {
+        let width = CTLineGetTypographicBounds(truncatedLine(shown.title, width: Metrics.Page.columnWidth), nil, nil, nil)
         return line.textStart - line.markerColumn.minX + width
     }
 }
@@ -75,8 +85,17 @@ extension PageTextView {
         guard block.kind == .pageLink, let pageId = block.linkedPageId else { return nil }
         let origin = textContainerOrigin
         let column = line.markerColumn.offsetBy(dx: origin.x, dy: origin.y)
-        let width = PageLinkPainter.clickWidth(linkedPages[pageId], line: line)
+        let width = PageLinkPainter.clickWidth(pageLinkDisplay(of: pageId), line: line)
         let target = CGRect(x: column.minX, y: column.minY, width: width, height: column.height)
         return target.contains(point) ? pageId : nil
+    }
+}
+
+extension PageTextView {
+    /// Что показать в строке блока-подстраницы: страница из дерева или, если её нет, — как упоминание.
+    func pageLinkDisplay(of pageId: UUID?) -> MentionDisplay {
+        guard let pageId else { return MentionDisplay(title: Page.untitledTitle, icon: nil, state: .page) }
+        if let page = linkedPages[pageId] { return MentionDisplay(title: page.displayTitle, icon: page.icon, state: .page) }
+        return mentionDirectory.display(of: pageId)
     }
 }

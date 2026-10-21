@@ -3,7 +3,9 @@ import CryptoKit
 import MarkdownExport
 import NotesCore
 import NotionImport
+import PageCover
 import PageEditor
+import PagePicker
 import PageTree
 import SwiftUI
 import Sync
@@ -27,6 +29,8 @@ final class UIGalleryRunner {
     private var window: NSWindow!
     private var isTrashShown = false
     private var missing: [String: String] = [:]
+    /// Снимок, снятый, пока на экране системное меню: после его закрытия окно снова без меню.
+    private var capturedWhileShowing: Data?
 
     private let filter: String?
 
@@ -58,6 +62,7 @@ final class UIGalleryRunner {
             NSApp.terminate(nil)
             return
         }
+        model.recordsVisits = false
         let runner = UIGalleryRunner(model: model, library: library, failingWrites: failingWrites, folder: folder, filter: filter)
         current = runner
         Task { await runner.run() }
@@ -111,13 +116,16 @@ final class UIGalleryRunner {
             window.setContentSize(contentSize)
         }
         await reset()
+        capturedWhileShowing = nil
         if let problem = await show(shot.state.scene) {
             missing[shot.fileName] = problem
+            await tearDown(shot.state.scene)
             return
         }
         try? await Task.sleep(for: Self.settleDelay)
         do {
-            try CompositeWindowSnapshot.png(of: window).write(to: folder.appending(path: shot.fileName), options: .atomic)
+            let png = try capturedWhileShowing ?? CompositeWindowSnapshot.png(of: window)
+            try png.write(to: folder.appending(path: shot.fileName), options: .atomic)
         } catch {
             missing[shot.fileName] = error.localizedDescription
         }
@@ -381,6 +389,71 @@ final class UIGalleryRunner {
         case .longBreadcrumb:
             await open(library.deepPage)
 
+        case .pageTopBar:
+            await open(library.sample.page.id)
+
+        case .favoriteStar(let isFavorite):
+            await open(library.sample.page.id)
+            if isFavorite { await setSections(favorites: [library.sample.page.id], recents: []) }
+
+        case .sidebarSections(let state):
+            await open(library.sample.page.id)
+            await setSections(favorites: sectionPages.favorites, recents: sectionPages.recents)
+            switch state {
+            case .recentAndFavorites: break
+            case .favoritesCollapsed: model.toggleSection(.favorites)
+            case .favoriteRowMenu:
+                await settle()
+                guard await PageTreePreview.showFavoriteRowMenu(ofPage: sectionPages.favorites[1], in: window, whileOpen: { [self] in
+                    capturedWhileShowing = try? CompositeWindowSnapshot.png(of: window)
+                }) else { return "строки в «Избранном» нет" }
+                if capturedWhileShowing == nil { return "меню строки не снялось" }
+            }
+        case .tabs(let kind):
+            return await GalleryTabsScene.show(kind, model: model, library: library)
+        case .versionHistory(let kind):
+            return await GalleryVersionHistoryScene.show(kind, model: model)
+        case .templates(let kind):
+            return await GalleryTemplatesScene.show(kind, model: model, library: library, window: window)
+
+        case .movePicker(let kind):
+            await open(library.sample.page.id)
+            // Недавние: сама страница (серая — в себя не переносится) и ещё три.
+            let recent = [library.sample.page.id] + model.tree.pagesInTreeOrder.map(\.id).filter { $0 != library.sample.page.id }.prefix(3)
+            try? model.store.write { transaction in
+                for (index, pageId) in recent.enumerated() {
+                    guard var page = try transaction.page(pageId) else { continue }
+                    page.visitedAt = Date().addingTimeInterval(-Double(index) * 60)
+                    try transaction.updatePage(page)
+                }
+            }
+            model.showMovePagePicker(library.sample.page.id)
+            guard let picker = model.movePicker.model else { return "окно «Переместить в…» не открылось" }
+            if kind == .query { picker.query = String(library.sample.page.title.prefix(4)) }
+            await settle()
+
+        case .pageMenu:
+            await open(library.sample.page.id)
+            guard let button = Self.view(identified: "page-menu", in: window) as? NSButton else { return "нет кнопки «•••»" }
+            button.performClick(nil)
+            await settle()
+
+        case .pageMenuAppearance:
+            await open(library.sample.page.id)
+            guard let button = Self.view(identified: "page-menu", in: window) as? NSButton else { return "нет кнопки «•••»" }
+            button.performClick(nil)
+            await settle()
+            let menuWindow = window.childWindows?.first { $0.contentView.flatMap { Self.find("page-menu-appearance", in: $0) } != nil }
+            guard let row = menuWindow?.contentView.flatMap({ Self.find("page-menu-appearance", in: $0) }) else { return "нет «Вид страницы»" }
+            _ = row.accessibilityPerformPress()
+            await settle()
+
+        case .pageCover(let state):
+            return await showPageCover(state)
+
+        case .backlinks(let state):
+            return await showBacklinks(state)
+
         case .notionImport(let state):
             guard let controller = AppDelegate.importController else { return "импорт из Notion не подключён" }
             await open(library.sample.page.id)
@@ -477,6 +550,22 @@ final class UIGalleryRunner {
         case .sidebarHidden:
             model.toggleSidebar()
             await settle()
+        case .tabs(let kind):
+            await GalleryTabsScene.tearDown(kind, model: model)
+        case .movePicker:
+            model.movePicker.close()
+            await settle()
+        case .versionHistory:
+            GalleryVersionHistoryScene.tearDown(model: model)
+        case .templates:
+            GalleryTemplatesScene.tearDown(model: model)
+            await settle()
+        case .backlinks(.list):
+            NSApp.windows.filter { $0.isVisible && $0.className.contains("PopupCardPanel") }.forEach { $0.orderOut(nil) }
+            await settle()
+        case .favoriteStar, .sidebarSections:
+            if model.collapsedSections.contains(.favorites) { model.toggleSection(.favorites) }
+            await setSections(favorites: [], recents: [])
         case .search:
             model.search.dismiss()
         case .notionImport:
@@ -524,6 +613,38 @@ final class UIGalleryRunner {
         })
     }
 
+    /// Страницы для «Избранного» и «Недавних» на снимках: открытая страница — в недавних сверху.
+    private var sectionPages: (favorites: [UUID], recents: [UUID]) {
+        ([library.projects, library.notesPage, library.deepPage, library.nestedLists, library.longTitlePage, library.archive],
+         [library.sample.page.id, library.notesPage, library.projects, library.deepPage, library.longTitlePage])
+    }
+
+    /// Поставить избранное и недавние на страницы базы (пустые списки снимают прежние) и перечитать панель.
+    private func setSections(favorites: [UUID], recents: [UUID]) async {
+        let now = Date()
+        try? model.store.write { transaction in
+            var lastKey: FractionalSortKey?
+            for var page in try transaction.allPages() where page.favorite != nil || page.visitedAt != nil {
+                page.favorite = nil
+                page.visitedAt = nil
+                try transaction.updatePage(page)
+            }
+            for pageId in favorites {
+                guard var page = try transaction.page(pageId) else { continue }
+                lastKey = .between(lastKey, nil)
+                page.favorite = lastKey
+                try transaction.updatePage(page)
+            }
+            for (index, pageId) in recents.enumerated() {
+                guard var page = try transaction.page(pageId) else { continue }
+                page.visitedAt = now.addingTimeInterval(-Double(index) * 60)
+                try transaction.updatePage(page)
+            }
+        }
+        model.library.reloadTree()
+        await settle()
+    }
+
     /// Открыть страницу заново (свой редактор) и снять курсор, который новая страница ставит в начало.
     private func open(_ pageId: UUID, keepingCaret: Bool = false) async {
         model.select(pageId)
@@ -538,6 +659,171 @@ final class UIGalleryRunner {
         await settle()
         isTrashShown = GalleryInput.trashPopoverWindow != nil
         return true
+    }
+
+    /// Вид окна по метке доступности.
+    /// Обложка и вид страницы (US1): страницы с обложками создаются при первом снимке и остаются до конца галереи.
+    private func showPageCover(_ state: GalleryPageCover) async -> String? {
+        switch state {
+        case .addHover:
+            await open(library.emptyPage)
+            if !PageEditorPreview.hoverHeader(in: window) { return "шапка не под мышью" }
+            return Self.view(identified: "add-page-cover", in: window)?.isHidden == false ? nil : "«Добавить обложку» не видна"
+        case .smallText, .fullWidth:
+            await open(library.sample.page.id)
+            guard let textView = PageEditorPreview.textView(in: window) else { return "нет редактора" }
+            // Только вид: данные образца не меняются, следующий снимок откроет страницу как была.
+            textView.applyLayout(PageLayoutSettings(isFullWidth: state == .fullWidth, isSmallText: state == .smallText))
+            await settle()
+            return nil
+        case .image:
+            guard let pageId = coverPages()?.image else { return "страница с картинкой-обложкой не создана" }
+            await open(pageId)
+            return await coverDrawn()
+        case .gallery, .hover, .reposition, .pickerGallery, .pickerUpload:
+            guard let pageId = coverPages()?.gallery else { return "страница с обложкой не создана" }
+            await open(pageId)
+            if let problem = await coverDrawn() { return problem }
+            guard let cover = Self.view(identified: "page-cover", in: window) as? CoverView else { return "нет обложки" }
+            switch state {
+            case .hover: cover.isHovered = true
+            case .reposition: cover.beginReposition()
+            case .pickerGallery, .pickerUpload:
+                cover.isHovered = true
+                cover.layoutSubtreeIfNeeded()
+                cover.changeCover()
+                await settle()
+                let picker = window.childWindows?.compactMap(\.contentView).first { $0.accessibilityIdentifier() == "cover-picker" }
+                guard let picker else { return "окно «Сменить обложку» не открылось" }
+                if state == .pickerUpload { _ = Self.find("cover-tab-upload", in: picker)?.accessibilityPerformPress() }
+            default: break
+            }
+            await settle()
+            return nil
+        }
+    }
+
+    /// Обратные ссылки (US5): «цель» с тремя источниками; строка появляется, когда счёт прочитан в фоне.
+    private func showBacklinks(_ state: GalleryBacklinks) async -> String? {
+        guard let targetId = backlinksPageId() else { return "страница с обратными ссылками не создана" }
+        await open(targetId)
+        var row: BacklinksRow?
+        for _ in 0..<40 {
+            row = Self.view(identified: "backlinks-row", in: window) as? BacklinksRow
+            if row != nil { break }
+            await settle()
+        }
+        guard let row else { return "строка обратных ссылок не появилась" }
+        if state == .list {
+            row.onPress?(row)
+            for _ in 0..<40 where !NSApp.windows.contains(where: { $0.isVisible && $0.className.contains("PopupCardPanel") }) { await settle() }
+            await settle()
+        }
+        return nil
+    }
+
+    private var backlinksTargetId: UUID?
+
+    /// Страница «Обратные ссылки» с иконкой и три страницы, где на неё ссылаются: упоминание в тексте, во вложенной странице и блок-ссылка.
+    private func backlinksPageId() -> UUID? {
+        if let backlinksTargetId { return backlinksTargetId }
+        let id = try? model.store.write { transaction -> UUID in
+            func filled(_ page: Page, _ make: (FractionalSortKey) -> Block) throws {
+                for block in try transaction.blocks(ofPage: page.id) { try transaction.deleteBlock(block.id) }
+                try transaction.insertBlock(make(.between(nil, nil)))
+            }
+            let target = try transaction.createPage(title: "Обратные ссылки", icon: "🎯")
+            let project = try transaction.createPage(title: "Проект «Весна»", icon: "🌱")
+            let notes = try transaction.createPage(title: "Заметки со встречи", parentId: project.id)
+            let idea = try transaction.createPage(title: "Идея про отпуск", icon: "🏖️")
+            func mention(_ prefix: String) -> InlineText {
+                InlineText(prefix + "\u{FFFC}", runs: [StyledRun(start: (prefix as NSString).length, length: 1, style: .mention(target.id))])
+            }
+            try filled(project) { Block(pageId: project.id, text: mention("Подробности — в "), sortKey: $0) }
+            try filled(notes) { Block(pageId: notes.id, text: mention("Договорились: "), sortKey: $0) }
+            try filled(idea) { Block(pageId: idea.id, kind: .pageLink, linkedPageId: target.id, sortKey: $0) }
+            return target.id
+        }
+        model.library.reloadTree()
+        backlinksTargetId = id
+        return id
+    }
+
+    /// Ждать, пока картинка обложки нарисуется (копия грузится в фоне).
+    private func coverDrawn() async -> String? {
+        for _ in 0..<20 {
+            if let cover = Self.view(identified: "page-cover", in: window) as? CoverView, cover.hasImage { return nil }
+            await settle()
+        }
+        return "обложка не нарисована"
+    }
+
+    private var coverPageIds: (gallery: UUID, image: UUID)?
+
+    /// «Обложка из галереи» с иконкой и текстом и «Обложка-картинка» с настоящей картинкой в хранилище файлов.
+    private func coverPages() -> (gallery: UUID, image: UUID)? {
+        if let coverPageIds { return coverPageIds }
+        let store = model.store
+        guard let picture = try? model.library.attachments.importData(Self.coverPicture(), name: "Закат.png", contentType: "public.png"),
+              let ids = try? store.write({ transaction -> (UUID, UUID) in
+                  func page(_ title: String, icon: String?, cover: PageCover) throws -> UUID {
+                      var page = try transaction.createPage(title: title)
+                      page.icon = icon
+                      page.cover = cover
+                      try transaction.updatePage(page)
+                      let blocks = try transaction.blocks(ofPage: page.id)
+                      var key = blocks.last?.sortKey
+                      for text in ["Обложка — во всю ширину области страницы, иконка заходит на неё.",
+                                   "Под обложкой — строка кнопок и название, как у Notion."] {
+                          key = .between(key, nil)
+                          try transaction.insertBlock(Block(pageId: page.id, kind: .paragraph, text: InlineText(text), sortKey: key!))
+                      }
+                      return page.id
+                  }
+                  return (try page("Обложка из галереи", icon: "🌅", cover: PageCover(source: .gallery("gradients_8"))),
+                          try page("Обложка-картинка", icon: nil, cover: PageCover(source: .file(picture), offset: 0.35)))
+              })
+        else { return nil }
+        model.library.reloadTree()
+        coverPageIds = (ids.0, ids.1)
+        return coverPageIds
+    }
+
+    /// Картинка-«фотография» для обложки: небо с солнцем и горы.
+    private static func coverPicture() -> Data {
+        let size = NSSize(width: 1600, height: 1000)
+        let image = NSImage(size: size, flipped: false) { rect in
+            NSGradient(colors: [NSColor(srgbRed: 0.98, green: 0.62, blue: 0.36, alpha: 1), NSColor(srgbRed: 0.35, green: 0.45, blue: 0.75, alpha: 1)])?
+                .draw(in: rect, angle: 90)
+            NSColor(srgbRed: 1, green: 0.85, blue: 0.5, alpha: 1).setFill()
+            NSBezierPath(ovalIn: NSRect(x: 700, y: 420, width: 200, height: 200)).fill()
+            NSColor(srgbRed: 0.18, green: 0.22, blue: 0.3, alpha: 1).setFill()
+            let hills = NSBezierPath()
+            hills.move(to: .zero)
+            hills.line(to: NSPoint(x: 0, y: 380)); hills.line(to: NSPoint(x: 420, y: 620)); hills.line(to: NSPoint(x: 820, y: 360))
+            hills.line(to: NSPoint(x: 1200, y: 560)); hills.line(to: NSPoint(x: 1600, y: 320)); hills.line(to: NSPoint(x: 1600, y: 0))
+            hills.close()
+            hills.fill()
+            return true
+        }
+        guard let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff),
+              let png = bitmap.representation(using: .png, properties: [:]) else { return Data() }
+        return png
+    }
+
+    static func find(_ identifier: String, in view: NSView) -> NSView? {
+        if view.accessibilityIdentifier() == identifier { return view }
+        for subview in view.subviews { if let found = find(identifier, in: subview) { return found } }
+        return nil
+    }
+
+    static func view(identified identifier: String, in window: NSWindow) -> NSView? {
+        func find(_ view: NSView) -> NSView? {
+            if view.accessibilityIdentifier() == identifier { return view }
+            for subview in view.subviews { if let found = find(subview) { return found } }
+            return nil
+        }
+        return window.contentView.flatMap(find)
     }
 
     private func settle() async {

@@ -9,7 +9,7 @@ enum BlockDecoration: Equatable {
     case bullet(String)
     case number(String)
     case checkbox(checked: Bool)
-    case pageLink(LinkedPage?)
+    case pageLink(MentionDisplay)
     /// Подсказка пустого заголовка, пункта или чекбокса без курсора (contracts/visual-style.md, «Пустые строки»).
     case placeholder(String, BlockTextStyle)
 }
@@ -120,8 +120,24 @@ final class BlockLayoutFragment: NSTextLayoutFragment, @unchecked Sendable {
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
         let offset = CGPoint(x: point.x - layoutFragmentFrame.minX, y: point.y - layoutFragmentFrame.minY)
+        let scale = textView.layoutSettings.fontScale
         for (decoration, line) in lines {
+            // Мелкий шрифт: маркер, номер, чекбокс и подсказка — той же шкалой, что текст, у своей строки.
+            let anchor: CGPoint? = switch decoration {
+            case .pageLink: nil
+            case .placeholder: CGPoint(x: line.caretX + offset.x, y: line.baseline + offset.y)
+            default: CGPoint(x: line.markerColumn.midX + offset.x, y: line.baseline + offset.y)
+            }
+            guard scale != 1, let anchor else {
+                BlockDecorationPainter.draw(decoration, line: line, offset: offset)
+                continue
+            }
+            context.saveGState()
+            context.translateBy(x: anchor.x, y: anchor.y)
+            context.scaleBy(x: scale, y: scale)
+            context.translateBy(x: -anchor.x, y: -anchor.y)
             BlockDecorationPainter.draw(decoration, line: line, offset: offset)
+            context.restoreGState()
         }
         NSGraphicsContext.restoreGraphicsState()
     }
@@ -140,8 +156,8 @@ enum BlockDecorationPainter {
             drawNumber(label, in: column, baseline: baseline)
         case .checkbox(let checked):
             drawCheckbox(in: line.checkboxRect.offsetBy(dx: offset.x, dy: offset.y), checked: checked)
-        case .pageLink(let page):
-            PageLinkPainter.draw(page, column: column, textStart: line.textStart + offset.x, baseline: baseline,
+        case .pageLink(let shown):
+            PageLinkPainter.draw(shown, column: column, textStart: line.textStart + offset.x, baseline: baseline,
                                  maxX: offset.x + Metrics.Page.columnWidth)
         case .placeholder(let hint, let style):
             // С начала текста блока, как подсказка под курсором (`PageTextView.updateEmptyParagraphHint`).
@@ -272,7 +288,7 @@ extension PageTextView {
         case .bullet: .bullet(ListMarkers.bullet(atIndent: block.indent))
         case .number: .number(ListMarkers.number(ordinal(ofBlock: block), atIndent: block.indent))
         case .checkbox: .checkbox(checked: block.isChecked)
-        case .pageLink: .pageLink(block.linkedPageId.flatMap { linkedPages[$0] })
+        case .pageLink: .pageLink(pageLinkDisplay(of: block.linkedPageId))
         case .none, .painted: nil
         }
     }

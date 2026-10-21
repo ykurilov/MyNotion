@@ -13,8 +13,14 @@ public struct PageTreeActions {
     public var addSubpage: (UUID) -> Void
     /// Набор свёрнутых веток изменился.
     public var collapsedPagesChanged: (Set<UUID>) -> Void
+    /// Избранную страницу перетащили в разделе «Избранное»: страница, место среди остальных избранных.
+    public var moveFavorite: (UUID, Int) -> Void = { _, _ in }
     /// Щелчок по иконке строки: открыть окно выбора иконки под этим видом (FR-034).
     public var chooseIcon: (UUID, NSView) -> Void
+    /// Обработчики пунктов меню строки историй 003 по местам (избранное, дублирование, перенос, вкладка, шаблон).
+    public var rowMenuHandlers: [PageRowMenuSlot: (UUID) -> Void] = [:]
+    /// Страница — шаблон, в избранном: для названий пунктов меню строки.
+    public var pageFlags: (UUID) -> (isTemplate: Bool, isFavorite: Bool) = { _ in (false, false) }
 
     public init(
         select: @escaping (UUID) -> Void,
@@ -48,9 +54,23 @@ final class PageOutlineItem: NSObject {
 /// свёрнутость запоминается, перетаскивание — по правилам `PageDrop`.
 @MainActor
 final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegate {
+    /// Что показывает список: дерево «Страницы» или раздел над ним — «Избранное» (корни — избранные страницы, подстраницы
+    /// раскрываются; тянуть можно только корни), «Шаблоны» (корни — шаблоны, подстраницы раскрываются; не тянется)
+    /// и «Недавние» (плоский список). В «Страницах» шаблонов нет — они в своём разделе.
+    enum Kind { case tree, favorites, templates, recents }
+
+    let kind: Kind
     var actions: PageTreeActions
+    /// Меню строки — «⋯» и правая кнопка.
+    let rowMenu = PageRowMenuPresenter()
     private(set) var tree = PageTreeSnapshot(allPages: [])
     private(set) var collapsedPageIds: Set<UUID> = []
+    /// Разделы: корни списка по порядку.
+    private(set) var rootPageIds: [UUID] = []
+    /// Разделы: раскрытые ветки (по умолчанию всё свёрнуто). У дерева «Страницы» наоборот — свёрнутые в `collapsedPageIds`.
+    private(set) var expandedPageIds: Set<UUID> = []
+    /// Раздел: раскрытие веток изменилось.
+    var expandedPagesChanged: (Set<UUID>) -> Void = { _ in }
     private var items: [UUID: PageOutlineItem] = [:]
     /// Название открытой страницы прямо во время набора.
     private var liveTitle: (pageId: UUID, title: String)?
@@ -58,20 +78,28 @@ final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineV
     private var isApplyingState = false
     weak var outlineView: PageOutlineView?
 
-    init(actions: PageTreeActions) {
+    init(actions: PageTreeActions, kind: Kind = .tree) {
         self.actions = actions
+        self.kind = kind
     }
 
     func attach(to outlineView: PageOutlineView) {
         self.outlineView = outlineView
+        outlineView.registerForDraggedTypes([dragType])
+        switch kind {
+        case .tree: break
+        case .favorites: outlineView.useSectionIdentifier("favorites", label: "Избранное")
+        case .templates: outlineView.useSectionIdentifier("templates", label: "Шаблоны")
+        case .recents: outlineView.useSectionIdentifier("recents", label: "Недавние")
+        }
         outlineView.dataSource = self
         outlineView.delegate = self
         outlineView.target = self
         outlineView.doubleAction = #selector(renameClickedRow)
         outlineView.onRename = { [weak self] row in self?.beginRenaming(row: row) }
-        outlineView.onContextMenu = { [weak self] row in
-            guard let self, let pageId = self.pageId(atRow: row) else { return nil }
-            return self.pageMenu(for: pageId)
+        outlineView.onContextMenu = { [weak self, weak outlineView] row, point in
+            guard let self, let outlineView, let pageId = self.pageId(atRow: row) else { return }
+            self.rowMenu.show(self.pageMenu(for: pageId), from: outlineView.convert(point, from: nil), in: outlineView)
         }
         outlineView.onTrash = { [weak self] row in
             guard let self, let pageId = self.pageId(atRow: row) else { return }
@@ -81,11 +109,14 @@ final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineV
 
     // MARK: Состояние от окна
 
-    func show(_ tree: PageTreeSnapshot, collapsedPageIds: Set<UUID>, selectedPageId: UUID?) {
+    func show(_ tree: PageTreeSnapshot, collapsedPageIds: Set<UUID>, selectedPageId: UUID?,
+              rootPageIds: [UUID] = [], expandedPageIds: Set<UUID> = []) {
         guard let outlineView else { return }
-        self.tree = tree
+        self.tree = kind == .tree ? tree.withoutTemplates() : tree
         self.collapsedPageIds = collapsedPageIds
-        items = items.filter { tree.page($0.key) != nil }
+        self.rootPageIds = rootPageIds
+        self.expandedPageIds = expandedPageIds
+        items = items.filter { self.tree.page($0.key) != nil }
         isApplyingState = true
         defer { isApplyingState = false }
         outlineView.reloadData()
@@ -108,11 +139,24 @@ final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineV
             if outlineView.selectedRow != row {
                 outlineView.selectRowIndexes([row], byExtendingSelection: false)
             }
-            // Видимую строку не трогаем: прокрутка заново раскладывает видимые строки.
-            if !outlineView.rows(in: outlineView.visibleRect).contains(row) { outlineView.scrollRowToVisible(row) }
+            // Видимую строку не трогаем: прокрутка заново раскладывает видимые строки. Невидимую — показываем чуть позже:
+            // сборка видов строк на новом месте (около 10 мс) не задерживает показ открытой страницы и ввод в неё
+            // (замер «назад», 003); панель догоняет страницу через `revealDelay`, глазом этого не видно.
+            if !outlineView.rows(in: outlineView.visibleRect).contains(row) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.revealDelay) { [weak self] in self?.scrollToVisible(pageId) }
+            }
         } else {
             outlineView.deselectAll(nil)
         }
+    }
+
+    static let revealDelay: DispatchTimeInterval = .milliseconds(50)
+
+    private func scrollToVisible(_ pageId: UUID) {
+        guard let outlineView, tree.page(pageId) != nil else { return }
+        let row = outlineView.row(forItem: item(for: pageId))
+        guard row >= 0, row == outlineView.selectedRow, !outlineView.rows(in: outlineView.visibleRect).contains(row) else { return }
+        outlineView.scrollRowToVisible(row)
     }
 
     func setLiveTitle(_ title: String?, of pageId: UUID?) {
@@ -126,35 +170,68 @@ final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineV
     // MARK: NSOutlineViewDataSource
 
     func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int {
-        tree.children(of: (item as? PageOutlineItem)?.pageId).count
+        children(of: (item as? PageOutlineItem)?.pageId).count
     }
 
     func outlineView(_ outlineView: NSOutlineView, child index: Int, ofItem item: Any?) -> Any {
-        self.item(for: tree.children(of: (item as? PageOutlineItem)?.pageId)[index].id)
+        self.item(for: children(of: (item as? PageOutlineItem)?.pageId)[index].id)
     }
 
     func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool {
         guard let item = item as? PageOutlineItem else { return false }
-        return !tree.children(of: item.pageId).isEmpty
+        return !children(of: item.pageId).isEmpty
+    }
+
+    /// Строки под родителем; `nil` — корень. У «Недавних» подстраниц нет.
+    private func children(of parentId: UUID?) -> [Page] {
+        switch (kind, parentId) {
+        case (.tree, _): tree.children(of: parentId)
+        case (_, nil): rootPageIds.compactMap { tree.page($0) }
+        case (.recents, _): []
+        case (.favorites, _), (.templates, _): tree.children(of: parentId)
+        }
+    }
+
+    private var idPrefix: String {
+        switch kind {
+        case .tree: "page-tree"
+        case .favorites: "favorites-row"
+        case .templates: "templates-row"
+        case .recents: "recents-row"
+        }
+    }
+
+    private func isCollapsed(_ pageId: UUID) -> Bool {
+        kind == .tree ? collapsedPageIds.contains(pageId) : !expandedPageIds.contains(pageId)
     }
 
     // MARK: Перетаскивание
 
     func outlineView(_ outlineView: NSOutlineView, pasteboardWriterForItem item: Any) -> (any NSPasteboardWriting)? {
-        guard let item = item as? PageOutlineItem else { return nil }
+        guard let item = item as? PageOutlineItem, kind != .recents, kind != .templates else { return nil }
+        if kind == .favorites, !rootPageIds.contains(item.pageId) { return nil }
         let pasteboardItem = NSPasteboardItem()
-        pasteboardItem.setString(item.pageId.uuidString, forType: .myNotionPageId)
+        pasteboardItem.setString(item.pageId.uuidString, forType: dragType)
         return pasteboardItem
     }
 
     func outlineView(_ outlineView: NSOutlineView, validateDrop info: any NSDraggingInfo,
                      proposedItem item: Any?, proposedChildIndex index: Int) -> NSDragOperation {
         guard let draggedId = draggedPageId(info) else { return [] }
+        if kind != .tree {
+            return favoriteDropIndex(draggedId, item: item, index: index, in: outlineView) == nil ? [] : .move
+        }
         let targetId = (item as? PageOutlineItem)?.pageId
         return PageDrop.resolve(dragged: draggedId, onto: targetId, childIndex: index, in: tree) == nil ? [] : .move
     }
 
     func outlineView(_ outlineView: NSOutlineView, acceptDrop info: any NSDraggingInfo, item: Any?, childIndex index: Int) -> Bool {
+        if kind != .tree {
+            guard let draggedId = draggedPageId(info),
+                  let target = favoriteDropIndex(draggedId, item: item, index: index, in: outlineView) else { return false }
+            actions.moveFavorite(draggedId, target)
+            return true
+        }
         guard let draggedId = draggedPageId(info),
               let drop = PageDrop.resolve(dragged: draggedId, onto: (item as? PageOutlineItem)?.pageId, childIndex: index, in: tree)
         else { return false }
@@ -162,8 +239,29 @@ final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineV
         return true
     }
 
+    /// «Избранное»: куда встанет перетащенная страница среди остальных избранных. Бросок на строку — перед ней;
+    /// бросок внутрь ветки или страницы не из раздела — нельзя. `nil` — бросать сюда нельзя.
+    private func favoriteDropIndex(_ draggedId: UUID, item: Any?, index: Int, in outlineView: NSOutlineView) -> Int? {
+        guard kind == .favorites, let from = rootPageIds.firstIndex(of: draggedId) else { return nil }
+        var position = index
+        if let target = item as? PageOutlineItem {
+            guard let onto = rootPageIds.firstIndex(of: target.pageId) else { return nil }
+            position = onto
+            outlineView.setDropItem(nil, dropChildIndex: onto)
+        } else if index < 0 {
+            position = rootPageIds.count
+            outlineView.setDropItem(nil, dropChildIndex: position)
+        }
+        // Индекс среди остальных: сама страница из списка уходит.
+        let target = position > from ? position - 1 : position
+        return target == from ? nil : target
+    }
+
+    /// Избранное тянется только внутри своего раздела: у него свой тип перетаскивания, дерево «Страницы» его не принимает.
+    private var dragType: NSPasteboard.PasteboardType { kind == .favorites ? .myNotionFavoritePageId : .myNotionPageId }
+
     private func draggedPageId(_ info: any NSDraggingInfo) -> UUID? {
-        info.draggingPasteboard.string(forType: .myNotionPageId).flatMap(UUID.init(uuidString:))
+        info.draggingPasteboard.string(forType: dragType).flatMap(UUID.init(uuidString:))
     }
 
     // MARK: NSOutlineViewDelegate
@@ -175,7 +273,7 @@ final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineV
     func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
         guard let item = item as? PageOutlineItem, let page = tree.page(item.pageId) else { return nil }
         let cell = outlineView.makeView(withIdentifier: PageTreeCellView.identifier, owner: nil) as? PageTreeCellView
-            ?? PageTreeCellView(frame: .zero)
+            ?? PageTreeCellView(frame: .zero, idPrefix: idPrefix)
         configure(cell, page: page, item: item)
         return cell
     }
@@ -192,14 +290,24 @@ final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineV
         isApplyingState = true
         expandOpenBranches(under: item.pageId)
         isApplyingState = wasApplying
-        guard !isApplyingState, collapsedPageIds.remove(item.pageId) != nil else { return }
+        guard !isApplyingState else { return }
+        if kind != .tree {
+            if expandedPageIds.insert(item.pageId).inserted { expandedPagesChanged(expandedPageIds) }
+            return
+        }
+        guard collapsedPageIds.remove(item.pageId) != nil else { return }
         actions.collapsedPagesChanged(collapsedPageIds)
     }
 
     func outlineViewItemDidCollapse(_ notification: Notification) {
         guard let item = notification.userInfo?["NSObject"] as? PageOutlineItem else { return }
         refreshRow(of: item.pageId)
-        guard !isApplyingState, collapsedPageIds.insert(item.pageId).inserted else { return }
+        guard !isApplyingState else { return }
+        if kind != .tree {
+            if expandedPageIds.remove(item.pageId) != nil { expandedPagesChanged(expandedPageIds) }
+            return
+        }
+        guard collapsedPageIds.insert(item.pageId).inserted else { return }
         actions.collapsedPagesChanged(collapsedPageIds)
     }
 
@@ -222,7 +330,7 @@ final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineV
     /// в `outlineViewItemDidExpand`: иначе подстраница новой подстраницы осталась бы в нераскрытой ветке.
     private func expandOpenBranches(under parentId: UUID?) {
         guard let outlineView else { return }
-        for page in tree.children(of: parentId) where !collapsedPageIds.contains(page.id) && !tree.children(of: page.id).isEmpty {
+        for page in children(of: parentId) where !isCollapsed(page.id) && !children(of: page.id).isEmpty {
             let item = item(for: page.id)
             if outlineView.isItemExpanded(item) {
                 expandOpenBranches(under: page.id)
@@ -236,7 +344,7 @@ final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineV
         let title = liveTitle.flatMap { live in
             live.pageId == page.id ? (live.title.isEmpty ? Page.untitledTitle : live.title) : nil
         } ?? page.displayTitle
-        let hasChildren = !tree.children(of: page.id).isEmpty
+        let hasChildren = !children(of: page.id).isEmpty
         cell.show(page, title: title, hasChildren: hasChildren, isExpanded: outlineView?.isItemExpanded(item) ?? false)
         cell.onToggleExpanded = { [weak self] in self?.toggleExpanded(page.id) }
         cell.onAddSubpage = { [weak self] in self?.actions.addSubpage(page.id) }
@@ -276,20 +384,21 @@ final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineV
     // MARK: Меню «⋯» и по правой кнопке
 
     private func showMenu(for pageId: UUID, from anchor: NSView) {
-        let menu = pageMenu(for: pageId)
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: anchor.bounds.maxY + 4), in: anchor)
+        rowMenu.show(pageMenu(for: pageId), from: anchor)
     }
 
-    func pageMenu(for pageId: UUID) -> NSMenu {
-        let menu = NSMenu()
-        menu.addItem(PageMenuItem(title: "Переименовать") { [weak self] in
+    func pageMenu(for pageId: UUID) -> ActionMenuView {
+        var handlers = actions.rowMenuHandlers
+        handlers[.rename] = { [weak self] pageId in
             guard let self, let outlineView = self.outlineView else { return }
             self.beginRenaming(row: outlineView.row(forItem: self.item(for: pageId)))
-        })
-        menu.addItem(PageMenuItem(title: "Добавить подстраницу") { [weak self] in self?.actions.addSubpage(pageId) })
-        menu.addItem(.separator())
-        menu.addItem(PageMenuItem(title: "Удалить в корзину") { [weak self] in self?.actions.moveToTrash(pageId) })
-        return menu
+        }
+        handlers[.addSubpage] = { [weak self] in self?.actions.addSubpage($0) }
+        handlers[.trash] = { [weak self] in self?.actions.moveToTrash($0) }
+        let flags = actions.pageFlags(pageId)
+        return PageRowMenu.make(items: PageRowMenuItem.all,
+                                context: PageRowMenuContext(pageId: pageId, isTemplate: flags.isTemplate, isFavorite: flags.isFavorite),
+                                handlers: handlers)
     }
 }
 

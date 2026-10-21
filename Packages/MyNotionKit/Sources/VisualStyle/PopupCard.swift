@@ -27,17 +27,41 @@ public final class PopupCard {
         guard let window = anchor.window, let windowContent = window.contentView else { return }
         let card = Self.cardFrame(size: size, anchor: anchor.convert(anchor.bounds, to: nil), in: windowContent.bounds,
                                   gap: gap, preferringRight: preferringRight)
+        present(content, card: card, in: window)
+    }
 
+    private func present(_ content: NSView, card: NSRect, in window: NSWindow) {
+        close()
         let panel = PopupCardPanel(content: content)
         panel.onCancel = { [weak self] in self?.close() }
         panel.setCard(window.convertToScreen(card))
         self.panel = panel
         guard PopupWindows.show(panel, over: window, makingKey: true) else { return }
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
-            if let panel = self?.panel, event.window !== panel { self?.close() }
+            // Подменю карточки — её дочернее окно: щелчок в нём карточку не закрывает.
+            if let panel = self?.panel, event.window !== panel, event.window?.parent !== panel { self?.close() }
             return event
         }
         deactivationObserver = PopupWindows.onAppDeactivation { [weak self] in self?.close() }
+    }
+
+    /// Показать `content` размером `size` от точки `point` (координаты окна вида `view`): вправо и вниз, место — `cardFrame(from:)`.
+    public func show(_ content: NSView, size: NSSize, from point: NSPoint, in view: NSView) {
+        guard let window = view.window, let windowContent = window.contentView else { return }
+        present(content, card: Self.cardFrame(size: size, from: point, in: windowContent.bounds), in: window)
+    }
+
+    /// Где встанет карточка размером `size` от точки `point` (координаты окна) внутри `bounds`: левым верхним углом в точке,
+    /// как меню строки панели Notion 7.39 от середины «⋯»; не влезает вниз — вверх, низом по точке; не влезает вправо — влево,
+    /// правым краем по точке. Всегда целиком в окне с полем 8.
+    nonisolated public static func cardFrame(size: NSSize, from point: NSPoint, in bounds: NSRect) -> NSRect {
+        let margin: CGFloat = 8
+        var card = NSRect(x: point.x, y: point.y - size.height, width: size.width, height: size.height)
+        if card.minY < bounds.minY + margin, point.y + size.height <= bounds.maxY - margin { card.origin.y = point.y }
+        if card.maxX > bounds.maxX - margin, point.x - size.width >= bounds.minX + margin { card.origin.x = point.x - size.width }
+        card.origin.x = min(max(margin, card.origin.x), bounds.maxX - margin - size.width)
+        card.origin.y = min(max(margin, card.origin.y), bounds.maxY - margin - size.height)
+        return card
     }
 
     /// Где встанет карточка размером `size` у `anchor` (координаты окна) внутри `bounds`: справа от него с зазором `gap`,

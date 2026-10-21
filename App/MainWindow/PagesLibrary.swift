@@ -6,6 +6,8 @@ import Observation
 import PageEditor
 import PageSearch
 import PageTree
+import PageVersions
+import VisualStyle
 
 /// Общее для всех окон приложения (FR-029): база, открытые страницы, дерево, корзина и синхронизация.
 /// У каждого окна свой `MainWindowModel` над этой библиотекой. Одна страница в двух окнах — один `PageDocument`
@@ -22,12 +24,23 @@ final class PagesLibrary {
     /// Меняется при каждом перечитывании дерева.
     private(set) var treeRevision = 0
     private(set) var trashEntries: [Page] = []
+    /// Избранные страницы по порядку и пять последних, где побывали (US2). Корзина в них не попадает.
+    private(set) var favoritePageIds: [UUID] = []
+    private(set) var recentPageIds: [UUID] = []
+    /// Шаблоны по порядку (US7): свой раздел панели.
+    private(set) var templatePageIds: [UUID] = []
+    /// Меняется при каждом перечитывании «Избранного» и «Недавних»: разделы перечитывают строки.
+    private(set) var sectionsRevision = 0
     /// Страницы корзины вместе с подстраницами — для упоминаний «Удалённая страница».
     private(set) var trashedPageIds: Set<UUID> = []
+    /// Те же страницы корзины: название и иконка для вкладки с заглушкой «Страница в корзине» (US3).
+    private(set) var trashedPagesById: [UUID: Page] = [:]
     /// Напоминания (US3): индекс, уведомления системы, «Готово».
     @ObservationIgnored let reminders: ReminderNotifications
     /// Синхронизация между Mac (US5); выключена — ничего не делает.
     @ObservationIgnored private(set) var sync: SyncController!
+    /// История версий страниц (003, US6).
+    @ObservationIgnored private(set) var versions: AppPageVersions!
     /// Окно, открытое при запуске: его ждут замеры, галерея и снимки окна.
     @ObservationIgnored private(set) var firstWindow: MainWindowModel!
     @ObservationIgnored private var isFirstWindowClaimed = false
@@ -39,7 +52,7 @@ final class PagesLibrary {
         weak var model: MainWindowModel?
     }
 
-    init(store: NotesStore, startsSync: Bool = true, reminders: ReminderNotifications) {
+    init(store: NotesStore, startsSync: Bool = true, reminders: ReminderNotifications, versionTiming: PageVersionRecorder.Timing = .standard) {
         self.store = store
         self.reminders = reminders
         attachments = AttachmentStore(store: store, folder: AttachmentStore.folder(forDatabaseAt: store.database.url))
@@ -49,7 +62,8 @@ final class PagesLibrary {
         reloadTree()
         sync = SyncController(store: store, openDocuments: openDocuments, attachments: attachments, startsEngine: startsSync)
         sync.onRemoteChange = { [weak self] _ in self?.remoteChangesApplied() }
-        firstWindow = MainWindowModel(library: self, opening: nil)
+        versions = AppPageVersions(store: store, deviceName: sync.deviceName, timing: versionTiming)
+        firstWindow = MainWindowModel(library: self, opening: nil, restoresTabs: true)
         reminders.openBlock = { [weak self] pageId, blockId in self?.openBlock(blockId, inPage: pageId) }
     }
 
@@ -87,10 +101,27 @@ final class PagesLibrary {
         windowModels.first { $0.window?.isKeyWindow == true } ?? windowModels.first
     }
 
+    /// Страница удалена навсегда (нет ни в дереве, ни в корзине): вкладки пропускают её в «назад/вперёд».
+    func isDeletedForever(_ pageId: UUID) -> Bool {
+        tree.page(pageId) == nil && trashedPagesById[pageId] == nil
+    }
+
+    /// Запись корзины, в которой лежит страница (сама страница или её предок), — её возвращает «Вернуть».
+    func trashEntry(containing pageId: UUID) -> UUID? {
+        var page = trashedPagesById[pageId]
+        while let current = page {
+            if current.trashedAt != nil { return current.id }
+            page = current.parentId.flatMap { trashedPagesById[$0] }
+        }
+        return nil
+    }
+
     /// Записать все открытые страницы сейчас: уход в фон, выход. `false` — что-то не записалось.
     @discardableResult
     func saveAll() -> Bool {
-        openDocuments.saveAll()
+        // Место прокрутки активных вкладок — вместе с правками: выход по ⌘Q окна уже не закрывает.
+        for window in windowModels { window.saveTabs() }
+        return openDocuments.saveAll()
     }
 
     var hasFailedSaves: Bool { openDocuments.hasFailedSaves }
@@ -99,8 +130,25 @@ final class PagesLibrary {
         let all = (try? store.pageOutline()) ?? []
         tree = PageTreeSnapshot(allPages: all)
         trashEntries = NotesStore.trashEntries(in: all)
-        trashedPageIds = Set(all.lazy.map(\.id).filter { self.tree.page($0) == nil })
+        trashedPagesById = Dictionary(all.lazy.filter { self.tree.page($0.id) == nil }.map { ($0.id, $0) }) { first, _ in first }
+        trashedPageIds = Set(trashedPagesById.keys)
         treeRevision += 1
+        favoritePageIds = ((try? store.favoritePages()) ?? []).map(\.id)
+        recentPageIds = recentIds()
+        templatePageIds = tree.templates.map(\.id)
+        sectionsRevision += 1
+    }
+
+    /// Запись открытия легла в базу: перечитываются только «Недавние», дерево и страницы остаются как были.
+    func reloadRecents() {
+        let ids = recentIds()
+        guard ids != recentPageIds else { return }
+        recentPageIds = ids
+        sectionsRevision += 1
+    }
+
+    private func recentIds() -> [UUID] {
+        ((try? store.recentPages(limit: Metrics.Sidebar.recentRowCount)) ?? []).map(\.id)
     }
 
     /// Операция с деревом в любом окне (и её отмена): дерево перечитывается один раз, окна сверяют свои страницы.

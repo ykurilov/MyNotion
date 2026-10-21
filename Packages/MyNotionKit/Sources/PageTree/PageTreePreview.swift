@@ -28,6 +28,31 @@ public enum PageTreePreview {
         return true
     }
 
+    /// Меню строки страницы в разделе «Избранное» от «⋯» строки: открыто на экране, пока `whileOpen` не отработает
+    /// (снимок), и после него закрывается; `false` — строки в разделе нет.
+    @discardableResult
+    public static func showFavoriteRowMenu(ofPage pageId: UUID, in window: NSWindow, whileOpen: @escaping @MainActor () -> Void) async -> Bool {
+        guard let outline = window.contentView.flatMap({ findOutline(identifier: "favorites-tree", in: $0) }),
+              let source = outline.dataSource as? PageOutlineDataSource,
+              let row = (0..<outline.numberOfRows).first(where: { (outline.item(atRow: $0) as? PageOutlineItem)?.pageId == pageId }),
+              let cell = outline.view(atColumn: 0, row: row, makeIfNecessary: false) as? PageTreeCellView else { return false }
+        (outline.rowView(atRow: row, makeIfNecessary: false) as? PageTreeRowView)?.isHovered = true
+        cell.isRowHovered = true
+        cell.layoutSubtreeIfNeeded()
+        source.rowMenu.show(source.pageMenu(for: pageId), from: cell.menuButton)
+        try? await Task.sleep(for: .milliseconds(400))
+        whileOpen()
+        source.rowMenu.close()
+        cell.isRowHovered = false
+        (outline.rowView(atRow: row, makeIfNecessary: false) as? PageTreeRowView)?.isHovered = false
+        return true
+    }
+
+    private static func findOutline(identifier: String, in view: NSView) -> PageOutlineView? {
+        if let outline = view as? PageOutlineView, outline.accessibilityIdentifier() == identifier { return outline }
+        return view.subviews.lazy.compactMap { findOutline(identifier: identifier, in: $0) }.first
+    }
+
     /// Снять подсветку «под мышью» со всех строк.
     public static func clearHover(in window: NSWindow) {
         guard let outline = outline(in: window) else { return }
@@ -41,7 +66,8 @@ public enum PageTreePreview {
     }
 
     private static func findOutline(in view: NSView) -> PageOutlineView? {
-        if let outline = view as? PageOutlineView { return outline }
+        // Дерево «Страницы», а не разделы «Избранное» и «Недавние» над ним.
+        if let outline = view as? PageOutlineView, outline.accessibilityIdentifier() == "page-tree" { return outline }
         return view.subviews.lazy.compactMap(findOutline).first
     }
 }

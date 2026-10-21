@@ -35,6 +35,7 @@ public class FlowTextView: PageTextView {
         pageLookup = host.pageLookup
         onRequestReminderPermission = host.onRequestReminderPermission
         if let store = host.blockViewState { blockViewState = store }
+        applyLayout(PageLayoutSettings(isSmallText: host.layoutSettings.isSmallText))
     }
 
     /// Высота текста потока без добавочной строки после последнего перевода строки.
@@ -94,6 +95,7 @@ extension PageTextView {
         embeddedViews.setHeight(height, of: blockId, width: width)
         relayoutParagraph(ofBlock: blockId)
         blockViews.update()
+        keepScrollAnchor()
     }
 
     /// Переложить абзац блока: высота его вида поменялась.

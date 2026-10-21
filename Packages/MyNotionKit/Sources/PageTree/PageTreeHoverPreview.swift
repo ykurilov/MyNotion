@@ -14,7 +14,8 @@ public enum PageTreeHoverPreview {
     }
 
     private static func findOutline(in view: NSView) -> PageOutlineView? {
-        if let outline = view as? PageOutlineView { return outline }
+        // Дерево «Страницы», а не разделы «Избранное» и «Недавние» над ним.
+        if let outline = view as? PageOutlineView, outline.accessibilityIdentifier() == "page-tree" { return outline }
         return view.subviews.lazy.compactMap(findOutline).first
     }
 }

@@ -19,6 +19,15 @@ public final class NotesTransaction {
     /// Соединение этой транзакции — для таблиц модулей-добавок (синхронизация).
     package var database: Database { db }
 
+    /// Имя Mac, чьи правки записывает транзакция (пачка синхронизации); `nil` — правки этого Mac.
+    /// По нему история версий подписывает автора (research R11).
+    public internal(set) var replicatedFromDeviceName: String?
+
+    /// Транзакция применяет пачку с другого Mac.
+    package func markReplicated(fromDeviceName name: String) {
+        replicatedFromDeviceName = name
+    }
+
     /// Выполнить после успешной фиксации транзакции (например, разбудить отправку).
     package func afterCommit(_ action: @escaping @Sendable () -> Void) {
         db.afterNextTransaction { _ in action() }
@@ -44,11 +53,19 @@ public final class NotesTransaction {
     }
 
     static func fetchBlocks(ofPage pageId: UUID, in db: Database) throws -> [Block] {
-        try Row.fetchAll(
+        let rows = try Row.fetchCursor(
             db,
             sql: "SELECT * FROM block WHERE pageId = ? AND isDeleted = 0 ORDER BY sortKey, id",
             arguments: [pageId.databaseText]
-        ).map(Block.init(row:))
+        )
+        var columns: BlockColumns?
+        var blocks: [Block] = []
+        while let row = try rows.next() {
+            let known = try columns ?? BlockColumns(row)
+            columns = known
+            blocks.append(try Block(row: row, columns: known))
+        }
+        return blocks
     }
 
     /// Контейнеры страницы под пометкой «удалён» и их контейнер.
@@ -113,7 +130,8 @@ public final class NotesTransaction {
         updated.createdAt = stored.createdAt
         updated.fieldClocks = stored.fieldClocks
         updated.fieldClocks.stamp(changedFields, with: clock.now())
-        updated.updatedAt = Date()
+        // Избранное и недавние — порядок и вид, а не содержимое: «изменено» не трогают (data-model.md, «Page»).
+        updated.updatedAt = changedFields.isSubset(of: Page.Field.bookkeeping) ? stored.updatedAt : Date()
         try updated.update(in: db)
         changes.pages.append(PageChange(page: updated, changedFields: changedFields, isNew: false))
         return updated
@@ -409,6 +427,11 @@ public final class NotesTransaction {
         try db.execute(sql: sql, arguments: StatementArguments(arguments.map(\.databaseValue)))
     }
 
+    /// Запрос подписчика с ответом — первая колонка строками (например, `DELETE … RETURNING`).
+    public func fetchTexts(sql: String, arguments: [SQLValue] = []) throws -> [String] {
+        try String.fetchAll(db, sql: sql, arguments: StatementArguments(arguments.map(\.databaseValue)))
+    }
+
     // MARK: Правила
 
     /// «У страницы всегда есть хотя бы один блок (пустой абзац)».
@@ -431,6 +454,29 @@ public final class NotesTransaction {
             db.cachedStatement(sql: "SELECT EXISTS (SELECT 1 FROM page WHERE id = ?)"),
             arguments: [id.databaseText]
         ) ?? false
+    }
+
+    /// Живые блоки вне страницы `pageId`, перенесённые «Переместить в» из блоков `sourceIds` (восстановление версии):
+    /// по индексу `block_by_moved_from`, без прохода по всем блокам.
+    func blocks(movedFrom sourceIds: Set<UUID>, outsidePage pageId: UUID) throws -> [Block] {
+        var found: [Block] = []
+        let ids = sourceIds.map(\.databaseText).sorted()
+        for start in stride(from: 0, to: ids.count, by: Self.movedFromBatch) {
+            let batch = Array(ids[start..<min(start + Self.movedFromBatch, ids.count)])
+            found += try Row.fetchAll(db, sql: Self.movedFromSQL(count: batch.count),
+                                      arguments: StatementArguments(batch + [pageId.databaseText])).map(Block.init(row:))
+        }
+        return found
+    }
+
+    static let movedFromBatch = 500
+
+    /// Запрос копий по `movedFrom`: `IS NOT NULL` — чтобы шёл частичный индекс.
+    static func movedFromSQL(count: Int) -> String {
+        """
+        SELECT * FROM block WHERE movedFrom IN (\(Array(repeating: "?", count: count).joined(separator: ", "))) \
+        AND movedFrom IS NOT NULL AND isDeleted = 0 AND pageId != ? ORDER BY sortKey, id
+        """
     }
 
     private func storedBlock(_ id: UUID) throws -> Block? {

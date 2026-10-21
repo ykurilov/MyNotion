@@ -1,5 +1,6 @@
 import AppKit
 import Attachments
+import Backlinks
 import MarkdownExport
 import NotesCore
 import NotionImport
@@ -44,8 +45,10 @@ struct MyNotionApp: App {
             reminders.installIndex()
             if options.uiGalleryURL != nil { galleryLibrary = try UIGalleryRunner.prepareLibrary(in: store) }
             // Служебные запуски (галерея, замеры, снимки) с сервером не связываются.
-            let pages = PagesLibrary(store: store, startsSync: options.allowsSync, reminders: reminders)
-            if options.uiGalleryURL != nil || options.generatesRichSample { SampleMedia.materialize(in: store, attachments: pages.attachments) }
+            let pages = PagesLibrary(store: store, startsSync: options.allowsSync, reminders: reminders, versionTiming: options.versionTiming)
+            if options.uiGalleryURL != nil || options.generatesRichSample || options.generates003Sample {
+                SampleMedia.materialize(in: store, attachments: pages.attachments)
+            }
             if let automation = options.syncAutomation { SyncAutomation.start(automation, controller: pages.sync) }
             return pages
         }
@@ -79,6 +82,7 @@ struct MyNotionApp: App {
         .commands {
             PageCommands(library: try? library.get())
             SidebarToggleCommands(library: try? library.get())
+            NavigationCommands(library: try? library.get())
             FormatCommands()
             PageFindCommands()
             ExportCommands(controller: exportController)
@@ -95,6 +99,9 @@ struct MyNotionApp: App {
         // Индекс поиска и очередь синхронизации пишутся в той же транзакции, что и записи (research R6, R4) —
         // до первой записи. Пока синхронизация не включена, очередь ничего не пишет.
         store.addWriteHook(SearchIndexer())
+        // Индекс обратных ссылок — в той же транзакции, что и блок (research R10); после фиксации открытые страницы
+        // перечитывают счёт, если их ссылки сменились.
+        store.addWriteHook(PageLinkIndexer(onLinksChange: BacklinksAddon.linksDidChange))
         // Ссылки на файлы пересчитываются в той же транзакции, что блоки (data-model.md, «Attachment»).
         store.addWriteHook(AttachmentReferenceCounter(onQueueChange: AttachmentQueueSignal.fire))
         Outbox.install(on: store)
@@ -110,6 +117,15 @@ struct MyNotionApp: App {
             // Каждый тип 002 добавляет свою часть через описатель (`BlockKinds.richPageParts`).
             let pageId = try RichPageGenerator(parts: BlockKinds.richPageParts).ensure(in: store)
             try store.saveWindowState(WindowState(windowId: WindowState.mainWindowId, openPageId: pageId))
+        }
+        if options.generates003Sample {
+            // Картинки ветки — те же файлы-образцы, что у картинок «богатой» страницы (`SampleMedia`).
+            let imageProps = BlockKinds.richPageParts.first { $0.name == BlockKind.image.rawValue }?.blocks.first?.props ?? .empty
+            try PagesNavigationSample(imageProps: imageProps).ensure(in: store)
+        }
+        if options.generates003Sample || options.generatesVersionsSample {
+            // До первого окна: окно открывает страницу образца, как любую страницу базы.
+            PageVersionsSampleLaunch.ensure(in: store)
         }
         if options.typingBenchmarkURL != nil {
             try TypingBenchmark.ensureHugePage(in: store)
@@ -207,7 +223,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let library = Self.library, !library.saveAll() else { return .terminateNow }
+        guard let library = Self.library else { return .terminateNow }
+        defer { library.versions.recordAllDueBeforeQuit() }
+        guard !library.saveAll() else { return .terminateNow }
         if Self.presence == .background {
             // Служебный запуск окон с вопросами не показывает: база у него своя или эталонная.
             FileHandle.standardError.write(Data("Выход без сохранения: записать правки на диск не удалось\n".utf8))
@@ -241,6 +259,13 @@ private struct PageCommands: Commands {
                 .keyboardShortcut("n")
             Button("Новая подстраница") { model?.createSubpage() }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
+            // ⌘D и ⇧⌘P в тексте страницы берёт редактор (блоки); здесь — фокус в панели, в названии или «Недавние» нет.
+            Button("Дублировать страницу") { model?.openPageId.map { model?.duplicatePage($0) } }
+                .keyboardShortcut("d")
+                .disabled(model?.openPageId == nil)
+            Button("Переместить страницу в…") { model?.openPageId.map { model?.showMovePagePicker($0) } }
+                .keyboardShortcut("p", modifiers: [.command, .shift])
+                .disabled(model?.openPageId == nil)
             // Сочетание ловит и `AppDelegate`: с ⌥ буква на русской раскладке другая.
             Button("Новое окно") { openWindow(id: MainWindowView.sceneId) }
                 .keyboardShortcut("n", modifiers: [.command, .option])

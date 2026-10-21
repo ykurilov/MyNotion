@@ -18,8 +18,10 @@ public struct FractionalSortKey: Sendable, Hashable, Comparable, Codable, Custom
 
     public var description: String { rawValue }
 
+    /// Ключ — только цифры ASCII, поэтому сравнение строк Swift совпадает с побайтовым и идёт быстрым путём для ASCII:
+    /// документ сортирует 1 000 блоков на каждом открытии страницы (research R15).
     public static func < (lhs: FractionalSortKey, rhs: FractionalSortKey) -> Bool {
-        lhs.rawValue.utf8.lexicographicallyPrecedes(rhs.rawValue.utf8)
+        lhs.rawValue < rhs.rawValue
     }
 
     /// Ключ строго между `before` и `after`; `nil` — край списка.

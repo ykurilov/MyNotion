@@ -14,6 +14,7 @@ final class EditorFixture {
         var indent: Int = 0
         var checked: Bool = false
         var link: UUID?
+        var props: BlockProps = .empty
 
         static func paragraph(_ text: String = "") -> Spec { Spec(kind: .paragraph, text: text) }
         static func heading(_ level: Int, _ text: String) -> Spec {
@@ -34,13 +35,14 @@ final class EditorFixture {
     let window: NSWindow
     let undoManager = UndoManager()
 
-    init(_ specs: [Spec] = [.paragraph()], icon: String? = nil) throws {
+    init(_ specs: [Spec] = [.paragraph()], icon: String? = nil, isTemplate: Bool = false) throws {
         folder = try TemporaryEditorFolder()
         store = try NotesStore(database: AppDatabase.open(at: folder.databaseURL), clock: HybridLogicalClock(deviceId: UUID()))
         pageId = try store.write { tx in
             var page = try tx.createPage(title: "Блоки")
-            if let icon {
+            if icon != nil || isTemplate {
                 page.icon = icon
+                page.isTemplate = isTemplate
                 try tx.updatePage(page)
             }
             for block in try tx.blocks(ofPage: page.id) { try tx.deleteBlock(block.id) }
@@ -48,7 +50,7 @@ final class EditorFixture {
             for spec in specs {
                 key = .between(key, nil)
                 try tx.insertBlock(Block(pageId: page.id, kind: spec.kind, text: InlineText(spec.text), indent: spec.indent,
-                                         isChecked: spec.checked, linkedPageId: spec.link, sortKey: key!))
+                                         isChecked: spec.checked, linkedPageId: spec.link, sortKey: key!, props: spec.props))
             }
             return page.id
         }

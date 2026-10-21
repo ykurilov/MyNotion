@@ -8,12 +8,18 @@ import VisualStyle
 final class PageOutlineView: NSOutlineView {
     var onRename: ((_ row: Int) -> Void)?
     var onTrash: ((_ row: Int) -> Void)?
-    var onContextMenu: ((_ row: Int) -> NSMenu?)?
+    var onContextMenu: ((_ row: Int, _ locationInWindow: NSPoint) -> Void)?
     /// Подписка снимается в `deinit` — он не привязан к главному потоку.
     nonisolated(unsafe) private var clipObserver: (any NSObjectProtocol)?
 
     deinit {
         if let clipObserver { NotificationCenter.default.removeObserver(clipObserver) }
+    }
+
+    /// Раздел панели («Избранное», «Недавние») тянет за собой свои идентификаторы доступности: тесты находят его отдельно от дерева.
+    func useSectionIdentifier(_ name: String, label: String) {
+        setAccessibilityIdentifier("\(name)-tree")
+        setAccessibilityLabel(label)
     }
 
     /// Видимая часть списка сменила высоту (внизу панели появилась строка): выбранная строка, срезанная краем,
@@ -56,7 +62,6 @@ final class PageOutlineView: NSOutlineView {
         selectionHighlightStyle = .regular
         draggingDestinationFeedbackStyle = .regular
         setDraggingSourceOperationMask(.move, forLocal: true)
-        registerForDraggedTypes([.myNotionPageId])
         setAccessibilityIdentifier("page-tree")
         setAccessibilityLabel("Страницы")
     }
@@ -74,10 +79,11 @@ final class PageOutlineView: NSOutlineView {
         return NSRect(x: leading, y: frame.minY, width: max(0, bounds.width - leading), height: frame.height)
     }
 
-    /// Меню по правой кнопке — то же, что у «⋯».
+    /// Меню по правой кнопке — то же, что у «⋯», от точки щелчка (как у Notion).
     override func menu(for event: NSEvent) -> NSMenu? {
         let row = row(at: convert(event.locationInWindow, from: nil))
-        return row >= 0 ? onContextMenu?(row) : nil
+        if row >= 0 { onContextMenu?(row, event.locationInWindow) }
+        return nil
     }
 
     override func keyDown(with event: NSEvent) {
@@ -97,6 +103,8 @@ final class PageOutlineView: NSOutlineView {
 extension NSPasteboard.PasteboardType {
     /// id страницы, которую тянут в дереве.
     static let myNotionPageId = NSPasteboard.PasteboardType("cloud.kurilov.mynotion.page-id")
+    /// id избранной страницы, которую тянут в разделе «Избранное».
+    static let myNotionFavoritePageId = NSPasteboard.PasteboardType("cloud.kurilov.mynotion.favorite-page-id")
 }
 
 // MARK: Строка
@@ -164,6 +172,8 @@ final class PageTreeRowView: NSTableRowView {
 final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
     static let identifier = NSUserInterfaceItemIdentifier("page-tree-row")
 
+    /// Начало идентификаторов доступности частей строки: у дерева «page-tree», у разделов — свои.
+    let idPrefix: String
     var onToggleExpanded: (() -> Void)?
     var onAddSubpage: (() -> Void)?
     var onChooseIcon: ((NSView) -> Void)?
@@ -197,7 +207,8 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
     var isRowHovered = false { didSet { updateHoverState() } }
     var isRowSelected = false { didSet { updateTitleColor() } }
 
-    override init(frame frameRect: NSRect) {
+    init(frame frameRect: NSRect, idPrefix: String = "page-tree") {
+        self.idPrefix = idPrefix
         super.init(frame: frameRect)
         identifier = Self.identifier
         textField = titleLabel
@@ -211,13 +222,13 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
         iconButton.target = self
         iconButton.action = #selector(chooseIcon)
         iconButton.setAccessibilityLabel("Сменить иконку")
-        iconButton.setAccessibilityIdentifier("page-tree-icon")
+        iconButton.setAccessibilityIdentifier("\(idPrefix)-icon")
 
         titleLabel.font = Typography.sidebarRow.font
         titleLabel.lineBreakMode = .byTruncatingTail
         titleLabel.cell?.truncatesLastVisibleLine = true
         titleLabel.maximumNumberOfLines = 1
-        titleLabel.setAccessibilityIdentifier("page-tree-title")
+        titleLabel.setAccessibilityIdentifier("\(idPrefix)-title")
 
         for view in [iconLabel, documentIcon, iconButton, titleLabel] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
@@ -252,7 +263,7 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
         let button = RowAccessoryButton()
         configureIconButton(button, symbol: "chevron.right", label: "Свернуть или развернуть",
                             pointSize: Metrics.Sidebar.disclosureSymbolSize, action: #selector(toggleExpanded), tint: Palette.handleIcon)
-        button.setAccessibilityIdentifier("page-tree-disclosure")
+        button.setAccessibilityIdentifier("\(idPrefix)-disclosure")
         add(button)
         let iconSize = Metrics.Sidebar.rowIconSize
         NSLayoutConstraint.activate([
@@ -270,10 +281,10 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
         let menu = RowAccessoryButton(), add = RowAccessoryButton()
         configureIconButton(menu, symbol: "ellipsis", label: "Действия со страницей",
                             pointSize: Metrics.Sidebar.accessorySymbolSize, action: #selector(showMenu))
-        menu.setAccessibilityIdentifier("page-tree-menu")
+        menu.setAccessibilityIdentifier("\(idPrefix)-menu")
         configureIconButton(add, symbol: "plus", label: "Добавить подстраницу",
                             pointSize: Metrics.Sidebar.accessorySymbolSize, action: #selector(addSubpage))
-        add.setAccessibilityIdentifier("page-tree-add-subpage")
+        add.setAccessibilityIdentifier("\(idPrefix)-add-subpage")
         self.add(menu)
         self.add(add)
         let size = Metrics.Sidebar.rowAccessorySize
@@ -307,7 +318,7 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
         field.lineBreakMode = .byClipping
         field.delegate = self
         field.isHidden = true
-        field.setAccessibilityIdentifier("page-tree-rename")
+        field.setAccessibilityIdentifier("\(idPrefix)-rename")
         add(field)
         NSLayoutConstraint.activate([
             field.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor, constant: Self.renameTextOffset),

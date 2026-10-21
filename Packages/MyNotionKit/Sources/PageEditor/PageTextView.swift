@@ -21,6 +21,12 @@ public class PageTextView: NSTextView {
     static let hintLabelTextInset: CGFloat = 2
     /// Проверка орфографии при наборе включена в меню «Правописание» (FR-013).
     private var spellCheckingWanted = true
+    /// Шаблоны, которые предлагает пустая страница (US7), и что делать при выборе; строки появляются, только когда они нужны.
+    var templateChoices: [TemplateChoice] = [] {
+        didSet { if templateChoices != oldValue { updateTemplateRows() } }
+    }
+    var onChooseTemplate: (@MainActor (UUID) -> Void)?
+    var templateRows: TemplateRowsController?
     /// Подложка под «/» с поиском, пока открыто меню «/».
     let slashQueryHighlight = NSView()
 
@@ -28,6 +34,12 @@ public class PageTextView: NSTextView {
     /// страницу открыли из дерева, и стрелки, Enter и ⌘⌫ дальше работают в дереве.
     public enum InitialFocus { case title, body, unchanged }
     private var pendingFocus: InitialFocus?
+    /// Место прокрутки вкладки, на которое встать при показе (US3); возвращается до первой отрисовки.
+    var pendingScrollPlace: TabScroll?
+    private var didRestoreScrollPlace = false
+    /// Возвращённое место держится, пока раскладка выше него уточняется (`keepScrollAnchor`).
+    var scrollAnchor: ScrollAnchor?
+    var isKeepingScrollAnchor = false
     /// Страница показана и принимает ввод.
     public var onReady: (@MainActor () -> Void)?
     /// Отмена, когда окна нет или оно своей не даёт (проверки без приложения).
@@ -100,6 +112,12 @@ public class PageTextView: NSTextView {
     private var isLoadingText = false
     /// Протяжка мышью с поля: где нажали и сдвинулась ли мышь.
     var marginDrag: (start: NSPoint, moved: Bool)?
+    /// Вид страницы: ширина колонки и шкала шрифтов (`PageLayout/`).
+    public internal(set) var layoutSettings = PageLayoutSettings()
+    /// Место обложки над шапкой (`PageLayout/`).
+    let coverSlot = CoverSlot()
+    /// Добавки шапки от хозяина редактора (US1: обложка); живут, пока жив редактор.
+    public internal(set) var headerAddons: [any PageHeaderAddon] = []
 
     public convenience init(document: PageDocument, initialFocus: InitialFocus) {
         self.init(flow: FlowDocument(document), initialFocus: initialFocus)
@@ -132,6 +150,10 @@ public class PageTextView: NSTextView {
         BuiltInBlockViews.registerOnce()
         tableOfContentsTracker = TableOfContentsTracker(textView: self)
         mapper = PageTextStorageMapper(flow: document, textStorage: textStorage!)
+        // Вид страницы — до загрузки текста: страница с мелким шрифтом сразу пишется мелкой.
+        layoutSettings = PageLayoutSettings(isFullWidth: document.page.isFullWidth, isSmallText: document.page.isSmallText)
+        mapper.fontScale = layoutSettings.fontScale
+        coverSlot.shownAppearance = PageAppearance(document.page)
         // После загрузки текста система ставит выделение в конец, и место курсора там считалось бы раскладкой
         // всей страницы (на 10 000 блоках — секунды). Пока текст загружается, вид выделения не обновляется;
         // курсор — в начало, куда его потом и ставит открытие страницы.
@@ -256,6 +278,7 @@ public class PageTextView: NSTextView {
     }
 
     public override func didChangeText() {
+        scrollAnchor = nil
         super.didChangeText()
         // Посреди набора с помощью IME текст ещё не окончательный.
         guard !hasMarkedText() else { return }
@@ -382,7 +405,7 @@ public class PageTextView: NSTextView {
 
     public override func keyDown(with event: NSEvent) {
         hideBlockHandles()
-        if !hasMarkedText(), let command = EditorKeyBindings.command(for: event) {
+        if !hasMarkedText(), let command = EditorKeyBindings.command(for: event), handlesKey(command) {
             perform(command)
             return
         }
@@ -396,7 +419,7 @@ public class PageTextView: NSTextView {
 
     /// ⌘B, ⌘I, ⇧⌘X, ⌘E, ⌘Enter — раньше меню: окно спрашивает поле ввода первым.
     public override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if window?.firstResponder === self, !hasMarkedText(), let command = EditorKeyBindings.command(for: event) {
+        if window?.firstResponder === self, !hasMarkedText(), let command = EditorKeyBindings.command(for: event), handlesKey(command) {
             perform(command)
             return true
         }
@@ -408,6 +431,7 @@ public class PageTextView: NSTextView {
             blockHandles.cancelDrag()
             return
         }
+        if handleTemplateRowsCommand(selector) { return }
         if handleMentionPickerCommand(selector) { return }
         if handlePopupCommand(selector) { return }
         if colorMenu.handleCommand(selector) { return }
@@ -479,7 +503,21 @@ public class PageTextView: NSTextView {
         case .insertInlineEquation: insertInlineEquation()
         case .duplicateBlocks:
             if let selected = selectedBlockRange() { duplicateBlocks(at: selected) }
+        case .moveBlocksToPage:
+            if let selected = selectedBlocks { requestMoveBlocks(selected, anchor: nil) }
         }
+    }
+
+    /// «Переместить в» (US4): окно выбирает страницу и переносит блоки (`PageTreeOperations.moveBlocks`).
+    func requestMoveBlocks(_ range: Range<Int>, anchor: NSRect?) {
+        commitEdits()
+        guard !range.isEmpty, range.upperBound <= document.blocks.count else { return }
+        onSubpageRequest?(.moveBlocks(blockIds: document.blocks[range].map(\.id), anchor: anchor))
+    }
+
+    /// ⇧⌘P берёт редактор, только когда выделены блоки; иначе клавиша — у меню окна (переносит страницу).
+    private func handlesKey(_ command: EditorCommand) -> Bool {
+        command != .moveBlocksToPage || isBlockSelection
     }
 
     /// Блоки под курсором или выделением.
@@ -770,6 +808,11 @@ public class PageTextView: NSTextView {
 
     /// Подсказка у курсора в пустом блоке: своя для каждого типа (contracts/visual-style.md, «Пустые строки»).
     func updateEmptyParagraphHint() {
+        updateEmptyParagraphHintLabel()
+        updateTemplateRows()
+    }
+
+    private func updateEmptyParagraphHintLabel() {
         let selection = selectedRange()
         guard window?.firstResponder === self, selection.length == 0, !hasMarkedText(), let window,
               let position = mapper.blockPosition(at: selection.location) else {
@@ -821,19 +864,24 @@ public class PageTextView: NSTextView {
     /// Центр — по ширине вместе с полосой прокрутки: длинная страница с полосой не сдвигается (раунд 2, № 23).
     /// У редактора колонки (`FlowTextView`) — вся его ширина.
     var column: (left: CGFloat, width: CGFloat) {
-        let pageWidth = enclosingScrollView?.frame.width ?? bounds.width
-        let left = max(Metrics.Page.minimumSideInset, (pageWidth - Metrics.Page.columnWidth) / 2)
-        return (left, max(0, min(Metrics.Page.columnWidth, bounds.width - left - Metrics.Page.minimumSideInset)))
+        layoutSettings.column(pageWidth: enclosingScrollView?.frame.width ?? bounds.width, textWidth: bounds.width)
+    }
+
+    /// Набор — в шкале шрифта страницы, откуда бы ни пришли атрибуты (описатель блока, оформление в строке).
+    public override var typingAttributes: [NSAttributedString.Key: Any] {
+        get { super.typingAttributes }
+        set { super.typingAttributes = PageFontScaling.scaled(newValue, to: layoutSettings.fontScale) }
     }
 
     public override var textContainerOrigin: NSPoint {
         NSPoint(x: column.left, y: header.frame.maxY)
     }
 
-    /// После раскладки видимой области — виды блоков на свои абзацы.
+    /// После раскладки видимой области — виды блоков на свои абзацы, возвращённое место прокрутки — на своё.
     public override func layout() {
         super.layout()
         blockViews.update()
+        keepScrollAnchor()
     }
 
     public override func viewDidMoveToSuperview() {
@@ -876,10 +924,13 @@ public class PageTextView: NSTextView {
         }
         header.isHidden = !showsPageHeader
         let headerHeight = showsPageHeader ? header.height(forWidth: columnWidth) : 0
-        header.frame = NSRect(x: left, y: 0, width: columnWidth, height: headerHeight)
-        // Отступ текста сверху — шапка, снизу — пустое место; NSTextView делит высоту поровну, а начало текста
+        let coverHeight = showsPageHeader ? coverSlot.height : 0
+        coverSlot.view?.frame = NSRect(x: 0, y: 0, width: bounds.width, height: coverHeight)
+        let headerTop = coverHeight - (coverHeight > 0 ? header.coverOverlap : 0)
+        header.frame = NSRect(x: left, y: headerTop, width: columnWidth, height: headerHeight)
+        // Отступ текста сверху — обложка и шапка, снизу — пустое место; NSTextView делит высоту поровну, а начало текста
         // задаёт `textContainerOrigin`.
-        let inset = NSSize(width: left, height: showsPageHeader ? (headerHeight + Metrics.Page.bottomPadding) / 2 : 0)
+        let inset = NSSize(width: left, height: showsPageHeader ? (headerTop + headerHeight + Metrics.Page.bottomPadding) / 2 : 0)
         if textContainerInset != inset {
             textContainerInset = inset
         }
@@ -1033,16 +1084,30 @@ public class PageTextView: NSTextView {
         super.viewDidMoveToWindow()
         guard window != nil, let focus = pendingFocus else { return }
         pendingFocus = nil
+        // Место прокрутки вкладки — до первой отрисовки: страница сразу на месте, без лишнего кадра сверху.
+        if pendingScrollPlace != nil, (enclosingScrollView?.contentSize.width ?? 0) > 0 { restorePendingScrollPlace() }
         // Следующий оборот цикла событий: окно уже на экране и принимает ввод.
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
+            let restored = restorePendingScrollPlace()
             switch focus {
             case .title: header.focusTitle()
+            case .body where restored: window?.makeFirstResponder(self)
             case .body: focusBody(at: 0)
             case .unchanged: break
             }
             onReady?()
         }
+    }
+
+    /// Вернуть место прокрутки вкладки, если оно ждёт; `true` — место вернули (сейчас или раньше).
+    @discardableResult
+    private func restorePendingScrollPlace() -> Bool {
+        guard let place = pendingScrollPlace else { return didRestoreScrollPlace }
+        pendingScrollPlace = nil
+        restoreScrollPlace(place)
+        didRestoreScrollPlace = true
+        return true
     }
 
     public func focusBody(at location: Int) {

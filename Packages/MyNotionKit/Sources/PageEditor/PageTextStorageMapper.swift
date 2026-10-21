@@ -44,6 +44,8 @@ public final class PageTextStorageMapper: NSObject {
     private var pendingRange: NSRange?
     /// Мэппер сам меняет текст или атрибуты — это не правки пользователя.
     private var isApplying = false
+    /// Шкала шрифта страницы (мелкий шрифт, `PageLayout/`): текст блоков пишется сразу в ней.
+    var fontScale: CGFloat = 1
 
     public convenience init(document: PageDocument, textStorage: NSTextStorage) {
         self.init(flow: FlowDocument(document), textStorage: textStorage)
@@ -62,7 +64,7 @@ public final class PageTextStorageMapper: NSObject {
     /// Показать блоки документа заново целиком.
     public func load() {
         pendingRange = nil
-        applying { textStorage.setAttributedString(Self.attributedText(for: document.blocks)) }
+        applying { textStorage.setAttributedString(PageFontScaling.scaled(Self.attributedText(for: document.blocks), to: fontScale)) }
     }
 
     /// Есть ли правки текста, которые документ ещё не получил.
@@ -142,7 +144,9 @@ public final class PageTextStorageMapper: NSObject {
         guard length == 0 || (textStorage.string as NSString).character(at: length - 1) != Self.newline else { return }
         let attributes = length > 0
             ? textStorage.attributes(at: length - 1, effectiveRange: nil)
-            : document.blocks.last.map { Self.baseAttributes(for: $0, after: previousKind(ofBlockAt: document.blocks.count - 1)) } ?? [:]
+            : document.blocks.last.map {
+                PageFontScaling.scaled(Self.baseAttributes(for: $0, after: previousKind(ofBlockAt: document.blocks.count - 1)), to: fontScale)
+            } ?? [:]
         applying { textStorage.append(NSAttributedString(string: "\n", attributes: attributes)) }
     }
 
@@ -213,7 +217,8 @@ public final class PageTextStorageMapper: NSObject {
             for (paragraph, id) in zip(paragraphs, ids) {
                 guard let block = document.block(id), let index = document.index(ofBlock: id) else { continue }
                 let hasNewline = NSMaxRange(paragraph) > Self.contentRange(of: paragraph, in: string).upperBound
-                let rendered = Self.paragraph(block, withNewline: hasNewline, after: previousKind(ofBlockAt: index))
+                let rendered = PageFontScaling.scaled(Self.paragraph(block, withNewline: hasNewline, after: previousKind(ofBlockAt: index)),
+                                                      to: fontScale)
                 guard rendered.length == paragraph.length else { continue }
                 // Вид блока остаётся тем же: вложение не пересоздаётся, только получает новые поля блока.
                 let existing = paragraph.length > 0
@@ -241,7 +246,7 @@ public final class PageTextStorageMapper: NSObject {
         guard document.blocks.indices.contains(index) else { return }
         let range = characterRange(ofBlocksAt: index..<index + 1)
         guard range.length > 0 else { return }
-        let spacing = Self.spacingBefore(document.blocks[index].kind, after: previousKind(ofBlockAt: index))
+        let spacing = Self.spacingBefore(document.blocks[index].kind, after: previousKind(ofBlockAt: index)) * fontScale
         let current = textStorage.attribute(.paragraphStyle, at: range.location, effectiveRange: nil) as? NSParagraphStyle
         guard current?.paragraphSpacingBefore != spacing else { return }
         applying {
@@ -320,7 +325,7 @@ public final class PageTextStorageMapper: NSObject {
         for index in range {
             text.append(Self.paragraph(blocks[index], withNewline: true, after: previousKind(ofBlockAt: index)))
         }
-        applying { textStorage.replaceCharacters(in: characters, with: text) }
+        applying { textStorage.replaceCharacters(in: characters, with: PageFontScaling.scaled(text, to: fontScale)) }
         paragraphHint = (0, 0)
         refreshSpacing(ofBlockAt: range.upperBound)
     }
@@ -363,7 +368,7 @@ public final class PageTextStorageMapper: NSObject {
 
     /// Текст блока для страницы: переносы строк — разрывы строки.
     static func pageString(ofBlockText string: String) -> String {
-        string.replacingOccurrences(of: "\n", with: lineSeparatorString)
+        string.utf8.contains(UInt8(ascii: "\n")) ? string.replacingOccurrences(of: "\n", with: lineSeparatorString) : string
     }
 
     /// Текст блока со страницы: разрывы строки — переносы `\n`.
@@ -442,12 +447,12 @@ public final class PageTextStorageMapper: NSObject {
     // MARK: Вид
 
     static func paragraphAttributes(of block: Block) -> [NSAttributedString.Key: Any] {
-        var attributes: [NSAttributedString.Key: Any] = [
-            .blockID: block.id,
-            .blockKind: block.kind.rawValue,
-            .blockIndent: block.indent,
-            .blockChecked: block.isChecked,
-        ]
+        // Место сразу под все атрибуты абзаца и оформления: словарь не перестраивается по ходу (открытие страницы).
+        var attributes = [NSAttributedString.Key: Any](minimumCapacity: 12)
+        attributes[.blockID] = block.id
+        attributes[.blockKind] = block.kind.rawValue
+        attributes[.blockIndent] = block.indent
+        attributes[.blockChecked] = block.isChecked
         attributes[.blockLinkedPage] = block.linkedPageId
         if !block.color.isNone { attributes[.blockColor] = block.color }
         if !block.props.isEmpty { attributes[.blockProps] = block.props }
@@ -486,26 +491,11 @@ public final class PageTextStorageMapper: NSObject {
     }
 
     static func baseAttributes(for block: Block, after previous: BlockKind? = nil) -> [NSAttributedString.Key: Any] {
-        let style = textStyle(of: block.kind)
-        let line = Typography.line(for: style)
-        let spacing = Metrics.block(style)
-        let descriptor = block.kind.descriptor
-        let paragraphStyle = (line.paragraphStyle.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
-        if let lineHeight = descriptor.lineHeight {
-            paragraphStyle.minimumLineHeight = lineHeight
-            paragraphStyle.maximumLineHeight = lineHeight
-        }
-        paragraphStyle.paragraphSpacingBefore = spacingBefore(block.kind, after: previous)
-        paragraphStyle.paragraphSpacing = descriptor.bottomSpacing ?? max(0, spacing.height - line.lineHeight - spacing.topSpacing)
-        let marker: CGFloat = block.kind.hasMarkerColumn ? Metrics.BlockMarker.textInset : descriptor.leadingInset
-        let indent = CGFloat(block.indent) * Metrics.Page.indentPerLevel + marker
-        paragraphStyle.firstLineHeadIndent = indent
-        paragraphStyle.headIndent = indent
-
+        let look = paragraphLook(of: block.kind, indent: block.indent, spacingBefore: spacingBefore(block.kind, after: previous))
         var attributes = paragraphAttributes(of: block)
-        attributes[.font] = line.font
+        attributes[.font] = look.font
         attributes[.foregroundColor] = Palette.notionText(block.color.text?.tone)
-        attributes[.paragraphStyle] = paragraphStyle
+        attributes[.paragraphStyle] = look.paragraphStyle
         if block.kind == .checkbox, block.isChecked {
             attributes[.foregroundColor] = Palette.textSecondary
             attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
@@ -513,20 +503,63 @@ public final class PageTextStorageMapper: NSObject {
         return attributes
     }
 
+    private struct ParagraphStyleKey: Hashable {
+        let kind: BlockKind
+        let indent: Int
+        let spacingBefore: CGFloat
+    }
+
+    /// Шрифт и оформление абзаца блока.
+    private struct ParagraphLook {
+        let font: NSFont
+        let paragraphStyle: NSParagraphStyle
+    }
+
+    /// Готовые шрифты и оформления абзацев: одно на тип, вложенность и отступ сверху. Сборка своих на каждый блок была
+    /// заметной частью открытия страницы (профиль переключения вкладок, 003). Оформление не меняют на месте — только копию.
+    nonisolated(unsafe) private static var paragraphLooks: [ParagraphStyleKey: ParagraphLook] = [:]
+    private static let paragraphLooksLock = NSLock()
+
+    private static func paragraphLook(of kind: BlockKind, indent level: Int, spacingBefore: CGFloat) -> ParagraphLook {
+        let key = ParagraphStyleKey(kind: kind, indent: level, spacingBefore: spacingBefore)
+        paragraphLooksLock.lock()
+        defer { paragraphLooksLock.unlock() }
+        if let known = paragraphLooks[key] { return known }
+        let style = textStyle(of: kind)
+        let line = Typography.line(for: style)
+        let spacing = Metrics.block(style)
+        let descriptor = kind.descriptor
+        let paragraphStyle = (line.paragraphStyle.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
+        if let lineHeight = descriptor.lineHeight {
+            paragraphStyle.minimumLineHeight = lineHeight
+            paragraphStyle.maximumLineHeight = lineHeight
+        }
+        paragraphStyle.paragraphSpacingBefore = spacingBefore
+        paragraphStyle.paragraphSpacing = descriptor.bottomSpacing ?? max(0, spacing.height - line.lineHeight - spacing.topSpacing)
+        let marker: CGFloat = kind.hasMarkerColumn ? Metrics.BlockMarker.textInset : descriptor.leadingInset
+        let indent = CGFloat(level) * Metrics.Page.indentPerLevel + marker
+        paragraphStyle.firstLineHeadIndent = indent
+        paragraphStyle.headIndent = indent
+        let look = ParagraphLook(font: line.font, paragraphStyle: paragraphStyle.copy() as? NSParagraphStyle ?? paragraphStyle)
+        paragraphLooks[key] = look
+        return look
+    }
+
     /// Абзац блока: текст с оформлением и, если нужно, перевод строки с атрибутами того же абзаца.
     static func paragraph(_ block: Block, withNewline: Bool, after previous: BlockKind? = nil) -> NSAttributedString {
         let base = baseAttributes(for: block, after: previous)
         if block.kind.rendersAsAttachment {
             // Блок без своего текста: один знак-вложение с видом блока (research R2).
-            let text = NSMutableAttributedString(attachment: BlockAttachment(block: block))
-            text.addAttributes(base, range: NSRange(location: 0, length: text.length))
-            if withNewline { text.append(NSAttributedString(string: "\n", attributes: base)) }
-            return text
+            // Знак и перевод строки — одной строкой: словарь атрибутов переводится в Objective-C один раз (research R15).
+            var attributes = base
+            attributes[.attachment] = BlockAttachment(block: block)
+            return NSAttributedString(string: withNewline ? "\u{FFFC}\n" : "\u{FFFC}", attributes: attributes)
         }
         let line = Typography.line(for: textStyle(of: block.kind))
-        let text = NSMutableAttributedString(string: pageString(ofBlockText: block.text.string), attributes: base)
-        let length = text.length
-        for run in block.text.normalized().runs {
+        let body = pageString(ofBlockText: block.text.string)
+        let text = NSMutableAttributedString(string: withNewline ? body + "\n" : body, attributes: base)
+        let length = (body as NSString).length
+        for run in block.text.runs.isEmpty ? [] : block.text.normalized().runs {
             let range = NSRange(location: run.start, length: run.length)
             guard run.start >= 0, NSMaxRange(range) <= length else { continue }
             switch run.style {
@@ -543,12 +576,12 @@ public final class PageTextStorageMapper: NSObject {
                 if let attachment = InlineAtomAttachment.make(for: run.style) { text.addAttribute(.attachment, value: attachment, range: range) }
             }
         }
-        if length > 0 {
+        // Без оформления в строке рисовать нечего: перебор атрибутов — заметная часть открытия страницы (research R15).
+        if length > 0, !block.text.runs.isEmpty {
             text.enumerateAttributes(in: NSRange(location: 0, length: length)) { attributes, range, _ in
                 text.addAttributes(inlineRendering(attributes, line: line), range: range)
             }
         }
-        if withNewline { text.append(NSAttributedString(string: "\n", attributes: base)) }
         return text
     }
 

@@ -13,6 +13,9 @@ public enum Metrics {
         public static let breadcrumbSeparatorKern: CGFloat = 4
         /// Запас справа от пути: длинный путь не упирается в край окна.
         public static let topBarTrailingInset: CGFloat = 24
+        /// «☆» и «•••» справа в верхней полосе (≈ по снимку `notion-sidebar-tabs-topbar.png`).
+        public static let topBarButtonSize: CGFloat = 28
+        public static let topBarButtonSpacing: CGFloat = 2
         /// Затухание прокрученного текста под верхней полосой; верхние `scrollEdgeSolidHeight` — сплошной фон страницы.
         public static let scrollEdgeFadeHeight: CGFloat = 16
         public static let scrollEdgeSolidHeight: CGFloat = 4
@@ -23,6 +26,9 @@ public enum Metrics {
         public static let headerTopPadding: CGFloat = 96
         /// От верхней полосы до названия, когда иконки нет (≈ по снимку Notion: верх букв названия на 65 от верха окна).
         public static let headerTopPaddingWithoutIcon: CGFloat = 32
+        /// С обложкой, без иконки: от нижнего края обложки до названия (≈ по снимку `notion-cover.png`: верх названия
+        /// на ≈ 39 ниже обложки, строка кнопок — между ними).
+        public static let headerTopPaddingWithCover: CGFloat = 40
         /// Эмодзи иконки внутри квадрата `iconSize`: рисунок ≈ 61×74, как у Notion на снимке (≈ по снимку).
         public static let iconFontSize: CGFloat = 78
         /// Под иконкой — место под строку скрытых кнопок, как у Notion (≈ по снимку: верх букв названия на 267).
@@ -164,6 +170,18 @@ public enum Metrics {
         /// Нижние строки панели («Корзина»): воздух над разделителем и под ним, отступ от нижнего края окна.
         public static let footerDividerSpacing: CGFloat = 6
         public static let footerBottomInset: CGFloat = 10
+        /// Воздух над заголовком раздела панели («Недавние», «Избранное», «Страницы»), если выше есть другой раздел.
+        public static let sectionTopSpacing: CGFloat = 10
+        /// «Недавние» показывают столько страниц и строку «Показать все».
+        public static let recentRowCount = 5
+        /// «Избранное» показывает до стольких строк, остальные — прокруткой внутри раздела.
+        public static let favoritesMaxRows = 7
+        /// Стрелка у заголовка раздела при наведении.
+        public static let sectionChevronSize: CGFloat = 9
+        /// Поле справа под полосу прокрутки у всех списков панели (у Notion строки до 247 при панели 270) и затухание сверху
+        /// прокрученного списка (у Notion — 34, замер 21.10.2026).
+        public static let scrollGutter: CGFloat = 15
+        public static let scrollTopFadeHeight: CGFloat = 34
     }
 
     /// Верхняя строка окна — в линию со светофором: шторка панели и «✎» (по снимку Notion для Mac).
@@ -355,6 +373,68 @@ public enum Metrics {
     }
 
     /// Шапка страницы: кнопка «Добавить иконку» при наведении, как у Notion (серая, значок и надпись 14), над названием.
+    /// Меню «•••» страницы (contracts/pages-ui.md), ≈ по Notion.
+    /// Меню «•••» страницы: ширина 256, как у Notion 7.39 (замер 21.10.2026).
+    public enum PageMenu {
+        public static let width: CGFloat = 256
+        /// Подменю «Вид страницы ›» сбоку от меню, по середине своей строки, заходит на меню на 4 (как «Appearance &
+        /// layout» у Notion 7.39, замер 21.10.2026), и его переключатели.
+        public static let submenuWidth: CGFloat = 230
+        public static let switchSize = CGSize(width: 26, height: 14)
+    }
+
+    /// Меню действий (`ActionMenuView`): меню «•••» страницы и меню строки панели. Замер Notion 7.39 21.10.2026:
+    /// поле поиска 28 в 12 от краёв карточки, до первого пункта 12, рамка поля в фокусе синяя; подсветка пункта 28;
+    /// «›» — квадрат 16 в 8 от правого края пункта. Меню строки панели шириной 265 встаёт от середины «⋯» вправо и вниз
+    /// (не влезает вниз — вверх, низом по середине «⋯»), по правой кнопке — от точки щелчка.
+    public enum ActionMenu {
+        public static let rowMenuWidth: CGFloat = 265
+        public static let searchInset: CGFloat = 12
+        public static let searchHeight: CGFloat = 28
+        /// Место поля в списке строк: от верха строк до поля 6 (с полем меню — 12 от края), после поля — 12 до пункта.
+        public static let searchTopOffset: CGFloat = 6
+        public static let searchBlockHeight: CGFloat = 46
+        public static let searchCornerRadius: CGFloat = 6
+        public static let searchTextX: CGFloat = 28
+        public static let searchIconSize: CGFloat = 16
+        public static let focusRingWidth: CGFloat = 2
+        public static let highlightHeight: CGFloat = 28
+        public static let chevronSize: CGFloat = 16
+        public static let chevronInkHeight: CGFloat = 10
+    }
+
+    /// Обложка страницы (contracts/pages-ui.md, «Шапка страницы»): высота ≈ 30 % высоты области страницы с верхней
+    /// полосой, как `30vh` у Notion (снимок `notion-cover.png`: окно 780, обложка 218); кнопки при наведении —
+    /// тёмной группой справа вверху обложки, окно «Сменить обложку» под ними (сверено с Notion 7.39 20.10.2026:
+    /// `notion-cover-hover-buttons.png`, `notion-change-cover.png`).
+    public enum PageCover {
+        public static let heightFraction: CGFloat = 0.3
+        public static let minimumHeight: CGFloat = 160
+        public static let maximumHeight: CGFloat = 280
+        public static let buttonHeight: CGFloat = 23
+        public static let buttonFontSize: CGFloat = 12
+        public static let buttonHorizontalPadding: CGFloat = 8
+        public static let buttonGroupCornerRadius: CGFloat = 5
+        /// От верхнего и правого края обложки до группы кнопок.
+        public static let buttonInset: CGFloat = 8
+        public static let buttonGroupPadding: CGFloat = 2
+        /// Подсказка «Перетащите картинку, чтобы сдвинуть».
+        public static let repositionHintHeight: CGFloat = 20
+        /// Окно «Сменить обложку»: ширина 428, плитки 94 × 51 по 4 в ряд через 5, вкладки высотой 31; под кнопками на 4.
+        public static let pickerWidth: CGFloat = 428
+        public static let pickerTileHeight: CGFloat = 51
+        public static let pickerTileSpacing: CGFloat = 5
+        public static let pickerTilesPerRow = 4
+        public static let pickerPadding: CGFloat = 12
+        public static let pickerTabHeight: CGFloat = 31
+        public static let pickerAnchorSpacing: CGFloat = 4
+
+        /// Высота обложки при высоте области страницы `pageAreaHeight`.
+        public static func height(forPageAreaHeight pageAreaHeight: CGFloat) -> CGFloat {
+            min(max((pageAreaHeight * heightFraction).rounded(), minimumHeight), maximumHeight)
+        }
+    }
+
     public enum PageHeaderButton {
         public static let height: CGFloat = 28
         public static let horizontalPadding: CGFloat = 8
@@ -365,6 +445,22 @@ public enum Metrics {
         public static let titleSpacing: CGFloat = 4
         /// Подсветка иконки страницы под мышью — скругление.
         public static let iconHoverCornerRadius: CGFloat = 6
+        /// Между кнопками строки над названием («Добавить иконку», «Добавить обложку»), ≈ по Notion.
+        public static let spacing: CGFloat = 2
+    }
+
+    /// Строка обратных ссылок под названием страницы (003, US5; contracts/pages-ui.md): серая, высотой ≈24.
+    public enum BacklinksRow {
+        public static let height: CGFloat = 24
+        public static let horizontalPadding: CGFloat = 6
+        public static let cornerRadius: CGFloat = 4
+        public static let fontSize: CGFloat = 13
+        /// Окно списка: ширина и самая большая высота; строка — как у пунктов меню.
+        public static let listWidth: CGFloat = 320
+        public static let listMaxHeight: CGFloat = 320
+        public static let listRowHeight: CGFloat = 36
+        /// Список — карточкой всплывающих меню под строкой на 4.
+        public static let listGap: CGFloat = 4
     }
 
     /// Панель форматирования над выделенным текстом (FR-033), карточка как у Notion 7.38.1 (снимок 15.10.2026, ±1,2):

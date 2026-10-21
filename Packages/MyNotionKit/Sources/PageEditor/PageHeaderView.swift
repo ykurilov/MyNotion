@@ -5,6 +5,9 @@ import VisualStyle
 /// Шапка страницы над текстом: эмодзи-иконка и название (contracts/visual-style.md, «Страница»). Как в Notion:
 /// без иконки при наведении на шапку над названием серая «Добавить иконку»; иконка под мышью подсвечена,
 /// щелчок по ней открывает окно выбора (FR-034).
+/// Места шапки (003, plan.md, Structure Decision): «обложка» — над шапкой у текста страницы (`PageLayout/`),
+/// «кнопки» — строка кнопок при наведении над названием (`addButton`), «название», «под названием» (`setUnderTitle`).
+/// Пустое место высоты не занимает.
 @MainActor
 public final class PageHeaderView: NSView, NSTextFieldDelegate {
     let iconView = PageIconView()
@@ -17,9 +20,17 @@ public final class PageHeaderView: NSView, NSTextFieldDelegate {
     /// Щелчок по иконке.
     var onIconClick: (() -> Void)?
 
-    /// Мышь над шапкой: у страницы без иконки видна «Добавить иконку».
+    /// Мышь над шапкой: видны доступные кнопки строки, у страницы без иконки — «Добавить иконку».
     var isHovered = false {
-        didSet { updateAddIconButton() }
+        didSet { updateButtons() }
+    }
+    /// Место «кнопки»: по порядку слева направо; первой — «Добавить иконку».
+    private(set) var buttons: [PageHeaderButton] = []
+    /// Место «под названием» и его высота.
+    private(set) var underTitle: (view: NSView, height: CGFloat)?
+    /// Над шапкой обложка: иконка заходит на неё серединой, без иконки название ближе к обложке (как у Notion).
+    var hasCover = false {
+        didSet { if hasCover != oldValue { needsLayout = true } }
     }
 
     init(page: Page) {
@@ -28,8 +39,8 @@ public final class PageHeaderView: NSView, NSTextFieldDelegate {
         iconView.onPress = { [weak self] in self?.onIconClick?() }
         addSubview(iconView)
         addIconButton.onPress = { [weak self] in self?.onAddIcon?() }
-        addSubview(addIconButton)
-        updateAddIconButton()
+        addIconButton.isAvailable = page.icon == nil
+        addButton(addIconButton)
 
         let titleStyle = Typography.pageTitle
         titleField.stringValue = page.title
@@ -66,18 +77,45 @@ public final class PageHeaderView: NSView, NSTextFieldDelegate {
     func setIcon(_ icon: String?) {
         guard icon != iconView.emoji else { return }
         iconView.emoji = icon
-        updateAddIconButton()
+        addIconButton.isAvailable = !hasIcon
+        updateButtons()
         needsLayout = true
     }
 
-    private func updateAddIconButton() {
-        addIconButton.isHidden = hasIcon || !isHovered
+    /// Добавить кнопку в строку кнопок над названием (US1: «Добавить обложку»).
+    public func addButton(_ button: PageHeaderButton) {
+        buttons.append(button)
+        addSubview(button)
+        button.onAvailabilityChange = { [weak self] in self?.updateButtons() }
+        updateButtons()
     }
 
+    /// Вид в месте «под названием» (US5: строка обратных ссылок); `nil` — место пустое.
+    func setUnderTitle(_ view: NSView?, height: CGFloat) {
+        if underTitle?.view !== view { underTitle?.view.removeFromSuperview() }
+        if let view {
+            if view.superview !== self { addSubview(view) }
+            underTitle = (view, height)
+        } else {
+            underTitle = nil
+        }
+        needsLayout = true
+    }
+
+    private func updateButtons() {
+        for button in buttons { button.isHidden = !button.isAvailable || !isHovered }
+        needsLayout = true
+    }
+
+    /// Верх иконки: с обложкой шапка начинается на половину иконки выше нижнего края обложки (`coverOverlap`).
+    private var iconTop: CGFloat { hasCover ? 0 : Metrics.Page.headerTopPadding }
+
+    /// Насколько шапка заходит на обложку.
+    var coverOverlap: CGFloat { hasCover && hasIcon ? Metrics.Page.iconSize / 2 : 0 }
+
     private var titleTop: CGFloat {
-        hasIcon
-            ? Metrics.Page.headerTopPadding + Metrics.Page.iconSize + Metrics.Page.iconToTitleSpacing
-            : Metrics.Page.headerTopPaddingWithoutIcon
+        if hasIcon { return iconTop + Metrics.Page.iconSize + Metrics.Page.iconToTitleSpacing }
+        return hasCover ? Metrics.Page.headerTopPaddingWithCover : Metrics.Page.headerTopPaddingWithoutIcon
     }
 
     private func titleHeight(forWidth width: CGFloat) -> CGFloat {
@@ -86,18 +124,24 @@ public final class PageHeaderView: NSView, NSTextFieldDelegate {
     }
 
     func height(forWidth width: CGFloat) -> CGFloat {
-        titleTop + titleHeight(forWidth: width) + Metrics.Page.titleToFirstBlockSpacing
+        titleTop + titleHeight(forWidth: width) + (underTitle?.height ?? 0) + Metrics.Page.titleToFirstBlockSpacing
     }
 
     public override func layout() {
         super.layout()
-        iconView.frame = NSRect(x: 0, y: Metrics.Page.headerTopPadding, width: Metrics.Page.iconSize, height: Metrics.Page.iconSize)
+        iconView.frame = NSRect(x: 0, y: iconTop, width: Metrics.Page.iconSize, height: Metrics.Page.iconSize)
         titleField.frame = NSRect(x: 0, y: titleTop, width: bounds.width, height: titleHeight(forWidth: bounds.width))
-        // Как у Notion: подложка кнопки выступает левее начала названия на поле кнопки.
-        let button = Metrics.PageHeaderButton.self
-        let width = addIconButton.fittingWidth
-        addIconButton.frame = NSRect(x: -button.horizontalPadding + Metrics.Page.emptyHintCaretGap, y: titleTop - button.titleSpacing - button.height,
-                                     width: width, height: button.height)
+        // Как у Notion: подложка первой кнопки выступает левее начала названия на поле кнопки; скрытые места не занимают.
+        let metrics = Metrics.PageHeaderButton.self
+        var x = -metrics.horizontalPadding + Metrics.Page.emptyHintCaretGap
+        for button in buttons where button.isAvailable {
+            button.frame = NSRect(x: x, y: titleTop - metrics.titleSpacing - metrics.height, width: button.fittingWidth, height: metrics.height)
+            x += button.fittingWidth + metrics.spacing
+        }
+        // Подложка строки выступает левее названия на её поле — текст стоит под началом названия (как у кнопок выше).
+        let underTitleInset = underTitle?.view is BacklinksRow ? Metrics.BacklinksRow.horizontalPadding - Metrics.Page.emptyHintCaretGap : 0
+        underTitle?.view.frame = NSRect(x: -underTitleInset, y: titleField.frame.maxY, width: bounds.width + underTitleInset,
+                                        height: underTitle?.height ?? 0)
     }
 
     public override func updateTrackingAreas() {
@@ -206,14 +250,19 @@ final class PageIconView: NSView {
 }
 
 /// Серая кнопка шапки со значком и надписью, как «Add icon» у Notion; под мышью — подложка.
+/// Видна при наведении на шапку, если доступна (`isAvailable`: у страницы с обложкой «Добавить обложку» не нужна).
 @MainActor
-final class PageHeaderButton: NSView {
+public final class PageHeaderButton: NSView {
     private let symbolName: String
-    let title: String
-    var onPress: (() -> Void)?
+    public let title: String
+    public var onPress: (() -> Void)?
+    public var isAvailable = true {
+        didSet { if isAvailable != oldValue { onAvailabilityChange?() } }
+    }
+    var onAvailabilityChange: (() -> Void)?
     private var isPointerInside = false { didSet { needsDisplay = true } }
 
-    init(symbolName: String, title: String, identifier: String) {
+    public init(symbolName: String, title: String, identifier: String) {
         self.symbolName = symbolName
         self.title = title
         super.init(frame: .zero)
@@ -226,7 +275,7 @@ final class PageHeaderButton: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
 
-    override var isFlipped: Bool { true }
+    public override var isFlipped: Bool { true }
 
     private var titleAttributes: [NSAttributedString.Key: Any] {
         [.font: NSFont.systemFont(ofSize: Typography.popupMenuTitle.fontSize), .foregroundColor: Palette.pageHeaderButton]
@@ -240,25 +289,25 @@ final class PageHeaderButton: NSView {
 
     func press() { onPress?() }
 
-    override func accessibilityPerformPress() -> Bool {
+    public override func accessibilityPerformPress() -> Bool {
         press()
         return true
     }
 
-    override func updateTrackingAreas() {
+    public override func updateTrackingAreas() {
         super.updateTrackingAreas()
         trackingAreas.forEach(removeTrackingArea)
         addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
     }
 
-    override func mouseEntered(with event: NSEvent) { isPointerInside = true }
-    override func mouseExited(with event: NSEvent) { isPointerInside = false }
-    override func mouseDown(with event: NSEvent) {}
-    override func mouseUp(with event: NSEvent) {
+    public override func mouseEntered(with event: NSEvent) { isPointerInside = true }
+    public override func mouseExited(with event: NSEvent) { isPointerInside = false }
+    public override func mouseDown(with event: NSEvent) {}
+    public override func mouseUp(with event: NSEvent) {
         if bounds.contains(convert(event.locationInWindow, from: nil)) { press() }
     }
 
-    override func draw(_ dirtyRect: NSRect) {
+    public override func draw(_ dirtyRect: NSRect) {
         let metrics = Metrics.PageHeaderButton.self
         if isPointerInside {
             Palette.hoverBackground.setFill()

@@ -13,8 +13,16 @@ public final class PageTreeOperations {
     /// Иконка страницы сменилась (в том числе отменой): страница и новая иконка. Вместо `onChange`, чтобы окно
     /// не перечитывало открытую страницу, а только подставило иконку.
     public var onIconChange: ((UUID, String?) -> Void)?
+    /// Обложка или вид страницы сменились (в том числе отменой): как `onIconChange`, без перечитывания страницы.
+    public var onAppearanceChange: ((UUID) -> Void)?
     /// Отмена не удалась (например, страницу уже стёрли навсегда).
     public var onUndoFailure: ((any Error) -> Void)?
+    /// Повтор дублирования (⇧⌘Z) дописал копию с очереди записи: окно открывает её (US4).
+    public var onDuplicateRedone: ((Page) -> Void)?
+    /// Копия повтора дублирования, которая ещё пишется с очереди записи.
+    public internal(set) var pendingDuplicate: Task<Page, any Error>?
+    /// Стирание копии, отменённой раньше, чем повтор её дописал.
+    public internal(set) var pendingErase: Task<Void, Never>?
 
     public init(store: NotesStore, undoManager: UndoManager? = nil) {
         self.store = store
@@ -291,32 +299,11 @@ public final class PageTreeOperations {
         guard let index = flow.firstIndex(where: { $0.id == anchor.id }) else { return ChildrenMove() }
         let children = flow[(index + 1)...].prefix { $0.indent > anchor.indent }
         guard !children.isEmpty else { return ChildrenMove() }
-        let flows = Dictionary(grouping: blocks.filter { $0.containerId != nil }, by: \.containerId)
-            .mapValues { $0.sorted(by: flowOrder) }
-
+        let copy = BlockCopier.copy(Array(children), pageBlocks: blocks, into: pageId, indentBase: anchor.indent + 1)
         var move = ChildrenMove()
-        var copies: [Block] = []
-        var newIds: [UUID: UUID] = [:]
-        func copy(_ block: Block, sortKey: FractionalSortKey, indent: Int, containerId: UUID?) {
-            let copied = Block(pageId: pageId, kind: block.kind, text: block.text, indent: indent, isChecked: block.isChecked,
-                               linkedPageId: block.linkedPageId, sortKey: sortKey, containerId: containerId, color: block.color,
-                               props: block.props)
-            newIds[block.id] = copied.id
-            move.originals.append(block)
-            copies.append(copied)
-            for inner in flows[block.id] ?? [] {
-                copy(inner, sortKey: inner.sortKey, indent: inner.indent, containerId: copied.id)
-            }
-        }
-        var key: FractionalSortKey?
-        for child in children {
-            key = .between(key, nil)
-            copy(child, sortKey: key!, indent: max(child.indent - anchor.indent - 1, 0), containerId: nil)
-        }
-        // Ячейка таблицы помнит свой столбец по id: у копии — копия столбца.
-        for index in copies.indices {
-            if let column = copies[index].props.columnId, let copied = newIds[column] { copies[index].props.columnId = copied }
-        }
+        move.originals = copy.originals
+        let copies = copy.blocks
+        let newIds = copy.newIds
         move.copiedIds = newIds
 
         for original in move.originals.reversed() { try transaction.deleteBlock(original.id) }
@@ -336,7 +323,7 @@ public final class PageTreeOperations {
     }
 
     /// Свёрнутость — вид этого Mac, мимо транзакций и отмены (research R1): переносится следом за правкой.
-    private func moveCollapsed(_ oldToNew: [UUID: UUID]) throws {
+    func moveCollapsed(_ oldToNew: [UUID: UUID]) throws {
         try BlockViewStateStore(database: store.database).moveCollapsed(from: oldToNew)
     }
 
@@ -371,7 +358,7 @@ public final class PageTreeOperations {
     }
 
     /// Блоки страницы в порядке чтения: поток страницы, внутри контейнера (колонки, таблицы) — его потоки.
-    private static func documentOrder(_ blocks: [Block]) -> [Block] {
+    static func documentOrder(_ blocks: [Block]) -> [Block] {
         let flows = Dictionary(grouping: blocks, by: \.containerId).mapValues { $0.sorted(by: flowOrder) }
         var ordered: [Block] = []
         var visited: Set<UUID> = []
@@ -386,7 +373,7 @@ public final class PageTreeOperations {
     }
 
     private static func flowOrder(_ lhs: Block, _ rhs: Block) -> Bool {
-        lhs.sortKey != rhs.sortKey ? lhs.sortKey < rhs.sortKey : lhs.id.uuidString < rhs.id.uuidString
+        BlockCopier.flowOrder(lhs, rhs)
     }
 
     /// Новое место страницы; отмена ставит её точно на прежнее.
@@ -418,27 +405,32 @@ public final class PageTreeOperations {
     }
 
     /// Одна транзакция; после неё — набор затронутых страниц для окна (`notify: false` — без `onChange`).
+    /// Истории пишут свои операции в файлах-расширениях `PageTreeOperations+<Тема>.swift` через `perform` и `registerUndo`.
     @discardableResult
-    private func perform<T>(notify: Bool = true, _ body: (NotesTransaction) throws -> T) throws -> T {
+    func perform<T>(notify: Bool = true, _ body: (NotesTransaction) throws -> T) throws -> T {
         var touched: Set<UUID> = []
         let result = try store.write { transaction in
             let result = try body(transaction)
-            let changes = transaction.changes
-            touched.formUnion(changes.pages.map(\.page.id))
-            touched.formUnion(changes.erasedPageIds)
-            for change in changes.blocks {
-                switch change {
-                case .saved(let block, _, _): touched.insert(block.pageId)
-                case .erased(_, let pageId): touched.insert(pageId)
-                }
-            }
+            touched = Self.touchedPages(transaction.changes)
             return result
         }
         if notify { onChange?(touched) }
         return result
     }
 
-    private func registerUndo(_ actionName: String, _ inverse: @escaping @MainActor (PageTreeOperations) throws -> Void) {
+    /// Страницы, которые затронула транзакция: свои поля или блоки.
+    nonisolated static func touchedPages(_ changes: NotesChanges) -> Set<UUID> {
+        var touched = Set(changes.pages.map(\.page.id)).union(changes.erasedPageIds)
+        for change in changes.blocks {
+            switch change {
+            case .saved(let block, _, _): touched.insert(block.pageId)
+            case .erased(_, let pageId): touched.insert(pageId)
+            }
+        }
+        return touched
+    }
+
+    func registerUndo(_ actionName: String, _ inverse: @escaping @MainActor (PageTreeOperations) throws -> Void) {
         guard let undoManager else { return }
         undoManager.registerUndo(withTarget: self) { operations in
             MainActor.assumeIsolated {
@@ -460,13 +452,13 @@ public final class PageTreeOperations {
         ))
     }
 
-    private static func removeLinks(to pageId: UUID, in parentId: UUID, _ transaction: NotesTransaction) throws {
+    static func removeLinks(to pageId: UUID, in parentId: UUID, _ transaction: NotesTransaction) throws {
         for block in try transaction.blocks(ofPage: parentId) where block.kind == .pageLink && block.linkedPageId == pageId {
             try transaction.deleteBlock(block.id)
         }
     }
 
-    private static func erase(_ pages: [Page], _ transaction: NotesTransaction) throws {
+    static func erase(_ pages: [Page], _ transaction: NotesTransaction) throws {
         let erasedIds = Set(pages.map(\.id))
         for page in pages {
             if let parentId = page.parentId, !erasedIds.contains(parentId), try transaction.page(parentId) != nil {

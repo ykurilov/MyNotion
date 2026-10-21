@@ -44,6 +44,20 @@ struct ExportFileNames {
 
     /// Имя копии файла в папке страницы: то же, что у файла, но без недопустимых знаков; занятое (подстраницей
     /// или другим файлом) получает « (2)» перед расширением. `taken` — ключи занятых имён, пополняется.
+    /// Копия своей картинки обложки (contracts/sync-v3-and-export.md): «Обложка.<расширение>», при занятом —
+    /// «Обложка 2.…», «Обложка 3.…».
+    static func coverFileName(extension ext: String, taken: inout Set<String>) -> String {
+        let suffix = ext.isEmpty ? "" : "." + ext
+        var candidate = "Обложка" + suffix
+        var number = 2
+        while taken.contains(key(candidate)) {
+            candidate = "Обложка \(number)\(suffix)"
+            number += 1
+        }
+        taken.insert(key(candidate))
+        return candidate
+    }
+
     static func uniqueFileName(_ name: String, taken: inout Set<String>) -> String {
         let ext = (name as NSString).pathExtension
         let stem = baseName(forTitle: ext.isEmpty ? name : (name as NSString).deletingPathExtension)

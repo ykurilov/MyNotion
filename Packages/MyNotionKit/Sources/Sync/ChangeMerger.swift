@@ -48,6 +48,7 @@ public struct ChangeMerger: Sendable {
     }
 
     public func apply(_ batch: SyncBatch, in transaction: NotesTransaction) throws -> MergeReport {
+        transaction.markReplicated(fromDeviceName: batch.deviceName)
         var run = MergeRun(transaction: transaction, sourceDeviceName: batch.deviceName, localDeviceName: localDeviceName,
                            snapshotKnowledge: nil)
         try run.merge(batch.changes)
@@ -57,6 +58,7 @@ public struct ChangeMerger: Sendable {
     /// Снимок всех записей с другого Mac: как пачка, но у текста нет версии начала правки — вместо неё
     /// известное снимку (`knowledge`).
     public func apply(_ snapshot: SyncSnapshot, in transaction: NotesTransaction) throws -> MergeReport {
+        transaction.markReplicated(fromDeviceName: "другой Mac")
         var run = MergeRun(transaction: transaction, sourceDeviceName: "другом Mac", localDeviceName: localDeviceName,
                            snapshotKnowledge: snapshot.knowledge)
         try run.merge(snapshot.changes)
@@ -150,11 +152,12 @@ private struct MergeRun {
                 changed.insert(.trashedAt)
                 trashing = trashedAt == nil ? nil : change
             default:
-                break
+                if Self.mergeViewField(change, into: &page) { changed.insert(Self.pageField(of: change.value)!) }
             }
         }
         if !changed.isEmpty {
-            page.updatedAt = Date()
+            // Избранное и открытие — не содержимое: «изменено» не трогают (data-model.md, «Page»).
+            if !changed.isSubset(of: Page.Field.bookkeeping) { page.updatedAt = Date() }
             try transaction.writeReplicatedPage(page, changedFields: changed)
         }
         if wasTrashed, page.trashedAt == nil {
@@ -227,7 +230,39 @@ private struct MergeRun {
         }
     }
 
+    /// Поле страницы 003 (обложка, вид, избранное, открытие, шаблон): позднее побеждает. `true` — поле поменялось.
+    private static func mergeViewField(_ change: SyncChange, into page: inout Page) -> Bool {
+        guard let field = pageField(of: change.value), change.hlc > (page.fieldClocks[field] ?? .distantPast) else { return false }
+        switch change.value {
+        case .cover(let cover): page.cover = cover
+        case .isFullWidth(let value): page.isFullWidth = value
+        case .isSmallText(let value): page.isSmallText = value
+        case .favorite(let raw):
+            // Испорченный ключ не ставит страницу в избранное без места.
+            guard raw == nil || FractionalSortKey(rawValue: raw!) != nil else { return false }
+            page.favorite = raw.flatMap(FractionalSortKey.init(rawValue:))
+        case .visitedAt(let date): page.visitedAt = date
+        case .isTemplate(let value): page.isTemplate = value
+        default: return false
+        }
+        page.fieldClocks.stamp([field], with: change.hlc)
+        return true
+    }
+
+    private static func pageField(of value: SyncChange.Value) -> Page.Field? {
+        switch value {
+        case .cover: .cover
+        case .isFullWidth: .isFullWidth
+        case .isSmallText: .isSmallText
+        case .favorite: .favorite
+        case .visitedAt: .visitedAt
+        case .isTemplate: .isTemplate
+        default: nil
+        }
+    }
+
     /// Страница из полного набора полей (новая или пришедшая целиком); `nil`, если полей не хватает.
+    /// Полей 003 в пачках v2 нет — у такой страницы они по умолчанию.
     private static func pageFromFullChanges(_ changes: [SyncChange]) -> Page? {
         var title: (String, HybridTimestamp)?
         var icon: (String?, HybridTimestamp)?
@@ -245,9 +280,11 @@ private struct MergeRun {
         }
         guard let title, let icon, let placement, let trashedAt, let id = changes.first?.id else { return nil }
         let now = Date()
-        return Page(id: id, title: title.0, icon: icon.0, parentId: placement.0, sortKey: placement.1, trashedAt: trashedAt.0,
-                    createdAt: now, updatedAt: now,
-                    fieldClocks: PageFieldClocks(title: title.1, icon: icon.1, placement: placement.2, trashedAt: trashedAt.1))
+        var page = Page(id: id, title: title.0, icon: icon.0, parentId: placement.0, sortKey: placement.1, trashedAt: trashedAt.0,
+                        createdAt: now, updatedAt: now,
+                        fieldClocks: PageFieldClocks(title: title.1, icon: icon.1, placement: placement.2, trashedAt: trashedAt.1))
+        for change in changes { _ = mergeViewField(change, into: &page) }
+        return page
     }
 
     // MARK: Блок

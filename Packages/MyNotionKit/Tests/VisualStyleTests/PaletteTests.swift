@@ -12,6 +12,20 @@ struct PaletteTests {
         #expect(try hex(Palette.pageBackground, in: .darkAqua) == "191919")
     }
 
+    @Test("Рамка окна ⌘T видна на странице в обеих темах (T101 № 21)", arguments: [NSAppearance.Name.aqua, .darkAqua])
+    func newTabCardRingStandsOut(_ theme: NSAppearance.Name) throws {
+        let appearance = try #require(NSAppearance(named: theme))
+        var ring = NSColor.clear, page = NSColor.clear, card = NSColor.clear
+        appearance.performAsCurrentDrawingAppearance {
+            ring = Palette.newTabCardRing.usingColorSpace(.sRGB)!
+            page = Palette.pageBackground.usingColorSpace(.sRGB)!
+            card = Palette.popupMenuBackground.usingColorSpace(.sRGB)!
+        }
+        // Кольцо поверх фона карточки.
+        let mixed = ring.redComponent * ring.alphaComponent + card.redComponent * (1 - ring.alphaComponent)
+        #expect(abs(mixed - page.redComponent) >= 0.09, "кольцо \(mixed) сливается со страницей \(page.redComponent)")
+    }
+
     private func hex(_ color: NSColor, in appearanceName: NSAppearance.Name) throws -> String {
         let appearance = try #require(NSAppearance(named: appearanceName))
         var resolved: NSColor?

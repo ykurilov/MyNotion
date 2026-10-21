@@ -115,7 +115,9 @@ struct OutboxRecorder: NotesWriteHook {
         let outgoing = try ChangeEncoding.outgoing(changes, in: transaction)
         guard !outgoing.isEmpty else { return }
         try Outbox.enqueue(outgoing, in: transaction.database)
-        transaction.afterCommit { NotificationCenter.default.post(name: Outbox.didEnqueue, object: nil) }
+        // Не дожидаясь главного потока: его подписчик (`queue: .main`) держал бы поток записи, пока главный, в свою
+        // очередь, ждёт запись (копия ветки с очереди записи при включённой синхронизации — взаимная блокировка).
+        transaction.afterCommit { DispatchQueue.main.async { NotificationCenter.default.post(name: Outbox.didEnqueue, object: nil) } }
     }
 }
 
@@ -190,6 +192,12 @@ enum ChangeEncoding {
         case .icon: .icon(page.icon)
         case .placement: .placement(parentId: page.parentId, sortKey: page.sortKey.rawValue)
         case .trashedAt: .trashedAt(page.trashedAt)
+        case .cover: .cover(page.cover)
+        case .isFullWidth: .isFullWidth(page.isFullWidth)
+        case .isSmallText: .isSmallText(page.isSmallText)
+        case .favorite: .favorite(page.favorite?.rawValue)
+        case .visitedAt: .visitedAt(page.visitedAt)
+        case .isTemplate: .isTemplate(page.isTemplate)
         }
         return SyncChange(entity: .page, id: page.id, value: value, hlc: hlc)
     }
@@ -219,17 +227,6 @@ enum ChangeEncoding {
     static func fullBlock(_ block: Block, baseHlc: HybridTimestamp?) -> [SyncChange] {
         [Block.Field.kindAndIndent, .text, .isChecked, .placement, .color, .props].map { field in
             blockChange(block, field: field, hlc: block.fieldClocks[field] ?? .distantPast, baseHlc: field == .text ? baseHlc : nil)
-        }
-    }
-}
-
-extension PageFieldClocks {
-    subscript(field: Page.Field) -> HybridTimestamp? {
-        switch field {
-        case .title: title
-        case .icon: icon
-        case .placement: placement
-        case .trashedAt: trashedAt
         }
     }
 }

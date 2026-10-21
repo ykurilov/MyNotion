@@ -31,7 +31,8 @@ public final class TextCaret {
     /// `isFocused: false` — текст отдаёт фокус: окно ещё считает его первым, но курсор уже гаснет.
     func update(isFocused: Bool? = nil) {
         isLit = true
-        guard let textView, isFocused != false, let rect = Self.rect(in: textView), isVisible(in: textView) else {
+        // Новый редактор ещё не в окне: место курсора (раскладка строки) считать незачем — курсор не виден.
+        guard let textView, isFocused != false, textView.window != nil, let rect = Self.rect(in: textView), isVisible(in: textView) else {
             view.isHidden = true
             stopBlinking()
             return

@@ -29,7 +29,7 @@ struct PageLinkIconTests {
         let box = CGRect(x: column.midX - size / 2, y: centerY - size / 2, width: size, height: size)
 
         let link = DrawingView(size: NSSize(width: 200, height: 40)) {
-            PageLinkPainter.draw(LinkedPage(title: "Подстраница"), column: column, textStart: 30, baseline: baseline, maxX: 200)
+            PageLinkPainter.draw(MentionDisplay(title: "Подстраница", icon: nil, state: .page), column: column, textStart: 30, baseline: baseline, maxX: 200)
         }
         let glyph = DrawingView(size: NSSize(width: 200, height: 40)) {
             DocumentGlyph.image(size: size, color: Palette.textSecondary).draw(in: box)

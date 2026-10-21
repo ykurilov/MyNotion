@@ -97,6 +97,21 @@ public final class PageDocument {
         savedPage.fieldClocks.icon = stored.fieldClocks.icon
     }
 
+    /// Обложку или вид страницы сменили в обход документа (`PageTreeOperations+Appearance`): как `adoptIcon`.
+    public func adoptAppearance(of stored: Page) {
+        Self.copyAppearance(of: stored, to: &page)
+        Self.copyAppearance(of: stored, to: &savedPage)
+    }
+
+    private static func copyAppearance(of stored: Page, to page: inout Page) {
+        page.cover = stored.cover
+        page.isFullWidth = stored.isFullWidth
+        page.isSmallText = stored.isSmallText
+        page.fieldClocks.cover = stored.fieldClocks.cover
+        page.fieldClocks.isFullWidth = stored.fieldClocks.isFullWidth
+        page.fieldClocks.isSmallText = stored.fieldClocks.isSmallText
+    }
+
     public func setText(_ text: InlineText, ofBlock blockId: UUID) {
         guard var block = byId[blockId] else { return }
         let normalized = text.normalized()
@@ -566,8 +581,15 @@ public final class PageDocument {
     /// сразу за своим `columnList` или `table` (их находит цепочка контейнеров, в том числе удалённых),
     /// а без них — в конце страницы.
     private func rebuildFlows() {
+        // Сортируются номера блоков, а не сами блоки: перестановка больших структур стоила половины чтения
+        // страницы при открытии (профиль переключения вкладок, 003).
         func ordered(_ items: [Block]) -> [Block] {
-            items.sorted { $0.sortKey != $1.sortKey ? $0.sortKey < $1.sortKey : $0.id.uuidString < $1.id.uuidString }
+            let keys = items.map(\.sortKey)
+            return items.indices.sorted { lhs, rhs in
+                if keys[lhs] < keys[rhs] { return true }
+                if keys[rhs] < keys[lhs] { return false }
+                return items[lhs].id.uuidString < items[rhs].id.uuidString
+            }.map { items[$0] }
         }
         var pageFlow: [Block] = []
         var flows: [UUID: [Block]] = [:]
@@ -588,7 +610,11 @@ public final class PageDocument {
         for orphan in ordered(orphans) {
             if let anchor = anchor(of: orphan, pageIds: pageIds) { anchored[anchor, default: []].append(orphan) } else { atEnd.append(orphan) }
         }
-        blocks = pageFlow.flatMap { [$0] + (anchored[$0.id] ?? []) } + atEnd
+        if anchored.isEmpty, atEnd.isEmpty {
+            blocks = pageFlow
+        } else {
+            blocks = pageFlow.flatMap { [$0] + (anchored[$0.id] ?? []) } + atEnd
+        }
         reindex()
     }
 

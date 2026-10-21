@@ -1,0 +1,81 @@
+import AppKit
+import NotesCore
+
+/// Место обложки над шапкой: вид во всю ширину области страницы и его высота (contracts/pages-ui.md, «Шапка»).
+@MainActor
+final class CoverSlot {
+    var view: NSView?
+    var height: CGFloat = 0
+    /// Обложка и вид, которые редактор уже показывает (`showAppearance`); `nil` — ещё не показывал.
+    var shownAppearance: PageAppearance?
+}
+
+/// Поля страницы, от которых зависит вид шапки и колонки.
+struct PageAppearance: Equatable {
+    var cover: PageCover?
+    var isFullWidth: Bool
+    var isSmallText: Bool
+
+    init(_ page: Page) {
+        cover = page.cover
+        isFullWidth = page.isFullWidth
+        isSmallText = page.isSmallText
+    }
+}
+
+extension PageTextView {
+    /// Поставить вид обложки над шапкой (`nil` — убрать); текст и шапка сдвигаются вниз на `height`, иконка заходит
+    /// на обложку.
+    public func setCover(_ view: NSView?, height: CGFloat) {
+        if coverSlot.view !== view {
+            coverSlot.view?.removeFromSuperview()
+            if let view { addSubview(view, positioned: .below, relativeTo: header) }
+            coverSlot.view = view
+        }
+        coverSlot.height = view == nil ? 0 : height
+        header.hasCover = view != nil
+        layoutColumn()
+    }
+
+    /// Вид в месте «под названием» шапки (US5: строка обратных ссылок); `nil` — место пустое и высоты не занимает.
+    public func setUnderTitle(_ view: NSView?, height: CGFloat) {
+        header.setUnderTitle(view, height: height)
+        layoutColumn()
+    }
+
+    /// Обложку и вид страницы из документа: перекладка без пересоздания редактора; добавки шапки (обложка)
+    /// получают страницу.
+    public func showAppearance(of page: Page) {
+        let appearance = PageAppearance(page)
+        guard appearance != coverSlot.shownAppearance else { return }
+        coverSlot.shownAppearance = appearance
+        applyLayout(PageLayoutSettings(isFullWidth: page.isFullWidth, isSmallText: page.isSmallText))
+        for addon in headerAddons { addon.pageDidChange(page, in: self) }
+    }
+
+    /// Сменить вид страницы без пересоздания редактора: ширина колонки — сразу, размеры текста — на месте, в тех же
+    /// атрибутах; колонки, ячейки и код — той же шкалой (виды 002 не пересоздаются).
+    public func applyLayout(_ settings: PageLayoutSettings) {
+        guard settings != layoutSettings else { return }
+        let scaleChanged = settings.fontScale != layoutSettings.fontScale
+        layoutSettings = settings
+        if scaleChanged {
+            mapper.fontScale = settings.fontScale
+            if let textStorage { PageFontScaling.rescale(textStorage, in: NSRange(location: 0, length: textStorage.length), to: settings.fontScale) }
+            typingAttributes = typingAttributes
+            for codeBlock in codeBlocks.allViews { codeBlock.applyFontScale(settings.fontScale) }
+            for editor in embeddedFlowEditors { editor.applyLayout(PageLayoutSettings(isSmallText: settings.isSmallText)) }
+        }
+        layoutColumn()
+        needsLayout = true
+        needsDisplay = true
+    }
+
+    /// Живые редакторы страниц (без редакторов колонок и ячеек): пробы вкладок проверяют, что редактор один.
+    public static var livePageEditorCount: Int {
+        liveEditors.allObjects.filter(\.showsPageHeader).count
+    }
+
+    /// Все живые редакторы: страниц, колонок и ячеек.
+    public static var liveEditorCount: Int { liveEditors.allObjects.count }
+}

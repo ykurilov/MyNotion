@@ -37,6 +37,14 @@ struct GalleryCatalogTests {
         for scene in required { #expect(scenes.contains(scene), "\(scene)") }
     }
 
+    @Test("Страницы и навигация (003): верхняя полоса с «•••», «☆» пустая и закрашенная, открытое меню «•••» — в обеих темах")
+    func pagesNavigationStatesPresent() {
+        for scene in [GalleryScene.pageTopBar, .pageMenu, .pageMenuAppearance, .favoriteStar(isFavorite: false), .favoriteStar(isFavorite: true)]
+            + GalleryPageCover.allCases.map(GalleryScene.pageCover) + GalleryBacklinks.allCases.map(GalleryScene.backlinks) {
+            #expect(scenes.contains(scene), "\(scene)")
+        }
+    }
+
     @Test("Снимки блоков 002 собираются из описателей типов: по состоянию на каждый образец")
     func kindSamplesFromDescriptors() {
         let samples = BlockKinds.gallerySamples
@@ -83,6 +91,11 @@ struct GalleryCatalogTests {
             .sidebarRowHover(longTitle: true), .sidebarSelectedRow, .sidebarRenaming, .sidebarHidden,
         ] + GalleryTrash.allCases.map(GalleryScene.trash)
         for scene in required { #expect(scenes.contains(scene), "\(scene)") }
+    }
+
+    @Test("Избранное и недавние (003, US2): панель с обоими разделами, свёрнутый раздел, меню строки избранной")
+    func favoritesAndRecentsStatesPresent() {
+        for state in GallerySidebarSections.allCases { #expect(scenes.contains(.sidebarSections(state)), "\(state)") }
     }
 
     @Test("Импорт из Notion: ход, вопрос о повторе, отчёт")

@@ -12,16 +12,16 @@ struct BlockMenuTests {
         editor.textView.openBlockMenu(forBlock: editor.document.blocks[index].id, below: NSRect(x: 100, y: 500, width: 20, height: 20))
     }
 
-    @Test("Короткое меню: заголовок — тип блока; «Преобразовать в», «Цвет», «Дублировать» ⌘D, «Удалить» Del")
+    @Test("Короткое меню: заголовок — тип блока; «Преобразовать в», «Цвет», «Дублировать» ⌘D, «Переместить в» ⇧⌘P, «Удалить» Del")
     func shortMenu() throws {
         let editor = try EditorFixture([.paragraph("один"), .heading(2, "два")])
         openMenu(editor, block: 1)
         let popups = editor.textView.popups
         #expect(popups.sectionTitle == "Заголовок 2")
-        #expect(popups.visibleItems.map(\.title) == ["Преобразовать в", "Цвет", "Дублировать", "Удалить"])
-        #expect(popups.visibleItems.map(\.hint) == [nil, nil, "⌘D", "Del"])
-        #expect(popups.visibleItems.map(\.startsGroup) == [false, false, true, false])
-        #expect(popups.visibleItems.map(\.opensSubmenu) == [true, true, false, false])
+        #expect(popups.visibleItems.map(\.title) == ["Преобразовать в", "Цвет", "Дублировать", "Переместить в", "Удалить"])
+        #expect(popups.visibleItems.map(\.hint) == [nil, nil, "⌘D", "⌘⇧P", "Del"])
+        #expect(popups.visibleItems.map(\.startsGroup) == [false, false, true, false, false])
+        #expect(popups.visibleItems.map(\.opensSubmenu) == [true, true, false, false, false])
         let frame = try #require(popups.menuFrame)
         #expect(frame.width == Metrics.PopupMenu.blockMenuWidth)
     }
@@ -146,10 +146,23 @@ struct BlockMenuTests {
         #expect(editor.texts == ["один", "один", "два"])
     }
 
-    @Test("Подстраницу не дублировать: в её меню нет «Дублировать»")
+    @Test("⌘D блока, принесённого «Переместить в»: у копии нет пометки movedFrom — восстановление версии её не удалит")
+    func duplicateDropsMovedFrom() throws {
+        var props = BlockProps()
+        props.movedFrom = UUID()
+        let editor = try EditorFixture([Spec(kind: .paragraph, text: "принесён", props: props)])
+        editor.placeCaret(inBlock: 0, at: 2)
+        editor.perform(.duplicateBlocks)
+        let blocks = editor.document.blocks
+        #expect(blocks.count == 2)
+        #expect(blocks[0].props.movedFrom == props.movedFrom, "У самого перенесённого пометка остаётся")
+        #expect(blocks[1].props.movedFrom == nil)
+    }
+
+    @Test("Подстраницу не дублировать: в её меню нет «Дублировать», группу начинает «Переместить в»")
     func pageLinkHasNoDuplicate() {
         #expect(!PopupMenuItem.blockMenuItems(for: .pageLink).contains(.duplicate))
-        #expect(PopupMenuItem.blockMenuItems(for: .pageLink).last?.startsGroup == true)
+        #expect(PopupMenuItem.blockMenuItems(for: .pageLink).first { $0.action == .moveTo }?.startsGroup == true)
     }
 
     @Test("Длинный список по высоте экрана: строки целиком, прокрутка за выбранной строкой, полоса прокрутки")

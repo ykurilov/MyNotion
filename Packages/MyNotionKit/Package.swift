@@ -23,6 +23,11 @@ let package = Package(
         .library(name: "LinkPreview", targets: ["LinkPreview"]),
         .library(name: "Reminders", targets: ["Reminders"]),
         .library(name: "EmbeddedMedia", targets: ["EmbeddedMedia"]),
+        .library(name: "Backlinks", targets: ["Backlinks"]),
+        .library(name: "PageVersions", targets: ["PageVersions"]),
+        .library(name: "Navigation", targets: ["Navigation"]),
+        .library(name: "PagePicker", targets: ["PagePicker"]),
+        .library(name: "PageCover", targets: ["PageCover"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.11.1"),
@@ -59,6 +64,16 @@ let package = Package(
         .target(name: "Reminders", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
         // Проигрыватель видеофайла и веб-проигрыватель YouTube и Vimeo по нажатию (research R8).
         .target(name: "EmbeddedMedia", dependencies: ["VisualStyle"]),
+        // 003 (plan.md, Project Structure). Обратные ссылки: подписчик записи `page_link`, счёт и список (research R10).
+        .target(name: "Backlinks", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
+        // История версий: снимки LZFSE, запись по отметкам, прореживание, разница, восстановление (research R11).
+        .target(name: "PageVersions", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
+        // Вкладки окна и «назад/вперёд», хранение в `window_state`; без видов AppKit (research R5, R6).
+        .target(name: "Navigation", dependencies: ["NotesCore"]),
+        // Окно «Переместить в…» (research R9).
+        .target(name: "PagePicker", dependencies: ["NotesCore", "PageSearch", "VisualStyle"]),
+        // Обложка: вид, галерея, окно «Сменить обложку», «Переместить» (research R1).
+        .target(name: "PageCover", dependencies: ["NotesCore", "Attachments", "VisualStyle"]),
 
         .testTarget(name: "VisualStyleTests", dependencies: ["VisualStyle"]),
         .testTarget(name: "NotesCoreTests", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
@@ -69,7 +84,7 @@ let package = Package(
         .testTarget(name: "MarkdownExportTests", dependencies: ["MarkdownExport", "NotesCore"]),
         .testTarget(name: "NotionImportTests", dependencies: ["NotionImport", "NotesCore", "MarkdownExport", "PageEditor", .product(name: "GRDB", package: "GRDB.swift")],
                     resources: [.copy("Fixtures")]),
-        .testTarget(name: "SyncTests", dependencies: ["Sync", "NotesCore", "Reminders", .product(name: "GRDB", package: "GRDB.swift")]),
+        .testTarget(name: "SyncTests", dependencies: ["Sync", "NotesCore", "Reminders", "Attachments", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "UIGalleryTests", dependencies: ["UIGallery", "NotesCore", "PageEditor"]),
         .testTarget(name: "ServiceLaunchTests", dependencies: ["ServiceLaunch"]),
         .testTarget(name: "CodeHighlightingTests", dependencies: ["CodeHighlighting"]),
@@ -78,6 +93,11 @@ let package = Package(
         .testTarget(name: "LinkPreviewTests", dependencies: ["LinkPreview"]),
         .testTarget(name: "RemindersTests", dependencies: ["Reminders", "NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "EmbeddedMediaTests", dependencies: ["EmbeddedMedia"]),
+        .testTarget(name: "BacklinksTests", dependencies: ["Backlinks", "NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
+        .testTarget(name: "PageVersionsTests", dependencies: ["PageVersions", "NotesCore", "Sync", .product(name: "GRDB", package: "GRDB.swift")]),
+        .testTarget(name: "NavigationTests", dependencies: ["Navigation", "NotesCore"]),
+        .testTarget(name: "PagePickerTests", dependencies: ["PagePicker", "NotesCore"]),
+        .testTarget(name: "PageCoverTests", dependencies: ["PageCover", "NotesCore", "Attachments", "VisualStyle"]),
     ],
     swiftLanguageModes: [.v6]
 )
