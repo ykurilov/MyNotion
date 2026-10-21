@@ -29,12 +29,15 @@ extension MainWindowModel {
     /// «Восстановить эту версию»: одна правка страницы с ⌘Z, вокруг неё — версии «до» и «после».
     func restoreVersion(_ versionId: UUID, ofPage pageId: UUID) {
         versionHistory = nil
+        // Как у Notion: после восстановления каретки в странице нет — ни в перечитанной, ни в заново открытой.
+        initialFocus = .unchanged
         openDocuments.saveAll()
         let restorer = VersionRestorer(recorder: versions.recorder, versions: versions.versions, operations: treeOperations)
         Task { @MainActor in
             do {
                 try await restorer.restore(versionId: versionId, ofPage: pageId)
                 restoredVersionPageId = pageId
+                window?.makeFirstResponder(nil)
             } catch {
                 showVersionError("Не удалось восстановить версию: \(SaveStatus.reason(for: error))")
             }

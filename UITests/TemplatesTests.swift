@@ -47,15 +47,13 @@ final class TemplatesTests: XCTestCase {
 
         // Меню строки шаблона → «Новая страница по шаблону».
         templateRow(app, "Шаблон: дневник").coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).rightClick()
-        XCTAssertTrue(app.menuItems["Новая страница по шаблону"].waitForExistence(timeout: 5), "В меню шаблона нет «Новая страница по шаблону»")
-        app.menuItems["Новая страница по шаблону"].click()
+        app.chooseRowMenuItem("newFromTemplate")
         waitForTitle(app, "Шаблон: дневник")
         XCTAssertTrue(waitForBody(app) { $0.contains("Как прошёл день:") }, "В новой странице нет текста шаблона: \(app.pageBody.value ?? "")")
 
         // «Перестать быть шаблоном»: страница снова в «Страницах».
         templateRow(app, "Копии: исходная").coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).rightClick()
-        XCTAssertTrue(app.menuItems["Перестать быть шаблоном"].waitForExistence(timeout: 5))
-        app.menuItems["Перестать быть шаблоном"].click()
+        app.chooseRowMenuItem("template")
         XCTAssertTrue(waitForTemplates(app, ["Шаблон: заметки встречи", "Шаблон: план на неделю", "Шаблон: дневник"]))
         XCTAssertTrue(treeRow(app, "Копии: исходная").waitForExistence(timeout: 5), "Страница не вернулась в «Страницы»")
 

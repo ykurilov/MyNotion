@@ -32,7 +32,7 @@ final class MainWindowModel {
     private(set) var isSidebarCollapsed = false
     private(set) var openDocument: PageDocument?
     /// Куда поставить курсор в только что открытой странице.
-    private(set) var initialFocus: PageTextView.InitialFocus = .body
+    var initialFocus: PageTextView.InitialFocus = .body
     private(set) var loadError: String?
     /// Перейти к блоку открытой страницы (найденное поиском страниц): редактор раскрывает свёрнутых предков.
     /// Новый запрос — новый `token`, даже к тому же блоку.

@@ -2,7 +2,7 @@ import AppKit
 import VisualStyle
 
 /// Подменю меню «•••» с переключателями («Вид страницы ›», contracts/pages-ui.md): карточка слева от пункта
-/// (меню стоит у правого края окна), как «Appearance & layout» у Notion 7.39 (снимок `notion-page-appearance.png`).
+/// (меню стоит у правого края окна), как «Appearance & layout» у Notion 7.39 (замер 21.10.2026, `cardFrame`).
 /// Переключатель срабатывает сразу и меню не закрывает.
 @MainActor
 final class PageMenuSubmenu {
@@ -23,14 +23,23 @@ final class PageMenuSubmenu {
         let size = NSSize(width: Metrics.PageMenu.submenuWidth,
                           height: CGFloat(rows.count) * Metrics.PopupMenu.compactRowHeight + 2 * Metrics.PopupMenu.verticalPadding)
         let content = PageMenuSubmenuView(rows: rows)
-        let anchor = window.convertToScreen(row.convert(row.bounds, to: nil))
-        var card = NSRect(x: anchor.minX - Metrics.PageMenu.submenuGap - size.width, y: anchor.maxY + Metrics.PopupMenu.verticalPadding - size.height,
-                          width: size.width, height: size.height)
-        if let screen = window.screen?.visibleFrame, card.minX < screen.minX { card.origin.x = anchor.maxX + Metrics.PageMenu.submenuGap }
+        let card = Self.cardFrame(size: size, row: window.convertToScreen(row.convert(row.bounds, to: nil)), screen: window.screen?.visibleFrame)
         let panel = PageMenuSubmenuPanel(content: content)
         panel.setFrame(card.insetBy(dx: -PageMenuSubmenuView.shadowMargin, dy: -PageMenuSubmenuView.shadowMargin), display: false)
         self.panel = panel
         PopupWindows.show(panel, over: window)
+    }
+
+    /// Где встанет подменю размером `size` у строки `row` меню (экранные координаты): по середине строки, слева от меню
+    /// и заходит на него на 4 — правым краем по левому краю строки (строка отступает от края меню на 4); слева нет места —
+    /// справа, левым краем по правому краю строки. Целиком на экране.
+    nonisolated static func cardFrame(size: NSSize, row: NSRect, screen: NSRect?) -> NSRect {
+        var card = NSRect(x: row.minX - size.width, y: row.midY - size.height / 2, width: size.width, height: size.height)
+        if let screen {
+            if card.minX < screen.minX { card.origin.x = row.maxX }
+            card.origin.y = min(max(screen.minY, card.origin.y), screen.maxY - size.height)
+        }
+        return card
     }
 
     func close() {

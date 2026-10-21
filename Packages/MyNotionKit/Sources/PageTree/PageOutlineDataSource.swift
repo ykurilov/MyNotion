@@ -61,6 +61,8 @@ final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineV
 
     let kind: Kind
     var actions: PageTreeActions
+    /// Меню строки — «⋯» и правая кнопка.
+    let rowMenu = PageRowMenuPresenter()
     private(set) var tree = PageTreeSnapshot(allPages: [])
     private(set) var collapsedPageIds: Set<UUID> = []
     /// Разделы: корни списка по порядку.
@@ -95,9 +97,9 @@ final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineV
         outlineView.target = self
         outlineView.doubleAction = #selector(renameClickedRow)
         outlineView.onRename = { [weak self] row in self?.beginRenaming(row: row) }
-        outlineView.onContextMenu = { [weak self] row in
-            guard let self, let pageId = self.pageId(atRow: row) else { return nil }
-            return self.pageMenu(for: pageId)
+        outlineView.onContextMenu = { [weak self, weak outlineView] row, point in
+            guard let self, let outlineView, let pageId = self.pageId(atRow: row) else { return }
+            self.rowMenu.show(self.pageMenu(for: pageId), from: outlineView.convert(point, from: nil), in: outlineView)
         }
         outlineView.onTrash = { [weak self] row in
             guard let self, let pageId = self.pageId(atRow: row) else { return }
@@ -382,11 +384,10 @@ final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineV
     // MARK: Меню «⋯» и по правой кнопке
 
     private func showMenu(for pageId: UUID, from anchor: NSView) {
-        let menu = pageMenu(for: pageId)
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: anchor.bounds.maxY + 4), in: anchor)
+        rowMenu.show(pageMenu(for: pageId), from: anchor)
     }
 
-    func pageMenu(for pageId: UUID) -> NSMenu {
+    func pageMenu(for pageId: UUID) -> ActionMenuView {
         var handlers = actions.rowMenuHandlers
         handlers[.rename] = { [weak self] pageId in
             guard let self, let outlineView = self.outlineView else { return }

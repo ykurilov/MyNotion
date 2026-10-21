@@ -102,7 +102,7 @@ struct TabStripView: View {
         let isDragged = dragged?.id == item.id
         return HStack(spacing: 0) {
             let isHovered = (hoveredTabId ?? previewHoveredTabId) == item.id
-            TabView(item: item, width: width)
+            TabView(item: item, width: width, isHovered: isHovered)
                 // Поверх вкладки: в строке светофора место под видом SwiftUI система считает «тянуть окно».
                 .overlay(TabMouseArea(
                     onHover: { inside in
@@ -139,20 +139,22 @@ struct TabStripView: View {
     }
 }
 
-/// Одна вкладка: иконка, название (у активной — «…», у остальных — затухание).
+/// Одна вкладка: иконка, название (у активной — «…», у остальных — затухание). Что влезает — `TabContentLayout`:
+/// узкая вкладка с иконкой показывает одну иконку, место под «×» берётся только под мышью.
 private struct TabView: View {
     let item: TabStripItem
     let width: CGFloat
+    let isHovered: Bool
 
     private typealias Tabs = Metrics.Tabs
 
     var body: some View {
+        let layout = TabContentLayout(width: width, hasIcon: item.icon != .none, isHovered: isHovered)
         HStack(spacing: Tabs.iconTitleGap) {
             icon
-            title
+            if layout.showsTitle { title.frame(width: layout.titleWidth, alignment: .leading) }
         }
-        .padding(.leading, Tabs.contentInset)
-        .padding(.trailing, item.isActive ? Tabs.closeCenterFromTrailing + Tabs.closeButtonSize / 2 + 4 : Tabs.closeCenterFromTrailing)
+        .padding(.leading, layout.inset)
         .frame(width: width, height: item.isActive ? Tabs.stripHeight + Tabs.separatorWidth : Tabs.stripHeight, alignment: .leading)
         .clipped()
         .frame(height: Tabs.stripHeight, alignment: .top)

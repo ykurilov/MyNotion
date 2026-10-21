@@ -1,6 +1,7 @@
 import AppKit
 import NotesCore
 import Testing
+import VisualStyle
 @testable import PageTree
 
 /// Реестры панели (plan.md, Structure Decision; contracts/pages-ui.md, «Боковая панель»): разделы и меню строки
@@ -19,8 +20,8 @@ struct SidebarRegistryTests {
         #expect(SidebarSection.ordered([]).map(\.id) == [.pages], "раздел «Страницы» есть всегда")
     }
 
-    private func titles(_ menu: NSMenu) -> [String] {
-        menu.items.map { $0.isSeparatorItem ? "—" : $0.title }
+    private func titles(_ menu: ActionMenuView) -> [String] {
+        menu.outline
     }
 
     @Test("Меню строки 001 из описателей: Переименовать, Добавить подстраницу, —, Удалить в корзину")
@@ -54,8 +55,8 @@ struct SidebarRegistryTests {
         var trashed: [UUID] = []
         let menu = PageRowMenu.make(items: PageRowMenuItem.all, context: PageRowMenuContext(pageId: pageId, isTemplate: false, isFavorite: false),
                                     handlers: [.trash: { trashed.append($0) }])
-        let item = try #require(menu.items.first { $0.title == "Удалить в корзину" })
-        _ = item.target?.perform(item.action, with: item)
+        let item = try #require(menu.rowViews.first { $0.action.title == "Удалить в корзину" })
+        item.press()
         #expect(trashed == [pageId])
     }
 }

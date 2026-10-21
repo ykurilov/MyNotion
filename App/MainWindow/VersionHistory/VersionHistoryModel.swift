@@ -21,6 +21,8 @@ final class VersionHistoryModel {
     /// «›» у выбранной версии: вместо списка — карточка версии и что менялось.
     var isExpanded = false
     var isRestoreDialogShown = false
+    /// Открыт список «Группировать изменения».
+    var isGroupingMenuShown = false
     /// Что показать справа.
     private(set) var preview: Preview?
     private(set) var errorText: String?

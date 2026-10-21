@@ -9,15 +9,15 @@ final class TemplateRowsController {
     private static let moreTitle = "Ещё шаблоны…"
 
     private weak var textView: PageTextView?
-    private let container = TemplateFlippedView()
-    private let heading = NSTextField(labelWithString: "Шаблоны")
-    private var rows: [TemplateRowView] = []
+    let container = TemplateFlippedView()
+    let heading = NSTextField(labelWithString: "Шаблоны")
+    private(set) var rows: [TemplateRowView] = []
     private var shown: [TemplateChoice] = []
     private var hasMore = false
     private(set) var selectedIndex: Int? {
         didSet { for (index, row) in rows.enumerated() { row.isSelected = index == selectedIndex } }
     }
-    private var searchPopover: TemplateSearchPopover?
+    private(set) var searchPopover: TemplateSearchPopover?
 
     init(textView: PageTextView) {
         self.textView = textView
@@ -49,7 +49,7 @@ final class TemplateRowsController {
         let gap: CGFloat = 14
         let height = headingHeight + CGFloat(rows.count) * TemplateRowView.height + 4
         container.frame = NSRect(x: left, y: top + gap, width: width, height: height)
-        heading.frame = NSRect(x: 4, y: 0, width: width - 8, height: headingHeight)
+        heading.frame = NSRect(x: 0, y: 0, width: width - 4, height: headingHeight)
         for (index, row) in rows.enumerated() {
             row.frame = NSRect(x: 0, y: headingHeight + CGFloat(index) * TemplateRowView.height, width: width, height: TemplateRowView.height)
         }
@@ -111,6 +111,6 @@ final class TemplateRowsController {
         guard let textView, let anchor = rows.last else { return }
         let popover = TemplateSearchPopover(choices: shown) { [weak textView] id in textView?.chooseTemplate(id) }
         searchPopover = popover
-        popover.show(relativeTo: anchor.bounds, of: anchor)
+        popover.show(below: anchor)
     }
 }

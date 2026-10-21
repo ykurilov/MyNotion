@@ -119,6 +119,18 @@ extension XCUIApplication {
         descendants(matching: .menuItem)["popup-item-\(identifier)"]
     }
 
+    /// Пункт меню строки панели (карточка, как у Notion): `slot` — место пункта (`favorite`, `trash`, `moveTo`…).
+    func rowMenuItem(_ slot: String) -> XCUIElement {
+        descendants(matching: .menuItem)["row-menu-\(slot)"]
+    }
+
+    /// Выбрать пункт меню строки: карточка — отдельное окно поверх, щелчок по точке пункта.
+    func chooseRowMenuItem(_ slot: String, file: StaticString = #filePath, line: UInt = #line) {
+        let item = rowMenuItem(slot)
+        XCTAssertTrue(item.waitForExistence(timeout: 5), "В меню строки нет пункта \(slot)", file: file, line: line)
+        item.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+    }
+
     /// Новая страница по ⌘N с названием; курсор переходит в текст страницы.
     func createPage(titled title: String) {
         typeKey("n", modifierFlags: .command)

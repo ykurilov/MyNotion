@@ -178,6 +178,10 @@ public enum Metrics {
         public static let favoritesMaxRows = 7
         /// Стрелка у заголовка раздела при наведении.
         public static let sectionChevronSize: CGFloat = 9
+        /// Поле справа под полосу прокрутки у всех списков панели (у Notion строки до 247 при панели 270) и затухание сверху
+        /// прокрученного списка (у Notion — 34, замер 21.10.2026).
+        public static let scrollGutter: CGFloat = 15
+        public static let scrollTopFadeHeight: CGFloat = 34
     }
 
     /// Верхняя строка окна — в линию со светофором: шторка панели и «✎» (по снимку Notion для Mac).
@@ -370,13 +374,33 @@ public enum Metrics {
 
     /// Шапка страницы: кнопка «Добавить иконку» при наведении, как у Notion (серая, значок и надпись 14), над названием.
     /// Меню «•••» страницы (contracts/pages-ui.md), ≈ по Notion.
+    /// Меню «•••» страницы: ширина 256, как у Notion 7.39 (замер 21.10.2026).
     public enum PageMenu {
-        public static let width: CGFloat = 265
-        public static let searchInset: CGFloat = 10
-        /// Подменю «Вид страницы ›» слева от меню и его переключатели (≈ по снимку `notion-page-appearance.png`).
+        public static let width: CGFloat = 256
+        /// Подменю «Вид страницы ›» сбоку от меню, по середине своей строки, заходит на меню на 4 (как «Appearance &
+        /// layout» у Notion 7.39, замер 21.10.2026), и его переключатели.
         public static let submenuWidth: CGFloat = 230
-        public static let submenuGap: CGFloat = 4
         public static let switchSize = CGSize(width: 26, height: 14)
+    }
+
+    /// Меню действий (`ActionMenuView`): меню «•••» страницы и меню строки панели. Замер Notion 7.39 21.10.2026:
+    /// поле поиска 28 в 12 от краёв карточки, до первого пункта 12, рамка поля в фокусе синяя; подсветка пункта 28;
+    /// «›» — квадрат 16 в 8 от правого края пункта. Меню строки панели шириной 265 встаёт от середины «⋯» вправо и вниз
+    /// (не влезает вниз — вверх, низом по середине «⋯»), по правой кнопке — от точки щелчка.
+    public enum ActionMenu {
+        public static let rowMenuWidth: CGFloat = 265
+        public static let searchInset: CGFloat = 12
+        public static let searchHeight: CGFloat = 28
+        /// Место поля в списке строк: от верха строк до поля 6 (с полем меню — 12 от края), после поля — 12 до пункта.
+        public static let searchTopOffset: CGFloat = 6
+        public static let searchBlockHeight: CGFloat = 46
+        public static let searchCornerRadius: CGFloat = 6
+        public static let searchTextX: CGFloat = 28
+        public static let searchIconSize: CGFloat = 16
+        public static let focusRingWidth: CGFloat = 2
+        public static let highlightHeight: CGFloat = 28
+        public static let chevronSize: CGFloat = 16
+        public static let chevronInkHeight: CGFloat = 10
     }
 
     /// Обложка страницы (contracts/pages-ui.md, «Шапка страницы»): высота ≈ 30 % высоты области страницы с верхней
@@ -435,6 +459,8 @@ public enum Metrics {
         public static let listWidth: CGFloat = 320
         public static let listMaxHeight: CGFloat = 320
         public static let listRowHeight: CGFloat = 36
+        /// Список — карточкой всплывающих меню под строкой на 4.
+        public static let listGap: CGFloat = 4
     }
 
     /// Панель форматирования над выделенным текстом (FR-033), карточка как у Notion 7.38.1 (снимок 15.10.2026, ±1,2):

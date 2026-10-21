@@ -90,10 +90,10 @@ final class VersionHistoryTests: XCTestCase {
 
     @MainActor
     private func chooseGrouping(_ app: XCUIApplication, _ identifier: String) {
-        app.descendants(matching: .any)["version-grouping"].firstMatch.click()
-        let item = app.menuItems.matching(identifier: identifier).firstMatch
+        tap(app.descendants(matching: .any)["version-grouping"].firstMatch)
+        let item = app.descendants(matching: .any).matching(identifier: identifier).firstMatch
         XCTAssertTrue(item.waitForExistence(timeout: 5), "Нет пункта группировки \(identifier)")
-        item.click()
+        tap(item)
     }
 
     /// Щелчок по точке: окно истории — SwiftUI поверх видов AppKit, и XCUITest считает его кнопки «не нажимаемыми»,
