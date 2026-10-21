@@ -72,7 +72,7 @@ xcodebuild build -scheme MyNotion -destination 'platform=macOS,arch=arm64'
 ```sh
 # Всё — на iMac через imac-run (см. «Проверки на iMac»): основной Mac только правит код.
 # Модули (Swift Testing)
-cd Packages/MyNotionKit && imac-run --no-setup -- swift test --jobs 4
+cd Packages/MyNotionKit && imac-run --no-fallback --wait 1800 --no-setup -- swift test --jobs 4
 
 # Сценарии XCUITest — сборка и прогон на iMac, журнал и снимки возвращаются сюда
 scripts/imac/run-on-imac.sh uitest [-only-testing:UITests/<Класс>]
