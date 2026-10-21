@@ -65,6 +65,9 @@ struct MainWindowView: View {
                 NSApp.terminate(nil)
             }
         }
+        if options.opensFormulaEditorDemo, case .success(let library) = library {
+            FormulaEditorDemo.editorReady(model: model ?? library.firstWindow)
+        }
         if let benchmarkURL = options.typingBenchmarkURL, case .success(let library) = library {
             TypingBenchmark.editorReady(model: model ?? library.firstWindow, reportTo: benchmarkURL)
         }

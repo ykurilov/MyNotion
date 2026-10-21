@@ -7,8 +7,17 @@ struct GalleryDatabaseStatesTests {
     @Test("«Пустая база» и «Таблица эталона» — в разделе «Базы», в обеих темах")
     func databaseStates() {
         let states = GalleryCatalog.states.filter { $0.section == "Базы" }
-        #expect(states.map(\.id) == ["database-empty", "database-sample-table"])
-        #expect(states.map(\.scene) == [.databases(.empty), .databases(.sampleTable)])
-        #expect(GalleryCatalog.shots.filter { $0.state.section == "Базы" }.count == 4)
+        #expect(states.prefix(2).map(\.id) == ["database-empty", "database-sample-table"])
+        #expect(states.prefix(2).map(\.scene) == [.databases(.empty), .databases(.sampleTable)])
+        #expect(GalleryCatalog.shots.filter { $0.state.section == "Базы" }.count == states.count * 2)
+    }
+
+    @Test("US5: редактор формулы пустой, с итогом, с ошибкой, с кругом и ячейки формул — в обеих темах")
+    func formulaStates() {
+        let ids = ["formula-editor-empty", "formula-editor-result", "formula-editor-error", "formula-editor-cycle", "formula-cells"]
+        let states = GalleryCatalog.states.filter { ids.contains($0.id) }
+        #expect(states.map(\.scene) == [.databases(.formulaEditorEmpty), .databases(.formulaEditorResult), .databases(.formulaEditorError),
+                                        .databases(.formulaEditorCycle), .databases(.formulaCells)])
+        #expect(GalleryCatalog.shots.filter { ids.contains($0.state.id) }.count == 10)
     }
 }

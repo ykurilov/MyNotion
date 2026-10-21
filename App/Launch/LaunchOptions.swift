@@ -39,6 +39,8 @@ struct LaunchOptions {
     var hoveredSidebarRow: Int?
     /// `--appearance light|dark`: тема окна вместо системной.
     var appearanceName: NSAppearance.Name?
+    /// `--formula-editor-demo`: малый эталон баз и открытый редактор формулы у «Задач» (UI-сценарий US5).
+    var opensFormulaEditorDemo = false
     /// `--ui-gallery <папка>`: на временной базе снять все состояния интерфейса в PNG и выйти.
     var uiGalleryURL: URL?
     /// `--ui-gallery-only <часть имени>`: снять только состояния, в имени которых есть эта строка.
@@ -80,6 +82,7 @@ struct LaunchOptions {
             case "--generate-rich-sample": generatesRichSample = true
             case "--generate-003-sample": generates003Sample = true
             case "--generate-004-sample": generates004Sample = true
+            case "--formula-editor-demo": opensFormulaEditorDemo = true
             case "--generate-versions-sample": generatesVersionsSample = true
             case "--versions-quick": versionTiming = PageVersionRecorder.Timing(minimumInterval: 2, quietPeriod: 1)
             case "--launch-report": launchReportURL = remaining.popFirst().map(Self.fileURL)

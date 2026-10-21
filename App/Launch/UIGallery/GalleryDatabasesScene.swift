@@ -12,6 +12,7 @@ enum GalleryDatabasesScene {
     private static var overlay: NSView?
 
     static func show(_ kind: GalleryDatabases, model: MainWindowModel, window: NSWindow) async -> String? {
+        if GalleryFormulasScene.handles(kind) { return await GalleryFormulasScene.show(kind, model: model, window: window) }
         let store = model.store
         let viewId: UUID
         let title: String
@@ -25,6 +26,8 @@ enum GalleryDatabasesScene {
                 let sample = try DatabaseSampleGenerator(taskCount: 300, projectCount: 20).ensure(in: store)
                 viewId = sample.tableViewId
                 title = DatabaseSampleGenerator.tasksTitle
+            default:
+                return "сцена \(kind) не нашлась"
             }
         } catch {
             return "база не записалась: \(error.localizedDescription)"
@@ -56,11 +59,12 @@ enum GalleryDatabasesScene {
     static func tearDown() {
         overlay?.removeFromSuperview()
         overlay = nil
+        GalleryFormulasScene.tearDown()
     }
 }
 
 /// Подложка сцены цвета страницы: снимок — только база.
-private final class GalleryOverlayView: NSView {
+final class GalleryOverlayView: NSView {
     override var isFlipped: Bool { true }
     override func draw(_ dirtyRect: NSRect) {
         Palette.pageBackground.setFill()

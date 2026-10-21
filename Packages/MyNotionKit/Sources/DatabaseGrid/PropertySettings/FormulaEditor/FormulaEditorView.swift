@@ -219,6 +219,11 @@ public final class FormulaEditorView: NSView, NSTextViewDelegate, NSTableViewDat
         updateFieldBorder()
     }
 
+    /// Заменить текст поля, как если бы его набрали (галерея, сценарии проверки).
+    public func type(_ text: String) {
+        field.insertText(text, replacementRange: NSRange(location: 0, length: field.string.utf16.count))
+    }
+
     // MARK: Поле и плашки
 
     /// Записать текст формулы в поле: `prop("…")` найденных свойств — плашками.

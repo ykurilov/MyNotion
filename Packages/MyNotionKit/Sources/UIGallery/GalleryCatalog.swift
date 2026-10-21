@@ -105,6 +105,12 @@ public enum GalleryDatabases: Hashable, Sendable, CaseIterable {
     case empty
     /// Таблица эталона баз: «Задачи», все типы свойств, плашки вариантов.
     case sampleTable
+    /// US5: редактор формулы — пустой, с итогом, с ошибкой, с кругом; ячейки формул всех типов итога.
+    case formulaEditorEmpty
+    case formulaEditorResult
+    case formulaEditorError
+    case formulaEditorCycle
+    case formulaCells
 }
 
 public enum GalleryMarkdownExport: String, Hashable, Sendable, CaseIterable {
@@ -279,6 +285,16 @@ public enum GalleryCatalog {
     static let databaseStates: [GalleryState] = [
         GalleryState("database-empty", .databases(.empty), "Новая база: вид «Таблица», колонка «Название», строк нет", section: "Базы"),
         GalleryState("database-sample-table", .databases(.sampleTable), "Таблица эталона «Задачи»: все типы, плашки, флажки, даты", section: "Базы"),
+        // US5, сверка — `notion-formula-editor*.png`.
+        GalleryState("formula-editor-empty", .databases(.formulaEditorEmpty), "Редактор формулы пустой: «Ваша формула», «Нет итога», список свойств и функций",
+                     section: "Базы"),
+        GalleryState("formula-editor-result", .databases(.formulaEditorResult), "Редактор с формулой: плашка свойства, итог первой строки, «Тип: текст»",
+                     section: "Базы"),
+        GalleryState("formula-editor-error", .databases(.formulaEditorError), "Редактор с ошибкой типов: текст по-русски, место подчёркнуто, «Готово» неактивно",
+                     section: "Базы"),
+        GalleryState("formula-editor-cycle", .databases(.formulaEditorCycle), "Редактор с кругом «Итог → Сумма → Итог», «Готово» неактивно", section: "Базы"),
+        GalleryState("formula-cells", .databases(.formulaCells), "Ячейки формул всех типов итога: число, текст, флажок, дата, список, страницы",
+                     section: "Базы"),
     ]
 
     /// Обратные ссылки (US5, contracts/pages-ui.md, «Обратные ссылки»): строка под названием и список источников.
