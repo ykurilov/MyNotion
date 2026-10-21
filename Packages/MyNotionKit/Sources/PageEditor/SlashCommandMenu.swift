@@ -13,6 +13,8 @@ struct PopupMenuItem: Equatable {
         /// Только в меню «/»: колонки из N пустых колонок, таблица 2 × 3 (US6).
         case insertColumns(Int)
         case insertTable
+        /// Только в меню «/»: новая база — встроенная или на всю страницу (004); создаёт владелец окна.
+        case insertDatabase(inline: Bool)
         /// Меню блока: подменю типов, как «Turn into» у Notion.
         case turnInto
         /// Меню блока: копия блока со всем вложенным сразу под ним (⌘D).
@@ -45,6 +47,7 @@ struct PopupMenuItem: Equatable {
         case .delete: "delete"
         case .insertColumns(let count): "columns-\(count)"
         case .insertTable: "table"
+        case .insertDatabase(let inline): inline ? "database-inline" : "database-full-page"
         case .turnInto: "turn-into"
         case .duplicate: "duplicate"
         case .moveTo: "move-to"
@@ -1026,6 +1029,9 @@ extension PageTextView {
     /// Выбор в меню: из меню «/» убирается «/» с набранным поиском, затем меняется тип блока.
     func applyPopupItem(_ item: PopupMenuItem, session: EditorPopupController.Session, menuFrame: NSRect? = nil) {
         let blockId: UUID
+        if case .slash(let id, let slash) = session, case .insertDatabase(let inline) = item.action {
+            return requestDatabase(fromSlashIn: id, slashLocation: slash, isInline: inline)
+        }
         switch session {
         case .slash(let id, let slash) where item.action == .setKind(.pageLink):
             return requestSubpage(fromSlashIn: id, slashLocation: slash)
@@ -1052,6 +1058,8 @@ extension PageTextView {
         case .insertTable:
             insertTable(at: index)
             return
+        case .insertDatabase:
+            return
         case .color, .turnInto:
             return
         }
@@ -1062,6 +1070,19 @@ extension PageTextView {
     /// у блока с текстом ссылка встанет следующим блоком; новая подстраница сразу открывается.
     /// Стирание — не свой шаг ⌘Z: создание отменяется одним шагом в отмене дерева, а после возврата на страницу
     /// шаг этого редактора вернул бы «/стр» в уже перечитанный блок.
+    /// «/База данных — …», как в Notion: «/» с поиском стирается; пустой блок база заменит, после блока с текстом —
+    /// встанет следующим блоком. Базу создают операции `Databases` у владельца окна — одним шагом ⌘Z.
+    private func requestDatabase(fromSlashIn blockId: UUID, slashLocation slash: Int, isInline: Bool) {
+        let caret = selectedRange().location
+        if caret > slash {
+            undoManager?.disableUndoRegistration()
+            replaceText(in: NSRange(location: slash, length: caret - slash), with: "")
+            undoManager?.enableUndoRegistration()
+        }
+        guard let block = document.blocks.first(where: { $0.id == blockId }) else { return }
+        onSubpageRequest?(.createDatabase(block.text.string.isEmpty ? .replacing(blockId: blockId) : .after(blockId: blockId), isInline: isInline))
+    }
+
     private func requestSubpage(fromSlashIn blockId: UUID, slashLocation slash: Int) {
         let caret = selectedRange().location
         if caret > slash {

@@ -10,4 +10,6 @@ public enum SubpageRequest: Equatable, Sendable {
     /// «Переместить в» (US4): окно выбора страницы для этих блоков; `anchor` — место меню блока на экране,
     /// `nil` — ⇧⌘P, окно показывает выбор у верхней полосы.
     case moveBlocks(blockIds: [UUID], anchor: NSRect?)
+    /// «/База данных — встроенная» и «— на всю страницу» (004): новая база у блока.
+    case createDatabase(SubpageLinkPlacement, isInline: Bool)
 }

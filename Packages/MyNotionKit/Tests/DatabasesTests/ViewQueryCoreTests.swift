@@ -30,7 +30,7 @@ struct ViewQueryCoreTests {
         store.addWriteHook(CellIndexer())
         var random = SplitMix(seed: 42)
         let words = ["альфа", "бета", "гамма", "Ёж", "delta", "Эхо", "яблоко", "zeta", "ива", "йод"]
-        return try store.write { tx in
+        return try store.write { tx throws in
             let page = try tx.createPage(title: "Случайная")
             try tx.saveDatabase(DatabaseSchema(pageId: page.id))
             var key: FractionalSortKey?

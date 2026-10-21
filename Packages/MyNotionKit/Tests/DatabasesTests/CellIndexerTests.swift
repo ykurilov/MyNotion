@@ -23,7 +23,7 @@ struct CellIndexerTests {
         store.addWriteHook(CellIndexer())
         store.addWriteHook(ReminderIndexer())
         var made: (UUID, UUID, UUID, UUID, UUID, SelectOption, SelectOption)!
-        try store.write { tx in
+        try store.write { tx throws in
             let page = try tx.createPage(title: "Задачи")
             try tx.saveDatabase(DatabaseSchema(pageId: page.id))
             try tx.saveProperty(DatabaseProperty(databaseId: page.id, name: "Название", kind: .title, sortKey: FractionalSortKey(rawValue: "a")!))
@@ -58,7 +58,7 @@ struct CellIndexerTests {
     func optionPositions() throws {
         try store.write { tx in try tx.setCell(rowId: row, propertyId: select, value: .string(high.id.databaseText)) }
         #expect(try columns(select).1 == 1)
-        try store.write { tx in
+        try store.write { tx throws in
             var moved = high
             moved.sortKey = FractionalSortKey(rawValue: "0V")!
             try tx.saveOption(moved)
@@ -74,7 +74,7 @@ struct CellIndexerTests {
     @Test("Смена типа свойства переписывает колонки всех его ячеек")
     func typeChangeReindexes() throws {
         try store.write { tx in try tx.setCell(rowId: row, propertyId: text, value: .number(12)) }
-        try store.write { tx in
+        try store.write { tx throws in
             var property = try #require(try tx.property(text))
             property.kind = .number
             try tx.saveProperty(property)
@@ -86,7 +86,7 @@ struct CellIndexerTests {
     func titleComparables() throws {
         let title = try store.write { tx in try tx.properties(ofDatabase: database).first { $0.kind == .title }!.id }
         #expect(try columns(title, table: "db_computed").0 == "позвонить в банк")
-        try store.write { tx in
+        try store.write { tx throws in
             var page = try #require(try tx.page(row))
             page.title = "Ёж"
             try tx.updatePage(page)
@@ -110,7 +110,7 @@ struct CellIndexerTests {
     @MainActor
     @Test("Дата с напоминанием — в индексе напоминаний 002; без напоминания и в корзине — нет")
     func dateReminders() throws {
-        try store.write { tx in
+        try store.write { tx throws in
             try tx.setCell(rowId: row, propertyId: date, value: ["start": "2030-05-10T15:00", "hasTime": true, "timeZone": "Europe/Moscow",
                                                                  "reminder": "minutes30"])
         }
@@ -121,7 +121,7 @@ struct CellIndexerTests {
         }
         let expected = DateText.parse("2030-05-10T14:30", timeZone: "Europe/Moscow")!
         #expect(try fireAt() == expected)
-        try store.write { tx in
+        try store.write { tx throws in
             try tx.setCell(rowId: row, propertyId: date, value: ["start": "2030-05-10", "hasTime": false, "timeZone": "Europe/Moscow", "reminder": "day1"])
         }
         #expect(try fireAt() == DateText.parse("2030-05-09T09:00", timeZone: "Europe/Moscow"), "без времени — за день в 9:00")

@@ -37,7 +37,7 @@ struct BackgroundRecomputeTests {
         #expect(report.writeBatches == 13, "пачки по 25 строк внутри чтений по 70: 4 × 3 + 1")
         let rows = try ViewQuery.open(sample.tableViewId, in: store)!.result.rowIds
         for row in rows {
-            let (done, deadline, project) = try store.write { tx in
+            let (done, deadline, project) = try store.write { tx throws in
                 (try tx.cell(rowId: row, propertyId: sample.taskProperties["Сделано"]!)?.value?.bool ?? false,
                  try tx.cell(rowId: row, propertyId: sample.taskProperties["Срок"]!)?.value,
                  try tx.relationLinks(propertyId: sample.taskProperties["Проект"]!, rowId: row).first.flatMap { try tx.page($0.targetRowId)?.title })
@@ -63,7 +63,7 @@ struct BackgroundRecomputeTests {
         // …а тем временем строку поправили — правка пересчитала свои итоги в своей транзакции.
         let old = try store.write { tx in try tx.cell(rowId: row, propertyId: done)?.value?.bool ?? false }
         Thread.sleep(forTimeInterval: 0.01)
-        try store.write { tx in
+        try store.write { tx throws in
             try tx.setCell(rowId: row, propertyId: done, value: .bool(!old))
             try recompute.recompute(rows: [row], in: tx)
         }

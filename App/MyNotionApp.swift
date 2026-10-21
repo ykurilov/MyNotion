@@ -1,6 +1,7 @@
 import AppKit
 import Attachments
 import Backlinks
+import Databases
 import MarkdownExport
 import NotesCore
 import NotionImport
@@ -99,6 +100,8 @@ struct MyNotionApp: App {
         // Индекс поиска и очередь синхронизации пишутся в той же транзакции, что и записи (research R6, R4) —
         // до первой записи. Пока синхронизация не включена, очередь ничего не пишет.
         store.addWriteHook(SearchIndexer())
+        // 004: сравнимые колонки и строки поиска значений ячеек — в той же транзакции (research R3, R14).
+        store.addWriteHook(CellIndexer())
         // Индекс обратных ссылок — в той же транзакции, что и блок (research R10); после фиксации открытые страницы
         // перечитывают счёт, если их ссылки сменились.
         store.addWriteHook(PageLinkIndexer(onLinksChange: BacklinksAddon.linksDidChange))

@@ -345,7 +345,8 @@ final class PageOutlineDataSource: NSObject, NSOutlineViewDataSource, NSOutlineV
             live.pageId == page.id ? (live.title.isEmpty ? Page.untitledTitle : live.title) : nil
         } ?? page.displayTitle
         let hasChildren = !children(of: page.id).isEmpty
-        cell.show(page, title: title, hasChildren: hasChildren, isExpanded: outlineView?.isItemExpanded(item) ?? false)
+        cell.show(page, title: title, hasChildren: hasChildren, isExpanded: outlineView?.isItemExpanded(item) ?? false,
+                  isDatabase: tree.isDatabase(page.id))
         cell.onToggleExpanded = { [weak self] in self?.toggleExpanded(page.id) }
         cell.onAddSubpage = { [weak self] in self?.actions.addSubpage(page.id) }
         cell.onChooseIcon = { [weak self] anchor in self?.actions.chooseIcon(page.id, anchor) }

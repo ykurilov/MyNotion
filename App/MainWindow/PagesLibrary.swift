@@ -127,8 +127,10 @@ final class PagesLibrary {
     var hasFailedSaves: Bool { openDocuments.hasFailedSaves }
 
     func reloadTree() {
-        let all = (try? store.pageOutline()) ?? []
-        tree = PageTreeSnapshot(allPages: all)
+        // Строки баз дерево не читает (их тысячи): только страницы, базы и корзина (research R1).
+        let outline = (try? store.treeOutline()) ?? (pages: [], databases: [:])
+        let all = outline.pages
+        tree = PageTreeSnapshot(allPages: all, databases: outline.databases)
         trashEntries = NotesStore.trashEntries(in: all)
         trashedPagesById = Dictionary(all.lazy.filter { self.tree.page($0.id) == nil }.map { ($0.id, $0) }) { first, _ in first }
         trashedPageIds = Set(trashedPagesById.keys)
