@@ -6,7 +6,7 @@ import NotesCore
 import UIGallery
 
 /// Связи и сводки в галерее (US4, T093) на эталоне «Задачи» ↔ «Проекты» (300 задач, 20 проектов): панель новой связи и
-/// настроенной двусторонней, окна «Связана с» и «Лимит», панель сводки и меню «Вычислить», таблица «Проекты» со
+/// настроенной двусторонней, окна «Связана с» и «Лимит», окно ячейки связи, панель сводки и меню «Вычислить», таблица «Проекты» со
 /// сводками и ответной связью. Сверка — `notion-relation-*.png`, `notion-rollup-*.png`.
 @MainActor
 enum GalleryRelationsScene {
@@ -14,7 +14,7 @@ enum GalleryRelationsScene {
 
     static func handles(_ kind: GalleryDatabases) -> Bool {
         [.relationNewSettings, .relationSettings, .relationTargetChooser, .relationLimitChooser, .rollupSettings, .rollupCalculateMenu,
-         .relationProjectsTable].contains(kind)
+         .relationProjectsTable, .relationPicker].contains(kind)
     }
 
     static func show(_ kind: GalleryDatabases, model: MainWindowModel, window: NSWindow) async -> String? {
@@ -42,6 +42,13 @@ enum GalleryRelationsScene {
             case .rollupSettings, .rollupCalculateMenu:
                 presenter.showEditProperty(sample.projectProperties["Сумма часов"]!, in: table)
                 if kind == .rollupCalculateMenu { await press("rollup-calculation", in: window) }
+            case .relationPicker:
+                // Окно ячейки связи первой задачи: выбранный проект с «−» и «Выбрать ещё».
+                guard let column = controller.content.columns.firstIndex(where: { $0.property.id == sample.taskProperties["Проект"]! }) else {
+                    return "нет колонки связи"
+                }
+                table.grid.select(CellPosition(row: 0, column: column))
+                table.grid.beginEditing()
             default:
                 window.makeFirstResponder(nil)
             }

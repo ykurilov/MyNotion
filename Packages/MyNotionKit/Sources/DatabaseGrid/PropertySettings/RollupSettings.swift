@@ -12,6 +12,7 @@ final class RollupSettingsView: NSView {
     nonisolated static let settings = PropertyTypeSettings(kinds: [.rollup]) { RollupSettingsView(context: $0) }
 
     private let context: PropertyTypeSettingsContext
+    private var property: DatabaseProperty
     private let stack = PropertyPopupStack()
     private let choices = PropertyChoiceCard()
     private(set) var relationRow: PropertyPopupRow!
@@ -20,16 +21,41 @@ final class RollupSettingsView: NSView {
 
     init(context: PropertyTypeSettingsContext) {
         self.context = context
+        property = context.property
         super.init(frame: NSRect(x: 0, y: 0, width: PropertyPopupMetrics.panelWidth, height: 0))
         stack.topPadding = 0
         addSubview(stack)
         build()
+        watchChanges()
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
 
     override var isFlipped: Bool { true }
+
+    // Панель «Изменить свойство» не пересобирается, пока в поле имени фокус: правку настроек (свою и с другого Mac)
+    // раздел показывает сам.
+    nonisolated(unsafe) private var observer: NSObjectProtocol?
+
+    private func watchChanges() {
+        observer = NotificationCenter.default.addObserver(forName: DatabaseOperations.didChange, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refresh() }
+        }
+    }
+
+    deinit {
+        if let observer { NotificationCenter.default.removeObserver(observer) }
+    }
+
+    /// Перечитать свойство и собрать строки заново (высота раздела та же).
+    func refresh() {
+        guard let fresh = (try? context.store.write { try $0.property(property.id) }) ?? nil else { return }
+        property = fresh
+        stack.removeAll()
+        build()
+        needsLayout = true
+    }
     override var fittingSize: NSSize { NSSize(width: frame.width, height: stack.contentHeight) }
 
     override func layout() {
@@ -37,8 +63,8 @@ final class RollupSettingsView: NSView {
         stack.frame = bounds
     }
 
-    private var config: JSONValue { context.property.config }
-    private var catalog: DatabaseCatalog? { try? DatabaseCatalog.read(context.property.databaseId, in: context.store) }
+    private var config: JSONValue { property.config }
+    private var catalog: DatabaseCatalog? { try? DatabaseCatalog.read(property.databaseId, in: context.store) }
 
     private var relation: DatabaseProperty? {
         config["relationPropertyId"]?.string.flatMap(UUID.init(uuidString:)).flatMap { catalog?.propertiesById[$0] }
@@ -130,7 +156,7 @@ final class RollupSettingsView: NSView {
 
     private func save(relation: UUID?, target: UUID?, calculation: Calculation) {
         do {
-            try context.operations.setRollup(context.property.id, relation: relation, target: target, calculation: calculation)
+            try context.operations.setRollup(property.id, relation: relation, target: target, calculation: calculation)
         } catch {
             NSSound.beep()
         }

@@ -12,6 +12,7 @@ final class RelationSettingsView: NSView {
     static let limitTitles: [RelationLimit: String] = [.one: "1 страница", .none: "Без лимита"]
 
     private let context: PropertyTypeSettingsContext
+    private var property: DatabaseProperty
     private let stack = PropertyPopupStack()
     private let choices = PropertyChoiceCard()
     private(set) var targetRow: PropertyPopupRow!
@@ -21,16 +22,41 @@ final class RelationSettingsView: NSView {
 
     init(context: PropertyTypeSettingsContext) {
         self.context = context
+        property = context.property
         super.init(frame: NSRect(x: 0, y: 0, width: PropertyPopupMetrics.panelWidth, height: 0))
         stack.topPadding = 0
         addSubview(stack)
         build()
+        watchChanges()
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
 
     override var isFlipped: Bool { true }
+
+    // Панель «Изменить свойство» не пересобирается, пока в поле имени фокус: правку настроек (свою и с другого Mac)
+    // раздел показывает сам.
+    nonisolated(unsafe) private var observer: NSObjectProtocol?
+
+    private func watchChanges() {
+        observer = NotificationCenter.default.addObserver(forName: DatabaseOperations.didChange, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refresh() }
+        }
+    }
+
+    deinit {
+        if let observer { NotificationCenter.default.removeObserver(observer) }
+    }
+
+    /// Перечитать свойство и собрать строки заново (высота раздела та же).
+    func refresh() {
+        guard let fresh = (try? context.store.write { try $0.property(property.id) }) ?? nil else { return }
+        property = fresh
+        stack.removeAll()
+        build()
+        needsLayout = true
+    }
     override var fittingSize: NSSize { NSSize(width: frame.width, height: stack.contentHeight) }
 
     override func layout() {
@@ -38,7 +64,6 @@ final class RelationSettingsView: NSView {
         stack.frame = bounds
     }
 
-    private var property: DatabaseProperty { context.property }
 
     /// Пара связи, если она есть и не удалена.
     private var paired: DatabaseProperty? {

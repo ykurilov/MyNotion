@@ -33,6 +33,7 @@ final class RelationCellView: NSView, CellPopupContent {
     private var rows: [NSView] = []
     private var highlighted: Int?
     private var query = ""
+    private var shownHeight: CGFloat = 0
 
     init(context: CellPopupContext) {
         self.context = context
@@ -93,7 +94,11 @@ final class RelationCellView: NSView, CellPopupContent {
         }
         rebuildRows(selectedCount: selected.count)
         needsLayout = true
-        context.resize()
+        // Карточку переставлять, только когда сменилась высота.
+        if preferredSize.height != shownHeight {
+            shownHeight = preferredSize.height
+            context.resize()
+        }
     }
 
     private func rebuildRows(selectedCount: Int) {
@@ -145,7 +150,14 @@ final class RelationCellView: NSView, CellPopupContent {
 
     override var fittingSize: NSSize { preferredSize }
 
-    func focusFirstField() { search.focus() }
+    /// Фокус — в поиск; уже там — не трогать (иначе каждый пересчёт размера выделял бы набранное).
+    func focusFirstField() {
+        guard !search.isFocused else { return }
+        search.focus()
+        // Карточка при новом размере ставится заново: каретка — в конец набранного, а не выделение всего.
+        let length = (search.field.stringValue as NSString).length
+        search.field.currentEditor()?.selectedRange = NSRange(location: length, length: 0)
+    }
 
     override func layout() {
         super.layout()

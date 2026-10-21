@@ -123,6 +123,7 @@ public enum GalleryDatabases: Hashable, Sendable, CaseIterable {
     case rollupSettings
     case rollupCalculateMenu
     case relationProjectsTable
+    case relationPicker
     /// US2: окна выбора, статуса, даты, файлов, меню варианта, настройки выбора, статуса и числа, плашки и полоса с кольцом.
     case typeSelectPicker, typeMultiSelectPicker, typeStatusPicker, typeOptionMenu, typeDatePicker, typeDateFormats, typeFilesPopup,
          typeSelectSettings, typeStatusSettings, typeNumberSettings, typeChipsAndMeters
@@ -334,6 +335,8 @@ public enum GalleryCatalog {
         GalleryState("rollup-settings", .databases(.rollupSettings), "Сводка «Сумма часов»: «Связь — Задачи», «Свойство — Часы», «Вычислить — Сумма»",
                      section: "Базы"),
         GalleryState("rollup-calculate-menu", .databases(.rollupCalculateMenu), "Меню «Вычислить»: как есть, уникальные, количество, проценты, числа",
+                     section: "Базы"),
+        GalleryState("relation-picker", .databases(.relationPicker), "Окно ячейки связи: поиск, «1 выбрано» с «−», «Выбрать ещё», «В «Проекты»»",
                      section: "Базы"),
         GalleryState("relation-projects-table", .databases(.relationProjectsTable), "«Проекты»: ответная связь «Задачи» плашками, сводки числом", section: "Базы"),
         // US2, сверка — `notion-select-*.png`, `notion-status-cell-popup.png`, `notion-edit-property-*.png`, `notion-date-format-options.png`.

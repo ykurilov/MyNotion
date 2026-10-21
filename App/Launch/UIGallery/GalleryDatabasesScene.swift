@@ -114,7 +114,7 @@ enum GalleryDatabasesScene {
             window.makeFirstResponder(nil)
         case .empty, .inlineEmpty, .inlineOverview, .formulaEditorEmpty, .formulaEditorResult, .formulaEditorError, .formulaEditorCycle,
              .formulaCells, .relationNewSettings, .relationSettings, .relationTargetChooser, .relationLimitChooser, .rollupSettings,
-             .rollupCalculateMenu, .relationProjectsTable,
+             .rollupCalculateMenu, .relationProjectsTable, .relationPicker,
              .typeSelectPicker, .typeMultiSelectPicker, .typeStatusPicker, .typeOptionMenu, .typeDatePicker, .typeDateFormats,
              .typeFilesPopup, .typeSelectSettings, .typeStatusSettings, .typeNumberSettings, .typeChipsAndMeters: break
         }
