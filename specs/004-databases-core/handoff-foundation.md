@@ -38,5 +38,5 @@ T008 (переход и вкладки на эталоне с базами) и T
 - `JSONValue` — тип 002 (`BlockProps.swift`); литерала `nil` нет — пишите `.null`.
 - Многооператорный SQL с параметрами GRDB не передаёт во второй оператор — по оператору на вызов.
 - Код в `PerformanceTests` не видит `package`-API — нужны публичные входы (`ViewQuery.open`, `executeCached`…).
-- Замеры в VM: на время своих прогонов не грузить основной Mac; эталон v5 создаётся в VM один раз (долго).
-- Пробы: `scripts/vm/run-in-vm.sh uitest --release -only-testing:PerformanceTests/<Класс>` с `MYNOTION_VM_DD=/tmp/mynotion-004a-vm-dd MYNOTION_UITEST_DD=/tmp/mynotion-004a-uitest-dd`.
+- Замеры — на iMac; основной Mac ничего не собирает. Эталон создаётся на iMac один раз (долго). Цифры iMac с прежними цифрами VM не сравнивать.
+- Пробы: `scripts/imac/run-on-imac.sh uitest --release -only-testing:PerformanceTests/<Класс>` (на iMac, у копии кода свои папки сборки; виртуальный Mac — только если iMac недоступен).

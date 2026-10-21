@@ -1,4 +1,8 @@
 #!/bin/zsh
+# ЗАПАСНОЙ ПУТЬ. Основной — iMac: scripts/imac/run-on-imac.sh (те же режимы). Виртуальный Mac на 8 ГБ
+# перегружает основной Mac, поэтому — только когда iMac недоступен; после проверки машина выключается сама
+# (MYNOTION_VM_KEEP=1 — оставить включённой на серию запусков, потом `lume stop cua-base-3416f98dedcf`).
+#
 # Запуск MyNotion в виртуальном Mac (Cua/Lume), чтобы не трогать экран и фокус Юрия.
 # На основном Mac приложение НЕ запускается никогда — только сборка.
 #
@@ -25,6 +29,8 @@ CONFIG=Debug
 if [[ ${2:-} == --release ]]; then CONFIG=Release; set -- $1 "${@:3}"; DERIVED=$DERIVED-release; UITEST_DERIVED=$UITEST_DERIVED-release; fi
 APP_LOCAL=$DERIVED/Build/Products/$CONFIG/MyNotion.app
 APP_REMOTE=/Users/$VM_USER/MyNotion.app
+
+[[ ${1:-} == (gallery|run|uitest|lock) ]] && print -u2 -- "[run-in-vm] Запасной путь: основной — scripts/imac/run-on-imac.sh (iMac). Виртуальный Mac выключится после проверки."
 
 vm_ip() {
   curl -s "$LUME_API/vms/$VM_NAME" | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('ipAddress') or '')"
@@ -88,7 +94,9 @@ take_vm_lock() {
 }
 # Ловушка — на верхнем уровне: в zsh `trap ... EXIT` внутри функции срабатывает при выходе из функции.
 # Полный путь и «|| true»: ловушка срабатывает и после чужого PATH, и код выхода скрипта она не портит.
-if [[ ${1:-} == (gallery|run|uitest|lock) ]]; then take_vm_lock; trap '/bin/rm -rf $LOCK || true' EXIT; fi
+# Виртуальный Mac на 8 ГБ после проверки выключается: он мешает основному Mac.
+stop_vm() { [[ ${MYNOTION_VM_KEEP:-} == 1 ]] || lume stop $VM_NAME >/dev/null 2>&1 || curl -s -X POST "$LUME_API/vms/$VM_NAME/stop" >/dev/null || true; }
+if [[ ${1:-} == (gallery|run|uitest|lock) ]]; then take_vm_lock; trap 'stop_vm; /bin/rm -rf $LOCK || true' EXIT; fi
 
 case ${1:-} in
   lock)
@@ -129,5 +137,5 @@ chmod +x ~/run-uitest.command; rm -f ~/uitest.done ~/uitest.log; open ~/run-uite
   status)
     curl -s "$LUME_API/vms/$VM_NAME" | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('status'), d.get('ipAddress'))";;
   *)
-    sed -n '2,9p' $0; exit 1;;
+    sed -n '2,14p' $0; exit 1;;
 esac

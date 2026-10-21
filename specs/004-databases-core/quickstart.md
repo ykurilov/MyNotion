@@ -4,9 +4,9 @@
 
 ## Правила запуска
 
-- На основном Mac — только сборка и `swift test` (без окон). Всё живое — в виртуальном Mac: `scripts/vm/run-in-vm.sh`. Каждый git worktree — со своими `MYNOTION_VM_DD` и `MYNOTION_UITEST_DD`.
-- Живая проверка двух Mac — `scripts/vm/sync-live-check.sh`: сервер этой копии кода внутри виртуального Mac. Боевой `mynotion.kurilov.cloud` не трогается.
-- Сверка с живым Notion — только подстраница «MyNotion — блоки 002» (https://www.notion.so/3fe714fdda6980619371f21351ce0d5e) или её подстраница «MyNotion — базы 004»; один непрерывный замок `scripts/vm/run-in-vm.sh lock -- …` на сеанс; без ⌘Z в Notion (правки — «Version history → Restore»); ничего вне неё не менять. Наведение мышью Notion в виртуальном Mac не видит.
+- На основном Mac — только правка кода и git: ни сборок, ни `swift test`. Сборки, тесты и всё живое — на iMac: `imac-run` и `scripts/imac/run-on-imac.sh` (README → «Проверки на iMac»). У каждого git worktree на iMac своя копия и свои папки сборки — переменные не нужны. Виртуальный Mac (`scripts/vm/…`) — только если iMac недоступен, и выключать сразу после проверки.
+- Живая проверка двух Mac — `scripts/imac/sync-live-check.sh`: сервер этой копии кода на iMac. Боевой `mynotion.kurilov.cloud` не трогается.
+- Сверка с живым Notion — только подстраница «MyNotion — блоки 002» (https://www.notion.so/3fe714fdda6980619371f21351ce0d5e) или её подстраница «MyNotion — базы 004»; место «экран» iMac на весь сеанс (`imac-run --gui --no-sync --wait 1800 -- <сценарий сеанса>`); без ⌘Z в Notion (правки — «Version history → Restore»); ничего вне неё не менять. Наведение мышью Notion в виртуальном Mac не видел.
 - Ожидание долгого прогона — внутри хода: PID в файл (`echo $! > /tmp/x.pid`, затем `kill -0`) или строка итога в логе; не `pgrep -f`.
 - Эталон: генератор 001 (1 000 страниц, 100 000 блоков), «богатая» страница 002, дополнения 003 и **дополнения 004**:
   - база «Задачи»: 10 000 строк, 30 свойств всех 18 типов (по 2 текста, числа, выбора, даты; 3 формулы — `dateBetween` со сроком, `if` по флажку, `map` по связи; 2 сводки — число задач и сумма часов у проекта); у 20 % строк тело из 5 блоков; варианты выбора — по 12;
@@ -19,7 +19,7 @@
 
 | История | Проверка | Ожидание |
 |---------|----------|----------|
-| Фундамент (этап 0) | `swift test --filter NotesCoreTests` (миграция v9, запись записей), `DatabasesTests` (модели 18 типов, запрос вида), `SyncTests` (v4, слияние); пробы R20 в виртуальном Mac | эталон v8 → v9 без потерь, восстановление из копии; шесть проб — в пределах и со снимками отрисовки |
+| Фундамент (этап 0) | `swift test --filter NotesCoreTests` (миграция v9, запись записей), `DatabasesTests` (модели 18 типов, запрос вида), `SyncTests` (v4, слияние); пробы R20 на iMac | эталон v8 → v9 без потерь, восстановление из копии; шесть проб — в пределах и со снимками отрисовки |
 | US1 | XCUITest `DatabaseTableTests`; `DatabaseOperationsTests`; снимки галереи (база на всю страницу и встроенная, таблица, меню колонки, список типов, выделение ячеек, страница строки, просмотр сбоку и по центру) в обеих темах | создать обе базы; колонки всех простых типов; правка, выделение, ⌘C в Numbers и ⌘V обратно; строка открыта тремя способами; ⌘Z каждого шага; перезапуск |
 | US5 | `FormulasTests` (разбор, типы, каждая функция contracts — по примеру), `FormulaRecomputeTests`; XCUITest `FormulaEditorTests` | итоги совпадают с Notion на наборе формул из `visual-reference/notion-survey.md`; ошибка и круг не сохраняются; правка зависимого значения пересчитывает |
 | US7 | `DatabaseExportTests`, `NotionDatabaseImportTests` (выгрузка Notion из сверки — в `NotionImport/Fixtures`), `DatabaseRoundTripTests` | типы угаданы по таблице contracts; связи восстановлены; 100 % значений; своя выгрузка → импорт — база один в один; CSV открывается в Numbers |
@@ -42,7 +42,7 @@
 
 ## Замеры бюджета (принцип II)
 
-Условия — 001 R13, в виртуальном Mac, Release, окно 1440×900. Каждый замер — со снимком, подтверждающим отрисовку (research R20).
+Условия — 001 R13, на iMac (до 21.10.2026 — в виртуальном Mac: цифры разных машин не сравнивать, после переезда — новый отсчёт), Release, окно 1440×900. Каждый замер — со снимком, подтверждающим отрисовку (research R20).
 
 | Показатель | Предел | Сейчас (003, T103) | Когда |
 |------------|--------|--------------------|-------|
@@ -91,7 +91,7 @@
 | Миграция эталона 003 → v9 | 2,18 (после `purge`) / 2,04 / 1,89 с | 1,94 / 1,94 с | ≤ 2 с — на грани у обеих |
 Холодный запуск одним приложением в VM (`purge`, прогрев на пустой базе, `open --launch-report`; 3 раза по кругу): эта ветка 0,54–0,84 с, база 1,82–1,92 с; тёплый — 0,33–0,38 / 0,37–0,43 с. Эталон v5 в виртуальном Mac создан до индекса — `page_trashed` добавлен в него вручную (`CREATE INDEX IF NOT EXISTS`); новый эталон получает его миграцией.
 
-Запуск проб: `scripts/vm/run-in-vm.sh uitest --release -only-testing:PerformanceTests/{DatabaseGridProbeTests,DatabaseQueryProbeTests,FormulaProbeTests,RelationProbeTests,InlineDatabaseProbeTests}` (своя папка сборки: `MYNOTION_VM_DD`, `MYNOTION_UITEST_DD`).
+Запуск проб: `scripts/imac/run-on-imac.sh uitest --release -only-testing:PerformanceTests/{DatabaseGridProbeTests,DatabaseQueryProbeTests,FormulaProbeTests,RelationProbeTests,InlineDatabaseProbeTests}`.
 
 ## US1 «Таблица» (21.10.2026, виртуальный Mac, Release; VM в это время делили другие агенты — цифры шумные)
 
@@ -111,7 +111,7 @@ Esc, флажок, ⇧-щелчок и ⌘C/⌘V, ⌘Z/⇧⌘Z вставки, �
 (VM выключен по правилу 21.10.2026) — пробы `InlineDatabaseProbeTests`, `TabsPerformanceTests` прогнать в итоговом замере.
 ## US5 «Формулы» (21.10.2026, виртуальный Mac, Release)
 
-`scripts/vm/run-in-vm.sh uitest --release -only-testing:PerformanceTests/FormulaBudgetTests` (эталон баз, «Задачи» 10 000 строк):
+`scripts/imac/run-on-imac.sh uitest --release -only-testing:PerformanceTests/FormulaBudgetTests` (эталон баз, «Задачи» 10 000 строк):
 
 | Показатель | Итог | Предел |
 |------------|------|--------|
@@ -134,8 +134,8 @@ Esc, флажок, ⇧-щелчок и ⌘C/⌘V, ⌘Z/⇧⌘Z вставки, �
 пульс ≤ 8 мс. В `FormulaBudgetTests.testFirstFillInBackground` добавлена проверка «главный поток ≤ 100 мс»; повтор в ВМ —
 когда ВМ снова включат (сейчас выключена из-за памяти основного Mac).
 
-UI: `scripts/vm/run-in-vm.sh uitest -only-testing:UITests/FormulaEditorTests` — формулы spec, ошибки, круг, поиск, «Готово» (34,6 с, зелёный).
-Галерея: `scripts/vm/run-in-vm.sh gallery --only formula` — 5 состояний × 2 темы.
+UI: `scripts/imac/run-on-imac.sh uitest -only-testing:UITests/FormulaEditorTests` — формулы spec, ошибки, круг, поиск, «Готово» (34,6 с, зелёный).
+Галерея: `scripts/imac/run-on-imac.sh gallery --only formula` — 5 состояний × 2 темы.
 
 ## US7 «Импорт и выгрузка» (21.10.2026, основной Mac, `swift test -c release`, набор `DatabaseImportPerformanceTests`, `MYNOTION_PERF=1`)
 
