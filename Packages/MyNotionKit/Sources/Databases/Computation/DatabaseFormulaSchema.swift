@@ -40,6 +40,11 @@ public struct DatabaseFormulaSchema: FormulaSchema {
         return match.map(Self.formulaProperty)
     }
 
+    /// База свойства (по id) среди прочитанных.
+    public func databaseId(ofProperty id: String) -> UUID? {
+        catalogs.first { $0.value.properties.contains { $0.id.databaseText == id } }?.key
+    }
+
     /// Свойство и тип его значения в формуле.
     public static func formulaProperty(_ property: DatabaseProperty) -> FormulaProperty {
         let type: FormulaType

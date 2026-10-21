@@ -85,7 +85,7 @@ let package = Package(
         // Базы: модели значений 18 типов, операции с отменой, запрос вида, пересчёт, индексы ячеек — без AppKit (R2–R9).
         .target(name: "Databases", dependencies: ["NotesCore", "Formulas", .product(name: "GRDB", package: "GRDB.swift")]),
         // Сетка таблицы: видимые строки слоями, ячейки по типам, меню колонки и окна настроек (research R4, R5).
-        .target(name: "DatabaseGrid", dependencies: ["NotesCore", "Databases", "VisualStyle", "Attachments"]),
+        .target(name: "DatabaseGrid", dependencies: ["NotesCore", "Databases", "Formulas", "VisualStyle", "Attachments"]),
         // Строка видов: фильтр, сортировка, поиск, «•••» вида, «Создать ▾».
         .target(name: "DatabaseViewBar", dependencies: ["Databases", "DatabaseGrid", "VisualStyle"]),
         // Страница строки: свойства под названием, просмотр сбоку и по центру (research R12).
@@ -118,7 +118,7 @@ let package = Package(
         .testTarget(name: "PageCoverTests", dependencies: ["PageCover", "NotesCore", "Attachments", "VisualStyle"]),
         .testTarget(name: "FormulasTests", dependencies: ["Formulas"]),
         .testTarget(name: "DatabasesTests", dependencies: ["Databases", "NotesCore", "Formulas", "Reminders", .product(name: "GRDB", package: "GRDB.swift")]),
-        .testTarget(name: "DatabaseGridTests", dependencies: ["DatabaseGrid", "DatabaseViewBar", "DatabaseRowPage", "Databases", "NotesCore"]),
+        .testTarget(name: "DatabaseGridTests", dependencies: ["DatabaseGrid", "DatabaseViewBar", "DatabaseRowPage", "Databases", "NotesCore", "Formulas"]),
         .testTarget(name: "DatabaseViewBarTests", dependencies: ["DatabaseViewBar", "Databases", "NotesCore"]),
         .testTarget(name: "DatabaseRowPageTests", dependencies: ["DatabaseRowPage", "Databases", "NotesCore"]),
         .testTarget(name: "NotionSchemaFetchTests", dependencies: ["NotionSchemaFetch", "Formulas"]),
