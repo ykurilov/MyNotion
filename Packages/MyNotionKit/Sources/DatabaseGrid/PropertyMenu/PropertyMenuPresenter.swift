@@ -196,8 +196,9 @@ public final class PropertyMenuPresenter {
 
     // MARK: Удаление
 
-    /// «Удалить это свойство из «База»? Оно пропадёт из всех видов.» [Удалить] [Отмена] — по центру окна.
-    private func confirmDelete(_ property: DatabaseProperty) {
+    /// «Удалить это свойство из «База»? Оно пропадёт из всех видов.» [Удалить] [Отмена] — по центру окна
+    /// (меню колонки, панель; галерея — после `showColumnMenu`).
+    public func confirmDelete(_ property: DatabaseProperty) {
         guard let view = editPanel ?? anchorView, let content = view.window?.contentView else { return }
         var question = ""
         Self.attempt { question = try commands.deleteQuestion() }

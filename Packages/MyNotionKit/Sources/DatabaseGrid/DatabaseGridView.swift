@@ -67,6 +67,10 @@ public final class DatabaseGridView: NSView {
                                                object: scrollView.contentView)
         content.onRowsLoaded = { [weak self] rows in self?.documentView.setNeedsDisplay(rows: rows) }
         hoverControls.grid = self
+        setAccessibilityElement(true)
+        setAccessibilityRole(.group)
+        setAccessibilityLabel("Таблица базы")
+        setAccessibilityIdentifier("database-grid")
         reloadData()
     }
 
@@ -313,6 +317,17 @@ public final class DatabaseGridView: NSView {
     func toggleRowSelection(_ row: Int) {
         selection = nil
         if selectedRows.contains(row) { selectedRows.remove(row) } else { selectedRows.insert(row) }
+    }
+
+    /// Мышь над строкой (галерея и сценарии): «ОТКРЫТЬ» и ручки, как при наведении.
+    public func showHover(row: Int) {
+        documentView.hover(at: NSPoint(x: 40, y: documentView.rowRect(row).midY))
+    }
+
+    /// Протяжка от ячейки до ячейки (галерея и сценарии).
+    public func selectRange(from start: CellPosition, to end: CellPosition) {
+        select(start)
+        select(end, extending: true)
     }
 
     /// Снять выделение (Esc в полосе «N выбрано», щелчок мимо таблицы).
