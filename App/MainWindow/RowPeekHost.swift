@@ -1,4 +1,5 @@
 import AppKit
+import DatabaseGrid
 import Databases
 import Navigation
 import NotesCore
@@ -170,11 +171,24 @@ private struct RowPeekEscape: NSViewRepresentable {
                   let window, event.window === window else { return event }
             switch window.firstResponder {
             case let text as PageTextView where text.document.pageDocument.pageId == rowId: close()
+            // Таблица слева без правки ячейки: как в Notion, Esc закрывает открытую строку.
+            case let view as NSView where Self.isInDatabaseGrid(view): close()
             // Поле правки NSTextField: Esc заканчивает правку.
             case is NSView: return event
             default: close()
             }
             return nil
+        }
+
+        /// Получатель клавиш — сама сетка таблицы (не поле правки ячейки внутри неё).
+        static func isInDatabaseGrid(_ view: NSView) -> Bool {
+            guard !(view is NSText) else { return false }
+            var current: NSView? = view
+            while let candidate = current {
+                if candidate is DatabaseGridView { return true }
+                current = candidate.superview
+            }
+            return false
         }
 
         override func removeFromSuperview() {

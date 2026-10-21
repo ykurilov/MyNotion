@@ -26,19 +26,24 @@ final class DatabaseTablePerformanceTests: XCTestCase {
 
         // Открытие: запрос вида, сетка с колонками, первый экран нарисован.
         var opens: [Double] = []
+        var openParts: [[Double]] = []
         var table: DatabaseTableView!
         for round in 0..<12 {
             window.show(NSView())
             window.render()
             window.pump(10)
+            var parts: [Double] = []
             let ms = try ProbeEditor.measure {
-                let controller = try XCTUnwrap(DatabaseTableController(store: store, operations: operations, databaseId: sample.tasksId,
+                var controller: DatabaseTableController!
+                parts.append(try ProbeEditor.measure {
+                    controller = try XCTUnwrap(DatabaseTableController(store: store, operations: operations, databaseId: sample.tasksId,
                                                                        viewId: sample.tableViewId))
-                table = DatabaseTableView(controller: controller, mode: .page)
-                window.show(table)
-                window.render()
+                })
+                parts.append(ProbeEditor.measure { table = DatabaseTableView(controller: controller, mode: .page) })
+                parts.append(ProbeEditor.measure { window.show(table) })
+                parts.append(ProbeEditor.measure { window.render() })
             }
-            if round >= 2 { opens.append(ms) }
+            if round >= 2 { opens.append(ms); openParts.append(parts) }
         }
         window.pump(300)
         XCTAssertEqual(table.controller.content.rowIds.count, DatabaseSampleGenerator.taskCount)
@@ -85,11 +90,12 @@ final class DatabaseTablePerformanceTests: XCTestCase {
             Таблица US1: открытие «Задачи» p95 \(ProbeEditor.format(ProbeEditor.p95(opens))) мс (предел 50); правка текста \
             p95 \(ProbeEditor.format(ProbeEditor.p95(edits))) мс, флажок p95 \(ProbeEditor.format(ProbeEditor.p95(toggles))) мс (предел 50); \
             смена типа на 10 000 строк \(ProbeEditor.format(typeChange)) мс (предел 2000)
+            Открытие по частям (контроллер, вид, показ, рисование), медианы: \((0..<4).map { index in ProbeEditor.format(ProbeEditor.median(openParts.map { $0[index] })) }.joined(separator: " / ")) мс
             Снимок: \(shotPath)
             """
         print(summary)
         add(XCTAttachment(string: summary))
-        XCTAssertLessThanOrEqual(ProbeEditor.p95(opens), Self.budgetMs, "Открытие «Задачи»: p95 больше 50 мс")
+        XCTAssertLessThanOrEqual(ProbeEditor.p95(opens), Self.budgetMs, "Открытие «Задачи»: p95 больше 50 мс. \(summary)")
         XCTAssertLessThanOrEqual(ProbeEditor.p95(edits), Self.budgetMs, "Правка текста: p95 больше 50 мс")
         XCTAssertLessThanOrEqual(ProbeEditor.p95(toggles), Self.budgetMs, "Флажок: p95 больше 50 мс")
         XCTAssertLessThanOrEqual(typeChange, Self.typeChangeBudgetMs, "Смена типа на 10 000 строк дольше 2 с")
