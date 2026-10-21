@@ -6,10 +6,9 @@ import GRDB
 extension NotesStore {
     public func templatePages() throws -> [Page] {
         try database.dbWriter.read { db in
-            let hidden = try Self.trashedPageIds(db)
-            return try Row.fetchAll(db, sql: "SELECT * FROM page WHERE isTemplate = 1").map(Page.init(row:))
-                .filter { !hidden.contains($0.id) }
-                .sorted(by: PageTreeSnapshot.siblingOrder)
+            let templates = try Row.fetchAll(db, sql: "SELECT * FROM page WHERE isTemplate = 1").map(Page.init(row:))
+            let hidden = try Self.hiddenPageIds(among: templates, hidingTemplates: false, db)
+            return templates.filter { !hidden.contains($0.id) }.sorted(by: PageTreeSnapshot.siblingOrder)
         }
     }
 }

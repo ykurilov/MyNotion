@@ -61,6 +61,39 @@ struct FavoritesRecentsQueryTests {
         #expect(try store.recentPages(limit: 50).map(\.id) == Array(newestFirst.prefix(50)))
     }
 
+    @Test("Корзина и шаблон выше по ветке — через несколько предков; цикл родителей не зависает")
+    func hiddenThroughDeepAncestors() throws {
+        let base = Date(timeIntervalSince1970: 1_790_000_000)
+        let trashed = try page("В корзине")
+        let middle = try page("Середина", parent: trashed.id)
+        try page("Глубоко в корзине", parent: middle.id) { $0.visitedAt = base; $0.favorite = FractionalSortKey(rawValue: "a") }
+        let template = try page("Шаблон") { $0.isTemplate = true }
+        let templateChild = try page("Под шаблоном", parent: template.id)
+        try page("Глубоко в шаблоне", parent: templateChild.id) { $0.visitedAt = base.addingTimeInterval(1) }
+        let first = try page("Цикл 1") { $0.visitedAt = base.addingTimeInterval(2) }
+        let second = try page("Цикл 2", parent: first.id)
+        try store.write { tx in
+            var page = try #require(try tx.page(trashed.id))
+            page.trashedAt = Date()
+            try tx.updatePage(page)
+        }
+        // Цикл родителей (не должен возникать, но чтение его переживает): первая страница — под второй.
+        try store.database.dbWriter.write { db in
+            try db.execute(sql: "UPDATE page SET parentId = ? WHERE id = ?", arguments: [second.id.databaseText, first.id.databaseText])
+        }
+        #expect(try store.recentPages(limit: 5).map(\.id) == [first.id])
+        #expect(try store.favoritePages().isEmpty)
+    }
+
+    @Test("Скрытых ищут вверх по предкам кандидатов, а не по всей таблице страниц")
+    func hiddenCheckUsesIndexesOnly() throws {
+        let plan = try store.database.dbWriter.read { db in
+            try Row.fetchAll(db, sql: "EXPLAIN QUERY PLAN " + NotesStore.hiddenAmongQuery(hidingTemplates: true), arguments: ["[]"])
+                .map { $0["detail"] as String }
+        }
+        #expect(!plan.contains { $0.hasPrefix("SCAN page") }, "полный проход по page: \(plan)")
+    }
+
     @Test("Запросы идут по индексам page_by_favorite и page_by_visit")
     func queriesUseIndexes() throws {
         let plans = try store.database.dbWriter.read { db in

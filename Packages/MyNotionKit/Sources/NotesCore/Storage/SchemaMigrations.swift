@@ -306,7 +306,8 @@ private func indexVersionFilesAndMoves(_ db: Database) throws {
 }
 
 /// Базы данных (004, data-model.md, «Миграция v9»): блок `database` (таблица блоков пересоздаётся с теми же rowid, как в v6)
-/// и восемь таблиц баз. `db_computed`, `db_cell_search` (номер строки `search_index` для текстового значения ячейки)
+/// и восемь таблиц баз; индекс корзины `page_trashed` — дерево читает удалённые строки баз, не проходя все строки.
+/// `db_computed`, `db_cell_search` (номер строки `search_index` для текстового значения ячейки)
 /// и колонки `sortText`, `sortNumber`, `searchText` — только на этом Mac: их пишут
 /// подписчики модуля `Databases`. `db_cell` и `db_computed` — без rowid: ячейки строки лежат рядом, видимые строки
 /// читаются одним проходом по ключу.
@@ -343,6 +344,7 @@ private func addDatabases(_ db: Database) throws {
         ALTER TABLE block ADD COLUMN movedFrom TEXT
             GENERATED ALWAYS AS (CASE WHEN json_valid(props) THEN json_extract(props, '$.movedFrom') END) VIRTUAL;
         CREATE INDEX block_by_moved_from ON block(movedFrom) WHERE movedFrom IS NOT NULL;
+        CREATE INDEX page_trashed ON page(trashedAt) WHERE trashedAt IS NOT NULL;
 
         CREATE TABLE db_database (
             pageId TEXT PRIMARY KEY NOT NULL,
