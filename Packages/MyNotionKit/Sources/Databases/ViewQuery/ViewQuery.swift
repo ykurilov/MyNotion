@@ -35,6 +35,15 @@ public enum ViewQuery {
         }
     }
 
+    /// Виды базы по порядку вкладок (без удалённых) — чтением, без записи.
+    public static func views(of databaseId: UUID, in store: NotesStore) throws -> [DatabaseView] {
+        try store.database.dbWriter.read { db in
+            try Row.fetchAll(db, sql: """
+                SELECT * FROM db_view WHERE databaseId = ? AND json_extract(layoutOptions, '$.deletedAt') IS NULL ORDER BY sortKey, id
+                """, arguments: [databaseId.databaseText]).map(DatabaseView.init(row:))
+        }
+    }
+
     /// Строки по готовому описанию запроса.
     public static func rows(_ spec: ViewQuerySpec, catalog: DatabaseCatalog, in store: NotesStore, now: Date = Date()) throws -> ViewQueryResult {
         try store.database.dbWriter.read { db in

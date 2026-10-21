@@ -179,7 +179,9 @@ public final class DatabaseTableView: NSView, NSTextFieldDelegate {
 
     /// Строки или колонки сменились: перерисовать, у встроенной — пересчитать высоту.
     public func refresh() {
-        viewBar.tabs = (try? controller.store.write { try $0.views(ofDatabase: controller.databaseId) })?.map { .init(id: $0.id, name: $0.name) } ?? []
+        let tabs = (try? ViewQuery.views(of: controller.databaseId, in: controller.store))?.map { ViewBarView.Tab(id: $0.id, name: $0.name) } ?? []
+        // Вкладки пересобираются, только когда виды сменились (перечитывание таблицы — на каждую правку).
+        if tabs != viewBar.tabs { viewBar.tabs = tabs }
         viewBar.activeTabId = controller.viewId
         // У встроенной базы с одним видом вкладки не видно (Notion 7.39).
         viewBar.showsTabs = !(mode == .inline && viewBar.tabs.count <= 1)

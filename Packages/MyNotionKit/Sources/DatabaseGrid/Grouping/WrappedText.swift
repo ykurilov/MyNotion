@@ -29,9 +29,42 @@ enum WrappedText {
         return max(Metrics.DatabaseGrid.rowHeight, ceil(size.height) + 2 * verticalPadding - 1)
     }
 
+    private struct FrameKey: Hashable {
+        let text: String
+        let width: Int
+        let height: Int
+        let weight: CGFloat
+        let right: Bool
+    }
+
+    /// Разложенный текст по строке и ширине: прокрутка рисует те же ячейки снова — раскладка Core Text не повторяется.
+    @MainActor private static var frames: [FrameKey: CTFrame] = [:]
+
     /// Нарисовать в перевёрнутом виде от верха `rect`.
+    @MainActor
     static func draw(_ text: String, in rect: CGRect, color: NSColor, weight: NSFont.Weight, alignment: NSTextAlignment, context: CGContext) {
         guard !text.isEmpty, rect.width > 8 else { return }
+        let height = rect.height - 2 * verticalPadding + 2
+        let key = FrameKey(text: text, width: Int(rect.width), height: Int(height), weight: weight.rawValue, right: alignment == .right)
+        let frame: CTFrame
+        if let cached = frames[key] {
+            frame = cached
+        } else {
+            frame = makeFrame(text, width: rect.width, height: height, weight: weight, alignment: alignment)
+            if frames.count > 4_000 { frames.removeAll() }
+            frames[key] = frame
+        }
+        context.saveGState()
+        context.setFillColor(color.cgColor)
+        context.textMatrix = .identity
+        // Core Text рисует снизу вверх: рамка — в перевёрнутых координатах полосы текста.
+        context.translateBy(x: rect.minX, y: rect.minY + verticalPadding - 1 + height)
+        context.scaleBy(x: 1, y: -1)
+        CTFrameDraw(frame, context)
+        context.restoreGState()
+    }
+
+    private static func makeFrame(_ text: String, width: CGFloat, height: CGFloat, weight: NSFont.Weight, alignment: NSTextAlignment) -> CTFrame {
         let attributed = NSMutableAttributedString(attributedString: attributed(text, weight: weight))
         if alignment == .right, let style = attributed.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle,
            let right = style.mutableCopy() as? NSMutableParagraphStyle {
@@ -39,16 +72,7 @@ enum WrappedText {
             attributed.addAttribute(.paragraphStyle, value: right, range: NSRange(location: 0, length: attributed.length))
         }
         let setter = CTFramesetterCreateWithAttributedString(attributed)
-        let height = rect.height - 2 * verticalPadding + 2
-        context.saveGState()
-        context.setFillColor(color.cgColor)
-        context.textMatrix = .identity
-        // Core Text рисует снизу вверх: рамка — в перевёрнутых координатах полосы текста.
-        context.translateBy(x: rect.minX, y: rect.minY + verticalPadding - 1 + height)
-        context.scaleBy(x: 1, y: -1)
-        let path = CGPath(rect: CGRect(x: 0, y: 0, width: rect.width, height: height), transform: nil)
-        let frame = CTFramesetterCreateFrame(setter, CFRange(location: 0, length: 0), path, nil)
-        CTFrameDraw(frame, context)
-        context.restoreGState()
+        let path = CGPath(rect: CGRect(x: 0, y: 0, width: width, height: height), transform: nil)
+        return CTFramesetterCreateFrame(setter, CFRange(location: 0, length: 0), path, nil)
     }
 }

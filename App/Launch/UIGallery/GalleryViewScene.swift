@@ -52,8 +52,11 @@ enum GalleryViewScene {
                 table.revealChips()
                 guard let path = FilterEditing.advancedPath(in: controller.view.filterNode) else { return "расширенного фильтра нет" }
                 var filter = controller.view.filterNode
-                filter = FilterEditing.addGroup(FilterCondition(propertyId: property("Часы"), op: .greaterThan, value: 4), toGroup: path, in: filter)
-                try operations.setFilter(filter, of: controller.viewId)
+                // Вложенная группа — одна (галерея снимает обе темы на одной базе).
+                if filter?.node(at: path)?.children.contains(where: \.isGroup) != true {
+                    filter = FilterEditing.addGroup(FilterCondition(propertyId: property("Часы"), op: .greaterThan, value: 4), toGroup: path, in: filter)
+                    try operations.setFilter(filter, of: controller.viewId)
+                }
                 table.revealChips()
                 panels.showFilter(at: path, below: chipRect(table, path[0]), in: table)
             case .viewFilterDate:
@@ -90,13 +93,18 @@ enum GalleryViewScene {
                 controller.setSearch("отчёт")
             case .viewCalculateMenu:
                 try operations.setCalculation(.sum, of: property("Часы"), in: controller.viewId)
+                try operations.setCalculation(.countAll, of: property("Название"), in: controller.viewId)
                 await settle()
                 let grid = table.grid
-                guard let column = controller.content.columns.firstIndex(where: { $0.property.id == property("Название") }) else { return "колонки нет" }
-                let rect = table.convert(NSRect(x: 0, y: grid.fittingHeight - GridLayout.totalsHeight, width: controller.content.columns[column].width,
-                                                height: GridLayout.totalsHeight), from: grid)
-                table.grid.scroll(toRow: max(0, controller.content.rowCount - 5))
-                menus.showCalculateMenu(for: property("Название"), below: rect, in: table)
+                guard let column = controller.content.columns.firstIndex(where: { $0.property.id == property("Часы") }) else { return "колонки нет" }
+                let x = controller.content.columns.prefix(column).reduce(0) { $0 + $1.width }
+                let cell = NSRect(x: x, y: grid.fittingHeight - 1 - GridLayout.totalsHeight, width: controller.content.columns[column].width,
+                                  height: GridLayout.totalsHeight)
+                let rect = table.convert(cell, from: grid)
+                // Строка итогов — внизу страницы-базы: долистать до неё, меню — над ней.
+                table.scrollToVisible(rect.insetBy(dx: 0, dy: -260))
+                await settle()
+                menus.showCalculateMenu(for: property("Часы"), below: rect, in: table)
             default:
                 return nil
             }

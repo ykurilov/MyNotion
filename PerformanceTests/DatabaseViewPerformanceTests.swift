@@ -34,12 +34,30 @@ final class DatabaseViewPerformanceTests: XCTestCase {
         let doneId = try XCTUnwrap(sample.options[property("Статус")]?["Готово"])
 
         /// Правка вида до нарисованной таблицы: операция, перечитывание вида, раскладка и кадр.
-        func change(_ body: () throws -> Void) rethrows -> Double {
-            try ProbeEditor.measure {
-                try body()
-                controller.reload()
-                window.render()
-            }
+        var parts: [String: [Double]] = [:]
+        func now() -> UInt64 { DispatchTime.now().uptimeNanoseconds }
+        func lap(_ name: String, _ start: inout UInt64) {
+            let end = now()
+            parts[name, default: []].append(Double(end - start) / 1_000_000)
+            start = end
+        }
+        func change(_ body: () throws -> Void) throws -> Double {
+            let first = now()
+            var start = first
+            try body()
+            lap("операция", &start)
+            _ = try ViewQuery.present(viewId, in: store)
+            lap("запрос", &start)
+            controller.reload()
+            lap("перечитать", &start)
+            window.window.contentView?.layoutSubtreeIfNeeded()
+            lap("раскладка", &start)
+            window.window.displayIfNeeded()
+            lap("рисование", &start)
+            CATransaction.flush()
+            lap("передача", &start)
+            // Проверочный запрос — не часть правки.
+            return Double(start - first) / 1_000_000 - (parts["запрос"]?.last ?? 0)
         }
         let notDone = FilterNode.condition(FilterCondition(propertyId: property("Статус"), op: .isNot, value: [.string(doneId.uuidString.lowercased())]))
         var filters: [Double] = [], sorts: [Double] = [], groups: [Double] = [], visibility: [Double] = []
@@ -63,10 +81,15 @@ final class DatabaseViewPerformanceTests: XCTestCase {
         let word = Array("отчёт")
         for round in 0..<4 {
             for length in 1...word.count {
-                searches.append(ProbeEditor.measure {
-                    controller.setSearch(String(word.prefix(length)))
-                    window.render()
-                })
+                var start = now()
+                _ = try ViewQuery.present(viewId, in: store, search: String(word.prefix(length)))
+                lap("поиск: запрос", &start)
+                let first = start
+                controller.setSearch(String(word.prefix(length)))
+                lap("поиск: перечитать", &start)
+                window.render()
+                lap("поиск: кадр", &start)
+                searches.append(Double(start - first) / 1_000_000)
             }
             controller.setSearch(nil)
             window.render()
@@ -122,7 +145,8 @@ final class DatabaseViewPerformanceTests: XCTestCase {
             Вид US3: фильтр p95 \(p95(warm(filters))) мс, сортировка \(p95(warm(sorts))) мс, группировка \(p95(warm(groups))) мс, \
             видимость \(p95(warm(visibility))) мс (предел 100); поиск на символ p95 \(p95(searches)) мс (предел 50); \
             открытие «Задачи — работа» p95 \(p95(opens)) мс; прокрутка с группами и переносом — \(frames.count) кадров, \
-            p95 \(p95(frames)) мс (предел 16), снимок \(shotPath)
+            p95 \(p95(frames)) мс (предел 16), снимок \(shotPath); части (медиана): \
+            \(parts.sorted { $0.key < $1.key }.map { "\($0.key) \(ProbeEditor.format(ProbeEditor.median($0.value)))" }.joined(separator: ", "))
             """
         print(summary)
         XCTContext.runActivity(named: summary) { _ in }
