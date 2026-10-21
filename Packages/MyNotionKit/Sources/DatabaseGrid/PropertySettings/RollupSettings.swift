@@ -75,7 +75,11 @@ final class RollupSettingsView: NSView {
         calculationRow.onPress = { [weak self] in self?.chooseCalculation() }
         stack.append(calculationRow, height: PropertyPopupMetrics.rowHeight)
 
-        stack.append(PropertyPopupCaption("Изменения применяются ко всем видам с этим свойством"), height: PropertyPopupMetrics.captionHeight)
+        let note = NSTextField(wrappingLabelWithString: "Изменения применяются ко всем видам с этим свойством")
+        note.font = Typography.popupMenuSectionHeader.font
+        note.textColor = Palette.textSecondary
+        note.setAccessibilityIdentifier("rollup-note")
+        stack.append(note, height: 40)
     }
 
     // MARK: Выбор
