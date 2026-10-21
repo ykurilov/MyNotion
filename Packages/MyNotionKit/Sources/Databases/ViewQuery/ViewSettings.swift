@@ -179,9 +179,8 @@ public enum FilterEditing {
 
     /// Условие по умолчанию для свойства (первое из меню типа; у флажка — «отмечен»).
     public static func defaultCondition(for property: DatabaseProperty) -> FilterCondition {
-        let type = PropertyTypes.type(for: property.kind)
-        let op = type.filterOperators.first ?? .contains
-        let value: JSONValue = property.kind == .checkbox ? .bool(true) : .null
+        let op = operators(for: property).first ?? .contains
+        let value: JSONValue = FilterValueKind(property) == .checkbox ? .bool(true) : .null
         return FilterCondition(propertyId: property.id, op: op, value: value)
     }
 }

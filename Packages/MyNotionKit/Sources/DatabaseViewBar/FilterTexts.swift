@@ -107,6 +107,11 @@ public enum FilterTexts {
         "\(count) " + plural(count, "правило", "правила", "правил")
     }
 
+    /// «1 фильтр», «2 фильтра», «5 фильтров».
+    public static func filters(_ count: Int) -> String {
+        "\(count) " + plural(count, "фильтр", "фильтра", "фильтров")
+    }
+
     /// «2 сортировки», «5 сортировок».
     public static func sorts(_ count: Int) -> String {
         "\(count) " + plural(count, "сортировка", "сортировки", "сортировок")
