@@ -20,9 +20,10 @@ struct DatabaseSchemaImport {
 
     /// Новые id всех записей схем; строки — страницы плана (по файлу), строке без файла — новая страница.
     mutating func assignIds(in plan: inout NotionExportPlan) throws {
+        // Новые id свойств — в порядке прежних (id по времени растут): у пары связь хранит та же сторона, что и раньше.
+        for old in schemas.values.flatMap({ $0.properties.map(\.id) }).sorted() { newIds[old] = UUID.timeOrdered().databaseText }
         for (index, schema) in schemas.sorted(by: { $0.key < $1.key }) {
             newIds[schema.databaseId] = plan.pages[index].id.databaseText
-            for property in schema.properties { newIds[property.id] = UUID.timeOrdered().databaseText }
             for option in schema.options { newIds[option.id] = UUID.timeOrdered().databaseText }
             for view in schema.views { newIds[view.id] = UUID.timeOrdered().databaseText }
 
@@ -85,6 +86,9 @@ struct DatabaseSchemaImport {
         let others = plan.pages[index].children.filter { !rowIndices.contains($0) && !templateIndices.contains($0) }
         plan.pages[index].children = rowIndices + templateIndices + others
 
+        let links = schema.links.map { links in
+            links.map { RelationLink(propertyId: id($0.propertyId), rowId: id($0.rowId), targetRowId: id($0.targetRowId), sortKey: key($0.sortKey)) }
+        }
         let rowOrders = schema.rowOrders.map { (viewId: id($0.viewId), rowId: id($0.rowId), sortKey: key($0.sortKey)) }
         let titles = Dictionary(uniqueKeysWithValues: schemas.values.map { ($0.databaseId, $0.title) })
         let summaryLines = schema.properties.filter { $0.deletedAt == nil }.map { property in
@@ -98,7 +102,7 @@ struct DatabaseSchemaImport {
         return PlannedDatabase(pageIndex: index,
                                schema: DatabaseSchema(pageId: databaseId, isInline: schema.isInline,
                                                       defaultTemplateId: schema.defaultTemplateId.map(id)),
-                               properties: properties, options: options, views: views, rowOrders: rowOrders, rows: rows,
+                               properties: properties, options: options, views: views, rowOrders: rowOrders, links: links, rows: rows,
                                summary: DatabaseImportSummary(title: schema.title, rowCount: schema.rows.count,
                                                               templateCount: schema.templates.count, properties: summaryLines, notes: []),
                                isFromNotion: false)

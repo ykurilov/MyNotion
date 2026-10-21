@@ -21,6 +21,9 @@ public struct DatabaseSchemaFile: Codable, Sendable, Equatable {
     /// Шаблоны строк — страницы в папке `Задачи/Шаблоны/`.
     public var templates: [Row]
     public var rowOrders: [RowOrderEntry]
+    /// Записи связей, которые хранит эта база (у пары — сторона с меньшим id свойства), с ключами порядка:
+    /// по ним возвращается и порядок ответной стороны. Нет — связи берутся из `rows[].relations`.
+    public var links: [Link]?
 
     public struct Property: Codable, Sendable, Equatable {
         public var id: String
@@ -67,6 +70,13 @@ public struct DatabaseSchemaFile: Codable, Sendable, Equatable {
         public var cells: [String: JSONValue]
         /// Связи по id свойства: id строк-целей по порядку (у пары — с обеих сторон).
         public var relations: [String: [String]]
+    }
+
+    public struct Link: Codable, Sendable, Equatable {
+        public var propertyId: String
+        public var rowId: String
+        public var targetRowId: String
+        public var sortKey: String
     }
 
     public struct RowOrderEntry: Codable, Sendable, Equatable {
@@ -119,6 +129,8 @@ extension DatabaseSchemaFile {
                      sorts: view.sorts, columns: view.columns, group: view.group, layoutOptions: view.layoutOptions)
             },
             rows: snapshot.rows.map(row), templates: snapshot.templates.map(row),
-            rowOrders: snapshot.rowOrders.map { RowOrderEntry(viewId: $0.viewId.databaseText, rowId: $0.rowId.databaseText, sortKey: $0.sortKey.rawValue) })
+            rowOrders: snapshot.rowOrders.map { RowOrderEntry(viewId: $0.viewId.databaseText, rowId: $0.rowId.databaseText, sortKey: $0.sortKey.rawValue) },
+            links: snapshot.storedLinks.map { Link(propertyId: $0.propertyId.databaseText, rowId: $0.rowId.databaseText,
+                                                   targetRowId: $0.targetRowId.databaseText, sortKey: $0.sortKey.rawValue) })
     }
 }

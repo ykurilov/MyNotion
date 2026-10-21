@@ -346,12 +346,17 @@ public struct NotionImporter: Sendable {
             database.rows.flatMap { $0.relations.map(\.propertyId) }
         })
         let properties = Dictionary(databases.values.flatMap(\.properties).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        var links: [RelationLink] = []
+        // Своя выгрузка хранит записи связей с ключами порядка: свойства её баз берут связи только оттуда.
+        let withLinks = databases.values.filter { $0.links != nil }
+        let coveredByLinks = Set(withLinks.flatMap { $0.properties.map(\.id) })
+        var links: [RelationLink] = withLinks.flatMap { $0.links ?? [] }
         for database in databases.values.sorted(by: { $0.pageIndex < $1.pageIndex }) {
             for row in database.rows {
                 let rowId = ids[row.pageIndex]
                 for (propertyId, targets) in row.relations {
                     let paired = properties[propertyId]?.config["pairedPropertyId"]?.string.flatMap(UUID.init(uuidString:))
+                    let storing = paired.flatMap { $0 < propertyId ? $0 : nil } ?? propertyId
+                    if coveredByLinks.contains(storing) { continue }
                     if let paired, paired < propertyId {
                         guard !planned.contains(paired) else { continue }
                         for target in targets {

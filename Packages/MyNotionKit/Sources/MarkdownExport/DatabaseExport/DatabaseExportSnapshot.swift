@@ -22,6 +22,8 @@ struct DatabaseExportSnapshot: Sendable {
     let relations: [UUID: [UUID: [UUID]]]
     let computed: [UUID: [UUID: JSONValue]]
     let rowOrders: [RowOrder]
+    /// Записи связей, которые хранит эта база: свойство этой базы, строка — её (не в корзине), цель не в корзине.
+    let storedLinks: [RelationLink]
     /// Названия строк-целей связей.
     let targetTitles: [UUID: String]
 
@@ -113,9 +115,15 @@ struct DatabaseExportSnapshot: Sendable {
         let rowOrders = try Row.fetchAll(db, sql: """
             SELECT o.* FROM db_row_order o JOIN db_view v ON v.id = o.viewId WHERE v.databaseId = ? ORDER BY o.id
             """, arguments: [id]).map(RowOrder.init(row:))
+        let storedLinks = try Row.fetchAll(db, sql: """
+            SELECT l.* FROM db_relation_link l JOIN db_property pr ON pr.id = l.propertyId JOIN page p ON p.id = l.rowId
+            JOIN page t ON t.id = l.targetRowId
+            WHERE pr.databaseId = ? AND l.isPresent = 1 AND p.parentId = ? AND p.trashedAt IS NULL AND t.trashedAt IS NULL
+            ORDER BY l.propertyId, l.rowId, l.sortKey, l.id
+            """, arguments: [id, id]).map(RelationLink.init(row:))
         return DatabaseExportSnapshot(schema: schema, title: page.title, properties: properties, options: options, views: views,
                                       rows: pages.filter { !$0.isTemplate }, templates: pages.filter(\.isTemplate), cells: cells,
-                                      relations: relations, computed: computed, rowOrders: rowOrders, targetTitles: targetTitles)
+                                      relations: relations, computed: computed, rowOrders: rowOrders, storedLinks: storedLinks, targetTitles: targetTitles)
     }
 }
 

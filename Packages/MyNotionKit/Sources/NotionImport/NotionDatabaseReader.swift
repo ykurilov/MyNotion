@@ -47,6 +47,8 @@ struct PlannedDatabase {
     var options: [SelectOption]
     var views: [DatabaseView]
     var rowOrders: [(viewId: UUID, rowId: UUID, sortKey: FractionalSortKey)] = []
+    /// Своя выгрузка: записи связей как были (с ключами порядка); `nil` — связи из списков строк.
+    var links: [RelationLink]?
     var rows: [PlannedRow] = []
     var summary: DatabaseImportSummary
     /// Своя выгрузка MyNotion (со схемой) — без строк отчёта о потерях Notion.
