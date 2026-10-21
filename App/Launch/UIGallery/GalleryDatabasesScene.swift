@@ -3,6 +3,7 @@ import DatabaseGrid
 import DatabaseViewBar
 import Databases
 import NotesCore
+import PageEditor
 import UIGallery
 import VisualStyle
 
@@ -37,7 +38,16 @@ enum GalleryDatabasesScene {
                 model.library.reloadTree()
                 model.select(sample.overviewId)
                 await settle()
-                guard let table = find(DatabaseTableView.self, in: window.contentView) else { return "встроенной базы нет" }
+                // База в середине длинной страницы: её вид появляется, когда строка блока видна, — листаем до неё.
+                var found = find(DatabaseTableView.self, in: window.contentView)
+                if found == nil, let page = find(PageTextView.self, in: window.contentView) {
+                    for step in 1...40 where found == nil {
+                        page.scroll(NSPoint(x: 0, y: CGFloat(step) * 600))
+                        try? await Task.sleep(for: .milliseconds(60))
+                        found = find(DatabaseTableView.self, in: window.contentView)
+                    }
+                }
+                guard let table = found else { return "встроенной базы нет" }
                 table.scrollToVisible(table.bounds)
                 await settle()
                 window.makeFirstResponder(nil)

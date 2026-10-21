@@ -25,6 +25,9 @@ public enum DatabasePageContent {
         }
         guard isDatabase else { return content }
         let block = Block(id: blockId(of: pageId), pageId: pageId, kind: .database, linkedPageId: pageId, sortKey: .between(nil, nil))
-        return PageContent(page: content.page, blocks: [block])
+        // Страница-база — во всю ширину окна, как у Notion 7.39; документ сравнивает с тем же, поэтому не записывает.
+        var page = content.page
+        page.isFullWidth = true
+        return PageContent(page: page, blocks: [block])
     }
 }

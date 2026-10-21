@@ -58,6 +58,8 @@ public final class DatabaseGridView: NSView {
         scrollView.hasVerticalScroller = scrollsVertically
         scrollView.hasHorizontalScroller = true
         scrollView.autohidesScrollers = true
+        // Полосы поверх таблицы, как у страницы: без серого угла между ними.
+        scrollView.scrollerStyle = .overlay
         scrollView.verticalScrollElasticity = scrollsVertically ? .automatic : .none
         scrollView.documentView = documentView
         scrollView.addFloatingSubview(headerView, for: .vertical)

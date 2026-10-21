@@ -59,9 +59,13 @@ final class GridDocumentView: NSView, NSMenuItemValidation {
     var newRowRect: NSRect { NSRect(x: 0, y: rowsHeight, width: max(tableWidth, 120), height: Metrics.DatabaseGrid.rowHeight) }
 
     func updateSize(minimumWidth: CGFloat) {
-        let extra = showsNewRow ? GridHeaderView.trailingButtonsWidth : 0
+        let extra = showsNewRow ? GridHeaderView.trailingButtonsWidth + 140 : 0
         let size = NSSize(width: max(tableWidth + 1 + extra, minimumWidth), height: tableHeight + 1)
-        if frame.size != size { setFrameSize(size) }
+        // Слой рисуется по запросу: выросшая часть (новые колонки, строки) сама не дорисуется.
+        if frame.size != size {
+            setFrameSize(size)
+            needsDisplay = true
+        }
     }
 
     func rows(in rect: NSRect) -> Range<Int> {
@@ -452,7 +456,7 @@ enum GridSymbols {
 
 /// «ОТКРЫТЬ» у названия строки при наведении.
 final class GridOpenButton: NSButton {
-    static let size = NSSize(width: 62, height: 22)
+    static let size = NSSize(width: 78, height: 22)
 
     init() {
         super.init(frame: NSRect(origin: .zero, size: Self.size))

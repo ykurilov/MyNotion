@@ -107,6 +107,8 @@ final class DatabasePageAddon: PageHeaderAddon {
     func install(in textView: PageTextView) {
         guard isDatabasePage else { return }
         textView.isEditable = false
+        // Без курсора в теле: в нём только таблица.
+        textView.isSelectable = false
     }
 
     func pageDidChange(_ page: Page, in textView: PageTextView) {}

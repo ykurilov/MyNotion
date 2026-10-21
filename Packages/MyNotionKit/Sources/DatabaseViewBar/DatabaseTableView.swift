@@ -145,25 +145,34 @@ public final class DatabaseTableView: NSView, NSTextFieldDelegate {
     /// Высота базы в странице при ширине `width`; на всю страницу — `available` (сетка листается сама).
     public func fittingHeight(available: CGFloat? = nil) -> CGFloat {
         if mode == .page, let available { return max(available, ViewBarView.height + 140) }
-        return Self.height(rows: controller.content.rowCount, hasMore: controller.hasMoreRows, mode: mode)
+        return Self.height(rows: controller.content.rowCount, hasMore: controller.hasMoreRows, mode: mode, barSharesTitleRow: barSharesTitleRow)
     }
 
+    /// У встроенной базы с одним видом кнопки строки вида — в строке названия (Notion 7.39, `notion-inline-db-new.png`).
+    var barSharesTitleRow: Bool { mode == .inline && !viewBar.showsTabs }
+
     /// Высота без вида (фабрика блока до показа): строк — по пределу загрузки.
-    public static func height(rows: Int, hasMore: Bool, mode: Mode) -> CGFloat {
+    public static func height(rows: Int, hasMore: Bool, mode: Mode, barSharesTitleRow: Bool = true) -> CGFloat {
         let grid = Metrics.DatabaseGrid.headerHeight + CGFloat(rows + 1) * Metrics.DatabaseGrid.rowHeight + 2
-        return (mode == .inline ? titleHeight : 0) + ViewBarView.height + grid + (hasMore ? loadMoreHeight : 0) + 8
+        let top = mode == .inline ? titleHeight + (barSharesTitleRow ? 0 : ViewBarView.height) : ViewBarView.height
+        return top + grid + (hasMore ? loadMoreHeight : 0) + 8
     }
 
     public override func layout() {
         super.layout()
         var y: CGFloat = 0
         if mode == .inline {
-            titleField.frame = NSRect(x: 0, y: 8, width: bounds.width, height: 28)
+            titleField.frame = NSRect(x: 0, y: 8, width: bounds.width * (barSharesTitleRow ? 0.6 : 1), height: 28)
+            if barSharesTitleRow {
+                viewBar.frame = NSRect(x: 0, y: (Self.titleHeight - ViewBarView.height) / 2 + 2, width: bounds.width, height: ViewBarView.height)
+            }
             y = Self.titleHeight
         }
-        viewBar.frame = NSRect(x: 0, y: y, width: bounds.width, height: ViewBarView.height)
+        if !barSharesTitleRow {
+            viewBar.frame = NSRect(x: 0, y: y, width: bounds.width, height: ViewBarView.height)
+            y += ViewBarView.height
+        }
         selectionBar.frame = viewBar.frame
-        y += ViewBarView.height
         let loadMore = loadMoreButton.isHidden ? 0 : Self.loadMoreHeight
         let gridHeight = mode == .page ? bounds.height - y : grid.fittingHeight
         grid.frame = NSRect(x: 0, y: y, width: bounds.width, height: max(0, gridHeight))

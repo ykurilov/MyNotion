@@ -37,8 +37,14 @@ final class GridHeaderView: NSView {
     private var interactive: Bool { grid?.controller != nil }
 
     var tableWidth: CGFloat { content.columns.reduce(0) { $0 + $1.width } }
-    var addRect: NSRect { NSRect(x: tableWidth, y: 0, width: Self.buttonWidth, height: bounds.height) }
-    var moreRect: NSRect { NSRect(x: tableWidth + Self.buttonWidth, y: 0, width: Self.buttonWidth, height: bounds.height) }
+    /// У таблицы с одной колонкой «+» подписан «Добавить свойство» (Notion 7.39, `notion-inline-db-new.png`).
+    var showsAddTitle: Bool { content.columns.count == 1 }
+    static let addTitle = "Добавить свойство"
+    var addRect: NSRect {
+        NSRect(x: tableWidth, y: 0, width: showsAddTitle ? Self.buttonWidth + text.width(Self.addTitle, size: 14) + 8 : Self.buttonWidth,
+               height: bounds.height)
+    }
+    var moreRect: NSRect { NSRect(x: addRect.maxX, y: 0, width: Self.buttonWidth, height: bounds.height) }
 
     func columnRect(_ index: Int) -> NSRect {
         let x = content.columns.prefix(index).reduce(0) { $0 + $1.width }
@@ -90,7 +96,7 @@ final class GridHeaderView: NSView {
             x += column.width
         }
         context.setFillColor(Palette.databaseGridLine.cgColor)
-        context.fill(CGRect(x: 0, y: 0, width: x, height: line))
+        // Как у Notion: линия под шапкой, сверху линии нет.
         context.fill(CGRect(x: 0, y: bounds.height - line, width: x, height: line))
         if x > 0 { context.fill(CGRect(x: x, y: 0, width: line, height: bounds.height)) }
         if interactive {
@@ -101,8 +107,12 @@ final class GridHeaderView: NSView {
                     context.fillPath()
                 }
                 let icon = GridSymbols.image(name, size: 13, color: Palette.textSecondary)
-                icon.draw(in: NSRect(x: rect.midX - icon.size.width / 2, y: rect.midY - icon.size.height / 2, width: icon.size.width,
-                                     height: icon.size.height))
+                let iconX = index == 0 && showsAddTitle ? rect.minX + 10 : rect.midX - icon.size.width / 2
+                icon.draw(in: NSRect(x: iconX, y: rect.midY - icon.size.height / 2, width: icon.size.width, height: icon.size.height))
+                if index == 0, showsAddTitle {
+                    text.draw(Self.addTitle, in: CGRect(x: iconX + icon.size.width + 6, y: 0, width: rect.width, height: rect.height),
+                              color: Palette.textSecondary, alignment: .left, context: context)
+                }
             }
         }
         if case .move(let column, _, let target?) = drag {
