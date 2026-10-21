@@ -91,7 +91,7 @@ public struct FormulaRecompute: Sendable {
             for formula in formulas {
                 let value = FormulaEvaluator.evaluate(formula.expression, row: row, context: inputs)
                 inputs.values[row, default: [:]][formula.property.id.databaseText] = value
-                result.append(ComputedValue(rowId: row, propertyId: formula.property.id, value: FormulaInputs.json(value, calendar: calendar),
+                result.append(ComputedValue(rowId: row, propertyId: formula.property.id, value: FormulaInputs.json(value, calendar: calendar, titles: inputs.titles),
                                             isLive: formula.expression.isLive))
             }
         }

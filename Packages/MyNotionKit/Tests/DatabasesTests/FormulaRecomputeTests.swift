@@ -297,6 +297,62 @@ struct FormulaRecomputeTests {
             try Bool.fetchOne(db, sql: "SELECT isLive FROM db_computed WHERE propertyId = ? LIMIT 1", arguments: [taskMinutes.databaseText]) } == true)
     }
 
+    @Test("Фильтр и сортировка по формуле — как у свойства того же типа: число, текст, флажок, дата")
+    func filterAndSortByFormula() throws {
+        let number = try addFormula("Часы × 10", to: sample.tasksId, #"prop("Часы") * 10"#)
+        let flag = try addFormula("Сделано?", to: sample.tasksId, #"prop("Сделано")"#)
+        let due = try addFormula("Срок + 1", to: sample.tasksId, #"dateAdd(prop("Срок"), 1, "days")"#)
+        queue.waitUntilIdle()
+        let catalog = try DatabaseCatalog.read(sample.tasksId, in: store)
+        let tasks = try rows(of: sample.tasksId)
+        func cell(_ row: UUID, _ name: String) throws -> JSONValue? { try store.write { tx in try tx.cell(rowId: row, propertyId: task(name))?.value } }
+        func query(_ filter: FilterNode?, _ sorts: [SortSpec] = []) throws -> [UUID] {
+            try ViewQuery.rows(ViewQuerySpec(databaseId: sample.tasksId, filter: filter, sorts: sorts), catalog: catalog, in: store).rowIds
+        }
+        // Число: больше 50 и по убыванию.
+        let hours = try Dictionary(uniqueKeysWithValues: tasks.map { ($0, try cell($0, "Часы")?.number) })
+        let over = try query(.condition(FilterCondition(propertyId: number, op: .greaterThan, value: 50)), [SortSpec(propertyId: number, ascending: false)])
+        let expected = tasks.filter { (hours[$0] ?? nil).map { $0 * 10 > 50 } ?? false }
+        #expect(Set(over) == Set(expected))
+        let values = over.map { hours[$0]!! }
+        #expect(values == values.sorted(by: >))
+        // Флажок.
+        let done = try query(.condition(FilterCondition(propertyId: flag, op: .is, value: true)))
+        #expect(try Set(done) == Set(tasks.filter { try cell($0, "Сделано")?.bool ?? false }))
+        // Текст: «Итог» содержит «Гот».
+        let ready = try query(.condition(FilterCondition(propertyId: task("Итог"), op: .contains, value: "Гот")))
+        #expect(Set(ready) == Set(done))
+        // Дата: по возрастанию — как «Срок».
+        let byDue = try query(nil, [SortSpec(propertyId: due, ascending: true)])
+        let starts = try byDue.compactMap { try cell($0, "Срок").flatMap(DateValues.start) }
+        #expect(starts == starts.sorted())
+    }
+
+    @Test("«Готово» редактора: формула с названиями сохраняется с id и типом итога; ошибка и круг — не сохраняются; ⌘Z")
+    @MainActor
+    func setFormulaOperation() throws {
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        let operations = DatabaseOperations(store: store, undoManager: undo)
+        undo.beginUndoGrouping()
+        let property = try operations.addProperty(to: sample.tasksId, name: "Цена", kind: .formula)
+        undo.endUndoGrouping()
+        undo.beginUndoGrouping()
+        #expect(try operations.setFormula(property.id, display: #"prop("Часы") * 1.2"#) == .number)
+        undo.endUndoGrouping()
+        let saved = try store.write { tx in try tx.property(property.id)!.config }
+        #expect(saved["expression"]?.string == #"prop("\#(task("Часы").databaseText)") * 1.2"#)
+        #expect(saved["resultType"]?.string == "number")
+        #expect(throws: FormulaError("Нет свойства „Срок2“", at: 5..<12)) { try operations.setFormula(property.id, display: #"prop("Срок2")"#) }
+        #expect(throws: FormulaError.self) { try operations.setFormula(property.id, display: "if(true, 1") }
+        #expect(throws: FormulaError("Формула ссылается сама на себя: Цена → Цена", at: 5..<11)) {
+            try operations.setFormula(property.id, display: #"prop("Цена") + 1"#)
+        }
+        #expect(try store.write { tx in try tx.property(property.id)!.config["expression"]?.string } == saved["expression"]?.string, "ошибочная не сохранилась")
+        undo.undo()
+        #expect(try store.write { tx in try tx.property(property.id)!.config["expression"]?.string ?? "" } == "")
+    }
+
     @Test("Первое заполнение: строки без итогов формул досчитываются в фоне")
     func fillMissing() throws {
         let tasks = try rows(of: sample.tasksId)

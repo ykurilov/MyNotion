@@ -125,7 +125,7 @@ struct FormulaInputs: FormulaContext {
     func title(ofPage pageId: UUID) -> String? { titles[pageId] }
 
     /// Итог формулы — JSON для `db_computed`.
-    static func json(_ value: FormulaValue, calendar: Calendar) -> JSONValue? {
+    static func json(_ value: FormulaValue, calendar: Calendar, titles: [UUID: String] = [:]) -> JSONValue? {
         switch value {
         case .empty: return nil
         case .number(let number): return number.isFinite ? .number(number) : nil
@@ -136,8 +136,9 @@ struct FormulaInputs: FormulaContext {
             let day = String(format: "%04d-%02d-%02d", c.year!, c.month!, c.day!)
             return ["start": .string(date.hasTime ? day + String(format: "T%02d:%02d", c.hour!, c.minute!) : day), "hasTime": .bool(date.hasTime),
                     "timeZone": .string(calendar.timeZone.identifier)]
-        case .list(let items): return .array(items.compactMap { json($0, calendar: calendar) })
-        case .page(let id): return ["id": .string(id.databaseText)]
+        case .list(let items): return .array(items.compactMap { json($0, calendar: calendar, titles: titles) })
+        // Название — для показа плашкой, поиска и сортировки без чтения страницы.
+        case .page(let id): return ["id": .string(id.databaseText), "title": .string(titles[id] ?? "")]
         }
     }
 }
