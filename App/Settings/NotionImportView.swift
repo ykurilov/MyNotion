@@ -266,6 +266,21 @@ struct NotionImportReportView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("notion-import-notice-line")
             }
+            if !report.databases.isEmpty {
+                Text("Базы стали базами MyNotion. Типы свойств угаданы по значениям:")
+                    .foregroundStyle(Color(nsColor: Palette.textSecondary))
+                    .fixedSize(horizontal: false, vertical: true)
+                Group {
+                    if report.databases.count > 2 || report.databases.contains(where: { $0.properties.count > 12 }) {
+                        ScrollView { databaseList }.frame(height: 220)
+                    } else {
+                        databaseList
+                    }
+                }
+                .background(Color(nsColor: Palette.pageBackground), in: RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: Palette.border)))
+                .accessibilityIdentifier("notion-import-databases")
+            }
             if report.simplified.isEmpty {
                 Text(report.notices.isEmpty ? "Всё перенесено как было." : "Остальное перенесено как было.")
                     .foregroundStyle(Color(nsColor: Palette.textSecondary))
@@ -299,6 +314,31 @@ struct NotionImportReportView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("notion-import-report")
+    }
+
+    /// По базе: «Задачи — строк: 4, шаблонов: 1», типы свойств, что перенесено не целиком.
+    private var databaseList: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(report.databases.enumerated()), id: \.offset) { _, database in
+                VStack(alignment: .leading, spacing: 2) {
+                    (Text(verbatim: database.title.isEmpty ? "Без названия" : database.title).fontWeight(.medium)
+                        + Text(verbatim: " — " + Self.rowsText(database)))
+                    Text(verbatim: database.properties.joined(separator: "; "))
+                        .foregroundStyle(Color(nsColor: Palette.textSecondary))
+                    ForEach(database.notes, id: \.self) { note in
+                        Text(verbatim: note + ".").foregroundStyle(Color(nsColor: Palette.textSecondary))
+                    }
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(10)
+    }
+
+    /// «строк: 4, шаблонов: 1».
+    static func rowsText(_ database: DatabaseImportSummary) -> String {
+        "строк: \(number(database.rowCount))" + (database.templateCount > 0 ? ", шаблонов: \(number(database.templateCount))" : "")
     }
 
     private var simplifiedList: some View {
