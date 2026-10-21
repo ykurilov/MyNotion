@@ -319,4 +319,15 @@ struct ViewSettingsOperationsTests {
             #expect(filtered.groups?.map(\.rowIds) == sql.groups?.map(\.rowIds), "«\(word)»")
         }
     }
+
+    @Test("Разбор UUID строк вида — как у Foundation, в любом регистре; испорченный — нет")
+    func uuidParsing() {
+        for _ in 0..<50 {
+            let id = UUID()
+            #expect(ViewQuerySQL.uuid(id.uuidString) == id)
+            #expect(ViewQuerySQL.uuid(id.uuidString.lowercased()) == id)
+        }
+        #expect(ViewQuerySQL.uuid("не uuid") == nil)
+        #expect(ViewQuerySQL.uuid("0193a1b2-0000-7000-8000-00000000000g") == nil)
+    }
 }
