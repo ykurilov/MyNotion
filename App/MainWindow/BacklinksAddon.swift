@@ -125,7 +125,8 @@ final class BacklinksListPresenter {
     private func rows(for sources: [BacklinkSource], tree: PageTreeSnapshot) -> [BacklinkListRow] {
         sources.compactMap { source in
             guard let page = tree.page(source.pageId) else { return nil }
-            let path = tree.ancestors(of: page.id).map(\.pathTitle).joined(separator: " / ")
+            // Путь без иконок, как у Notion: «Проект / Встречи».
+            let path = tree.ancestors(of: page.id).map(\.displayTitle).joined(separator: " / ")
             return BacklinkListRow(source: source, icon: page.icon, title: page.displayTitle, path: path)
         }
     }
