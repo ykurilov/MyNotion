@@ -5,7 +5,7 @@ import GRDB
 // метки часов — строками HybridTimestamp, наборы меток и оформление — JSON.
 
 extension UUID {
-    var databaseText: String { uuidString.lowercased() }
+    package var databaseText: String { uuidString.lowercased() }
 }
 
 enum RowDecoding {

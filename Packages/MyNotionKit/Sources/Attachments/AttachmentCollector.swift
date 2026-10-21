@@ -44,6 +44,7 @@ public struct AttachmentCollector: Sendable {
                 AND NOT EXISTS (SELECT 1 FROM block WHERE instr(upper(block.props), upper(attachment.id)) > 0)
                 AND NOT EXISTS (SELECT 1 FROM page WHERE page.cover IS NOT NULL AND instr(upper(page.cover), upper(attachment.id)) > 0)
                 AND NOT EXISTS (SELECT 1 FROM page_version_file WHERE page_version_file.fileId = attachment.id)
+                AND NOT EXISTS (\(AttachmentReferenceCounter.cellReference))
             ORDER BY id
             """, arguments: [now().addingTimeInterval(-Self.orphanLifetime)])
     }

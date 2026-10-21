@@ -234,7 +234,7 @@ struct SchemaV6MigrationTests {
 
         let database = try AppDatabase.open(at: folder.databaseURL)
         defer { database.close() }
-        #expect(try database.appliedSchemaVersion() == "v8", "через v6 до текущей схемы: читает текущий код")
+        #expect(try database.appliedSchemaVersion() == SchemaMigrations.current.steps.last?.version, "через v6 до текущей схемы: читает текущий код")
         let store = NotesStore(database: database, clock: HybridLogicalClock(deviceId: device))
         let blocks = try #require(try store.pageContent(pageId)).blocks
         #expect(blocks.map(\.id) == blockIds)
@@ -314,7 +314,7 @@ struct SchemaV6MigrationTests {
         try store.write { tx in
             let page = try tx.createPage(title: "Все типы")
             var key = try tx.blocks(ofPage: page.id)[0].sortKey
-            for kind in BlockKind.allCases where kind != .pageLink {
+            for kind in BlockKind.allCases where !kind.linksPage {
                 key = .between(key, nil)
                 try tx.insertBlock(Block(pageId: page.id, kind: kind, sortKey: key))
             }
@@ -385,7 +385,7 @@ struct SchemaV7MigrationTests {
         try makeV6Library(at: folder.databaseURL)
         let database = try AppDatabase.open(at: folder.databaseURL)
         defer { database.close() }
-        #expect(try database.appliedSchemaVersion() == "v8")
+        #expect(try database.appliedSchemaVersion() == SchemaMigrations.current.steps.last?.version)
         let store = NotesStore(database: database, clock: HybridLogicalClock(deviceId: device))
         let content = try #require(try store.pageContent(pageId))
         #expect(content.page.title == "Эталон v6")
@@ -511,7 +511,7 @@ struct SchemaV8MigrationTests {
         }
         let database = try AppDatabase.open(at: folder.databaseURL)
         defer { database.close() }
-        #expect(try database.appliedSchemaVersion() == "v8")
+        #expect(try database.appliedSchemaVersion() == SchemaMigrations.current.steps.last?.version)
         let (files, moved, plan) = try database.dbWriter.read { db in
             (try Row.fetchAll(db, sql: "SELECT versionId, fileId FROM page_version_file").map { "\($0["versionId"] as String) \($0["fileId"] as String)" },
              try String.fetchAll(db, sql: "SELECT id FROM block WHERE movedFrom = ?", arguments: [movedFrom]),

@@ -85,13 +85,16 @@ private struct MergeRun {
     mutating func merge(_ changes: [SyncChange]) throws {
         // Свои следующие метки — позже всего пришедшего.
         for change in changes where change.hlc != .distantPast { transaction.clock.receive(change.hlc) }
+        var databases = DatabaseRecordMerger(transaction: transaction)
         for group in Outbox.groupedByRecord(changes) {
             switch group[0].entity {
             case .page: try mergePage(group)
             case .block: try mergeBlock(group)
             case .reminder: try mergeReminder(group)
+            default: try databases.merge(group)
             }
         }
+        report.touchedPageIds.formUnion(databases.touchedPageIds)
         try reviveContainersOfLiveBlocks()
         try removeStaleLinks()
         try repairLoops()
@@ -454,8 +457,8 @@ private struct MergeRun {
     /// Поля, пришедшие с разных Mac, могут не сочетаться (отметка у абзаца, ссылка без страницы):
     /// приводятся к допустимым одинаково на всех Mac. Глубину сверх допустимой урезает показ (`BlockNesting`).
     private static func makeConsistent(_ block: inout Block) {
-        if block.kind == .pageLink, block.linkedPageId == nil { block.kind = .paragraph }
-        if block.kind != .pageLink { block.linkedPageId = nil }
+        if block.kind.linksPage, block.linkedPageId == nil { block.kind = .paragraph }
+        if !block.kind.linksPage { block.linkedPageId = nil }
         if block.kind != .checkbox { block.isChecked = false }
         block.indent = min(max(block.indent, Block.indentRange.lowerBound), Block.indentRange.upperBound)
     }

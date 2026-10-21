@@ -127,9 +127,11 @@ public struct NotesChanges: Sendable {
     public internal(set) var resolvedConflicts: [Conflict] = []
     /// Отметки «сделано» напоминаний — свои и пришедшие с других Mac.
     public internal(set) var reminderStates: [ReminderState] = []
+    /// Базы (004): схема, варианты, виды, ячейки, связи, места строк.
+    public internal(set) var database = DatabaseChanges()
 
     public var isEmpty: Bool {
-        pages.isEmpty && blocks.isEmpty && erasedPageIds.isEmpty && resolvedConflicts.isEmpty && reminderStates.isEmpty
+        pages.isEmpty && blocks.isEmpty && erasedPageIds.isEmpty && resolvedConflicts.isEmpty && reminderStates.isEmpty && database.isEmpty
     }
 }
 
@@ -150,6 +152,7 @@ public enum NotesStoreError: Error, Equatable, LocalizedError {
     case invalidPage(String)
     case invalidBlock(String)
     case corruptedRecord(String)
+    case invalidRecord(String)
 
     public var errorDescription: String? {
         switch self {
@@ -158,6 +161,7 @@ public enum NotesStoreError: Error, Equatable, LocalizedError {
         case .invalidPage(let reason): "Страница не записана: \(reason)"
         case .invalidBlock(let reason): "Блок не записан: \(reason)"
         case .corruptedRecord(let reason): "Запись в базе повреждена: \(reason)"
+        case .invalidRecord(let reason): "Запись не сделана: \(reason)"
         }
     }
 }

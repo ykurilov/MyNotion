@@ -20,6 +20,7 @@ public struct SchemaMigrations: Sendable {
         Step(version: "v6", migrate: addRichBlocks),
         Step(version: "v7", migrate: addPagesNavigation),
         Step(version: "v8", migrate: indexVersionFilesAndMoves),
+        Step(version: "v9", migrate: addDatabases),
     ])
 
     /// Та же схема плюс ещё один шаг — для проверки миграций.
@@ -38,6 +39,12 @@ public struct SchemaMigrations: Sendable {
 
 /// Типы блоков первой версии схемы. Выпущенный шаг не меняется: новые типы добавляет v6.
 private let blockKindsOf001 = ["paragraph", "heading1", "heading2", "heading3", "bulletItem", "numberedItem", "checkbox", "pageLink"]
+
+/// Типы блоков v6 (002). Выпущенный шаг не меняется: тип `database` добавляет v9.
+private let blockKindsOf002 = blockKindsOf001 + [
+    "toggle", "quote", "callout", "divider", "code", "equation", "tableOfContents", "image", "file", "video", "bookmark",
+    "table", "tableRow", "tableColumn", "tableCell", "columnList", "column",
+]
 
 private func createInitialSchema(_ db: Database) throws {
     let blockKinds = blockKindsOf001.map { "'\($0)'" }.joined(separator: ", ")
@@ -153,7 +160,7 @@ private func addSyncBookkeeping(_ db: Database) throws {
 /// пересоздаётся с теми же rowid (на них держится индекс поиска); в метках полей `sortKey` становится `placement`.
 /// GRDB на время миграции выключает внешние ключи и проверяет их в конце: конфликты блоков не стираются.
 private func addRichBlocks(_ db: Database) throws {
-    let blockKinds = BlockKind.allCases.map { "'\($0.rawValue)'" }.joined(separator: ", ")
+    let blockKinds = blockKindsOf002.map { "'\($0)'" }.joined(separator: ", ")
     try db.execute(sql: """
         CREATE TABLE block_v6 (
             id TEXT PRIMARY KEY NOT NULL,
@@ -296,6 +303,141 @@ private func indexVersionFilesAndMoves(_ db: Database) throws {
                            arguments: [row["id"] as String, fileId])
         }
     }
+}
+
+/// Базы данных (004, data-model.md, «Миграция v9»): блок `database` (таблица блоков пересоздаётся с теми же rowid, как в v6)
+/// и восемь таблиц баз. `db_computed` и колонки `sortText`, `sortNumber`, `searchText` — только на этом Mac: их пишут
+/// подписчики модуля `Databases`. `db_cell` и `db_computed` — без rowid: ячейки строки лежат рядом, видимые строки
+/// читаются одним проходом по ключу.
+private func addDatabases(_ db: Database) throws {
+    let blockKinds = BlockKind.allCases.map { "'\($0.rawValue)'" }.joined(separator: ", ")
+    try db.execute(sql: """
+        CREATE TABLE block_v9 (
+            id TEXT PRIMARY KEY NOT NULL,
+            pageId TEXT NOT NULL REFERENCES page(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+            kind TEXT NOT NULL CHECK (kind IN (\(blockKinds))),
+            text TEXT NOT NULL,
+            textStyles TEXT NOT NULL DEFAULT '[]',
+            indent INTEGER NOT NULL DEFAULT 0 CHECK (indent BETWEEN 0 AND 8),
+            isChecked BOOLEAN NOT NULL DEFAULT 0,
+            linkedPageId TEXT,
+            sortKey TEXT NOT NULL,
+            containerId TEXT,
+            color TEXT,
+            props TEXT NOT NULL DEFAULT '{}',
+            isDeleted BOOLEAN NOT NULL DEFAULT 0,
+            fieldClocks TEXT NOT NULL,
+            textBaseClock TEXT
+        );
+        INSERT INTO block_v9 (rowid, id, pageId, kind, text, textStyles, indent, isChecked, linkedPageId, sortKey, containerId,
+                              color, props, isDeleted, fieldClocks, textBaseClock)
+            SELECT rowid, id, pageId, kind, text, textStyles, indent, isChecked, linkedPageId, sortKey, containerId,
+                   color, props, isDeleted, fieldClocks, textBaseClock
+            FROM block;
+        DROP TABLE block;
+        ALTER TABLE block_v9 RENAME TO block;
+        CREATE INDEX block_by_page ON block(pageId, sortKey);
+        CREATE INDEX block_deleted ON block(isDeleted) WHERE isDeleted = 1;
+        CREATE INDEX block_by_container ON block(containerId, sortKey) WHERE containerId IS NOT NULL;
+        ALTER TABLE block ADD COLUMN movedFrom TEXT
+            GENERATED ALWAYS AS (CASE WHEN json_valid(props) THEN json_extract(props, '$.movedFrom') END) VIRTUAL;
+        CREATE INDEX block_by_moved_from ON block(movedFrom) WHERE movedFrom IS NOT NULL;
+
+        CREATE TABLE db_database (
+            pageId TEXT PRIMARY KEY NOT NULL,
+            isInline BOOLEAN NOT NULL DEFAULT 0,
+            defaultTemplateId TEXT,
+            fieldClocks TEXT NOT NULL
+        );
+
+        CREATE TABLE db_property (
+            id TEXT PRIMARY KEY NOT NULL,
+            databaseId TEXT NOT NULL,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL,
+            config TEXT NOT NULL DEFAULT '{}',
+            sortKey TEXT NOT NULL,
+            deletedAt DATETIME,
+            fieldClocks TEXT NOT NULL
+        );
+        CREATE INDEX db_property_by_database ON db_property(databaseId, sortKey);
+
+        CREATE TABLE db_select_option (
+            id TEXT PRIMARY KEY NOT NULL,
+            propertyId TEXT NOT NULL,
+            name TEXT NOT NULL,
+            color TEXT NOT NULL,
+            sortKey TEXT NOT NULL,
+            statusGroup TEXT,
+            deletedAt DATETIME,
+            fieldClocks TEXT NOT NULL
+        );
+        CREATE INDEX db_select_option_by_property ON db_select_option(propertyId, sortKey);
+
+        CREATE TABLE db_cell (
+            rowId TEXT NOT NULL,
+            propertyId TEXT NOT NULL,
+            value TEXT,
+            hlc TEXT NOT NULL,
+            sortText TEXT,
+            sortNumber REAL,
+            searchText TEXT,
+            PRIMARY KEY (rowId, propertyId)
+        ) WITHOUT ROWID;
+        CREATE INDEX db_cell_by_property_number ON db_cell(propertyId, sortNumber);
+        CREATE INDEX db_cell_by_property_text ON db_cell(propertyId, sortText);
+
+        CREATE TABLE db_relation_link (
+            id TEXT PRIMARY KEY NOT NULL,
+            propertyId TEXT NOT NULL,
+            rowId TEXT NOT NULL,
+            targetRowId TEXT NOT NULL,
+            sortKey TEXT NOT NULL,
+            isPresent BOOLEAN NOT NULL DEFAULT 1,
+            fieldClocks TEXT NOT NULL
+        );
+        CREATE INDEX db_relation_link_by_row ON db_relation_link(propertyId, rowId, sortKey);
+        CREATE INDEX db_relation_link_by_target ON db_relation_link(propertyId, targetRowId);
+        CREATE INDEX db_relation_link_by_target_row ON db_relation_link(targetRowId);
+
+        CREATE TABLE db_view (
+            id TEXT PRIMARY KEY NOT NULL,
+            databaseId TEXT NOT NULL,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL,
+            sortKey TEXT NOT NULL,
+            filter TEXT,
+            sorts TEXT NOT NULL DEFAULT '[]',
+            columns TEXT NOT NULL DEFAULT '[]',
+            grouping TEXT,
+            layoutOptions TEXT NOT NULL DEFAULT '{}',
+            fieldClocks TEXT NOT NULL
+        );
+        CREATE INDEX db_view_by_database ON db_view(databaseId, sortKey);
+
+        CREATE TABLE db_row_order (
+            id TEXT PRIMARY KEY NOT NULL,
+            viewId TEXT NOT NULL,
+            rowId TEXT NOT NULL,
+            sortKey TEXT NOT NULL,
+            hlc TEXT NOT NULL
+        );
+        CREATE INDEX db_row_order_by_view ON db_row_order(viewId, rowId);
+        CREATE INDEX db_row_order_by_row ON db_row_order(rowId);
+
+        CREATE TABLE db_computed (
+            rowId TEXT NOT NULL,
+            propertyId TEXT NOT NULL,
+            value TEXT,
+            sortText TEXT,
+            sortNumber REAL,
+            searchText TEXT,
+            isLive BOOLEAN NOT NULL DEFAULT 0,
+            PRIMARY KEY (rowId, propertyId)
+        ) WITHOUT ROWID;
+        CREATE INDEX db_computed_by_property_number ON db_computed(propertyId, sortNumber);
+        CREATE INDEX db_computed_by_property_text ON db_computed(propertyId, sortText);
+        """)
 }
 
 private func addSidebarCollapsed(_ db: Database) throws {

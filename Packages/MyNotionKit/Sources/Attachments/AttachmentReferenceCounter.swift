@@ -38,6 +38,14 @@ public struct AttachmentReferenceCounter: NotesWriteHook {
                 mayHaveLostReferences = true
             }
         }
+        // Ячейки «Файлы и медиа» (004): файл из ячейки — такая же ссылка, как картинка в блоке.
+        var kinds: [UUID: PropertyKind?] = [:]
+        for cell in changes.database.cells {
+            if kinds[cell.propertyId] == nil { kinds[cell.propertyId] = .some(try transaction.property(cell.propertyId)?.kind) }
+            guard kinds[cell.propertyId] == .some(.files) else { continue }
+            referenced += Self.attachmentRefs(inFilesValue: cell.value)
+            mayHaveLostReferences = true
+        }
         guard !referenced.isEmpty || mayHaveLostReferences else { return }
 
         var queueChanged = false
@@ -77,5 +85,17 @@ public struct AttachmentReferenceCounter: NotesWriteHook {
             AND block.kind IN (\(BlockKind.withAttachments.map { "'\($0.rawValue)'" }.sorted().joined(separator: ", ")))
             AND instr(upper(block.props), upper(attachment.id)) > 0
         UNION ALL SELECT 1 FROM page WHERE page.cover IS NOT NULL AND instr(upper(page.cover), upper(attachment.id)) > 0
+        UNION ALL \(cellReference)
         """
+
+    /// Ячейка «Файлы и медиа» с этим файлом — по индексу свойства, только у свойств-файлов.
+    static let cellReference = """
+        SELECT 1 FROM db_property p JOIN db_cell c ON c.propertyId = p.id
+            WHERE p.type = 'files' AND c.value IS NOT NULL AND instr(upper(c.value), upper(attachment.id)) > 0
+        """
+
+    /// Файлы в значении ячейки: `[{attachment: AttachmentRef} | {url, name}]` (data-model.md, `db_cell.value`).
+    public static func attachmentRefs(inFilesValue value: JSONValue?) -> [AttachmentRef] {
+        (value?.array ?? []).compactMap { item in item["attachment"].flatMap { try? $0.decoded(as: AttachmentRef.self) } }
+    }
 }

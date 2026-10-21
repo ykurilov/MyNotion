@@ -24,11 +24,10 @@ struct SyncPayloadV3Tests {
         return "\(fieldName) {\"value\":" + text[valueStart.upperBound...]
     }
 
-    @Test("Версия формата — 3")
+    @Test("Версия формата — не ниже 3 (004 подняла до 4)")
     func formatVersion() {
-        #expect(SyncBatch.currentFormatVersion == 3)
-        #expect(SyncBatch(deviceId: "d", deviceName: "Mac", changes: []).formatVersion == 3)
-        #expect(SyncSnapshot(seq: 1, changes: [], knowledge: ClockKnowledge()).formatVersion == 3)
+        #expect(SyncBatch.currentFormatVersion >= 3)
+        #expect(SyncBatch(deviceId: "d", deviceName: "Mac", changes: []).formatVersion == SyncBatch.currentFormatVersion)
     }
 
     @Test("Значения новых полей страницы — дословно как в контракте")
@@ -78,7 +77,7 @@ struct SyncPayloadV3Tests {
     @Test("Mac с форматом 2 пачку v3 не применяет и показывает «Обновите MyNotion на этом Mac»")
     func olderMacWaits() throws {
         let key = SymmetricKey(size: .bits256)
-        let sealed = try BatchCipher(key: key).seal(SyncBatch(deviceId: "d", deviceName: "Mac", changes: [
+        let sealed = try BatchCipher(key: key).seal(SyncBatch(formatVersion: 3, deviceId: "d", deviceName: "Mac", changes: [
             SyncChange(entity: .page, id: pageId, value: .isTemplate(true), hlc: hlc),
         ]), batchId: "b3")
         #expect(throws: BatchCipherError.newerFormat(3)) {

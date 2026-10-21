@@ -34,6 +34,9 @@ public struct SyncSnapshot: Sendable, Hashable, Codable {
                     block.fieldClocks.all.forEach { knowledge.record($0) }
                 }
             }
+            let records = try DatabaseChangeEncoding.fullRecords(in: transaction)
+            changes += records
+            for change in records where change.hlc != .distantPast { knowledge.record(change.hlc) }
             for state in try transaction.allReminderStates() {
                 changes.append(SyncChange(entity: .reminder, id: state.mentionId, value: .doneAt(state.doneAt), hlc: state.doneClock))
                 knowledge.record(state.doneClock)

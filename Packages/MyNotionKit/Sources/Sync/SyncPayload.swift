@@ -13,8 +13,9 @@ public struct SyncBatch: Sendable, Hashable, Codable {
 
     /// 2 — блоки 002: поля `placement`, `color`, `props`, новые типы и оформления, сущность `reminder`
     /// (contracts/sync-and-files-api.md). 3 — поля страницы 003: обложка, вид, избранное, открытие, шаблон
-    /// (contracts/sync-v3-and-export.md). Пачки версий 1 и 2 читаются.
-    public static let currentFormatVersion = 3
+    /// (contracts/sync-v3-and-export.md). 4 — базы 004: семь сущностей баз и блок `database`
+    /// (contracts/sync-v4-and-export.md). Пачки версий 1–3 читаются.
+    public static let currentFormatVersion = 4
 
     public init(formatVersion: Int = SyncBatch.currentFormatVersion, deviceId: String, deviceName: String,
                 changes: [SyncChange]) {
@@ -32,6 +33,23 @@ public struct SyncChange: Sendable, Hashable, Codable {
         case block
         /// Отметка «сделано» напоминания; `id` — id упоминания даты (research R11).
         case reminder
+        // Формат 4: базы (contracts/sync-v4-and-export.md, «Новые сущности»); `pageId` — страница-база.
+        case database
+        case property
+        case option
+        case view
+        /// `id` — строка; у каждой ячейки (`value.propertyId`) своя метка.
+        case cell
+        case relationLink
+        case rowOrder
+
+        /// Сущность баз: поле и значение — JSON как в контракте.
+        public var isDatabaseRecord: Bool {
+            switch self {
+            case .page, .block, .reminder: false
+            default: true
+            }
+        }
     }
 
     public var entity: Entity
@@ -88,6 +106,8 @@ public struct SyncChange: Sendable, Hashable, Codable {
         case conflictResolved(versions: [InlineText])
         // Напоминание
         case doneAt(Date?)
+        /// Поле записи базы (формат 4): имя поля и значение JSON (contracts/sync-v4-and-export.md).
+        case databaseField(String, JSONValue)
 
         public var field: String {
             switch self {
@@ -112,6 +132,7 @@ public struct SyncChange: Sendable, Hashable, Codable {
             case .deleted: "deleted"
             case .conflictResolved: "conflictResolved"
             case .doneAt: "doneAt"
+            case .databaseField(let field, _): field
             }
         }
     }
@@ -129,7 +150,12 @@ public struct SyncChange: Sendable, Hashable, Codable {
         hlc = try container.decode(HybridTimestamp.self, forKey: .hlc)
         baseHlc = try container.decodeIfPresent(HybridTimestamp.self, forKey: .baseHlc)
         known = try container.decodeIfPresent(ClockKnowledge.self, forKey: .known)
-        switch try container.decode(String.self, forKey: .field) {
+        let field = try container.decode(String.self, forKey: .field)
+        if entity.isDatabaseRecord {
+            value = .databaseField(field, try container.decodeIfPresent(JSONValue.self, forKey: .value) ?? .null)
+            return
+        }
+        switch field {
         case "title": value = .title(try container.decode(String.self, forKey: .value))
         case "icon": value = .icon(try container.decodeIfPresent(String.self, forKey: .value))
         case "placement" where entity == .block:
@@ -204,6 +230,7 @@ public struct SyncChange: Sendable, Hashable, Codable {
         case .doneAt(let date): try container.encode(date, forKey: .value)
         case .sortKey(let key): try container.encode(key, forKey: .value)
         case .conflictResolved(let versions): try container.encode(versions, forKey: .value)
+        case .databaseField(_, let value): try container.encode(value, forKey: .value)
         }
     }
 }

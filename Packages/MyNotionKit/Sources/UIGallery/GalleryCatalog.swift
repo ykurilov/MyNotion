@@ -368,6 +368,7 @@ public enum GalleryCatalog {
         case .tableCell: "ячейка таблицы"
         case .columnList: "колонки"
         case .column: "колонка"
+        case .database: "встроенная база"
         }
     }
 

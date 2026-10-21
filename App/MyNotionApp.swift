@@ -123,6 +123,9 @@ struct MyNotionApp: App {
             let imageProps = BlockKinds.richPageParts.first { $0.name == BlockKind.image.rawValue }?.blocks.first?.props ?? .empty
             try PagesNavigationSample(imageProps: imageProps).ensure(in: store)
         }
+        if options.generates004Sample {
+            try DatabaseSampleGenerator().ensure(in: store)
+        }
         if options.generates003Sample || options.generatesVersionsSample {
             // До первого окна: окно открывает страницу образца, как любую страницу базы.
             PageVersionsSampleLaunch.ensure(in: store)
