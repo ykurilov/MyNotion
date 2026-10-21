@@ -149,15 +149,15 @@ description: "Задачи: базы данных — основа"
 ### Tests for User Story 7
 
 - [ ] T057 [P] [US7] Образец выгрузки Notion в `PK/Sources/NotionImport/Fixtures/NotionDatabases/`: две связанные базы со всеми типами, встроенная и полностраничная, тела строк, одинаковые названия — выгрузить из живого Notion (страница «MyNotion — базы 004», одним замком, «Include subpages» вкл)
-- [ ] T058 [P] [US7] `PK/Tests/MarkdownExportTests/DatabaseExportTests.swift`: CSV, Markdown строк и схема дословно по contracts/sync-v4-and-export.md; встроенная — в папке хозяина; шаблоны — в `Шаблоны/`
-- [ ] T059 [P] [US7] `PK/Tests/NotionImportTests/NotionDatabaseImportTests.swift` на образце T057: место базы, строки ↔ файлы, каждый признак таблицы типов, связи по 32 hex (CSV и `.md`), пара — двусторонняя, «Создано» / «Изменено» в `createdAt` / `updatedAt`, 100 % значений, отчёт дословно; выгрузка без «Include subpages» — строки без тел и строка отчёта
-- [ ] T060 [P] [US7] `PK/Tests/NotionImportTests/DatabaseRoundTripTests.swift`: эталон баз → своя выгрузка → импорт — схема, варианты, формулы, связи, виды, шаблоны, значения один в один
+- [x] T058 [P] [US7] `PK/Tests/MarkdownExportTests/DatabaseExportTests.swift`: CSV, Markdown строк и схема дословно по contracts/sync-v4-and-export.md; встроенная — в папке хозяина; шаблоны — в `Шаблоны/`
+- [x] T059 [P] [US7] `PK/Tests/NotionImportTests/NotionDatabaseImportTests.swift` на образце T057: место базы, строки ↔ файлы, каждый признак таблицы типов, связи по 32 hex (CSV и `.md`), пара — двусторонняя, «Создано» / «Изменено» в `createdAt` / `updatedAt`, 100 % значений, отчёт дословно; выгрузка без «Include subpages» — строки без тел и строка отчёта
+- [x] T060 [P] [US7] `PK/Tests/NotionImportTests/DatabaseRoundTripTests.swift`: эталон баз → своя выгрузка → импорт — схема, варианты, формулы, связи, виды, шаблоны, значения один в один
 
 ### Implementation for User Story 7
 
-- [ ] T061 [US7] Выгрузка `PK/Sources/MarkdownExport/DatabaseExport/` (`DatabaseCSVWriter`, `RowMarkdownWriter`, `DatabaseSchemaFile`) и база в общей выгрузке 001; на очереди чтения (T058)
-- [ ] T062 [US7] Импорт `PK/Sources/NotionImport/NotionDatabaseReader.swift` (место, строки, типы, второй проход связей), импорт своей схемы `DatabaseSchemaImport.swift`; запись через `DatabaseOperations` (T059, T060)
-- [ ] T063 [US7] Отчёт импорта баз в `App/Settings/NotionImportView.swift`; пункт «Выгрузить базу» в меню «•••» страницы-базы
+- [x] T061 [US7] Выгрузка `PK/Sources/MarkdownExport/DatabaseExport/` (`DatabaseCSVWriter`, `RowMarkdownWriter`, `DatabaseSchemaFile`) и база в общей выгрузке 001; на очереди чтения (T058)
+- [x] T062 [US7] Импорт `PK/Sources/NotionImport/NotionDatabaseReader.swift` (место, строки, типы, второй проход связей), импорт своей схемы `DatabaseSchemaImport.swift`; запись через `DatabaseOperations` (T059, T060)
+- [x] T063 [US7] Отчёт импорта баз в `App/Settings/NotionImportView.swift`; пункт «Выгрузить базу» в меню «•••» страницы-базы
 - [ ] T064 [US7] Затронутые тесты зелёные; замеры: импорт 10 000 строк (≤ 60 с, отзыв правки ≤ 100 мс), выгрузка «Задачи» (≤ 10 с); CSV выгрузки открыт в Numbers в виртуальном Mac (снимок); запись в quickstart.md; коммит
 
 **Checkpoint**: US7 работает и проверяется сама (вливается после US5).

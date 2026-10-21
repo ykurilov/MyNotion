@@ -115,7 +115,8 @@ public struct MarkdownBlockWriter: Sendable {
             return ["\(String(repeating: "#", count: level)) \(InlineMarkdown.render(flattened, resolveLink: resolveLink))"]
         case .bulletItem, .checkbox, .numberedItem:
             return listLines(block, marker: Self.marker(for: block, ordinal: ordinal) ?? "", nesting: nesting, resolveLink: resolveLink)
-        case .pageLink:
+        case .pageLink, .database:
+            // Встроенная база — ссылкой на свой CSV, как у Notion.
             guard let target = block.linkedPageId.flatMap(resolveLink) else { return nil }
             let title = escapedTitle(target.title)
             guard let path = target.path else { return [title] }

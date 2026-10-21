@@ -173,6 +173,11 @@ struct MyNotionApp: App {
             let report = try importer.importExport(prepared)
             print("Импорт готов: ветка «\(report.rootTitle)», страниц: \(report.pageCount), блоков: \(report.blockCount)")
             for page in report.simplified { print("Упрощено: \(page.pageTitle) — \(page.items.joined(separator: ", "))") }
+            for database in report.databases {
+                print("База: \(database.title) — \(NotionImportReportView.rowsText(database))")
+                for line in database.properties + database.notes { print("  \(line)") }
+            }
+            for notice in report.notices { print("Отчёт: \(notice)") }
             exit(0)
         } catch {
             FileHandle.standardError.write(Data("Импорт не удался: \(error.localizedDescription)\n".utf8))
