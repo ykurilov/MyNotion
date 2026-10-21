@@ -107,7 +107,7 @@ public struct NotionImporter: Sendable {
     /// не ждёт конца импорта. Страница целиком всегда в одной транзакции.
     var maxBlocksPerTransaction = 1_000
     /// Сколько связей строк баз пишется одной транзакцией.
-    var maxLinksPerTransaction = 2_000
+    var maxLinksPerTransaction = 200
     /// Для тестов: упасть после стольких записанных строк баз (откат ветки с базами).
     var failAfterDatabaseRows: Int?
 
@@ -372,12 +372,15 @@ public struct NotionImporter: Sendable {
                 }
             }
         }
+        // Строки этой выгрузки записаны; проверяется только связь на строку вне неё (своя выгрузка одной базы).
+        let written = Set(ids)
         var position = 0
         while position < links.count {
             try Task.checkCancellation()
             let batch = links[position..<min(position + maxLinksPerTransaction, links.count)]
             try store.write { transaction in
-                for link in batch where try transaction.page(link.targetRowId) != nil && transaction.page(link.rowId) != nil {
+                func exists(_ id: UUID) throws -> Bool { try written.contains(id) || transaction.page(id) != nil }
+                for link in batch where try exists(link.rowId) && exists(link.targetRowId) {
                     try transaction.saveRelationLink(link)
                 }
             }

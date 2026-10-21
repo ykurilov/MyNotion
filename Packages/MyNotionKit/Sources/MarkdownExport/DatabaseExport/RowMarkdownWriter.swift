@@ -12,8 +12,10 @@ enum RowMarkdownWriter {
             let title = values.title(ofTarget: id)
             return relationPath(id).map { "\(title) (\(InlineMarkdown.encodedPath($0)))" } ?? title
         }
-        return snapshot.columns.filter { $0.kind != .title }.compactMap { property in
-            let text = values.text(property, of: row, relation: relation)
+        return values.columns.indices.compactMap { index in
+            let property = values.columns[index]
+            guard property.kind != .title else { return nil }
+            let text = values.text(at: index, of: row, relation: relation)
             return text.isEmpty ? nil : "\(property.name): \(text)"
         }
     }

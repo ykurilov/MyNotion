@@ -112,23 +112,27 @@ struct NotionDatabaseReader {
 
         // Строки ↔ файлы: по названию и порядку, у одинаковых названий — файл с совпадающими строками свойств.
         let files = page.children.filter { !plan.pages[$0].isTable }
-        var unused = files
+        // Файлы по названию, по порядку имён: тысячи строк сопоставляются за один проход.
+        var unusedByTitle: [String: [Int]] = [:]
+        for file in files { unusedByTitle[Self.titleKey(plan.pages[file].title), default: []].append(file) }
         var rowPages: [Int] = []
-        var matchedFiles = 0
+        var matched: Set<Int> = []
         for values in csvRows {
             let title = Self.titleKey(values.first ?? "")
-            let candidates = unused.filter { Self.titleKey(plan.pages[$0].title) == title }
-            let scores = candidates.map { Self.agreement(plan.pages[$0].propertyLines, values, header) }
-            if let best = scores.max(), let chosen = zip(candidates, scores).first(where: { $0.1 == best })?.0 {
-                unused.removeAll { $0 == chosen }
+            let candidates = unusedByTitle[title] ?? []
+            let scores = candidates.count > 1 ? candidates.map { Self.agreement(plan.pages[$0].propertyLines, values, header) } : [0]
+            if let best = scores.max(), let position = scores.firstIndex(of: best), position < candidates.count {
+                let chosen = candidates[position]
+                unusedByTitle[title]?.remove(at: position)
                 plan.pages[chosen].title = values.first ?? ""
                 rowPages.append(chosen)
-                matchedFiles += 1
+                matched.insert(chosen)
             } else {
                 rowPages.append(plan.appendSyntheticRow(title: values.first ?? "", database: index))
             }
         }
-        let templates = unused
+        let matchedFiles = matched.count
+        let templates = files.filter { !matched.contains($0) }
         plan.pages[index].children = rowPages + templates
 
         // Типы колонок по всем значениям.

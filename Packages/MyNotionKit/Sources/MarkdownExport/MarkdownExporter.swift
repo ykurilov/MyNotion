@@ -83,7 +83,16 @@ public struct MarkdownExporter: Sendable {
             let databases = try store.database.dbWriter.read { db in
                 Set(try String.fetchAll(db, sql: "SELECT pageId FROM db_database").compactMap(UUID.init(uuidString:)))
             }
-            plan = try ExportPlan(pages: store.pageOutline(), databases: databases, root: root)
+            // Одна база — только её ветка: читать всё дерево (десятки тысяч строк других баз) незачем.
+            var outlined = ExportPlan(pages: try root.map(store.branchOutline) ?? store.pageOutline(), databases: databases, root: root)
+            if root != nil {
+                let store = store
+                outlined.outsideTitle = { id in
+                    (try? store.database.dbWriter.read { db in try String.fetchOne(db, sql: "SELECT title FROM page WHERE id = ?", arguments: [id.databaseText]) })
+                        .flatMap { $0 }.map { $0.isEmpty ? Page.untitledTitle : $0 }
+                }
+            }
+            plan = outlined
         } catch {
             throw MarkdownExportError.cannotRead(error.localizedDescription)
         }
@@ -124,6 +133,8 @@ public struct MarkdownExporter: Sendable {
         }
         // Базы, чьи строки ещё пишутся: снимок читается один раз, на странице-базе (она раньше своих строк).
         var databases: [UUID: (snapshot: DatabaseExportSnapshot, values: DatabaseValueText)] = [:]
+        // Строки баз со своими блоками — одним чтением на базу; строка забирается отсюда, когда пишется.
+        var rowContents: [UUID: PageContent] = [:]
         for (index, page) in plan.orderedPages.enumerated() {
             try Task.checkCancellation()
             if plan.isDatabase(page.id), let location = plan.location(of: page.id) {
@@ -132,15 +143,21 @@ public struct MarkdownExporter: Sendable {
                     throw MarkdownExportError.cannotRead(error.localizedDescription)
                 }
                 if let snapshot {
+                    let values = DatabaseValueText(snapshot: snapshot)
                     try createFolder(location.folder)
-                    try writeDatabase(snapshot, at: location, in: plan, into: draft)
-                    databases[page.id] = (snapshot, DatabaseValueText(snapshot: snapshot))
+                    try writeDatabase(snapshot, values: values, at: location, in: plan, into: draft)
+                    databases[page.id] = (snapshot, values)
+                    do { rowContents.merge(try store.childPageContents(of: page.id)) { first, _ in first } } catch {
+                        throw MarkdownExportError.cannotRead(error.localizedDescription)
+                    }
                 }
                 progress?(MarkdownExportProgress(pagesDone: index + 1, pagesTotal: plan.orderedPages.count))
                 continue
             }
-            let content: PageContent?
-            do { content = try store.pageContent(page.id) } catch { throw MarkdownExportError.cannotRead(error.localizedDescription) }
+            var content = rowContents.removeValue(forKey: page.id)
+            if content == nil {
+                do { content = try store.pageContent(page.id) } catch { throw MarkdownExportError.cannotRead(error.localizedDescription) }
+            }
             if let content, let location = plan.location(of: page.id) {
                 let (attachmentPaths, coverName, missing) = try copyAttachments(of: content, at: location, in: plan, into: draft,
                                                                                 createFolder: createFolder)
@@ -164,9 +181,10 @@ public struct MarkdownExporter: Sendable {
     }
 
     /// База: `Задачи.csv` и схема `Задачи.mynotion-database.json` рядом; строки — файлами в `Задачи/` (пишет обход страниц).
-    private func writeDatabase(_ snapshot: DatabaseExportSnapshot, at location: ExportPlan.Location, in plan: ExportPlan, into draft: URL) throws {
+    private func writeDatabase(_ snapshot: DatabaseExportSnapshot, values: DatabaseValueText, at location: ExportPlan.Location,
+                               in plan: ExportPlan, into draft: URL) throws {
         let folder = location.folder.reduce(draft) { $0.appendingPathComponent($1, isDirectory: true) }
-        let csv = DatabaseCSVWriter.csv(snapshot) { target in plan.linkTarget(for: target, from: location)?.path }
+        let csv = DatabaseCSVWriter.csv(snapshot, values: values) { target in plan.linkTarget(for: target, from: location)?.path }
         try writeFile(Data(csv.utf8), folder.appendingPathComponent(location.fileName))
         let schema = DatabaseSchemaFile(snapshot, rowFile: { row in
             plan.location(of: row.id).map { Array($0.components.dropFirst(location.folder.count)).joined(separator: "/") } ?? ""
@@ -281,6 +299,8 @@ private struct ExportPlan {
     private var icons: [UUID: String] = [:]
     private var titlesOfTrashedPages: [UUID: String] = [:]
     private let databases: Set<UUID>
+    /// Выгрузка одной ветки: название страницы вне неё (ссылки на неё — названием, без пути).
+    var outsideTitle: ((UUID) -> String?)?
     /// Папка шаблонов строк в папке базы.
     static let templatesFolder = "Шаблоны"
 
@@ -333,6 +353,6 @@ private struct ExportPlan {
             let path = Array(repeating: "..", count: source.folder.count - common) + target.components[common...]
             return PageLinkTarget(title: titles[pageId] ?? Page.untitledTitle, path: path.joined(separator: "/"), icon: icons[pageId])
         }
-        return titlesOfTrashedPages[pageId].map { PageLinkTarget(title: $0, path: nil) }
+        return (titlesOfTrashedPages[pageId] ?? outsideTitle?(pageId)).map { PageLinkTarget(title: $0, path: nil) }
     }
 }
