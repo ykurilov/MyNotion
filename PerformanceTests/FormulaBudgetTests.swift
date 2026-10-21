@@ -39,7 +39,7 @@ final class FormulaBudgetTests: XCTestCase {
         let operations = DatabaseOperations(store: store)
         let property = try operations.addProperty(to: sample.tasksId, name: "Оценка часов", kind: .formula)
 
-        let gaps = MainThreadGaps()
+        let gaps = GapLog()
         let ticker = Timer.scheduledTimer(withTimeInterval: 0.005, repeats: true) { _ in gaps.tick() }
         var waits: [Double] = []
         var step = 0
@@ -73,12 +73,10 @@ final class FormulaBudgetTests: XCTestCase {
                 if stored != expected { mismatches.append("\(row): \(stored ?? "нет") ≠ \(expected ?? "пусто")") }
             }
         }
-        let summary = """
-            Новая формула на \(rowIds.count) строках: «Готово» \(ProbeEditor.format(saveMs)) мс (пересчёт — в фоне), до готовности \
-            \(String(format: "%.2f", total)) с; правка во время пересчёта ждёт p95 \(ProbeEditor.format(ProbeEditor.p95(waits))) мс, \
-            медиана \(ProbeEditor.format(ProbeEditor.median(waits))), худшая \(ProbeEditor.format(waits.max() ?? 0)) мс (\(waits.count) правок, предел 50); \
-            главный поток замирал до \(ProbeEditor.format(gaps.longest)) мс; итог сошёлся «в лоб» у \(rowIds.count - mismatches.count) из \(rowIds.count)
-            """
+        let summary = "Проба формул US5: новая формула на \(rowIds.count) строках: «Готово» \(ProbeEditor.format(saveMs)) мс (пересчёт — в фоне), до готовности "
+            + "\(String(format: "%.2f", total)) с; правка во время пересчёта ждёт p95 \(ProbeEditor.format(ProbeEditor.p95(waits))) мс, "
+            + "медиана \(ProbeEditor.format(ProbeEditor.median(waits))), худшая \(ProbeEditor.format(waits.max() ?? 0)) мс (\(waits.count) правок, предел 50); "
+            + "главный поток: \(gaps.report); итог сошёлся «в лоб» у \(rowIds.count - mismatches.count) из \(rowIds.count)"
         print(summary)
         add(XCTAttachment(string: summary + "\n" + mismatches.prefix(5).joined(separator: "\n")))
         XCTAssertLessThanOrEqual(ProbeEditor.p95(waits), Self.editWaitBudgetMs, "Правка во время пересчёта ждёт больше 50 мс (p95)")
@@ -88,13 +86,20 @@ final class FormulaBudgetTests: XCTestCase {
     }
 
     func testFirstFillInBackground() async throws {
+        // Разовая остановка главного потока ~0,7–0,9 с бывает у первого асинхронного замера в процессе (и через секунду
+        // после копии эталона); повторное заполнение в том же процессе и контроль — ≤ 9 мс (quickstart.md, US5).
+        try await firstFill(settle: false)
+    }
+
+    private func firstFill(settle: Bool) async throws {
         let (folder, store, sample, queue) = try library()
+        if settle { try await Task.sleep(for: .seconds(1)) }
         defer { store.database.close(); try? FileManager.default.removeItem(at: folder) }
         let formulas = ["Дней до срока", "Итог", "Проект (имя)"].map { sample.taskProperties[$0]! }
         try store.write { tx in
             for id in formulas { try tx.execute(sql: "DELETE FROM db_computed WHERE propertyId = ?", arguments: [.text(id.uuidString.lowercased())]) }
         }
-        let gaps = MainThreadGaps()
+        let gaps = GapLog()
         let ticker = Timer.scheduledTimer(withTimeInterval: 0.005, repeats: true) { _ in gaps.tick() }
         let started = ContinuousClock.now
         queue.fillMissing()
@@ -106,11 +111,47 @@ final class FormulaBudgetTests: XCTestCase {
                               arguments: formulas.map { .text($0.uuidString.lowercased()) }).first.flatMap(Int.init) ?? 0
         }
         let rows = try XCTUnwrap(try ViewQuery.open(sample.tableViewId, in: store)).result.rowIds.count
-        let summary = "Первое заполнение: 3 формулы × \(rows) строк — \(String(format: "%.2f", total)) с в фоне (предел 5), записано \(filled) из \(rows * 3); главный поток замирал до \(ProbeEditor.format(gaps.longest)) мс"
+        let summary = "Проба формул US5: первое заполнение\(settle ? " (через 1 с после копии)" : ""): 3 формулы × \(rows) строк — \(String(format: "%.2f", total)) с в фоне (предел 5), записано \(filled) из \(rows * 3); главный поток: \(gaps.report)"
         print(summary)
         add(XCTAttachment(string: summary))
         XCTAssertLessThanOrEqual(total, Self.firstFillBudgetSeconds)
         XCTAssertEqual(filled, rows * 3)
+    }
+
+    /// Контроль остановок главного потока: секунда простоя с тем же таймером, затем пересчёт базы очередью без запроса
+    /// «чего не хватает» — чья остановка в первом заполнении.
+    func testMainThreadGapControl() async throws {
+        let (folder, store, sample, queue) = try library()
+        defer { store.database.close(); try? FileManager.default.removeItem(at: folder) }
+        let idle = GapLog()
+        var ticker = Timer.scheduledTimer(withTimeInterval: 0.005, repeats: true) { _ in idle.tick() }
+        try await Task.sleep(for: .seconds(1))
+        ticker.invalidate()
+        let busy = GapLog()
+        ticker = Timer.scheduledTimer(withTimeInterval: 0.005, repeats: true) { _ in busy.tick() }
+        queue.enqueue(sample.tasksId)
+        await waitIdle(queue)
+        ticker.invalidate()
+        // Стёрли итоги, как в первом заполнении, но без запроса «чего не хватает».
+        let formulas = ["Дней до срока", "Итог", "Проект (имя)"].map { sample.taskProperties[$0]! }
+        try store.write { tx in
+            for id in formulas { try tx.execute(sql: "DELETE FROM db_computed WHERE propertyId = ?", arguments: [.text(id.uuidString.lowercased())]) }
+        }
+        let afterDelete = GapLog()
+        ticker = Timer.scheduledTimer(withTimeInterval: 0.005, repeats: true) { _ in afterDelete.tick() }
+        queue.enqueue(sample.tasksId)
+        await waitIdle(queue)
+        ticker.invalidate()
+        // Только запрос «чего не хватает» (итоги уже есть).
+        let query = GapLog()
+        ticker = Timer.scheduledTimer(withTimeInterval: 0.005, repeats: true) { _ in query.tick() }
+        queue.fillMissing()
+        await waitIdle(queue)
+        ticker.invalidate()
+        let summary = "Проба формул US5: контроль — простой: \(idle.report); пересчёт очередью: \(busy.report); "
+            + "после стирания итогов: \(afterDelete.report); запрос недостающих: \(query.report)"
+        print(summary)
+        add(XCTAttachment(string: summary))
     }
 
     func testEditWithRecomputeAndOpenSortedByFormula() throws {
@@ -139,14 +180,37 @@ final class FormulaBudgetTests: XCTestCase {
             let ms = try ProbeEditor.measure { _ = try ViewQuery.open(sample.workViewId, in: store) }
             if index >= 5 { opens.append(ms) }
         }
-        let summary = """
-            Правка флажка с пересчётом через подписчика записи: p95 \(ProbeEditor.format(ProbeEditor.p95(edits))) мс (предел 50)
-            Открытие вида «работа» (сортировка по формуле: \(sortsByFormula ? "да" : "нет"), \(opened.result.rowIds.count) строк): p95 \(ProbeEditor.format(ProbeEditor.p95(opens))) мс (предел 50)
-            """
+        let summary = "Проба формул US5: правка флажка с пересчётом через подписчика записи: p95 \(ProbeEditor.format(ProbeEditor.p95(edits))) мс (предел 50); "
+            + "открытие вида «работа» (сортировка по формуле: \(sortsByFormula ? "да" : "нет"), \(opened.result.rowIds.count) строк): p95 \(ProbeEditor.format(ProbeEditor.p95(opens))) мс (предел 50)"
         print(summary)
         add(XCTAttachment(string: summary))
         XCTAssertTrue(sortsByFormula)
         XCTAssertLessThanOrEqual(ProbeEditor.p95(edits), Self.editWaitBudgetMs)
         XCTAssertLessThanOrEqual(ProbeEditor.p95(opens), Self.openBudgetMs)
+    }
+}
+
+/// Остановки главного потока: самая долгая, сколько дольше 100 мс и когда (от начала).
+final class GapLog: @unchecked Sendable {
+    private let start = ContinuousClock.now
+    private var last = ContinuousClock.now
+    private(set) var longest = 0.0
+    private var long: [(at: Double, ms: Double)] = []
+
+    func tick() {
+        let now = ContinuousClock.now
+        let gap = now - last
+        let ms = Double(gap.components.seconds) * 1_000 + Double(gap.components.attoseconds) / 1e15
+        if ms > 100 {
+            let at = now - start
+            long.append((Double(at.components.seconds) * 1_000 + Double(at.components.attoseconds) / 1e15 - ms, ms))
+        }
+        longest = max(longest, ms)
+        last = now
+    }
+
+    var report: String {
+        "замирал до \(String(format: "%.1f", longest)) мс, дольше 100 мс — \(long.count) раз"
+            + (long.isEmpty ? "" : " (" + long.prefix(5).map { "с \(Int($0.at)) мс на \(Int($0.ms))" }.joined(separator: ", ") + ")")
     }
 }
