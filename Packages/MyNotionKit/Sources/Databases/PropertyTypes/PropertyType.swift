@@ -93,7 +93,7 @@ public enum PropertyTypes {
     public static let all: [any PropertyType] = [
         TitleType(), TextType(), NumberType(), SelectType(), MultiSelectType(), StatusType(), DateType(), CheckboxType(),
         PlainTextType(kind: .url), PlainTextType(kind: .email), PlainTextType(kind: .phone), FilesType(),
-        PageTimeType(kind: .createdTime), PageTimeType(kind: .lastEditedTime), RelationType(), ComputedType(kind: .rollup),
+        PageTimeType(kind: .createdTime), PageTimeType(kind: .lastEditedTime), RelationType(), RollupType(),
         ComputedType(kind: .formula), UniqueIdType(),
     ]
 

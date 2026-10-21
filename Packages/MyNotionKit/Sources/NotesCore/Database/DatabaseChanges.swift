@@ -30,6 +30,9 @@ public struct DatabaseChanges: Sendable {
     public internal(set) var cells: [CellRecord] = []
     public internal(set) var relationLinks: [RecordChange<RelationLink>] = []
     public internal(set) var rowOrders: [RowOrder] = []
+    /// Связи, стёртые вместе со страницей навсегда (только этому Mac: стирание страницы уходит на сервер само) —
+    /// пересчёт сводок и формул живой стороны.
+    public internal(set) var erasedLinks: [RelationLink] = []
 
     public var isEmpty: Bool {
         databases.isEmpty && properties.isEmpty && options.isEmpty && views.isEmpty && cells.isEmpty && relationLinks.isEmpty

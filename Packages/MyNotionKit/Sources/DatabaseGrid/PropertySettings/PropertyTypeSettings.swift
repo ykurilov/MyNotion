@@ -15,8 +15,8 @@ public struct PropertyTypeSettings: Sendable {
         self.makeView = makeView
     }
 
-    /// Описатели историй (US1 — префикс ID).
-    public static var all: [PropertyTypeSettings] { [UniqueIdSettingsView.settings] }
+    /// Описатели историй (US1 — префикс ID, US4 — связь и сводка).
+    public static var all: [PropertyTypeSettings] { [UniqueIdSettingsView.settings, RelationSettingsView.settings, RollupSettingsView.settings] }
 
     static func settings(for kind: PropertyKind) -> PropertyTypeSettings? { all.first { $0.kinds.contains(kind) } }
 }

@@ -44,18 +44,7 @@ public enum RowWindowReader {
             }
         }
         for property in catalog.properties where property.kind == .relation {
-            let paired = property.config["pairedPropertyId"]?.string.flatMap(UUID.init(uuidString:))
-            let reversed = paired.map { $0.uuidString < property.id.uuidString } ?? false
-            let (linkProperty, own, other) = reversed ? (paired!, "targetRowId", "rowId") : (property.id, "rowId", "targetRowId")
-            let cursor = try Row.fetchCursor(db, sql: """
-                SELECT l.\(own), t.id, t.title, t.icon FROM db_relation_link l JOIN page t ON t.id = l.\(other)
-                WHERE l.propertyId = ? AND l.\(own) IN (\(marks)) AND l.isPresent = 1 AND t.trashedAt IS NULL
-                ORDER BY l.sortKey, l.id
-                """, arguments: StatementArguments([linkProperty.databaseText] + ids))
-            while let row = try cursor.next() {
-                guard let rowId = UUID(uuidString: row[0]), let targetId = UUID(uuidString: row[1]) else { continue }
-                rows[rowId]?.relations[property.id, default: []].append(RelatedRow(id: targetId, title: row[2], icon: row[3]))
-            }
+            for (rowId, related) in try RelationLinks.targets(of: rowIds, through: property, in: db) { rows[rowId]?.relations[property.id] = related }
         }
         return rows
     }

@@ -68,12 +68,12 @@ public struct DatabaseFormulaSchema: FormulaSchema {
 
 extension DatabaseProperty {
     /// База, куда ведёт связь.
-    var relationTarget: UUID? {
+    public var relationTarget: UUID? {
         kind == .relation ? config["targetDatabaseId"]?.string.flatMap(UUID.init(uuidString:)) : nil
     }
 
     /// Ответное свойство двусторонней связи.
-    var pairedRelation: UUID? { config["pairedPropertyId"]?.string.flatMap(UUID.init(uuidString:)) }
+    public var pairedRelation: UUID? { config["pairedPropertyId"]?.string.flatMap(UUID.init(uuidString:)) }
 
     /// Ссылки двусторонней пары хранятся у свойства с меньшим id: у «второго» свойства пара читается наоборот
     /// (как в `FormulaInputs`).

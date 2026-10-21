@@ -59,7 +59,7 @@ extension DatabaseOperations {
     }
 
     /// В корзину или обратно; шаг отмены — противоположное.
-    func setRowsTrashed(_ rowIds: [UUID], _ isTrashed: Bool) throws {
+    public func setRowsTrashed(_ rowIds: [UUID], _ isTrashed: Bool) throws {
         try perform(isTrashed ? "Удаление строки" : "Возврат строки") { transaction in
             let now = Date()
             for rowId in rowIds {

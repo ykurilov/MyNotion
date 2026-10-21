@@ -113,7 +113,12 @@ public final class PropertyMenuPresenter {
     public func showAddProperty(below rect: NSRect, in view: NSView) {
         showNameAndType(below: rect, in: view, name: "", current: nil) { [weak self] name, kind in
             guard let self, let kind else { return }
-            Self.attempt { try self.commands.addProperty(named: name, kind: kind) }
+            var created: DatabaseProperty?
+            Self.attempt { created = try self.commands.addProperty(named: name, kind: kind) }
+            // Связь и сводка без настроек пусты: панель «Изменить свойство» — сразу (contracts/property-types.md).
+            if let created, kind == .relation || kind == .rollup, let host = self.panelHost ?? self.anchorView {
+                self.showEditProperty(created.id, in: host)
+            }
         }
     }
 

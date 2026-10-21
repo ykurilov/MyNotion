@@ -24,17 +24,7 @@ struct FormulaInputs: FormulaContext {
         // Связи: страницы цели и нужные свойства целей.
         let foreign = needed.subtracting(catalog.properties.map(\.id.databaseText))
         for relation in own where relation.kind == .relation {
-            var targets: [UUID: [UUID]] = [:]
-            let (linkProperty, ownColumn, otherColumn) = relation.readsLinksReversed ? (relation.pairedRelation!, "targetRowId", "rowId")
-                : (relation.id, "rowId", "targetRowId")
-            let marks = Array(repeating: "?", count: rows.count).joined(separator: ",")
-            for row in try Row.fetchAll(db, sql: """
-                SELECT l.\(ownColumn), l.\(otherColumn) FROM db_relation_link l JOIN page t ON t.id = l.\(otherColumn)
-                WHERE l.propertyId = ? AND l.\(ownColumn) IN (\(marks)) AND l.isPresent = 1 AND t.trashedAt IS NULL ORDER BY l.sortKey, l.id
-                """, arguments: StatementArguments([linkProperty.databaseText] + rows.map(\.databaseText))) {
-                guard let from = UUID(uuidString: row[0]), let to = UUID(uuidString: row[1]) else { continue }
-                targets[from, default: []].append(to)
-            }
+            let targets = try RelationLinks.targets(of: rows, through: relation, in: db).mapValues { $0.map(\.id) }
             for row in rows { values[row, default: [:]][relation.id.databaseText] = .list((targets[row] ?? []).map(FormulaValue.page)) }
             let targetRows = Array(Set(targets.values.flatMap { $0 }))
             guard !targetRows.isEmpty, let targetDatabase = relation.relationTarget else { continue }
