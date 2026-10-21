@@ -30,6 +30,18 @@ extension DatabaseOperations {
         }
     }
 
+    /// Настройки типа свойства (`config`, data-model.md): префикс ID, формат числа и т. п. Неизвестные ключи — как пришли.
+    public func setPropertyConfig(_ propertyId: UUID, _ config: JSONValue) throws {
+        try performChange("Настройка свойства") { transaction in
+            var property = try Self.requireProperty(propertyId, transaction)
+            let previous = property.config
+            guard previous != config else { return nil }
+            property.config = config
+            try transaction.saveProperty(property)
+            return { try $0.setPropertyConfig(propertyId, previous) }
+        }
+    }
+
     /// Место свойства в базе (окно «Свойства», страница строки): `index` — среди неудалённых свойств.
     public func moveProperty(_ propertyId: UUID, to index: Int) throws {
         try perform("Перестановка свойства") { transaction in
