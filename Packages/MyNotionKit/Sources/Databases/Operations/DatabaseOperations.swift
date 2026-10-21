@@ -198,6 +198,8 @@ public final class DatabaseOperations {
                                                                          sortKey: .between(last, nil)))
             // Новое ID нумерует прежние строки по созданию (Notion 7.39).
             if kind == .uniqueId { try UniqueIds.numberRows(of: property.id, inDatabase: databaseId, in: transaction) }
+            // Новый статус — с группами и вариантами Notion (US2).
+            if kind == .status { try Self.insertStatusDefaults(in: property.id, transaction) }
             return (property, { try $0.setDeleted(property.id, true) })
         }
     }

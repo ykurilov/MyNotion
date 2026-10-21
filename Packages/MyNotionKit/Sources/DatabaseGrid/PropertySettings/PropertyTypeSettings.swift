@@ -15,8 +15,11 @@ public struct PropertyTypeSettings: Sendable {
         self.makeView = makeView
     }
 
-    /// Описатели историй (US1 — префикс ID, US4 — связь и сводка).
-    public static var all: [PropertyTypeSettings] { [UniqueIdSettingsView.settings, RelationSettingsView.settings, RollupSettingsView.settings] }
+    /// Описатели историй (US1 — префикс ID; US2 — число, выбор, статус, дата; US4 — связь и сводка).
+    public static var all: [PropertyTypeSettings] {
+        [UniqueIdSettingsView.settings, NumberSettingsView.settings, SelectSettingsView.settings, StatusSettingsView.settings,
+         DateSettingsView.settings, RelationSettingsView.settings, RollupSettingsView.settings]
+    }
 
     static func settings(for kind: PropertyKind) -> PropertyTypeSettings? { all.first { $0.kinds.contains(kind) } }
 }
@@ -28,4 +31,10 @@ public struct PropertyTypeSettingsContext {
     public let store: NotesStore
     public let operations: DatabaseOperations
     public let viewId: UUID?
+}
+
+/// Раздел настроек, чья высота меняется (новый вариант, «Показывать как»): панель подстраивает место под него.
+@MainActor
+public protocol PropertyTypeSettingsResizing: AnyObject {
+    var onHeightChange: (() -> Void)? { get set }
 }

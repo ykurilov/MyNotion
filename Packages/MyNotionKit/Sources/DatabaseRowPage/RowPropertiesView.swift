@@ -185,6 +185,11 @@ final class RowPropertyLineView: NSView, NSTextFieldDelegate {
         case .chips(let chips):
             chipViews = chips.map { OptionChip(title: $0.title, color: $0.color) }
             chipViews.forEach(addSubview)
+        case .meter(let meter):
+            // Число полосой или кольцом — на странице строки числом (как Notion в свойствах страницы).
+            valueLabel.stringValue = meter.text ?? ""
+            valueLabel.textColor = Palette.textPrimary
+            valueLabel.isHidden = false
         }
         setAccessibilityValue(line.presentation == .empty ? RowPropertyLine.emptyText : line.presentation.plainText)
         needsLayout = true

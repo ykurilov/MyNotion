@@ -20,4 +20,12 @@ struct GalleryDatabaseStatesTests {
                                         .databases(.formulaEditorCycle), .databases(.formulaCells)])
         #expect(GalleryCatalog.shots.filter { ids.contains($0.state.id) }.count == 10)
     }
+
+    @Test("US2: окна выбора, статуса, даты, файлов, настройки и плашки — в обеих темах")
+    func typeStates() {
+        let states = GalleryCatalog.states.filter { $0.id.hasPrefix("type-") }
+        #expect(states.count == 11)
+        #expect(states.allSatisfy { $0.section == "Базы" })
+        #expect(GalleryCatalog.shots.filter { $0.state.id.hasPrefix("type-") }.count == 22)
+    }
 }

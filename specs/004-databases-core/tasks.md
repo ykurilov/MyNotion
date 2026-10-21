@@ -172,14 +172,14 @@ description: "Задачи: базы данных — основа"
 
 ### Tests for User Story 2
 
-- [ ] T065 [P] [US2] `PK/Tests/DatabasesTests/SelectOptionOperationsTests.swift`: создать из ячейки (случайный цвет не как у предыдущего), переименовать, цвет, удалить из всех строк и ⌘Z, порядок, сортировка вариантов; статус — три группы и варианты по умолчанию; одинаковые имена с двух Mac сливаются при правке ячейки
-- [ ] T066 [P] [US2] `PK/Tests/DatabasesTests/DatePropertyTests.swift` и `DatabaseReminderTests.swift` (подменённые часы): диапазон, время, форматы (contracts), напоминания всех вариантов — момент срабатывания; «сделано» синхронизируется как в 002
-- [ ] T067 [P] [US2] `PK/Tests/DatabasesTests/FilesPropertyTests.swift`: несколько файлов и ссылок, лимит 100 МБ, счётчик ссылок 002 — файл не стирается, пока он в ячейке или в версии
+- [x] T065 [P] [US2] `PK/Tests/DatabasesTests/SelectOptionOperationsTests.swift`: создать из ячейки (случайный цвет не как у предыдущего), переименовать, цвет, удалить из всех строк и ⌘Z, порядок, сортировка вариантов; статус — три группы и варианты по умолчанию; одинаковые имена с двух Mac сливаются при правке ячейки
+- [x] T066 [P] [US2] `PK/Tests/DatabasesTests/DatePropertyTests.swift` и `DatabaseReminderTests.swift` (подменённые часы): диапазон, время, форматы (contracts), напоминания всех вариантов — момент срабатывания; «сделано» синхронизируется как в 002
+- [x] T067 [P] [US2] `PK/Tests/DatabasesTests/FilesPropertyTests.swift`: несколько файлов и ссылок, лимит 100 МБ, счётчик ссылок 002 — файл не стирается, пока он в ячейке или в версии
 - [ ] T068 [P] [US2] XCUITest `UITests/SelectStatusDateTests.swift`: сценарии spec, US2; перезапуск
 
 ### Implementation for User Story 2
 
-- [ ] T069 [US2] Операции вариантов `PK/Sources/Databases/Operations/DatabaseOperations+Options.swift` (T065)
+- [x] T069 [US2] Операции вариантов `PK/Sources/Databases/Operations/DatabaseOperations+Options.swift` (T065)
 - [ ] T070 [US2] Ячейки и окна `PK/Sources/DatabaseGrid/Cells/{Select,MultiSelect,Status}Cell.swift` (окно «Найти вариант…», «Выберите вариант или создайте», ручки, «⋯» варианта с цветами) и настройки `PropertySettings/{SelectSettings,StatusSettings}.swift`
 - [ ] T071 [US2] Дата `PK/Sources/DatabaseGrid/Cells/DateCell.swift` (календарь с понедельника, «Дата окончания», «Формат даты ›», «Включить время», «Напомнить ›», «Очистить»), напоминания из ячеек в `ReminderNotifications` (T066)
 - [ ] T072 [US2] Файлы `PK/Sources/DatabaseGrid/Cells/FilesCell.swift` (окно «Загрузить» / «Ссылка», перетаскивание из Finder, уменьшенные картинки) (T067)

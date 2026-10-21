@@ -233,7 +233,8 @@ public final class DatabaseGridView: NSView {
             if text == nil { controller.toggleCheckbox(row: position.row, column: position.column) }
             return
         case .inPlace: break
-        case .popup, .none: return
+        case .popup: return openCellPopup(replacingWith: text)
+        case .none: return
         }
         editor?.removeFromSuperview()
         let initial = text ?? controller.editingText(row: position.row, column: position.column)

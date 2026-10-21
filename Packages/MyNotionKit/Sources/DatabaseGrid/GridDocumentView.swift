@@ -243,6 +243,11 @@ final class GridDocumentView: NSView, NSMenuItemValidation {
             let height = Metrics.DatabaseGrid.chipHeight
             for chip in chips {
                 guard chipX < inner.maxX - 12 else { break }
+                // Статус, картинка файла — свой вид плашки (US2, `Cells/StatusCell.swift`, `Cells/FilesCell.swift`).
+                if let width = CellChipStyles.draw(chip, at: CGPoint(x: chipX, y: rect.midY), maxX: inner.maxX, store: content.store) {
+                    chipX += width + Metrics.DatabaseGrid.chipSpacing
+                    continue
+                }
                 let textWidth = min(text.width(chip.title, size: Metrics.DatabaseGrid.chipFontSize), inner.maxX - chipX - 2 * Metrics.DatabaseGrid.chipHorizontalPadding)
                 let chipRect = CGRect(x: chipX, y: rect.midY - height / 2, width: textWidth + 2 * Metrics.DatabaseGrid.chipHorizontalPadding, height: height)
                 context.addPath(CGPath(roundedRect: chipRect, cornerWidth: Metrics.DatabaseGrid.chipCornerRadius,
@@ -253,6 +258,8 @@ final class GridDocumentView: NSView, NSMenuItemValidation {
                           alignment: .left, context: context)
                 chipX = chipRect.maxX + Metrics.DatabaseGrid.chipSpacing
             }
+        case .meter(let meter):
+            NumberMeterDrawing.draw(meter, in: inner, cellRect: rect, text: text, context: context)
         }
     }
 
@@ -385,8 +392,9 @@ final class GridDocumentView: NSView, NSMenuItemValidation {
     override func mouseUp(with event: NSEvent) {
         defer { dragAnchor = nil; mouseDownPosition = nil }
         guard let grid, let position = mouseDownPosition, !didDrag, event.clickCount <= 2 else { return }
-        // Щелчок по ячейке названия, текста, числа, ссылки, email, телефона — правка на месте (строку не открывает).
-        if CellKind.for(content.columns[position.column].property.kind).editing == .inPlace { grid.beginEditing() }
+        // Щелчок по ячейке названия, текста, числа, ссылки, email, телефона — правка на месте (строку не открывает);
+        // выбора, статуса, даты, файлов, связи — окно под ячейкой.
+        if [.inPlace, .popup].contains(CellKind.for(content.columns[position.column].property.kind).editing) { grid.beginEditing() }
     }
 
     private func checkboxHit(_ point: NSPoint, at position: CellPosition) -> Bool {
