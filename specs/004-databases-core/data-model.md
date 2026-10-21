@@ -177,7 +177,7 @@
 ## Миграция v9
 
 1. Копия базы `MyNotion.backup-v8.sqlite`, тест восстановления из неё.
-2. Таблица блоков пересоздаётся с теми же rowid (новый тип `database` в `CHECK`); таблицы `db_database`, `db_property`, `db_select_option`, `db_cell`, `db_relation_link`, `db_view`, `db_row_order`, `db_computed` с индексами и локальная `db_cell_search`.
+2. Таблица блоков пересоздаётся с теми же rowid (новый тип `database` в `CHECK`); таблицы `db_database`, `db_property`, `db_select_option`, `db_cell`, `db_relation_link`, `db_view`, `db_row_order`, `db_computed` с индексами и локальная `db_cell_search`; частичный индекс корзины `page_trashed` (дерево читает удалённые строки баз, не проходя все строки, T030).
 3. Повтор миграции ничего не меняет; база новее приложения — запись не идёт (как в 002).
 
 ## Синхронизация (формат v4)
