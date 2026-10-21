@@ -159,9 +159,12 @@ public final class DatabaseOperations {
     @discardableResult
     public func addProperty(to databaseId: UUID, name: String, kind: PropertyKind, config: JSONValue = .emptyObject) throws -> DatabaseProperty {
         try perform("Новое свойство") { transaction in
+            if kind == .uniqueId { try UniqueIds.ensureNone(inDatabase: databaseId, in: transaction) }
             let last = try transaction.properties(ofDatabase: databaseId, includingDeleted: true).map(\.sortKey).max()
             let property = try transaction.saveProperty(DatabaseProperty(databaseId: databaseId, name: name, kind: kind, config: config,
                                                                          sortKey: .between(last, nil)))
+            // Новое ID нумерует прежние строки по созданию (Notion 7.39).
+            if kind == .uniqueId { try UniqueIds.numberRows(of: property.id, inDatabase: databaseId, in: transaction) }
             return (property, { try $0.setDeleted(property.id, true) })
         }
     }
@@ -170,6 +173,11 @@ public final class DatabaseOperations {
     public func setDeleted(_ propertyId: UUID, _ isDeleted: Bool) throws {
         try perform(isDeleted ? "Удаление свойства" : "Возврат свойства") { transaction in
             guard var property = try transaction.property(propertyId) else { throw NotesStoreError.invalidRecord("свойства нет") }
+            // «Название» не удаляется (FR-305); удалённое навсегда не возвращается (US1, `eraseProperty`).
+            guard property.kind != .title, property.config[Self.erasedKey] == nil else {
+                throw NotesStoreError.invalidRecord("это свойство не удаляется и не возвращается")
+            }
+            if !isDeleted, property.kind == .uniqueId { try UniqueIds.ensureNone(inDatabase: property.databaseId, except: propertyId, in: transaction) }
             property.deletedAt = isDeleted ? Date() : nil
             try transaction.saveProperty(property)
             return ((), { try $0.setDeleted(propertyId, !isDeleted) })

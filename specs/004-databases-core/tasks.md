@@ -90,14 +90,14 @@ description: "Задачи: базы данных — основа"
 
 ### Tests for User Story 1
 
-- [ ] T031 [P] [US1] `PK/Tests/DatabasesTests/DatabaseOperationsTests.swift`: создать обе базы (пустая, одна колонка «Название»); свойство — добавить, переименовать, переставить, ширина, вставить слева/справа, дублировать со значениями, удалить (в «Удалённые свойства») и вернуть, удалить навсегда; строка — «+ Новая строка» (в конце), «Создать» (вверху вида), дублировать, в корзину, перетащить (только `db_row_order` этого вида); смена типа с переводом значений и ⌘Z целиком; каждая — один шаг отмены
-- [ ] T032 [P] [US1] `PK/Tests/DatabaseGridTests/CellSelectionTests.swift` и `CellClipboardTests.swift`: прямоугольник ⇧-стрелками и протяжкой, ⌘A; ⌘C — TSV и HTML-таблица; ⌘V с добавлением строк и обрезкой колонок; ⌫ стирает; вставка одним шагом отмены
-- [ ] T033 [P] [US1] `PK/Tests/DatabasesTests/UniqueIdTests.swift`: номера 1, 2, 3 по созданию, одно свойство ID на базу, номер не переиспользуется после корзины
+- [x] T031 [P] [US1] `PK/Tests/DatabasesTests/DatabaseOperationsTests.swift`: создать обе базы (пустая, одна колонка «Название»); свойство — добавить, переименовать, переставить, ширина, вставить слева/справа, дублировать со значениями, удалить (в «Удалённые свойства») и вернуть, удалить навсегда; строка — «+ Новая строка» (в конце), «Создать» (вверху вида), дублировать, в корзину, перетащить (только `db_row_order` этого вида); смена типа с переводом значений и ⌘Z целиком; каждая — один шаг отмены
+- [x] T032 [P] [US1] `PK/Tests/DatabaseGridTests/CellSelectionTests.swift` и `CellClipboardTests.swift`: прямоугольник ⇧-стрелками и протяжкой, ⌘A; ⌘C — TSV и HTML-таблица; ⌘V с добавлением строк и обрезкой колонок; ⌫ стирает; вставка одним шагом отмены
+- [x] T033 [P] [US1] `PK/Tests/DatabasesTests/UniqueIdTests.swift`: номера 1, 2, 3 по созданию, одно свойство ID на базу, номер не переиспользуется после корзины
 - [ ] T034 [P] [US1] XCUITest `UITests/DatabaseTableTests.swift`: «/База данных — встроенная» и «— на всю страницу»; колонки простых типов; 20 строк; правка, Esc, Enter, Tab; выделение и ⌘C/⌘V; открыть строку «ОТКРЫТЬ» сбоку, по центру, на всю страницу; свойства на странице строки; ⌘Z по шагам; перезапуск — всё на месте
 
 ### Implementation for User Story 1
 
-- [ ] T035 [US1] Операции `PK/Sources/Databases/Operations/DatabaseOperations+{Schema,Rows,Cells}.swift` и `PK/Sources/Databases/UniqueIds.swift` (выдача номеров) (T031, T033)
+- [x] T035 [US1] Операции `PK/Sources/Databases/Operations/DatabaseOperations+{Schema,Rows,Cells}.swift` и `PK/Sources/Databases/UniqueIds.swift` (выдача номеров) (T031, T033)
 - [ ] T036 [US1] Сетка `PK/Sources/DatabaseGrid/DatabaseGridView.swift` из черновика T004: шапка колонок с иконками, протяжка края, перетаскивание колонок, «+» и «•••» в шапке, «+ Новая строка», наведение строки («+», «⠿», «ОТКРЫТЬ», флажок), полоса «N выбрано»; данные — окно видимых строк из `ViewQuery`
 - [ ] T037 [US1] Выделение, клавиши и буфер в `PK/Sources/DatabaseGrid/{CellSelection,CellKeyboard,CellClipboard}.swift`, редактор ячейки `CellEditorOverlay.swift` (T032)
 - [ ] T038 [US1] Ячейки простых типов в `PK/Sources/DatabaseGrid/Cells/{Title,Text,Number,Checkbox,URL,Email,Phone,CreatedTime,LastEditedTime,UniqueId}Cell.swift`; ссылка, email, телефон — кнопка при наведении
