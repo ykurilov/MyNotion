@@ -72,6 +72,7 @@ struct CellSelectionTests {
         #expect(command(.character, [.command], "v") == .paste)
         #expect(command(.character, [.command], "a") == .selectAll)
         #expect(command(.enter, [.shift, .command]) == .openInNewTab)
+        #expect(command(.character, [.command], "d") == .duplicateRows)
         #expect(command(.character, [.command], "z") == .none, "⌘Z — меню «Правка», не сетка")
     }
 

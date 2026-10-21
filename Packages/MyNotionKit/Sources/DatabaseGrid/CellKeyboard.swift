@@ -58,6 +58,8 @@ public enum CellCommand: Sendable, Hashable {
     case selectAll, copy, cut, paste, erase
     /// ⇧⌘↩ — строка в новой вкладке.
     case openInNewTab
+    /// ⌘D — дублировать строку (меню строки).
+    case duplicateRows
     /// Клавиша не для сетки (⌘Z и меню — дальше по цепочке).
     case none
 }
@@ -89,6 +91,7 @@ public enum CellKeyboard {
                 case "x", "ч": return .cut
                 case "v", "м": return .paste
                 case "a", "ф": return .selectAll
+                case "d", "в": return .duplicateRows
                 default: return .none
                 }
             }

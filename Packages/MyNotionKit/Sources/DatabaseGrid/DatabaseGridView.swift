@@ -267,6 +267,10 @@ public final class DatabaseGridView: NSView {
             } else {
                 eraseSelection()
             }
+        case .duplicateRows:
+            let rows = selectedRows.isEmpty ? selection.map { Array($0.rows) } ?? [] : selectedRows.sorted()
+            guard !rows.isEmpty else { return false }
+            controller?.duplicateRows(rows)
         case .openInNewTab:
             guard let row = selection?.focus.row ?? selectedRows.min() else { return false }
             controller?.openRow(row, inNewTab: true)
