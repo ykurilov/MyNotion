@@ -89,3 +89,36 @@ public struct DatabaseSchemaFile: Codable, Sendable, Equatable {
         return try decoder.decode(DatabaseSchemaFile.self, from: data)
     }
 }
+
+extension DatabaseSchemaFile {
+    /// Схема из снимка базы. `rowFile` — файл строки или шаблона от папки схемы; `relationTarget` — CSV базы-цели связи.
+    init(_ snapshot: DatabaseExportSnapshot, rowFile: (Page) -> String, relationTarget: (UUID) -> String?) {
+        func row(_ page: Page) -> Row {
+            var cells: [String: JSONValue] = [:]
+            for (propertyId, value) in snapshot.cells[page.id] ?? [:] { cells[propertyId.databaseText] = value ?? .null }
+            var relations: [String: [String]] = [:]
+            for (propertyId, targets) in snapshot.relations[page.id] ?? [:] { relations[propertyId.databaseText] = targets.map(\.databaseText) }
+            return Row(id: page.id.databaseText, file: rowFile(page), title: page.title, sortKey: page.sortKey.rawValue,
+                       createdAt: page.createdAt, updatedAt: page.updatedAt, cells: cells, relations: relations)
+        }
+        self.init(
+            formatVersion: Self.currentFormatVersion, databaseId: snapshot.schema.pageId.databaseText, title: snapshot.title,
+            isInline: snapshot.schema.isInline, defaultTemplateId: snapshot.schema.defaultTemplateId?.databaseText,
+            properties: snapshot.properties.map { property in
+                Property(id: property.id.databaseText, name: property.name, type: property.kind.rawValue, config: property.config,
+                         sortKey: property.sortKey.rawValue, deletedAt: property.deletedAt,
+                         relationTarget: property.kind == .relation
+                            ? property.config["targetDatabaseId"]?.string.flatMap(UUID.init(uuidString:)).flatMap(relationTarget) : nil)
+            },
+            options: snapshot.options.map { option in
+                Option(id: option.id.databaseText, propertyId: option.propertyId.databaseText, name: option.name, color: option.color,
+                       sortKey: option.sortKey.rawValue, statusGroup: option.statusGroup?.rawValue, deletedAt: option.deletedAt)
+            },
+            views: snapshot.views.map { view in
+                View(id: view.id.databaseText, name: view.name, type: view.type, sortKey: view.sortKey.rawValue, filter: view.filter,
+                     sorts: view.sorts, columns: view.columns, group: view.group, layoutOptions: view.layoutOptions)
+            },
+            rows: snapshot.rows.map(row), templates: snapshot.templates.map(row),
+            rowOrders: snapshot.rowOrders.map { RowOrderEntry(viewId: $0.viewId.databaseText, rowId: $0.rowId.databaseText, sortKey: $0.sortKey.rawValue) })
+    }
+}
