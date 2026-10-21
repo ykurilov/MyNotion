@@ -27,6 +27,7 @@ final class DatabaseTablePerformanceTests: XCTestCase {
         // Открытие: запрос вида, сетка с колонками, первый экран нарисован.
         var opens: [Double] = []
         var openParts: [[Double]] = []
+        var allOpens: [Double] = []
         var table: DatabaseTableView!
         for round in 0..<12 {
             window.show(NSView())
@@ -41,8 +42,11 @@ final class DatabaseTablePerformanceTests: XCTestCase {
                 })
                 parts.append(ProbeEditor.measure { table = DatabaseTableView(controller: controller, mode: .page) })
                 parts.append(ProbeEditor.measure { window.show(table) })
-                parts.append(ProbeEditor.measure { window.render() })
+                parts.append(ProbeEditor.measure { window.window.contentView?.layoutSubtreeIfNeeded() })
+                parts.append(ProbeEditor.measure { window.window.displayIfNeeded() })
+                parts.append(ProbeEditor.measure { CATransaction.flush() })
             }
+            allOpens.append(ms)
             if round >= 2 { opens.append(ms); openParts.append(parts) }
         }
         window.pump(300)
@@ -90,8 +94,8 @@ final class DatabaseTablePerformanceTests: XCTestCase {
             Таблица US1: открытие «Задачи» p95 \(ProbeEditor.format(ProbeEditor.p95(opens))) мс (предел 50); правка текста \
             p95 \(ProbeEditor.format(ProbeEditor.p95(edits))) мс, флажок p95 \(ProbeEditor.format(ProbeEditor.p95(toggles))) мс (предел 50); \
             смена типа на 10 000 строк \(ProbeEditor.format(typeChange)) мс (предел 2000). \
-            Открытия по кругам: \(opens.map(ProbeEditor.format).joined(separator: ", ")) мс; части худшего: \(openParts.max { $0.reduce(0, +) < $1.reduce(0, +) }.map { $0.map(ProbeEditor.format).joined(separator: " / ") } ?? ""). \
-            Открытие по частям (контроллер, вид, показ, рисование), медианы: \((0..<4).map { index in ProbeEditor.format(ProbeEditor.median(openParts.map { $0[index] })) }.joined(separator: " / ")) мс
+            Открытия по кругам (с первыми двумя): \(allOpens.map(ProbeEditor.format).joined(separator: ", ")) мс; части худшего: \(openParts.max { $0.reduce(0, +) < $1.reduce(0, +) }.map { $0.map(ProbeEditor.format).joined(separator: " / ") } ?? ""). \
+            Открытие по частям (контроллер, вид, показ, раскладка, рисование, передача слоёв), медианы: \((0..<6).map { index in ProbeEditor.format(ProbeEditor.median(openParts.map { $0[index] })) }.joined(separator: " / ")) мс
             Снимок: \(shotPath)
             """
         print(summary)
