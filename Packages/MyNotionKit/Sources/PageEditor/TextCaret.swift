@@ -32,7 +32,7 @@ public final class TextCaret {
     func update(isFocused: Bool? = nil) {
         isLit = true
         // Новый редактор ещё не в окне: место курсора (раскладка строки) считать незачем — курсор не виден.
-        guard let textView, isFocused != false, textView.window != nil, let rect = Self.rect(in: textView), isVisible(in: textView) else {
+        guard let textView, isFocused != false, textView.isSelectable, textView.window != nil, let rect = Self.rect(in: textView), isVisible(in: textView) else {
             view.isHidden = true
             stopBlinking()
             return

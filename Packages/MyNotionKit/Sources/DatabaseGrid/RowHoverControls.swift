@@ -69,7 +69,15 @@ final class RowHoverControls: NSView {
                 NSBezierPath(roundedRect: rect.insetBy(dx: 1, dy: 0), xRadius: 4, yRadius: 4).fill()
             }
             let color = index == 2 && selected ? Palette.checkboxChecked : Palette.handleIcon
-            let icon = GridSymbols.image(name, size: index == 1 ? 9 : 13, color: color, weight: .medium)
+            if index == 1 {
+                // «⠿» — шесть точек, как ручка блока 002.
+                color.setFill()
+                for column in 0..<2 { for line in 0..<3 {
+                    NSBezierPath(ovalIn: NSRect(x: rect.midX - 3.5 + CGFloat(column) * 5, y: rect.midY - 6 + CGFloat(line) * 5, width: 2.6, height: 2.6)).fill()
+                } }
+                continue
+            }
+            let icon = GridSymbols.image(name, size: 13, color: color, weight: .medium)
             icon.draw(in: NSRect(x: rect.midX - icon.size.width / 2, y: rect.midY - icon.size.height / 2, width: icon.size.width, height: icon.size.height))
         }
     }
