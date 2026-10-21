@@ -175,16 +175,16 @@ description: "Задачи: базы данных — основа"
 - [x] T065 [P] [US2] `PK/Tests/DatabasesTests/SelectOptionOperationsTests.swift`: создать из ячейки (случайный цвет не как у предыдущего), переименовать, цвет, удалить из всех строк и ⌘Z, порядок, сортировка вариантов; статус — три группы и варианты по умолчанию; одинаковые имена с двух Mac сливаются при правке ячейки
 - [x] T066 [P] [US2] `PK/Tests/DatabasesTests/DatePropertyTests.swift` и `DatabaseReminderTests.swift` (подменённые часы): диапазон, время, форматы (contracts), напоминания всех вариантов — момент срабатывания; «сделано» синхронизируется как в 002
 - [x] T067 [P] [US2] `PK/Tests/DatabasesTests/FilesPropertyTests.swift`: несколько файлов и ссылок, лимит 100 МБ, счётчик ссылок 002 — файл не стирается, пока он в ячейке или в версии
-- [ ] T068 [P] [US2] XCUITest `UITests/SelectStatusDateTests.swift`: сценарии spec, US2; перезапуск
+- [x] T068 [P] [US2] XCUITest `UITests/SelectStatusDateTests.swift`: сценарии spec, US2; перезапуск
 
 ### Implementation for User Story 2
 
 - [x] T069 [US2] Операции вариантов `PK/Sources/Databases/Operations/DatabaseOperations+Options.swift` (T065)
-- [ ] T070 [US2] Ячейки и окна `PK/Sources/DatabaseGrid/Cells/{Select,MultiSelect,Status}Cell.swift` (окно «Найти вариант…», «Выберите вариант или создайте», ручки, «⋯» варианта с цветами) и настройки `PropertySettings/{SelectSettings,StatusSettings}.swift`
-- [ ] T071 [US2] Дата `PK/Sources/DatabaseGrid/Cells/DateCell.swift` (календарь с понедельника, «Дата окончания», «Формат даты ›», «Включить время», «Напомнить ›», «Очистить»), напоминания из ячеек в `ReminderNotifications` (T066)
-- [ ] T072 [US2] Файлы `PK/Sources/DatabaseGrid/Cells/FilesCell.swift` (окно «Загрузить» / «Ссылка», перетаскивание из Finder, уменьшенные картинки) (T067)
-- [ ] T073 [US2] Число: `PropertySettings/NumberSettings.swift` — «Формат числа» с фильтром (снять полный список валют прокруткой в Notion), знаки после запятой, «Показывать как» (полоса, кольцо с цветом, «Разделить на», «Показывать число»)
-- [ ] T074 [US2] Состояния галереи: окна выбора, статуса, даты (все переключатели), файлов, настроек числа, плашки 10 цветов, полоса и кольцо — в обеих темах; сверка с `visual-reference/` и живым Notion
+- [x] T070 [US2] Ячейки и окна `PK/Sources/DatabaseGrid/Cells/{Select,MultiSelect,Status}Cell.swift` (окно «Найти вариант…», «Выберите вариант или создайте», ручки, «⋯» варианта с цветами) и настройки `PropertySettings/{SelectSettings,StatusSettings}.swift`
+- [x] T071 [US2] Дата `PK/Sources/DatabaseGrid/Cells/DateCell.swift` (календарь с понедельника, «Дата окончания», «Формат даты ›», «Включить время», «Напомнить ›», «Очистить»), напоминания из ячеек в `ReminderNotifications` (T066)
+- [x] T072 [US2] Файлы `PK/Sources/DatabaseGrid/Cells/FilesCell.swift` (окно «Загрузить» / «Ссылка», перетаскивание из Finder, уменьшенные картинки) (T067)
+- [x] T073 [US2] Число: `PropertySettings/NumberSettings.swift` — «Формат числа» с фильтром (снять полный список валют прокруткой в Notion), знаки после запятой, «Показывать как» (полоса, кольцо с цветом, «Разделить на», «Показывать число»)
+- [x] T074 [US2] Состояния галереи: окна выбора, статуса, даты (все переключатели), файлов, настроек числа, плашки 10 цветов, полоса и кольцо — в обеих темах; сверка с `visual-reference/` и живым Notion
 - [ ] T075 [US2] Затронутые тесты зелёные; замер правки ячейки выбора и даты; запись в quickstart.md; коммит
 
 **Checkpoint**: US2 работает и проверяется сама.

@@ -123,8 +123,9 @@ enum GalleryTypesScene {
             try operations.setCell(rowId: row, propertyId: progress.id, value: .number(Double(index) / 9))
             try operations.setCell(rowId: row, propertyId: score.id, value: .number(Double(index + 1)))
         }
-        for property in [select, tags, status, files, progress, score] { try operations.setColumnWidth(property.id, in: created.viewId, to: 170) }
-        try operations.setColumnWidth(due.id, in: created.viewId, to: 260)
+        for property in [select, tags, status, files, progress, score] { try operations.setColumnWidth(property.id, in: created.viewId, to: 150) }
+        try operations.setColumnWidth(due.id, in: created.viewId, to: 200)
+        try operations.setColumnWidth(created.titlePropertyId, in: created.viewId, to: 200)
         return id
     }
 }

@@ -19,6 +19,10 @@ extension DatabaseGridView {
             self.window?.makeFirstResponder(self.documentView)
             self.documentView.setNeedsDisplay(rows: position.row..<position.row + 1)
         }
-        host.show(popup, below: documentView.cellRect(row: position.row, column: position.column), of: documentView)
+        // Место — после прокрутки к ячейке (сетка и страница-база могли сдвинуться).
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            host.show(popup, below: self.documentView.cellRect(row: position.row, column: position.column), of: self.documentView)
+        }
     }
 }

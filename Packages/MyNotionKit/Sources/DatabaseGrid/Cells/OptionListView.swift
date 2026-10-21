@@ -231,7 +231,14 @@ final class OptionRowView: NSView {
             Palette.hoverBackground.setFill()
             NSBezierPath(roundedRect: highlight, xRadius: Metrics.PopupMenu.rowCornerRadius, yRadius: Metrics.PopupMenu.rowCornerRadius).fill()
         }
-        ActionMenuIcon.draw("circle.grid.2x3.fill", color: Palette.handleIcon, in: handleRect.insetBy(dx: 2, dy: (bounds.height - 14) / 2), inkSide: 10)
+        // «⠿»: шесть точек в два столбца, как ручка Notion.
+        Palette.handleIcon.setFill()
+        for column in 0..<2 {
+            for line in 0..<3 {
+                NSBezierPath(ovalIn: NSRect(x: handleRect.midX - 3.5 + CGFloat(column) * 5, y: bounds.height / 2 - 6 + CGFloat(line) * 5,
+                                            width: 2.4, height: 2.4)).fill()
+            }
+        }
         let chipX = handleRect.maxX + 4
         let maxWidth = bounds.width - chipX - 40
         if isStatus {
