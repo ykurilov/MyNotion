@@ -89,7 +89,7 @@ let package = Package(
         // Строка видов: фильтр, сортировка, поиск, «•••» вида, «Создать ▾».
         .target(name: "DatabaseViewBar", dependencies: ["Databases", "DatabaseGrid", "VisualStyle"]),
         // Страница строки: свойства под названием, просмотр сбоку и по центру (research R12).
-        .target(name: "DatabaseRowPage", dependencies: ["Databases", "DatabaseGrid", "PageEditor"]),
+        .target(name: "DatabaseRowPage", dependencies: ["Databases", "DatabaseGrid", "PageEditor", .product(name: "GRDB", package: "GRDB.swift")]),
         // Схема баз из Notion по ключу (Q3, research R19): только чтение.
         .target(name: "NotionSchemaFetch", dependencies: ["Formulas"]),
 
@@ -120,7 +120,7 @@ let package = Package(
         .testTarget(name: "DatabasesTests", dependencies: ["Databases", "NotesCore", "Formulas", "Reminders", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "DatabaseGridTests", dependencies: ["DatabaseGrid", "DatabaseViewBar", "DatabaseRowPage", "Databases", "NotesCore"]),
         .testTarget(name: "DatabaseViewBarTests", dependencies: ["DatabaseViewBar", "Databases", "NotesCore"]),
-        .testTarget(name: "DatabaseRowPageTests", dependencies: ["DatabaseRowPage", "Databases", "NotesCore"]),
+        .testTarget(name: "DatabaseRowPageTests", dependencies: ["DatabaseRowPage", "DatabaseGrid", "Databases", "NotesCore"]),
         .testTarget(name: "NotionSchemaFetchTests", dependencies: ["NotionSchemaFetch", "Formulas"]),
     ],
     swiftLanguageModes: [.v6]
