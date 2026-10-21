@@ -179,6 +179,13 @@ private struct BacklinkListRowView: View {
     let action: () -> Void
     @State private var isHovered = false
 
+    private var pathText: some View {
+        Text(row.path)
+            .font(.system(size: 12))
+            .foregroundStyle(Color(nsColor: Palette.textSecondary))
+            .lineLimit(1)
+    }
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
@@ -198,12 +205,11 @@ private struct BacklinkListRowView: View {
                 Spacer(minLength: 8)
                 if !row.path.isEmpty {
                     // Влезает — целиком; не влезает — «…» в начале пути (ближний родитель виден).
-                    Text(row.path)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color(nsColor: Palette.textSecondary))
-                        .lineLimit(1)
-                        .truncationMode(.head)
-                        .layoutPriority(1)
+                    ViewThatFits(in: .horizontal) {
+                        pathText.fixedSize()
+                        pathText.truncationMode(.head)
+                    }
+                    .layoutPriority(1)
                 }
             }
             .padding(.horizontal, 8)
