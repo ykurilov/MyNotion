@@ -119,7 +119,7 @@ let package = Package(
         .testTarget(name: "FormulasTests", dependencies: ["Formulas"]),
         .testTarget(name: "DatabasesTests", dependencies: ["Databases", "NotesCore", "Formulas", "Reminders", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "DatabaseGridTests", dependencies: ["DatabaseGrid", "DatabaseViewBar", "DatabaseRowPage", "Databases", "NotesCore", "Formulas"]),
-        .testTarget(name: "DatabaseViewBarTests", dependencies: ["DatabaseViewBar", "Databases", "NotesCore"]),
+        .testTarget(name: "DatabaseViewBarTests", dependencies: ["DatabaseViewBar", "DatabaseGrid", "Databases", "NotesCore"]),
         .testTarget(name: "DatabaseRowPageTests", dependencies: ["DatabaseRowPage", "DatabaseGrid", "Databases", "NotesCore"]),
         .testTarget(name: "NotionSchemaFetchTests", dependencies: ["NotionSchemaFetch", "Formulas"]),
     ],
