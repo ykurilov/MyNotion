@@ -8,7 +8,7 @@ import XCTest
 enum DatabaseProbeLibrary {
     /// Эталон баз на пустой базе: создаётся один раз во временной папке, каждой пробе — своя копия.
     static func copy() throws -> (folder: URL, store: NotesStore, sample: DatabaseSampleGenerator.Sample) {
-        let source = FileManager.default.temporaryDirectory.appendingPathComponent("MyNotion-db004-sample-v2", isDirectory: true)
+        let source = FileManager.default.temporaryDirectory.appendingPathComponent("MyNotion-db004-sample-v3", isDirectory: true)
             .appendingPathComponent("MyNotion.sqlite")
         if !FileManager.default.fileExists(atPath: source.path) {
             try FileManager.default.createDirectory(at: source.deletingLastPathComponent(), withIntermediateDirectories: true)

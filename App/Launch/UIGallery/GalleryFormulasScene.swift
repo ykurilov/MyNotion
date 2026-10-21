@@ -6,11 +6,12 @@ import NotesCore
 import UIGallery
 import VisualStyle
 
-/// Формулы в галерее (US5, T055): редактор «Изменить формулу» в четырёх состояниях поверх страницы и ячейки формул всех
-/// типов итога в сетке эталона «Задачи» (300 строк). Сверка — `notion-formula-editor*.png`.
+/// Формулы в галерее (US5, T055): редактор «Изменить формулу» в четырёх состояниях поверх открытой страницы «Задачи»
+/// (эталон, 300 строк) и ячейки формул всех типов итога в своей базе «Формулы» — обе открываются настоящим переходом.
+/// Сверка — `notion-formula-editor*.png`.
 @MainActor
 enum GalleryFormulasScene {
-    private static var overlay: NSView?
+    private static var presenter: FormulaEditorPresenter?
 
     static func handles(_ kind: GalleryDatabases) -> Bool {
         [.formulaEditorEmpty, .formulaEditorResult, .formulaEditorError, .formulaEditorCycle, .formulaCells].contains(kind)
@@ -18,35 +19,31 @@ enum GalleryFormulasScene {
 
     /// Сцена формул; итог — текст сбоя или `nil`.
     static func show(_ kind: GalleryDatabases, model: MainWindowModel, window: NSWindow) async -> String? {
-        guard let content = window.contentView else { return "окна нет" }
-        let store = model.store
         do {
-            let sample = try DatabaseSampleGenerator(taskCount: 300, projectCount: 20).ensure(in: store)
-            let host = GalleryOverlayView(frame: content.bounds)
-            host.autoresizingMask = [.width, .height]
-            content.addSubview(host)
-            overlay = host
             if kind == .formulaCells {
-                try showCells(sample: sample, store: store, in: host)
+                try openCells(model: model)
+                await settle()
+                window.makeFirstResponder(nil)
             } else {
-                try showEditor(kind, sample: sample, store: store, in: host, window: window)
+                try await openEditor(kind, model: model, window: window)
             }
         } catch {
             return "формулы не открылись: \(error)"
         }
-        try? await Task.sleep(for: .milliseconds(500))
         return nil
     }
 
     static func tearDown() {
-        overlay?.removeFromSuperview()
-        overlay = nil
+        presenter?.close()
+        presenter = nil
     }
 
-    private static func showEditor(_ kind: GalleryDatabases, sample: DatabaseSampleGenerator.Sample, store: NotesStore, in host: NSView,
-                                   window: NSWindow) throws {
+    private static func settle() async { try? await Task.sleep(for: .milliseconds(500)) }
+
+    private static func openEditor(_ kind: GalleryDatabases, model: MainWindowModel, window: NSWindow) async throws {
+        let store = model.store
+        let sample = try DatabaseSampleGenerator(taskCount: 300, projectCount: 20).ensure(in: store)
         let operations = DatabaseOperations(store: store)
-        let rows = try ViewQuery.open(sample.tableViewId, in: store)?.result.rowIds ?? []
         let property: DatabaseProperty
         var text = ""
         switch kind {
@@ -64,59 +61,59 @@ enum GalleryFormulasScene {
             default: ""
             }
         }
-        let editorModel = try FormulaEditorModel(store: store, property: property, rows: rows)
-        let editor = FormulaEditorView(model: editorModel, operations: operations)
-        let card = GalleryCardView(frame: NSRect(x: (host.bounds.width - FormulaEditorView.size.width) / 2 - 12, y: 150,
-                                                 width: FormulaEditorView.size.width + 24, height: FormulaEditorView.size.height + 24))
-        editor.frame.origin = NSPoint(x: 12, y: 12)
-        card.addSubview(editor)
-        let heading = NSTextField(labelWithString: DatabaseSampleGenerator.tasksTitle)
-        heading.font = .systemFont(ofSize: 32, weight: .bold)
-        heading.textColor = Palette.textPrimary
-        heading.frame = NSRect(x: 96, y: 72, width: 600, height: 44)
-        host.addSubview(heading)
-        host.addSubview(card)
-        editor.focusField()
+        model.library.reloadTree()
+        model.select(sample.tasksId)
+        await settle()
+        guard let anchor = window.contentView else { return }
+        let rows = try ViewQuery.open(sample.tableViewId, in: store)?.result.rowIds ?? []
+        let presenter = FormulaEditorPresenter()
+        let editor = try presenter.show(property: property, rows: rows, operations: operations, besides: anchor)
+        self.presenter = presenter
         if !text.isEmpty { editor.type(text) }
+        await settle()
     }
 
-    private static func showCells(sample: DatabaseSampleGenerator.Sample, store: NotesStore, in host: NSView) throws {
+    /// База «Формулы»: значения четырёх типов и формулы всех типов итога, по 6 строк.
+    private static func openCells(model: MainWindowModel) throws {
+        let store = model.store
         let operations = DatabaseOperations(store: store)
+        let created = try operations.createDatabase(in: nil, isInline: false, title: "Формулы")
+        let number = try operations.addProperty(to: created.databaseId, name: "Часы", kind: .number)
+        let done = try operations.addProperty(to: created.databaseId, name: "Сделано", kind: .checkbox)
+        let due = try operations.addProperty(to: created.databaseId, name: "Срок", kind: .date, config: ["dateFormat": "full"])
+        let tags = try operations.addProperty(to: created.databaseId, name: "Метки", kind: .text)
         let formulas: [(String, String, JSONValue)] = [
             ("Часы × 2", #"prop("Часы") * 2"#, ["numberFormat": ["format": "number", "decimals": 1]]),
             ("Метка", #"if(prop("Сделано"), "✅ готово", "⏳ в работе")"#, .emptyObject),
-            ("Важно и не сделано", #"prop("Важно") and not prop("Сделано")"#, .emptyObject),
+            ("Не сделано", #"not prop("Сделано")"#, .emptyObject),
             ("Срок + неделя", #"dateAdd(prop("Срок"), 1, "weeks")"#, ["dateFormat": "full"]),
-            ("Теги списком", #"prop("Теги")"#, .emptyObject),
-            ("Проекты", #"prop("Проект")"#, .emptyObject),
+            ("Метки списком", #"split(prop("Метки"), ", ")"#, .emptyObject),
         ]
-        var ids: [UUID] = []
+        var formulaIds: [UUID] = []
         for (name, text, config) in formulas {
-            let property = try operations.addProperty(to: sample.tasksId, name: name, kind: .formula, config: config)
+            let property = try operations.addProperty(to: created.databaseId, name: name, kind: .formula, config: config)
             try operations.setFormula(property.id, display: text)
-            ids.append(property.id)
+            formulaIds.append(property.id)
         }
-        _ = try FormulaRecompute(store: store, databaseId: sample.tasksId).recomputeAll()
-        guard let opened = try ViewQuery.open(sample.tableViewId, in: store) else { return }
-        let columns = ([opened.catalog.titleProperty?.id].compactMap { $0 } + ids).compactMap { id -> GridColumn? in
-            opened.catalog.propertiesById[id].map { GridColumn(property: $0, width: $0.kind == .title ? 240 : 190) }
+        let rows: [(String, Double, Bool, String, String)] = [
+            ("Купить молоко", 1, true, "2026-10-21", "дом, срочно"), ("Отчёт за квартал", 6.5, false, "2026-10-24", "работа"),
+            ("Позвонить в банк", 0.5, false, "2026-10-22", "дела, звонок"), ("Ремонт велосипеда", 3, true, "2026-11-02", "дом"),
+            ("Статья для клуба", 4, false, "2026-10-30", "работа, текст, клуб"), ("Запись к врачу", 0.25, true, "2026-10-23", "здоровье"),
+        ]
+        try store.write { tx throws in
+            for (title, hours, isDone, date, labels) in rows {
+                let page = try tx.createPage(title: title, parentId: created.databaseId)
+                _ = try tx.setCell(rowId: page.id, propertyId: number.id, value: .number(hours))
+                _ = try tx.setCell(rowId: page.id, propertyId: done.id, value: .bool(isDone))
+                _ = try tx.setCell(rowId: page.id, propertyId: due.id, value: ["start": .string(date), "hasTime": false])
+                _ = try tx.setCell(rowId: page.id, propertyId: tags.id, value: .string(labels))
+            }
         }
-        let grid = DatabaseGridView(content: GridContent(store: store, catalog: opened.catalog, columns: columns, rowIds: opened.result.rowIds))
-        let heading = NSTextField(labelWithString: DatabaseSampleGenerator.tasksTitle)
-        heading.font = .systemFont(ofSize: 32, weight: .bold)
-        heading.textColor = Palette.textPrimary
-        heading.frame = NSRect(x: 96, y: 72, width: 600, height: 44)
-        grid.frame = NSRect(x: 96, y: 140, width: host.bounds.width - 192, height: host.bounds.height - 180)
-        grid.autoresizingMask = [.width, .height]
-        host.addSubview(heading)
-        host.addSubview(grid)
-    }
-}
-
-/// Карточка с тенью всплывающего окна вокруг редактора.
-private final class GalleryCardView: NSView {
-    override var isFlipped: Bool { true }
-    override func draw(_ dirtyRect: NSRect) {
-        PopupSurface.draw(card: bounds.insetBy(dx: 10, dy: 10), shadow: Palette.popupCardShadow)
+        _ = try FormulaRecompute(store: store, databaseId: created.databaseId).recomputeAll()
+        for id in [number.id, done.id] + formulaIds { try operations.setColumnWidth(id, in: created.viewId, to: 130) }
+        try operations.setColumnWidth(due.id, in: created.viewId, to: 170)
+        try operations.setColumnWidth(tags.id, in: created.viewId, to: 150)
+        model.library.reloadTree()
+        model.select(created.databaseId)
     }
 }

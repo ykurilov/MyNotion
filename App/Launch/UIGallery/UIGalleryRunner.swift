@@ -563,7 +563,7 @@ final class UIGalleryRunner {
             GalleryTemplatesScene.tearDown(model: model)
             await settle()
         case .databases:
-            GalleryDatabasesScene.tearDown()
+            GalleryDatabasesScene.tearDown(model: model)
             await settle()
         case .backlinks(.list):
             NSApp.windows.filter { $0.isVisible && $0.className.contains("PopupCardPanel") }.forEach { $0.orderOut(nil) }

@@ -138,6 +138,26 @@ struct PageMenusRegistryTests {
         #expect(line.superview == nil)
     }
 
+    @Test("Место «под названием» на двоих (строка базы, 004): свойства строки над обратными ссылками; убрать один — второй на месте")
+    func underTitleStack() throws {
+        let editor = try EditorFixture()
+        let header = editor.textView.header
+        header.layoutSubtreeIfNeeded()
+        let before = header.frame.height
+        let backlinks = NSView()
+        let properties = NSView()
+        editor.textView.setUnderTitle(backlinks, height: 24)
+        editor.textView.setUnderTitle(properties, height: 100, order: -1)
+        header.layoutSubtreeIfNeeded()
+        #expect(header.frame.height == before + 124)
+        #expect(properties.frame.minY == header.titleField.frame.maxY && properties.frame.height == 100)
+        #expect(backlinks.frame.minY == properties.frame.maxY)
+        editor.textView.setUnderTitle(nil, height: 24)
+        header.layoutSubtreeIfNeeded()
+        #expect(header.frame.height == before + 100)
+        #expect(backlinks.superview == nil && properties.superview === header)
+    }
+
     @Test("Место «обложка»: текст и шапка ниже на высоту обложки; без обложки — на месте")
     func coverSlot() throws {
         let editor = try EditorFixture()

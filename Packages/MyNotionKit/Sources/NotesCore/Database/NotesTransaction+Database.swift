@@ -133,6 +133,23 @@ extension NotesTransaction {
         return cell
     }
 
+    /// Значения одного свойства у многих строк (смена типа): прежние значения вызывающий уже знает и шлёт только
+    /// изменённые; «изменено» строк сдвигается одним запросом на пачку.
+    public func setCells(_ values: [(rowId: UUID, value: JSONValue?)], propertyId: UUID) throws {
+        let now = Date()
+        for start in stride(from: 0, to: values.count, by: 500) {
+            let chunk = values[start..<min(start + 500, values.count)]
+            for (rowId, value) in chunk {
+                let cell = CellRecord(rowId: rowId, propertyId: propertyId, value: value == .null ? nil : value, hlc: clock.now())
+                try cell.save(in: database)
+                changes.database.cells.append(cell)
+            }
+            let marks = Array(repeating: "?", count: chunk.count).joined(separator: ",")
+            try database.execute(sql: "UPDATE page SET updatedAt = ? WHERE id IN (\(marks))",
+                                 arguments: StatementArguments([now.databaseValue] + chunk.map { $0.rowId.databaseText.databaseValue }))
+        }
+    }
+
     /// Ручное место строки в виде.
     @discardableResult
     public func setRowOrder(viewId: UUID, rowId: UUID, sortKey: FractionalSortKey) throws -> RowOrder {

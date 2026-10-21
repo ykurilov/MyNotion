@@ -18,8 +18,12 @@ public struct CreatedDatabase: Sendable, Hashable {
 public final class DatabaseOperations {
     public let store: NotesStore
     public weak var undoManager: UndoManager?
-    /// После каждой успешной операции, в том числе отмены: какие страницы она затронула (базы и строки).
+    /// После каждой успешной операции, в том числе отмены: чьи записи страниц или блоков она изменила (новая строка,
+    /// название, корзина, блок базы в хозяине) — дереву и открытым страницам. Ячейки, свойства и виды сюда не входят:
+    /// их ловят открытые таблицы по `didChange`, а страница базы не перечитывается из-за правки своей таблицы.
     public var onChange: ((Set<UUID>) -> Void)?
+    /// Идущая фоновая перезапись свойства (большая смена типа и её отмена); следующая ждёт её.
+    public internal(set) var pendingRewrite: Task<Void, any Error>?
     /// Отмена не удалась (например, строку уже стёрли навсегда).
     public var onUndoFailure: ((any Error) -> Void)?
 
@@ -32,14 +36,27 @@ public final class DatabaseOperations {
     @discardableResult
     public func perform<T>(_ actionName: String, _ body: (NotesTransaction) throws -> (T, inverse: @MainActor (DatabaseOperations) throws -> Void)) throws -> T {
         var touched: Set<UUID> = []
+        var pages: Set<UUID> = []
         let (result, inverse) = try store.write { transaction in
             let outcome = try body(transaction)
             touched = Self.touchedPages(transaction.changes)
+            pages = Self.touchedPageRecords(transaction.changes)
             return outcome
         }
         registerUndo(actionName, inverse)
-        onChange?(touched)
+        Self.announce(touched)
+        if !pages.isEmpty { onChange?(pages) }
         return result
+    }
+
+    /// Правка баз в любом окне (и её отмена) или правки с другого Mac: открытые таблицы и страницы строк перечитывают
+    /// своё. `userInfo[touchedKey]` — затронутые базы и строки (`Set<UUID>`); без него — перечитать всё.
+    public static let didChange = Notification.Name("DatabaseOperations.didChange")
+    public static let touchedKey = "touched"
+
+    /// Сообщить открытым видам баз: `nil` — изменилось неизвестно что (правки с другого Mac).
+    public static func announce(_ touched: Set<UUID>?) {
+        NotificationCenter.default.post(name: didChange, object: nil, userInfo: touched.map { [touchedKey: $0] })
     }
 
     public func registerUndo(_ actionName: String, _ inverse: @escaping @MainActor (DatabaseOperations) throws -> Void) {
@@ -50,6 +67,18 @@ public final class DatabaseOperations {
             }
         }
         undoManager.setActionName(actionName)
+    }
+
+    /// Страницы, чьи записи или блоки изменились.
+    nonisolated static func touchedPageRecords(_ changes: NotesChanges) -> Set<UUID> {
+        var touched = Set(changes.pages.map(\.page.id)).union(changes.erasedPageIds)
+        for change in changes.blocks {
+            switch change {
+            case .saved(let block, _, _): touched.insert(block.pageId)
+            case .erased(_, let pageId): touched.insert(pageId)
+            }
+        }
+        return touched
     }
 
     nonisolated static func touchedPages(_ changes: NotesChanges) -> Set<UUID> {
@@ -75,7 +104,10 @@ public final class DatabaseOperations {
     @discardableResult
     public func createDatabase(in parentId: UUID?, isInline: Bool, title: String = "", linkAt placement: SubpageLinkPlacement? = nil) throws -> CreatedDatabase {
         let (created, replaced) = try perform(isInline ? "Новая встроенная база" : "Новая база") { transaction -> ((CreatedDatabase, Block?), inverse: @MainActor (DatabaseOperations) throws -> Void) in
-            let page = try transaction.createPage(title: title, parentId: parentId)
+            var page = try transaction.createPage(title: title, parentId: parentId)
+            // Страница-база — во всю ширину окна, как у Notion 7.39 (`notion-db-fullpage-open-from-inline.png`).
+            page.isFullWidth = true
+            page = try transaction.updatePage(page)
             // У страницы-базы своих блоков нет: её содержимое — строки.
             for block in try transaction.blocks(ofPage: page.id) { try transaction.deleteBlock(block.id) }
             try transaction.saveDatabase(DatabaseSchema(pageId: page.id, isInline: isInline))
@@ -159,9 +191,12 @@ public final class DatabaseOperations {
     @discardableResult
     public func addProperty(to databaseId: UUID, name: String, kind: PropertyKind, config: JSONValue = .emptyObject) throws -> DatabaseProperty {
         try perform("Новое свойство") { transaction in
+            if kind == .uniqueId { try UniqueIds.ensureNone(inDatabase: databaseId, in: transaction) }
             let last = try transaction.properties(ofDatabase: databaseId, includingDeleted: true).map(\.sortKey).max()
             let property = try transaction.saveProperty(DatabaseProperty(databaseId: databaseId, name: name, kind: kind, config: config,
                                                                          sortKey: .between(last, nil)))
+            // Новое ID нумерует прежние строки по созданию (Notion 7.39).
+            if kind == .uniqueId { try UniqueIds.numberRows(of: property.id, inDatabase: databaseId, in: transaction) }
             return (property, { try $0.setDeleted(property.id, true) })
         }
     }
@@ -170,6 +205,11 @@ public final class DatabaseOperations {
     public func setDeleted(_ propertyId: UUID, _ isDeleted: Bool) throws {
         try perform(isDeleted ? "Удаление свойства" : "Возврат свойства") { transaction in
             guard var property = try transaction.property(propertyId) else { throw NotesStoreError.invalidRecord("свойства нет") }
+            // «Название» не удаляется (FR-305); удалённое навсегда не возвращается (US1, `eraseProperty`).
+            guard property.kind != .title, property.config[Self.erasedKey] == nil else {
+                throw NotesStoreError.invalidRecord("это свойство не удаляется и не возвращается")
+            }
+            if !isDeleted, property.kind == .uniqueId { try UniqueIds.ensureNone(inDatabase: property.databaseId, except: propertyId, in: transaction) }
             property.deletedAt = isDeleted ? Date() : nil
             try transaction.saveProperty(property)
             return ((), { try $0.setDeleted(propertyId, !isDeleted) })

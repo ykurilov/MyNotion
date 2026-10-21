@@ -1,4 +1,5 @@
 import AppKit
+import DatabaseGrid
 import Databases
 import Foundation
 import Navigation
@@ -34,6 +35,11 @@ final class MainWindowModel {
     /// Боковая панель спрятана шторкой (⌘⌥S).
     private(set) var isSidebarCollapsed = false
     private(set) var openDocument: PageDocument?
+    /// Строка базы в просмотре сбоку или по центру (`MainWindowModel+Rows`); `nil` — просмотра нет.
+    var rowPeek: RowPeek?
+    /// «+ Добавить свойство» на странице строки: окно типов под кнопкой (строка, кнопка).
+    /// Окно «+ Добавить свойство» страницы строки, пока оно открыто.
+    @ObservationIgnored var rowPropertyMenus: PropertyMenuPresenter?
     /// Куда поставить курсор в только что открытой странице.
     var initialFocus: PageTextView.InitialFocus = .body
     private(set) var loadError: String?
@@ -90,7 +96,7 @@ final class MainWindowModel {
         treeOperations.onUndoFailure = { [weak self] error in
             self?.loadError = "Не удалось отменить: \(SaveStatus.reason(for: error))"
         }
-        databaseOperations.onChange = { [weak library] touched in library?.treeDidChange(touched) }
+        databaseOperations.onChange = { [weak self] touched in self?.databaseDidChange(touched) }
         databaseOperations.onUndoFailure = { [weak self] error in
             self?.loadError = "Не удалось отменить: \(SaveStatus.reason(for: error))"
         }
@@ -141,6 +147,7 @@ final class MainWindowModel {
         if let editObserver { NotificationCenter.default.removeObserver(editObserver) }
         editObserver = nil
         visits.pageOpened(Optional<UUID>.none)
+        closeRowPeek()
         if let openDocument { openDocuments.release(openDocument.pageId) }
         openDocument = nil
         library.unregister(self)
@@ -155,7 +162,7 @@ final class MainWindowModel {
 
     /// Названия предков страницы с иконками от корня — для пути в верхней полосе.
     func ancestorTitles(of pageId: UUID) -> [String] {
-        tree.ancestors(of: pageId).map(\.pathTitle)
+        rowAncestorTitles(of: pageId) ?? tree.ancestors(of: pageId).map(\.pathTitle)
     }
 
     /// Отмена окна: общая для редактора и дерева.
@@ -344,7 +351,8 @@ final class MainWindowModel {
     /// Если открытая страница ушла в корзину или стёрта — открыть другую.
     /// Страница активной вкладки ушла в корзину или стёрта — вкладка показывает заглушку или «Недавние» (US3).
     func remoteChangesApplied() {
-        if let openPageId, tree.page(openPageId) != nil { return }
+        if let rowPeek, !isLiveRow(rowPeek.document.pageId) { closeRowPeek() }
+        if let openPageId, tree.page(openPageId) != nil || isLiveRow(openPageId) { return }
         if openPageId != nil { closeOpenDocument() }
         // Пустой Mac получил первые страницы — открыть первую, как при запуске.
         if tabs.activePageId == nil, tabs.items.count == 1, tabs.activeTab.back.isEmpty, let first = tree.children(of: nil).first {
@@ -385,7 +393,7 @@ final class MainWindowModel {
             defer { scrollBeforeReload = nil }
             return openEditor(releasedPageId, focus: reopenFocus ?? .body, scroll: scrollBeforeReload, remember: false)
         }
-        if let openPageId, tree.page(openPageId) == nil { closeOpenDocument() }
+        if let openPageId, tree.page(openPageId) == nil, !isLiveRow(openPageId) { closeOpenDocument() }
         showActiveTab(focus: .body)
     }
 

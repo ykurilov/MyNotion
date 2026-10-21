@@ -38,3 +38,10 @@ public enum PropertySettingsPanel {
         all.filter { $0.applies(kind) }.sorted { $0.slot < $1.slot }
     }
 }
+
+extension PropertySettingsPanel {
+    /// Разделы для типа, у которых есть обработчик окна (`handled`): раздел без обработчика не показывается.
+    public static func sections(for kind: PropertyKind, handled: Set<PropertySettingsSlot>) -> [PropertySettingsSection] {
+        sections(for: kind).filter { handled.contains($0.slot) }
+    }
+}

@@ -54,7 +54,7 @@
 | relation | `targetDatabaseId`, `limit`: `one` \| `none`, `pairedPropertyId?` (ответное свойство в той базе) |
 | rollup | `relationPropertyId`, `targetPropertyId`, `calculation` (contracts/property-types.md) , `numberFormat?`, `dateFormat?` |
 | formula | `expression` (текст формулы с `prop("…")` по id внутри, показ — по именам), `numberFormat?`, `dateFormat?` |
-| uniqueId | `prefix?` (только если Notion 7.39 его даёт — проверяет US1) |
+| uniqueId | `prefix?` — текст перед номером («ЗАД-12»), пусто — без префикса (Notion «Prefix», notion.com/help/unique-id) |
 | остальные | `{}` |
 
 ## db_select_option — вариант выбора, множественного выбора и статуса
@@ -177,7 +177,7 @@
 ## Миграция v9
 
 1. Копия базы `MyNotion.backup-v8.sqlite`, тест восстановления из неё.
-2. Таблица блоков пересоздаётся с теми же rowid (новый тип `database` в `CHECK`); таблицы `db_database`, `db_property`, `db_select_option`, `db_cell`, `db_relation_link`, `db_view`, `db_row_order`, `db_computed` с индексами и локальная `db_cell_search`.
+2. Таблица блоков пересоздаётся с теми же rowid (новый тип `database` в `CHECK`); таблицы `db_database`, `db_property`, `db_select_option`, `db_cell`, `db_relation_link`, `db_view`, `db_row_order`, `db_computed` с индексами и локальная `db_cell_search`; частичный индекс корзины `page_trashed` (дерево читает удалённые строки баз, не проходя все строки, T030).
 3. Повтор миграции ничего не меняет; база новее приложения — запись не идёт (как в 002).
 
 ## Синхронизация (формат v4)
