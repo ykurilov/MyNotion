@@ -131,7 +131,11 @@ public final class DatabaseGridView: NSView {
     }
 
     /// Строки в видимой части — с учётом прокрутки страницы у встроенной базы.
-    public var visibleRows: Range<Int> { documentView.rows(in: documentView.visibleRect) }
+    /// Вне окна видимой части ещё нет: тогда — первый экран, а не вся таблица (иначе чтение заранее заказало бы все строки).
+    public var visibleRows: Range<Int> {
+        guard window != nil else { return 0..<min(content.rowCount, 40) }
+        return documentView.rows(in: documentView.visibleRect)
+    }
 
     /// Рамка ячейки в координатах сетки (для проб и редактора ячейки).
     public func cellRect(row: Int, column: Int) -> NSRect {

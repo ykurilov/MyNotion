@@ -70,11 +70,11 @@ final class DatabaseTablePerformanceTests: XCTestCase {
         let edited = try store.write { try $0.cell(rowId: table.controller.content.rowIds[3], propertyId: sample.taskProperties["Описание"]!)?.value }
         XCTAssertEqual(edited?["string"]?.string, "правка 20")
 
-        // Смена типа «Заметка» (текст) → «Выбор» на 10 000 строках: время и ⌘Z.
-        let note = try XCTUnwrap(sample.taskProperties["Заметка"])
+        // Смена типа «Часы» (число, значение у каждой строки) → «Текст» на 10 000 строках: время и ⌘Z.
+        let note = try XCTUnwrap(sample.taskProperties["Часы"])
         let before = try store.write { try $0.cell(rowId: table.controller.content.rowIds[7], propertyId: note)?.value }
         undo.beginUndoGrouping()
-        let typeChange = try ProbeEditor.measure { try operations.changeType(note, to: .select) }
+        let typeChange = try ProbeEditor.measure { try operations.changeType(note, to: .text) }
         undo.endUndoGrouping()
         window.render()
         undo.undo()

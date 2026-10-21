@@ -172,23 +172,30 @@ extension DatabaseOperations {
             }
             var options = OptionMaker(property: changed, transaction: transaction,
                                       existing: keepsOptions ? try transaction.options(ofProperty: propertyId) : [])
+            // Значение в прежнем типе: у типа с ячейкой — только его ячейки (уже прочитаны снимком), иначе — строка целиком.
+            // Порядок строк — порядок новых вариантов.
             let rowIds = try String.fetchAll(transaction.database, sql: "SELECT id FROM page WHERE parentId = ? ORDER BY sortKey, id",
                                              arguments: [old.databaseId.databaseText]).compactMap(UUID.init(uuidString:))
-            for start in stride(from: 0, to: rowIds.count, by: 500) {
-                let chunk = Array(rowIds[start..<min(start + 500, rowIds.count)])
-                let snapshots = try RowWindowReader.read(chunk, catalog: catalog, in: transaction.database)
-                for rowId in chunk {
-                    let value = snapshots[rowId].flatMap { Self.sourceValue(of: old, in: $0, context: source) }
-                    let converted: JSONValue?
-                    switch TypeChange.convert(value, from: source, to: options.context) {
-                    case .value(let result): converted = result
-                    case .optionNames(let names):
-                        let ids = try names.map { JSONValue.string(try options.option(named: $0).databaseText) }
-                        converted = kind == .multiSelect ? .array(ids) : ids.first
-                    }
-                    let stored = before.cells[rowId] ?? nil
-                    if kind.storesCells || stored != nil { try transaction.setCell(rowId: rowId, propertyId: propertyId, value: kind.storesCells ? converted : nil) }
+            var sources: [(UUID, JSONValue?)] = []
+            if old.kind.storesCells {
+                sources = rowIds.compactMap { rowId in before.cells[rowId].map { (rowId, $0) } }
+            } else {
+                for start in stride(from: 0, to: rowIds.count, by: 500) {
+                    let chunk = Array(rowIds[start..<min(start + 500, rowIds.count)])
+                    let snapshots = try RowWindowReader.read(chunk, catalog: catalog, in: transaction.database)
+                    sources += chunk.map { rowId in (rowId, snapshots[rowId].flatMap { Self.sourceValue(of: old, in: $0, context: source) }) }
                 }
+            }
+            for (rowId, value) in sources {
+                let converted: JSONValue?
+                switch TypeChange.convert(value, from: source, to: options.context) {
+                case .value(let result): converted = result
+                case .optionNames(let names):
+                    let ids = try names.map { JSONValue.string(try options.option(named: $0).databaseText) }
+                    converted = kind == .multiSelect ? .array(ids) : ids.first
+                }
+                let stored = before.cells[rowId] ?? nil
+                if kind.storesCells || stored != nil { try transaction.setCell(rowId: rowId, propertyId: propertyId, value: kind.storesCells ? converted : nil) }
             }
             try transaction.saveProperty(changed)
             if kind == .uniqueId { try UniqueIds.numberRows(of: propertyId, inDatabase: old.databaseId, in: transaction) }

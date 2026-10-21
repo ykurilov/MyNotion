@@ -96,6 +96,8 @@ public final class GridContent {
 
     /// Прочитать заранее порции вокруг видимых строк.
     public func prefetch(around visible: Range<Int>) {
+        // Видимых строк не бывает больше нескольких экранов: широкая полоса — ошибка места, а не повод читать всё.
+        let visible = visible.lowerBound..<min(visible.upperBound, visible.lowerBound + 400)
         let first = max(0, (visible.lowerBound - Self.chunkSize / 2) / Self.chunkSize)
         let last = min((rowCount - 1) / Self.chunkSize, (visible.upperBound + Self.chunkSize / 2) / Self.chunkSize)
         guard first <= last else { return }

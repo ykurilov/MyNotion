@@ -120,7 +120,7 @@ final class DatabaseTableTests: XCTestCase {
         let field = app.descendants(matching: .any)["add-property-name"]
         XCTAssertTrue(field.waitForExistence(timeout: 5), "Нет поля имени нового свойства")
         app.typeText(name)
-        let item = app.descendants(matching: .menuItem)["property-type-\(type)"]
+        let item = app.descendants(matching: .any)["property-type-\(type)"]
         XCTAssertTrue(item.waitForExistence(timeout: 5), "Нет типа \(type)")
         item.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
         app.typeKey(.escape, modifierFlags: [])
