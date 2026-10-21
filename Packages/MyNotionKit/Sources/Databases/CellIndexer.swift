@@ -20,7 +20,26 @@ public struct CellIndexer: NotesWriteHook {
         for change in changes.database.properties where change.isNew || change.changedFields.contains(.typeAndConfig) {
             reindex.insert(change.record.id)
         }
-        for change in changes.database.options { reindex.insert(change.record.propertyId) }
+        // Один новый вариант (из ячейки по Enter, «+ Добавить вариант») встаёт на место `p`: у ячеек дальше по списку место
+        // сдвигается на 1, остальное в ячейках не меняется — без переписывания всех строк (замер US2: 10 000 строк).
+        var optionChanges: [UUID: [RecordChange<SelectOption>]] = [:]
+        for change in changes.database.options { optionChanges[change.record.propertyId, default: []].append(change) }
+        for (propertyId, list) in optionChanges {
+            if !reindex.contains(propertyId), list.count == 1, let change = list.first, change.isNew, change.record.deletedAt == nil,
+               let context = try run.context(propertyId), let position = context.options.firstIndex(where: { $0.id == change.record.id }) {
+                try db.execute(sql: "UPDATE db_cell SET sortNumber = sortNumber + 1 WHERE propertyId = ? AND sortNumber >= ?",
+                               arguments: [propertyId.databaseText, Double(position)])
+                // Ячейки, пришедшие с другого Mac раньше варианта, получают колонки сейчас.
+                let waiting = try Row.fetchAll(db, sql: "SELECT rowId, value FROM db_cell WHERE propertyId = ? AND instr(value, ?) > 0",
+                                               arguments: [propertyId.databaseText, change.record.id.databaseText])
+                for row in waiting {
+                    guard let rowId = UUID(uuidString: row[0]) else { continue }
+                    try run.index(rowId: rowId, propertyId: propertyId, value: (row[1] as String?).flatMap(JSONValue.init(jsonText:)))
+                }
+            } else {
+                reindex.insert(propertyId)
+            }
+        }
         for propertyId in reindex { try run.reindex(propertyId) }
         for cell in changes.database.cells where !reindex.contains(cell.propertyId) {
             try run.index(rowId: cell.rowId, propertyId: cell.propertyId, value: cell.value)
