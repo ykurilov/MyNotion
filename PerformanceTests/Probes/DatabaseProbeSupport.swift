@@ -13,7 +13,9 @@ enum DatabaseProbeLibrary {
         if !FileManager.default.fileExists(atPath: source.path) {
             try FileManager.default.createDirectory(at: source.deletingLastPathComponent(), withIntermediateDirectories: true)
             let started = Date()
-            try DatabaseSampleGenerator().generate(at: source)
+            // Генерация копит в пуле автоосвобождения много мусора: без своего пула его освобождает главный поток уже во
+            // время замера пробы — остановка 0,7–0,9 с, не относящаяся к тому, что меряется (US5, T056).
+            try autoreleasepool { try DatabaseSampleGenerator().generate(at: source) }
             print("Эталон баз: создан за \(String(format: "%.1f", Date().timeIntervalSince(started))) с")
         }
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("MyNotion-db-probe-\(UUID().uuidString)", isDirectory: true)

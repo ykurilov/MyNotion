@@ -15,7 +15,8 @@ final class FormulaBudgetTests: XCTestCase {
     static let openBudgetMs = 50.0
 
     private func library() throws -> (folder: URL, store: NotesStore, sample: DatabaseSampleGenerator.Sample, queue: FormulaRecomputeQueue) {
-        let library = try DatabaseProbeLibrary.copy()
+        // Мусор подготовки (копия, чтение эталона) освобождается здесь, а не на главном потоке во время замера.
+        let library = try autoreleasepool { try DatabaseProbeLibrary.copy() }
         let queue = FormulaRecomputeQueue(store: library.store)
         library.store.addWriteHook(CellIndexer())
         library.store.addWriteHook(ComputationHook(store: library.store, queue: queue))
@@ -86,21 +87,18 @@ final class FormulaBudgetTests: XCTestCase {
     }
 
     func testFirstFillInBackground() async throws {
-        // Разовая остановка главного потока ~0,7–0,9 с бывает у первого асинхронного замера в процессе (и через секунду
-        // после копии эталона); повторное заполнение в том же процессе и контроль — ≤ 9 мс (quickstart.md, US5).
-        try await firstFill(settle: false)
-    }
-
-    private func firstFill(settle: Bool) async throws {
         let (folder, store, sample, queue) = try library()
-        if settle { try await Task.sleep(for: .seconds(1)) }
         defer { store.database.close(); try? FileManager.default.removeItem(at: folder) }
         let formulas = ["Дней до срока", "Итог", "Проект (имя)"].map { sample.taskProperties[$0]! }
-        try store.write { tx in
-            for id in formulas { try tx.execute(sql: "DELETE FROM db_computed WHERE propertyId = ?", arguments: [.text(id.uuidString.lowercased())]) }
+        try autoreleasepool {
+            try store.write { tx in
+                for id in formulas { try tx.execute(sql: "DELETE FROM db_computed WHERE propertyId = ?", arguments: [.text(id.uuidString.lowercased())]) }
+            }
         }
         let gaps = GapLog()
-        let ticker = Timer.scheduledTimer(withTimeInterval: 0.005, repeats: true) { _ in gaps.tick() }
+        let watchdog = MainThreadWatchdog()
+        let ticker = Timer.scheduledTimer(withTimeInterval: 0.005, repeats: true) { _ in gaps.tick(); watchdog.tick() }
+        defer { watchdog.stop() }
         let started = ContinuousClock.now
         queue.fillMissing()
         await waitIdle(queue)
@@ -111,10 +109,12 @@ final class FormulaBudgetTests: XCTestCase {
                               arguments: formulas.map { .text($0.uuidString.lowercased()) }).first.flatMap(Int.init) ?? 0
         }
         let rows = try XCTUnwrap(try ViewQuery.open(sample.tableViewId, in: store)).result.rowIds.count
-        let summary = "Проба формул US5: первое заполнение\(settle ? " (через 1 с после копии)" : ""): 3 формулы × \(rows) строк — \(String(format: "%.2f", total)) с в фоне (предел 5), записано \(filled) из \(rows * 3); главный поток: \(gaps.report)"
+        let summary = "Проба формул US5: первое заполнение: 3 формулы × \(rows) строк — \(String(format: "%.2f", total)) с в фоне (предел 5), записано \(filled) из \(rows * 3); главный поток: \(gaps.report)"
         print(summary)
+        print("Проба формул US5: стек главного потока при остановке: \(watchdog.report)")
         add(XCTAttachment(string: summary))
         XCTAssertLessThanOrEqual(total, Self.firstFillBudgetSeconds)
+        XCTAssertLessThanOrEqual(gaps.longest, 100, "Главный поток стоял дольше 100 мс при первом заполнении: \(gaps.report); \(watchdog.report)")
         XCTAssertEqual(filled, rows * 3)
     }
 
