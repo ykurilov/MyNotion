@@ -20,16 +20,19 @@ public struct ActionMenuAction {
     public let icon: String?
     public let hint: String?
     public let opensSubmenu: Bool
+    /// «›» справа без подменю по наведению: пункт открывает окно щелчком («Изменить свойство ›» меню колонки).
+    public let showsChevron: Bool
     public let identifier: String?
     /// Выбор пункта; для пункта с подменю `row` — его строка (подменю встаёт у неё).
     public let perform: @MainActor (_ row: NSView) -> Void
 
-    public init(title: String, icon: String?, hint: String? = nil, opensSubmenu: Bool = false, identifier: String? = nil,
-                perform: @escaping @MainActor (_ row: NSView) -> Void) {
+    public init(title: String, icon: String?, hint: String? = nil, opensSubmenu: Bool = false, showsChevron: Bool = false,
+                identifier: String? = nil, perform: @escaping @MainActor (_ row: NSView) -> Void) {
         self.title = title
         self.icon = icon
         self.hint = hint
         self.opensSubmenu = opensSubmenu
+        self.showsChevron = showsChevron
         self.identifier = identifier
         self.perform = perform
     }
@@ -164,6 +167,29 @@ public final class ActionMenuView: NSView, NSSearchFieldDelegate {
 
     /// Поле поиска, если есть.
     public var searchBox: ActionMenuSearchField? { searchField }
+
+    // MARK: Клавиши
+
+    /// Подсвеченный пункт среди видимых (мышью или стрелками).
+    public var highlightedRow: ActionMenuRowView? { rowViews.first { !$0.isHidden && $0.isHovered } }
+
+    /// Стрелка ↑↓: подсветка на соседний видимый пункт, по кругу (как у меню «/» 002).
+    public func moveHighlight(by delta: Int) {
+        let rows = rowViews.filter { !$0.isHidden }
+        guard !rows.isEmpty else { return }
+        let current = rows.firstIndex { $0.isHovered }
+        let next = current.map { ($0 + (delta > 0 ? 1 : -1) + rows.count) % rows.count } ?? (delta > 0 ? 0 : rows.count - 1)
+        rowViews.forEach { $0.isHovered = false }
+        rows[next].isHovered = true
+    }
+
+    /// Enter: выбрать подсвеченный пункт; `false` — подсветки нет.
+    @discardableResult
+    public func pressHighlighted() -> Bool {
+        guard let row = highlightedRow else { return false }
+        row.press()
+        return true
+    }
 }
 
 /// Пункт меню: значок, название, серая подсказка или «›» справа, подложка под мышью.
@@ -172,7 +198,7 @@ public final class ActionMenuRowView: NSView {
     public let action: ActionMenuAction
     var onPress: (() -> Void)?
     var onHover: (() -> Void)?
-    public private(set) var isHovered = false { didSet { needsDisplay = true } }
+    public internal(set) var isHovered = false { didSet { needsDisplay = true } }
 
     init(_ action: ActionMenuAction) {
         self.action = action
@@ -230,7 +256,7 @@ public final class ActionMenuRowView: NSView {
         }
         if let icon = action.icon { ActionMenuIcon.draw(icon, color: Palette.textPrimary, in: iconRect) }
         var titleEnd = bounds.maxX - Metrics.PopupMenu.rowHorizontalPadding
-        if action.opensSubmenu {
+        if action.opensSubmenu || action.showsChevron {
             ActionMenuIcon.drawChevron(in: chevronRect)
             titleEnd = chevronRect.minX - Metrics.PopupMenu.rowHorizontalPadding
         } else if let hintText, let hintRect {
