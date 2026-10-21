@@ -202,25 +202,10 @@ final class FilesCellView: NSView, CellPopupContent {
 
     /// Скопировать файлы в фоне и положить в ячейку одной правкой; больше 100 МБ — сообщение, остальные берутся.
     func importFiles(_ urls: [URL]) {
-        let attachments = attachments
-        // Окно могло закрыться, пока файл копировался (щелчок в окне выбора файла): правка всё равно ложится в ячейку.
-        let context = context
         show("Копируется…", isError: false)
-        Task { [weak self] in
-            let outcome: (refs: [AttachmentRef], errors: [String]) = await Task.detached(priority: .userInitiated) {
-                var refs: [AttachmentRef] = []
-                var errors: [String] = []
-                for url in urls {
-                    let accessed = url.startAccessingSecurityScopedResource()
-                    defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-                    do { refs.append(try attachments.importFile(at: url)) } catch { errors.append(error.localizedDescription) }
-                }
-                return (refs, errors)
-            }.value
-            if !outcome.refs.isEmpty {
-                context.attempt { try context.operations.addFiles(outcome.refs.map(FilesValue.Item.file), rowId: context.rowId, propertyId: context.propertyId) }
-            }
-            self?.show(outcome.errors.first ?? "")
+        // Окно могло закрыться, пока файл копировался (щелчок в окне выбора файла): правка всё равно ложится в ячейку.
+        FilesCellImport.run(urls, store: context.store, operations: context.operations, rowId: context.rowId, propertyId: context.propertyId) {
+            [weak self] error in self?.show(error ?? "")
         }
     }
 
@@ -328,5 +313,36 @@ final class FileItemRow: NSView {
     override func accessibilityPerformPress() -> Bool {
         onOpen?()
         return true
+    }
+}
+
+/// Файлы в ячейку «Файлы и медиа» — из окна ячейки и перетаскиванием на ячейку сетки: копии в фоне (лимит 100 МБ, как
+/// у файлов 002), затем одна правка ячейки. `done` — текст первой ошибки или `nil`.
+@MainActor
+enum FilesCellImport {
+    static func run(_ urls: [URL], store: NotesStore, operations: DatabaseOperations, rowId: UUID, propertyId: UUID,
+                    done: @escaping @MainActor (String?) -> Void) {
+        let attachments = AttachmentStore(store: store, folder: AttachmentStore.folder(forDatabaseAt: store.database.url))
+        Task {
+            let outcome: (refs: [AttachmentRef], errors: [String]) = await Task.detached(priority: .userInitiated) {
+                var refs: [AttachmentRef] = []
+                var errors: [String] = []
+                for url in urls {
+                    let accessed = url.startAccessingSecurityScopedResource()
+                    defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                    do { refs.append(try attachments.importFile(at: url)) } catch { errors.append(error.localizedDescription) }
+                }
+                return (refs, errors)
+            }.value
+            var failure = outcome.errors.first
+            if !outcome.refs.isEmpty {
+                do {
+                    try operations.addFiles(outcome.refs.map(FilesValue.Item.file), rowId: rowId, propertyId: propertyId)
+                } catch {
+                    failure = failure ?? error.localizedDescription
+                }
+            }
+            done(failure)
+        }
     }
 }
