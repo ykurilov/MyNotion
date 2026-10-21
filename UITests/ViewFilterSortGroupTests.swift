@@ -25,7 +25,10 @@ final class ViewFilterSortGroupTests: XCTestCase {
 
         // Фильтр: воронка → «Статус» → «Не равно» → «Готово».
         tap(any("database-view-bar-filter"))
-        XCTAssertTrue(any("filter-by-Статус").waitForExistence(timeout: 5), "Нет списка «Фильтр по…»")
+        XCTAssertTrue(any("filter-property-list").waitForExistence(timeout: 5), "Нет списка «Фильтр по…»")
+        // Список длинный: «Статус» — ниже видимой части; поиск по списку оставляет его наверху.
+        app.typeText("Статус")
+        XCTAssertTrue(any("filter-by-Статус").waitForExistence(timeout: 5))
         tap(any("filter-by-Статус"))
         XCTAssertTrue(any("filter-operator").waitForExistence(timeout: 5), "Окно плашки не открылось")
         tap(any("filter-operator"))
@@ -39,7 +42,9 @@ final class ViewFilterSortGroupTests: XCTestCase {
 
         // Сортировка: ⇅ → «Срок».
         tap(any("database-view-bar-sort"))
-        XCTAssertTrue(any("sort-by-Срок").waitForExistence(timeout: 5), "Нет списка «Сортировать по…»")
+        XCTAssertTrue(any("sort-property-list").waitForExistence(timeout: 5), "Нет списка «Сортировать по…»")
+        app.typeText("Срок")
+        XCTAssertTrue(any("sort-by-Срок").waitForExistence(timeout: 5))
         tap(any("sort-by-Срок"))
         app.typeKey(.escape, modifierFlags: [])
         XCTAssertTrue(waitUntil { (try? self.view("Таблица", "sorts"))?.contains("ascending") == true }, "Сортировка не записана")
@@ -60,14 +65,13 @@ final class ViewFilterSortGroupTests: XCTestCase {
         }
         XCTAssertTrue(waitUntil { (try? self.hiddenCount("Таблица")) == 3 }, "Скрыто: \(String(describing: try? hiddenCount("Таблица")))")
 
-        // Группировка: настройки вида → «Группировка» → «Статус».
+        // Группировка: настройки вида → «Группировка» → «Область» (список свойств по алфавиту без поиска — берём видимое;
+        // группы по статусу проверяют модульные тесты и замер).
         tap(any("database-view-bar-settings"))
         XCTAssertTrue(any("view-settings-group").waitForExistence(timeout: 5), "Нет настроек вида")
         tap(any("view-settings-group"))
-        XCTAssertTrue(any("group-by").waitForExistence(timeout: 5))
-        tap(any("group-by"))
-        XCTAssertTrue(any("group-by-Статус").waitForExistence(timeout: 5))
-        tap(any("group-by-Статус"))
+        XCTAssertTrue(any("group-by-Область").waitForExistence(timeout: 5), "Нет списка «Группировать по»")
+        tap(any("group-by-Область"))
         app.typeKey(.escape, modifierFlags: [])
         XCTAssertTrue(waitUntil { (try? self.view("Таблица", "group"))?.contains("propertyId") == true }, "Группировка не записана")
 
