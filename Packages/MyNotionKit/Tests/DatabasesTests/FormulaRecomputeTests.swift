@@ -136,6 +136,18 @@ struct FormulaRecomputeTests {
         #expect(try computed(row, task("Проект (имя)")) == projectNames(of: row))
     }
 
+    @Test("Цепочка через связь: формула проекта → формула задачи — обе той же записью, по порядку")
+    func chainThroughRelation() throws {
+        let projectDue = try addFormula("Срок текстом", to: sample.projectsId, #"formatDate(prop("Срок"), "DD.MM.YYYY")"#)
+        let taskDue = try addFormula("Срок проекта текстом", to: sample.tasksId, #"prop("Проект").map(current.prop("Срок текстом")).join(", ")"#)
+        queue.waitUntilIdle()
+        let row = try rows(of: sample.tasksId)[9]
+        let projectId = try store.write { tx in try tx.relationLinks(propertyId: task("Проект"), rowId: row).first!.targetRowId }
+        try store.write { tx throws in _ = try tx.setCell(rowId: projectId, propertyId: project("Срок"), value: ["start": "2027-03-08", "hasTime": false]) }
+        #expect(try computed(projectId, projectDue) == .string("08.03.2027"))
+        #expect(try computed(row, taskDue) == .string("08.03.2027"), "задача прочитала новый итог проекта")
+    }
+
     @Test("Новая строка получает итоги формул той же записью")
     func newRow() throws {
         let row = try store.write { tx throws in try tx.createPage(title: "Новая задача", parentId: sample.tasksId).id }

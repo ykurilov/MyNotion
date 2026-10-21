@@ -121,18 +121,18 @@ description: "Задачи: базы данных — основа"
 
 ### Tests for User Story 5
 
-- [ ] T046 [P] [US5] `PK/Tests/FormulasTests/ParserTests.swift`: синтаксис contracts (литералы, старшинство, методы и функции, `let`/`lets`, `current`/`index`, комментарии); ошибки с местом и текстом по-русски — дословно примеры contracts
-- [ ] T047 [P] [US5] `PK/Tests/FormulasTests/FunctionsTests.swift`: каждая функция contracts — по примеру Notion (итоги примеров — из справки редактора формул Notion, снять в живом Notion одним замком); пустое и деление на ноль — пусто; неподдержанная — ошибка с названием
-- [ ] T048 [P] [US5] `PK/Tests/FormulasTests/TypeCheckTests.swift`: вывод типа итога, ошибки типов, круг «Итог → Сумма → Итог»
-- [ ] T049 [P] [US5] `PK/Tests/DatabasesTests/FormulaRecomputeTests.swift`: правка зависимого значения пересчитывает в той же транзакции; переименование свойства переписывает формулы; полный пересчёт — в фоне по R21 (механизм фундамента `FormulaRecompute`): вне транзакции записи, короткими пачками, не затирает поправленную строку, до готовности — прежнее значение; «живые» формулы — раз в минуту только у открытого вида (подменённые часы)
+- [x] T046 [P] [US5] `PK/Tests/FormulasTests/ParserTests.swift`: синтаксис contracts (литералы, старшинство, методы и функции, `let`/`lets`, `current`/`index`, комментарии); ошибки с местом и текстом по-русски — дословно примеры contracts
+- [x] T047 [P] [US5] `PK/Tests/FormulasTests/FunctionsTests.swift`: каждая функция contracts — по примеру Notion (итоги примеров — из справки редактора формул Notion, снять в живом Notion одним замком); пустое и деление на ноль — пусто; неподдержанная — ошибка с названием
+- [x] T048 [P] [US5] `PK/Tests/FormulasTests/TypeCheckTests.swift`: вывод типа итога, ошибки типов, круг «Итог → Сумма → Итог»
+- [x] T049 [P] [US5] `PK/Tests/DatabasesTests/FormulaRecomputeTests.swift`: правка зависимого значения пересчитывает в той же транзакции; переименование свойства переписывает формулы; полный пересчёт — в фоне по R21 (механизм фундамента `FormulaRecompute`): вне транзакции записи, короткими пачками, не затирает поправленную строку, до готовности — прежнее значение; «живые» формулы — раз в минуту только у открытого вида (подменённые часы)
 - [ ] T050 [P] [US5] XCUITest `UITests/FormulaEditorTests.swift`: формулы из spec, US5; ошибка подсвечена, «Готово» неактивно; итог для первой строки; фильтр и сортировка по формуле (через операции — кнопки вида появятся в US3)
 
 ### Implementation for User Story 5
 
-- [ ] T051 [US5] Модуль `PK/Sources/Formulas/`: `Lexer`, `Parser`, `FormulaTypes`, `Evaluator`, `Functions/{Logic,Numbers,Text,Dates,Lists,Pages}.swift`, `FunctionCatalog.swift` (описания и примеры для редактора), `FormulaErrors.swift` (T046–T048)
-- [ ] T052 [US5] Пересчёт `PK/Sources/Databases/Computation/` (`ComputationHook` — подписчик записи, граф зависимостей базы, `db_computed`; полный пересчёт и первое заполнение — на `FormulaRecompute` и `ComputedWriter` фундамента по R21; «живые» формулы) (T049)
-- [ ] T053 [US5] Ячейка `PK/Sources/DatabaseGrid/Cells/FormulaCell.swift` и формат итога (числа и даты — форматы свойства)
-- [ ] T054 [US5] Редактор `PK/Sources/DatabaseGrid/PropertySettings/FormulaEditor/` по contracts/formulas.md и `notion-formula-editor*.png`: поле с подсветкой (свойства — плашками), «Предпросмотр с <строка ▾>» и итог, «Тип: …», список свойств и функций по разделам с поиском, описание с примерами, ошибки (T050)
+- [x] T051 [US5] Модуль `PK/Sources/Formulas/`: `Lexer`, `Parser`, `FormulaTypes`, `Evaluator`, `Functions/{Logic,Numbers,Text,Dates,Lists,Pages}.swift`, `FunctionCatalog.swift` (описания и примеры для редактора), `FormulaErrors.swift` (T046–T048)
+- [x] T052 [US5] Пересчёт `PK/Sources/Databases/Computation/` (`ComputationHook` — подписчик записи, граф зависимостей базы, `db_computed`; полный пересчёт и первое заполнение — на `FormulaRecompute` и `ComputedWriter` фундамента по R21; «живые» формулы) (T049)
+- [x] T053 [US5] Ячейка `PK/Sources/DatabaseGrid/Cells/FormulaCell.swift` и формат итога (числа и даты — форматы свойства)
+- [x] T054 [US5] Редактор `PK/Sources/DatabaseGrid/PropertySettings/FormulaEditor/` по contracts/formulas.md и `notion-formula-editor*.png`: поле с подсветкой (свойства — плашками), «Предпросмотр с <строка ▾>» и итог, «Тип: …», список свойств и функций по разделам с поиском, описание с примерами, ошибки (T050)
 - [ ] T055 [US5] Состояния галереи: редактор пустой, с итогом, с ошибкой, с кругом; ячейки формул всех типов итога — в обеих темах; сверка с Notion
 - [ ] T056 [US5] Затронутые тесты зелёные; замеры (R21): новая формула на 10 000 — в фоне, без блокировки, итог сходится с подсчётом «в лоб», правка во время пересчёта ждёт ≤ 50 мс p95; первое заполнение `db_computed` (≤ 5 с, в фоне); правка с пересчётом; открытие «Задачи» с сортировкой по формуле; запись в quickstart.md; коммит
 

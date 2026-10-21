@@ -44,8 +44,11 @@ public final class ComputationHook: NotesWriteHook {
     // MARK: Строки — в транзакции правки
 
     private func recomputeRows(_ changes: NotesChanges, graph: ComputationGraph, in db: Database, transaction: NotesTransaction) throws {
-        /// База → строки, чьи формулы пересчитать.
-        var dirty: [UUID: Set<UUID>] = [:]
+        /// База → строки, чьи формулы пересчитать; `order` — порядок баз по кругам: читатели — после тех, кого читают.
+        var dirty: [UUID: Set<UUID>] = [:] {
+            didSet { for key in dirty.keys where !order.contains(key) { order.append(key) } }
+        }
+        var order: [UUID] = []
         /// База → строки, у которых поменялись свойства (`nil` — неизвестно какие: новая строка, корзина).
         var touched: [UUID: [UUID: Set<UUID>?]] = [:]
         func touch(_ databaseId: UUID, _ row: UUID, _ property: UUID?) {
@@ -108,8 +111,8 @@ public final class ComputationHook: NotesWriteHook {
             touched = next.filter { databaseId, _ in !graph.readers(of: databaseId, changed: graph.formulas[databaseId]?.formulaIds).isEmpty }
         }
 
-        for (databaseId, rows) in dirty {
-            guard let formulas = graph.formulas[databaseId], !formulas.isEmpty else { continue }
+        for databaseId in order {
+            guard let rows = dirty[databaseId], let formulas = graph.formulas[databaseId], !formulas.isEmpty else { continue }
             let alive = try Self.aliveRows(Array(rows), of: databaseId, in: db)
             try FormulaRecompute(store: store, catalog: formulas.catalog, now: now, calendar: calendar).recompute(rows: alive, in: transaction)
         }
