@@ -186,6 +186,7 @@ extension DatabaseOperations {
                     sources += chunk.map { rowId in (rowId, snapshots[rowId].flatMap { Self.sourceValue(of: old, in: $0, context: source) }) }
                 }
             }
+            var writes: [(rowId: UUID, value: JSONValue?)] = []
             for (rowId, value) in sources {
                 let converted: JSONValue?
                 switch TypeChange.convert(value, from: source, to: options.context) {
@@ -195,8 +196,10 @@ extension DatabaseOperations {
                     converted = kind == .multiSelect ? .array(ids) : ids.first
                 }
                 let stored = before.cells[rowId] ?? nil
-                if kind.storesCells || stored != nil { try transaction.setCell(rowId: rowId, propertyId: propertyId, value: kind.storesCells ? converted : nil) }
+                let value = kind.storesCells ? converted : nil
+                if value != stored { writes.append((rowId, value)) }
             }
+            try transaction.setCells(writes, propertyId: propertyId)
             try transaction.saveProperty(changed)
             if kind == .uniqueId { try UniqueIds.numberRows(of: propertyId, inDatabase: old.databaseId, in: transaction) }
             return { try $0.restoreProperty(before, actionName: "Смена типа") }
@@ -344,12 +347,9 @@ struct PropertyState: Sendable {
             option.deletedAt = Date()
             try transaction.saveOption(option)
         }
-        for (rowId, value) in cells where (current.cells[rowId] ?? nil) != value {
-            try transaction.setCell(rowId: rowId, propertyId: property.id, value: value)
-        }
-        for (rowId, value) in current.cells where value != nil && cells[rowId] == nil {
-            try transaction.setCell(rowId: rowId, propertyId: property.id, value: nil)
-        }
+        var writes: [(rowId: UUID, value: JSONValue?)] = cells.filter { (current.cells[$0.key] ?? nil) != $0.value }.map { ($0.key, $0.value) }
+        writes += current.cells.filter { $0.value != nil && cells[$0.key] == nil }.map { ($0.key, nil) }
+        try transaction.setCells(writes, propertyId: property.id)
     }
 }
 
