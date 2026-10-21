@@ -89,6 +89,17 @@ public enum FormulaText {
         }
     }
 
+    /// Итог в записи справки Notion — для примеров: текст в кавычках, список в скобках, дата с «@», пусто — `Empty`.
+    public static func notation(_ value: FormulaValue, context: (any FormulaContext)? = nil) -> String {
+        switch value {
+        case .empty: "Empty"
+        case .text(let text): "\"" + text + "\""
+        case .list(let items): "[" + items.map { notation($0, context: context) }.joined(separator: ", ") + "]"
+        case .date(let date): "@" + self.date(date, timeZone: context?.calendar.timeZone ?? .current, twelveHour: true)
+        default: format(value, context: context)
+        }
+    }
+
     /// Число как в JavaScript у Notion: целое — без дробной части, иначе кратчайшая запись.
     static func number(_ number: Double) -> String {
         if number == 0 { return "0" }
@@ -96,13 +107,14 @@ public enum FormulaText {
         return "\(number)"
     }
 
-    /// Дата как у Notion: `October 21, 2026`, с временем — `October 21, 2026 5:56 PM`, диапазон — через « → ».
-    static func date(_ date: FormulaDate, timeZone: TimeZone) -> String {
+    /// Дата как у Notion: `October 21, 2026`, с временем у `format` — `October 21, 2026 17:56` (справка Notion:
+    /// `format(now())` = «August 30, 2023 17:55»), в записи примеров — `5:56 PM`; диапазон — через « → ».
+    static func date(_ date: FormulaDate, timeZone: TimeZone, twelveHour: Bool = false) -> String {
         func one(_ moment: Date) -> String {
             let formatter = DateFormatter()
             formatter.locale = Locale(identifier: "en_US_POSIX")
             formatter.timeZone = timeZone
-            formatter.dateFormat = date.hasTime ? "MMMM d, yyyy h:mm a" : "MMMM d, yyyy"
+            formatter.dateFormat = date.hasTime ? (twelveHour ? "MMMM d, yyyy h:mm a" : "MMMM d, yyyy HH:mm") : "MMMM d, yyyy"
             return formatter.string(from: moment)
         }
         guard let end = date.end else { return one(date.start) }

@@ -40,12 +40,12 @@ struct FunctionsTests {
 
     @Test("Каждый пример из описания функции даёт свой итог", arguments: FormulaFunctionCatalog.all.flatMap { info in info.examples.map { (info.name, $0) } })
     func examples(_ name: String, _ example: FormulaExample) throws {
-        #expect(try row.text(example.formula) == example.result, "\(name): \(example.formula)")
+        #expect(FormulaText.notation(try row.evaluate(example.formula), context: row) == example.result, "\(name): \(example.formula)")
     }
 
     @Test("Примеры «Встроенных» (знаки) дают свой итог", arguments: FormulaFunctionCatalog.builtins.flatMap(\.examples))
     func builtinExamples(_ example: FormulaExample) throws {
-        #expect(try row.text(example.formula) == example.result, "\(example.formula)")
+        #expect(FormulaText.notation(try row.evaluate(example.formula), context: row) == example.result, "\(example.formula)")
     }
 
     @Test("Формулы из spec, US5")
@@ -167,8 +167,11 @@ struct FunctionsTests {
     func dates() throws {
         #expect(try row.evaluate("minute(now())") == .number(56))
         #expect(try row.evaluate("hour(now())") == .number(17))
-        #expect(try row.evaluate("day(now())") == .number(3), "21.10.2026 — среда")
-        #expect(try row.evaluate(#"day(parseDate("2026-10-25"))"#) == .number(0), "воскресенье — 0")
+        #expect(try row.evaluate("day(now())") == .number(3), "21.10.2026 — среда, как у Notion: 1 — понедельник")
+        #expect(try row.evaluate(#"day(parseDate("2026-10-25"))"#) == .number(7), "воскресенье — 7")
+        #expect(try row.evaluate(#"day(parseDate("2026-10-19"))"#) == .number(1), "понедельник — 1")
+        #expect(try row.evaluate("format(now())") == .text("October 21, 2026 17:56"), "как format(now()) в справке Notion")
+        #expect(try row.evaluate(#"formatDate(parseDate("2026-10-21"), "MMMM D, Y")"#) == .text("октября 21, 2026"))
         #expect(try row.evaluate(#"week(parseDate("2027-01-01"))"#) == .number(53))
         #expect(try row.evaluate(#"week(parseDate("2026-01-01"))"#) == .number(1))
         #expect(try row.evaluate("today()") == row.day(2026, 10, 21))

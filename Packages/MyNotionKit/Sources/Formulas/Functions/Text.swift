@@ -23,7 +23,7 @@ extension FormulaFunctions {
 
     static let text: [FormulaFunctionInfo] = [
         FormulaFunctionInfo("length", .text, "length(текст или список)", "Длина текста в символах или число элементов списка.",
-                            [FormulaExample(#"length("Привет")"#, "6"), FormulaExample("length([1, 2, 3])", "3")],
+                            [FormulaExample(#"length("hello")"#, "5"), FormulaExample("length([1, 2, 3])", "3")],
                             typing: Typing.fixed([[.text, .list(.any)]], .number),
                             .eager { arguments, _ in
                                 switch arguments[0] {
@@ -33,7 +33,7 @@ extension FormulaFunctions {
                                 }
                             }),
         FormulaFunctionInfo("concat", .text, "concat(текст или список, …)", "Склеивает тексты или соединяет списки в один.",
-                            [FormulaExample(#"concat("до", "бро")"#, "добро"), FormulaExample("concat([1, 2], [3])", "1,2,3")],
+                            [FormulaExample("concat([1, 2], [3, 4])", "[1, 2, 3, 4]"), FormulaExample(#"concat(["a", "b"], ["c", "d"])"#, #"["a", "b", "c", "d"]"#)],
                             typing: { call in
                                 try call.arity(1...Int.max)
                                 let types = try (0..<call.count).map { try call.type($0) }
@@ -52,14 +52,14 @@ extension FormulaFunctions {
                                 return .text(arguments.map { FormulaText.format($0, context: evaluator.context) }.joined())
                             }),
         FormulaFunctionInfo("join", .text, "join(список, разделитель)", "Соединяет элементы списка в текст через разделитель.",
-                            [FormulaExample(#"join(["a", "b", "c"], ", ")"#, "a, b, c")],
+                            [FormulaExample(#"join(["a", "b", "c"], ", ")"#, #""a, b, c""#), FormulaExample(#"join(["dog", "go"], "")"#, #""doggo""#)],
                             typing: Typing.fixed([[.list(.any)], [.text]], .text),
                             .eager { arguments, evaluator in
                                 guard let items = arguments.list(0) else { return .text("") }
                                 return .text(items.map { FormulaText.format($0, context: evaluator.context) }.joined(separator: arguments.text(1) ?? ""))
                             }),
         text("split", "split(текст, разделитель)", "Делит текст на список по разделителю.",
-             [FormulaExample(#"split("a,b,c", ",")"#, "a,b,c"), FormulaExample(#"length(split("a b c", " "))"#, "3")],
+             [FormulaExample(#"split("apple,pear,orange", ",")"#, #"["apple", "pear", "orange"]"#)],
              [[.text], [.text]], .list(.text)) { arguments, _ in
             guard let text = arguments.text(0) else { return .list([]) }
             let separator = arguments.text(1) ?? ""
@@ -67,7 +67,7 @@ extension FormulaFunctions {
             return .list(parts.map(FormulaValue.text))
         },
         text("substring", "substring(текст, от, до?)", "Часть текста с номера «от» (с 0) до номера «до», не включая его.",
-             [FormulaExample(#"substring("Notion", 0, 3)"#, "Not"), FormulaExample(#"substring("Notion", 3)"#, "ion")],
+             [FormulaExample(#"substring("Notion", 0, 3)"#, #""Not""#), FormulaExample(#"substring("Notion", 3)"#, #""ion""#)],
              [[.text], [.number], [.number]], optional: 1, .text) { arguments, _ in
             guard let text = arguments.text(0) else { return .text("") }
             let characters = Array(text)
@@ -81,7 +81,7 @@ extension FormulaFunctions {
             return .text(String(characters[start..<end]))
         },
         FormulaFunctionInfo("contains", .text, "contains(текст, искомое)", "Истина, если в тексте есть искомое (у списка — такой элемент).",
-                            [FormulaExample(#"contains("Notion", "tion")"#, "true"), FormulaExample(#"contains("Notion", "x")"#, "false")],
+                            [FormulaExample(#"contains("Notion", "ot")"#, "true")],
                             typing: Typing.fixed([textLike + [.list(.any)], textLike], .bool),
                             .eager { arguments, evaluator in
                                 if let items = arguments.list(0) {
@@ -98,51 +98,51 @@ extension FormulaFunctions {
              [FormulaExample(#"endsWith("Notion", "on")"#, "true")], [textLike, textLike], .bool) { arguments, evaluator in
             .bool((string(arguments, 0, evaluator) ?? "").hasSuffix(string(arguments, 1, evaluator) ?? ""))
         },
-        text("lower", "lower(текст)", "Текст строчными буквами.", [FormulaExample(#"lower("NOTION")"#, "notion")], [[.text]], .text) { arguments, _ in
+        text("lower", "lower(текст)", "Текст строчными буквами.", [FormulaExample(#"lower("NOTION")"#, #""notion""#)], [[.text]], .text) { arguments, _ in
             .text((arguments.text(0) ?? "").lowercased())
         },
-        text("upper", "upper(текст)", "Текст заглавными буквами.", [FormulaExample(#"upper("notion")"#, "NOTION")], [[.text]], .text) { arguments, _ in
+        text("upper", "upper(текст)", "Текст заглавными буквами.", [FormulaExample(#"upper("notion")"#, #""NOTION""#)], [[.text]], .text) { arguments, _ in
             .text((arguments.text(0) ?? "").uppercased())
         },
-        text("trim", "trim(текст)", "Убирает пробелы в начале и в конце.", [FormulaExample(#"trim("  Notion  ")"#, "Notion")], [[.text]], .text) { arguments, _ in
+        text("trim", "trim(текст)", "Убирает пробелы в начале и в конце.", [FormulaExample(#"" notion ".trim()"#, #""notion""#)], [[.text]], .text) { arguments, _ in
             .text((arguments.text(0) ?? "").trimmingCharacters(in: .whitespacesAndNewlines))
         },
-        text("repeat", "repeat(текст, раз)", "Повторяет текст указанное число раз.", [FormulaExample(#"repeat("ab", 3)"#, "ababab")],
+        text("repeat", "repeat(текст, раз)", "Повторяет текст указанное число раз.", [FormulaExample(#"repeat("0", 4)"#, #""0000""#), FormulaExample(#"repeat("~=", 10)"#, #""~=~=~=~=~=~=~=~=~=~=""#)],
              [textLike, [.number]], .text) { arguments, evaluator in
             let times = Swift.max(0, Int(arguments.number(1) ?? 0))
             guard times <= 10_000 else { throw FormulaError("Слишком много повторов") }
             return .text(String(repeating: string(arguments, 0, evaluator) ?? "", count: times))
         },
         text("padStart", "padStart(текст, длина, заполнитель)", "Дополняет текст слева до нужной длины.",
-             [FormulaExample(#"padStart("5", 3, "0")"#, "005")], [textLike, [.number], [.text]], .text) { arguments, evaluator in
+             [FormulaExample(#"padStart("5", 3, "0")"#, #""005""#)], [textLike, [.number], [.text]], .text) { arguments, evaluator in
             .text(pad(string(arguments, 0, evaluator) ?? "", to: arguments.number(1) ?? 0, with: arguments.text(2) ?? " ", atStart: true))
         },
         text("padEnd", "padEnd(текст, длина, заполнитель)", "Дополняет текст справа до нужной длины.",
-             [FormulaExample(#"padEnd("5", 3, "0")"#, "500")], [textLike, [.number], [.text]], .text) { arguments, evaluator in
+             [FormulaExample(#"padEnd("5", 3, "0")"#, #""500""#)], [textLike, [.number], [.text]], .text) { arguments, evaluator in
             .text(pad(string(arguments, 0, evaluator) ?? "", to: arguments.number(1) ?? 0, with: arguments.text(2) ?? " ", atStart: false))
         },
         text("replace", "replace(текст, шаблон, замена)", "Заменяет первое совпадение с регулярным выражением; $1 — первая группа.",
-             [FormulaExample(#"replace("1-2-3", "-", "+")"#, "1+2-3")], [textLike, [.text], [.text]], .text) { arguments, evaluator in
+             [FormulaExample(#"replace("Notion Notion", "N", "M")"#, #""Motion Notion""#)], [textLike, [.text], [.text]], .text) { arguments, evaluator in
             .text(try replace(string(arguments, 0, evaluator) ?? "", arguments.text(1) ?? "", arguments.text(2) ?? "", all: false))
         },
         text("replaceAll", "replaceAll(текст, шаблон, замена)", "Заменяет все совпадения с регулярным выражением.",
-             [FormulaExample(#"replaceAll("1-2-3", "-", "+")"#, "1+2+3")], [textLike, [.text], [.text]], .text) { arguments, evaluator in
+             [FormulaExample(#"replaceAll("Notion Notion", "N", "M")"#, #""Motion Motion""#), FormulaExample(#"replaceAll("Notion 123", "\\d", "")"#, #""Notion ""#)], [textLike, [.text], [.text]], .text) { arguments, evaluator in
             .text(try replace(string(arguments, 0, evaluator) ?? "", arguments.text(1) ?? "", arguments.text(2) ?? "", all: true))
         },
         text("test", "test(текст, шаблон)", "Истина, если текст подходит под регулярное выражение.",
-             [FormulaExample(#"test("Notion 2", "\\d")"#, "true"), FormulaExample(#"test("Notion", "^n")"#, "false")],
+             [FormulaExample(#"test("Notion", "Not")"#, "true"), FormulaExample(#"test("Notion", "\\d")"#, "false")],
              [textLike, [.text]], .bool) { arguments, evaluator in
             let text = string(arguments, 0, evaluator) ?? ""
             return .bool(try regex(arguments.text(1) ?? "").firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil)
         },
         text("match", "match(текст, шаблон)", "Все совпадения с регулярным выражением списком.",
-             [FormulaExample(#"match("a1 b22 c3", "\\d+")"#, "1,22,3")], [textLike, [.text]], .list(.text)) { arguments, evaluator in
+             [FormulaExample(#"match("Notion Notion", "Not")"#, #"["Not", "Not"]"#), FormulaExample(#"match("Notion 123 Notion 456", "\\d+")"#, #"["123", "456"]"#)], [textLike, [.text]], .list(.text)) { arguments, evaluator in
             let text = string(arguments, 0, evaluator) ?? ""
             let matches = try regex(arguments.text(1) ?? "").matches(in: text, range: NSRange(text.startIndex..., in: text))
             return .list(matches.compactMap { Range($0.range, in: text).map { .text(String(text[$0])) } })
         },
         FormulaFunctionInfo("format", .general, "format(значение)", "Любое значение в текст.",
-                            [FormulaExample("format(1234)", "1234"), FormulaExample("format(true)", "true")],
+                            [FormulaExample("format(1234)", #""1234""#), FormulaExample("format(true)", #""true""#)],
                             typing: { call in try call.arity(1...1); _ = try call.type(0); return .text },
                             .eager { arguments, evaluator in .text(FormulaText.format(arguments[0], context: evaluator.context)) }),
     ]

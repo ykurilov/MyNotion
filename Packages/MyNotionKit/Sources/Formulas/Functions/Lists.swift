@@ -23,19 +23,19 @@ extension FormulaFunctions {
 
     static let lists: [FormulaFunctionInfo] = [
         listOnly("at", "at(список, номер)", "Элемент списка по номеру с 0; отрицательный — с конца.",
-                 [FormulaExample("at([10, 20, 30], 1)", "20"), FormulaExample("at([10, 20, 30], -1)", "30")],
+                 [FormulaExample("at([1, 2, 3], 1)", "2"), FormulaExample("at([10, 20, 30], -1)", "30")],
                  typing: { call in try call.arity(2...2); try call.expect(1, .number); return try Typing.element(of: call) }) { arguments, _ in
             guard let items = arguments.list(0), let number = arguments.number(1) else { return .empty }
             let index = Int(number.rounded(.towardZero)), position = index < 0 ? items.count + index : index
             guard items.indices.contains(position) else { throw FormulaError("Номер \(index) за пределами списка из \(items.count)") }
             return items[position]
         },
-        listOnly("first", "first(список)", "Первый элемент списка.", [FormulaExample("first([10, 20, 30])", "10")],
+        listOnly("first", "first(список)", "Первый элемент списка.", [FormulaExample("first([1, 2, 3])", "1")],
                  typing: { call in try call.arity(1...1); return try Typing.element(of: call) }) { arguments, _ in arguments.list(0)?.first ?? .empty },
-        listOnly("last", "last(список)", "Последний элемент списка.", [FormulaExample("last([10, 20, 30])", "30")],
+        listOnly("last", "last(список)", "Последний элемент списка.", [FormulaExample("last([1, 2, 3])", "3")],
                  typing: { call in try call.arity(1...1); return try Typing.element(of: call) }) { arguments, _ in arguments.list(0)?.last ?? .empty },
         listOnly("slice", "slice(список, от, до?)", "Часть списка с номера «от» до номера «до», не включая его.",
-                 [FormulaExample("slice([1, 2, 3, 4], 1, 3)", "2,3"), FormulaExample("slice([1, 2, 3, 4], -2)", "3,4")],
+                 [FormulaExample("slice([1, 2, 3], 1, 2)", "[2]"), FormulaExample(#"slice(["a", "b", "c"], 1)"#, #"["b", "c"]"#)],
                  typing: { call in
                      try call.arity(2...3)
                      for index in 1..<call.count { try call.expect(index, .number) }
@@ -48,7 +48,7 @@ extension FormulaFunctions {
         },
         FormulaFunctionInfo("sort", .lists, "sort(список, выражение?)",
                             "Список по возрастанию; с выражением — по его значению для каждого элемента current.",
-                            [FormulaExample("sort([3, 1, 2])", "1,2,3"), FormulaExample(#"sort(["bb", "a", "ccc"], length(current))"#, "a,bb,ccc")],
+                            [FormulaExample("sort([3, 1, 2])", "[1, 2, 3]"), FormulaExample(#"sort(["bb", "a", "ccc"], length(current))"#, #"["a", "bb", "ccc"]"#)],
                             typing: { call in
                                 try call.arity(1...2)
                                 let element = try Typing.element(of: call)
@@ -63,32 +63,32 @@ extension FormulaFunctions {
                                 }
                                 return .list(keyed.sorted { ascending($0.2, $1.2) || (!ascending($1.2, $0.2) && $0.0 < $1.0) }.map(\.1))
                             }),
-        listOnly("reverse", "reverse(список)", "Список в обратном порядке.", [FormulaExample("reverse([1, 2, 3])", "3,2,1")],
+        listOnly("reverse", "reverse(список)", "Список в обратном порядке.", [FormulaExample(#"reverse(["green", "eggs", "ham"])"#, #"["ham", "eggs", "green"]"#)],
                  typing: { call in try call.arity(1...1); return .list(try Typing.element(of: call)) }) { arguments, _ in
             .list((arguments.list(0) ?? []).reversed())
         },
-        listOnly("unique", "unique(список)", "Список без повторов, в порядке первого появления.", [FormulaExample("unique([1, 2, 1, 3, 2])", "1,2,3")],
+        listOnly("unique", "unique(список)", "Список без повторов, в порядке первого появления.", [FormulaExample("unique([1, 1, 2])", "[1, 2]")],
                  typing: { call in try call.arity(1...1); return .list(try Typing.element(of: call)) }) { arguments, _ in
             var seen: Set<FormulaValue> = []
             return .list((arguments.list(0) ?? []).filter { seen.insert($0).inserted })
         },
         listOnly("includes", "includes(список, значение)", "Истина, если в списке есть значение.",
-                 [FormulaExample("includes([1, 2, 3], 2)", "true"), FormulaExample(#"includes(["a", "b"], "c")"#, "false")],
+                 [FormulaExample(#"includes(["a", "b", "c"], "b")"#, "true"), FormulaExample("includes([1, 2, 3], 4)", "false")],
                  typing: { call in try call.arity(2...2); _ = try Typing.element(of: call); _ = try call.type(1); return .bool }) { arguments, _ in
             .bool((arguments.list(0) ?? []).contains(arguments[1]))
         },
         FormulaFunctionInfo("find", .lists, "find(список, условие)", "Первый элемент, для которого условие с current истинно.",
-                            [FormulaExample("find([1, 2, 3], current > 1)", "2")],
+                            [FormulaExample(#"find(["a", "b", "c"], current == "b")"#, #""b""#), FormulaExample("find([1, 2, 3], current > 100)", "Empty")],
                             typing: { call in try Typing.lambda(call).element },
                             .lazy { arguments, evaluator in try each(arguments, evaluator) { _, item, condition in try condition().isTrue ? item : nil } ?? .empty }),
         FormulaFunctionInfo("findIndex", .lists, "findIndex(список, условие)", "Номер (с 0) первого элемента, для которого условие истинно; нет такого — -1.",
-                            [FormulaExample("findIndex([1, 2, 3], current > 1)", "1"), FormulaExample("findIndex([1, 2, 3], current > 5)", "-1")],
+                            [FormulaExample(#"findIndex(["a", "b", "c"], current == "b")"#, "1"), FormulaExample("findIndex([1, 2, 3], current > 100)", "-1")],
                             typing: { call in _ = try Typing.lambda(call); return .number },
                             .lazy { arguments, evaluator in
                                 try each(arguments, evaluator) { index, _, condition in try condition().isTrue ? FormulaValue.number(Double(index)) : nil } ?? .number(-1)
                             }),
         FormulaFunctionInfo("filter", .lists, "filter(список, условие)", "Элементы, для которых условие с current истинно.",
-                            [FormulaExample("filter([1, 2, 3, 4], current % 2 == 0)", "2,4")],
+                            [FormulaExample("filter([1, 2, 3], current > 1)", "[2, 3]"), FormulaExample(#"filter(["a", "b", "c"], current == "a")"#, #"["a"]"#)],
                             typing: { call in .list(try Typing.lambda(call).element) },
                             .lazy { arguments, evaluator in
                                 var kept: [FormulaValue] = []
@@ -99,7 +99,7 @@ extension FormulaFunctions {
                                 return .list(kept)
                             }),
         FormulaFunctionInfo("map", .lists, "map(список, выражение)", "Новый список: выражение для каждого элемента current (index — его номер).",
-                            [FormulaExample("map([1, 2, 3], current * 2)", "2,4,6"), FormulaExample("map([5, 5], index)", "0,1")],
+                            [FormulaExample("map([1, 2, 3], current + 1)", "[2, 3, 4]"), FormulaExample("map([1, 2, 3], current + index)", "[1, 3, 5]")],
                             typing: { call in .list(try Typing.lambda(call).body) },
                             .lazy { arguments, evaluator in
                                 var mapped: [FormulaValue] = []
@@ -110,14 +110,14 @@ extension FormulaFunctions {
                                 return .list(mapped)
                             }),
         FormulaFunctionInfo("some", .lists, "some(список, условие)", "Истина, если условие истинно хотя бы для одного элемента.",
-                            [FormulaExample("some([1, 2, 3], current > 2)", "true")],
+                            [FormulaExample("some([1, 2, 3], current == 2)", "true")],
                             typing: { call in _ = try Typing.lambda(call); return .bool },
                             .lazy { arguments, evaluator in .bool(try each(arguments, evaluator) { _, _, condition in try condition().isTrue ? true : nil } ?? false) }),
         FormulaFunctionInfo("every", .lists, "every(список, условие)", "Истина, если условие истинно для всех элементов; у пустого списка — истина.",
-                            [FormulaExample("every([1, 2, 3], current > 0)", "true"), FormulaExample("every([1, 2, 3], current > 1)", "false")],
+                            [FormulaExample("every([1, 2, 3], current > 0)", "true"), FormulaExample(#"every(["a", "b", "c"], current == "b")"#, "false")],
                             typing: { call in _ = try Typing.lambda(call); return .bool },
                             .lazy { arguments, evaluator in .bool(try each(arguments, evaluator) { _, _, condition in try condition().isTrue ? nil : false } ?? true) }),
-        listOnly("flat", "flat(список)", "Раскрывает вложенные списки на один уровень.", [FormulaExample("flat([[1, 2], [3]])", "1,2,3")],
+        listOnly("flat", "flat(список)", "Раскрывает вложенные списки на один уровень.", [FormulaExample("flat([1, 2, 3])", "[1, 2, 3]"), FormulaExample("flat([[1, 2], [3, 4]])", "[1, 2, 3, 4]")],
                  typing: { call in try call.arity(1...1); let element = try Typing.element(of: call); return .list(element.element == .any && element != .any ? .any : element.element) }) { arguments, _ in
             .list((arguments.list(0) ?? []).flatMap { $0.list ?? [$0] })
         },

@@ -21,17 +21,18 @@ extension FormulaFunctions {
 
     static let dates: [FormulaFunctionInfo] = [
         FormulaFunctionInfo("now", .dates, "now()", "Текущие дата и время. Формула с now() пересчитывается раз в минуту, пока вид открыт.",
-                            [FormulaExample("now()", "October 21, 2026 5:56 PM")], typing: Typing.fixed([], .date),
+                            [FormulaExample("now()", "@October 21, 2026 5:56 PM")], typing: Typing.fixed([], .date),
                             .eager { _, evaluator in .date(FormulaDate(start: evaluator.context.now, hasTime: true)) }),
         FormulaFunctionInfo("today", .dates, "today()", "Сегодняшняя дата без времени.",
-                            [FormulaExample("today()", "October 21, 2026")], typing: Typing.fixed([], .date),
+                            [FormulaExample("today()", "@October 21, 2026")], typing: Typing.fixed([], .date),
                             .eager { _, evaluator in
                                 .date(FormulaDate(start: evaluator.context.calendar.startOfDay(for: evaluator.context.now), hasTime: false))
                             }),
         part("minute", "Минуты времени: от 0 до 59.", [FormulaExample(#"minute(parseDate("2026-10-21T17:56"))"#, "56")]) { $1.component(.minute, from: $0) },
         part("hour", "Час времени: от 0 до 23.", [FormulaExample(#"hour(parseDate("2026-10-21T17:56"))"#, "17")]) { $1.component(.hour, from: $0) },
-        part("day", "День недели: 0 — воскресенье, 6 — суббота.", [FormulaExample(#"day(parseDate("2026-10-21"))"#, "3")]) {
-            $1.component(.weekday, from: $0) - 1
+        part("day", "День недели: 1 — понедельник, 7 — воскресенье.", [FormulaExample(#"day(parseDate("2026-10-21"))"#, "3"), FormulaExample(#"day(parseDate("2026-10-25"))"#, "7")]) {
+            // Как у Notion: 1 — понедельник … 7 — воскресенье (у календаря 1 — воскресенье).
+            ($1.component(.weekday, from: $0) + 5) % 7 + 1
         },
         part("date", "Число месяца: от 1 до 31.", [FormulaExample(#"date(parseDate("2026-10-21"))"#, "21")]) { $1.component(.day, from: $0) },
         part("week", "Номер недели года по ISO.", [FormulaExample(#"week(parseDate("2026-10-21"))"#, "43")]) { date, calendar in
@@ -43,11 +44,11 @@ extension FormulaFunctions {
         part("year", "Год.", [FormulaExample(#"year(parseDate("2026-10-21"))"#, "2026")]) { $1.component(.year, from: $0) },
         FormulaFunctionInfo("dateAdd", .dates, "dateAdd(дата, число, единица)",
                             "Прибавляет к дате число единиц: years, quarters, months, weeks, days, hours, minutes, seconds, milliseconds.",
-                            [FormulaExample(#"dateAdd(parseDate("2026-10-21"), 3, "days")"#, "October 24, 2026")],
+                            [FormulaExample(#"dateAdd(parseDate("2026-10-21"), 3, "days")"#, "@October 24, 2026")],
                             typing: Typing.fixed([[.date], [.number], [.text]], .date),
                             .eager { arguments, evaluator in try shift(arguments, sign: 1, calendar: evaluator.context.calendar) }),
         FormulaFunctionInfo("dateSubtract", .dates, "dateSubtract(дата, число, единица)", "Вычитает из даты число единиц.",
-                            [FormulaExample(#"dateSubtract(parseDate("2026-10-21"), 1, "months")"#, "September 21, 2026")],
+                            [FormulaExample(#"dateSubtract(parseDate("2026-10-21"), 1, "months")"#, "@September 21, 2026")],
                             typing: Typing.fixed([[.date], [.number], [.text]], .date),
                             .eager { arguments, evaluator in try shift(arguments, sign: -1, calendar: evaluator.context.calendar) }),
         FormulaFunctionInfo("dateBetween", .dates, "dateBetween(дата, дата, единица)",
@@ -61,7 +62,7 @@ extension FormulaFunctions {
                                 return dateBetween(first.start, second.start, unit: unit, calendar: evaluator.context.calendar).map(FormulaValue.number) ?? .empty
                             }),
         FormulaFunctionInfo("dateRange", .dates, "dateRange(начало, конец)", "Диапазон дат от начала до конца.",
-                            [FormulaExample(#"dateRange(parseDate("2026-10-21"), parseDate("2026-10-23"))"#, "October 21, 2026 → October 23, 2026")],
+                            [FormulaExample(#"dateRange(parseDate("2026-10-21"), parseDate("2026-10-23"))"#, "@October 21, 2026 → October 23, 2026")],
                             typing: Typing.fixed([[.date], [.date]], .date),
                             .eager { arguments, _ in
                                 guard let start = arguments.date(0) else { return .empty }
@@ -69,11 +70,11 @@ extension FormulaFunctions {
                                 return .date(FormulaDate(start: start.start, end: end.end ?? end.start, hasTime: start.hasTime || end.hasTime))
                             }),
         FormulaFunctionInfo("dateStart", .dates, "dateStart(дата)", "Начало диапазона; у одной даты — она сама.",
-                            [FormulaExample(#"dateStart(dateRange(parseDate("2026-10-21"), parseDate("2026-10-23")))"#, "October 21, 2026")],
+                            [FormulaExample(#"dateStart(dateRange(parseDate("2026-10-21"), parseDate("2026-10-23")))"#, "@October 21, 2026")],
                             typing: Typing.fixed([[.date]], .date),
                             .eager { arguments, _ in arguments.date(0).map { .date(FormulaDate(start: $0.start, hasTime: $0.hasTime)) } ?? .empty }),
         FormulaFunctionInfo("dateEnd", .dates, "dateEnd(дата)", "Конец диапазона; у одной даты — она сама.",
-                            [FormulaExample(#"dateEnd(dateRange(parseDate("2026-10-21"), parseDate("2026-10-23")))"#, "October 23, 2026")],
+                            [FormulaExample(#"dateEnd(dateRange(parseDate("2026-10-21"), parseDate("2026-10-23")))"#, "@October 23, 2026")],
                             typing: Typing.fixed([[.date]], .date),
                             .eager { arguments, _ in arguments.date(0).map { .date(FormulaDate(start: $0.end ?? $0.start, hasTime: $0.hasTime)) } ?? .empty }),
         FormulaFunctionInfo("timestamp", .dates, "timestamp(дата)", "Миллисекунды с 1 января 1970 года (UTC).",
@@ -88,15 +89,14 @@ extension FormulaFunctions {
                             }),
         FormulaFunctionInfo("formatDate", .dates, "formatDate(дата, шаблон)",
                             "Дата текстом по шаблону: YYYY год, MM месяц, MMMM название месяца, DD число, dddd день недели, HH:mm время.",
-                            [FormulaExample(#"formatDate(parseDate("2026-10-21"), "DD.MM.YYYY")"#, "21.10.2026"),
-                             FormulaExample(#"formatDate(parseDate("2026-10-21T17:05"), "YYYY-MM-DD HH:mm")"#, "2026-10-21 17:05")],
+                            [FormulaExample(#"formatDate(parseDate("2026-10-21"), "DD.MM.YYYY")"#, #""21.10.2026""#), FormulaExample(#"formatDate(parseDate("2026-10-21T17:05"), "YYYY-MM-DD HH:mm")"#, #""2026-10-21 17:05""#)],
                             typing: Typing.fixed([[.date], [.text]], .text),
                             .eager { arguments, evaluator in
                                 guard let date = arguments.date(0) else { return .text("") }
                                 return .text(MomentFormat.format(date.start, pattern: arguments.text(1) ?? "", calendar: evaluator.context.calendar))
                             }),
         FormulaFunctionInfo("parseDate", .dates, "parseDate(текст)", "Дата из текста ISO 8601: 2026-10-21 или 2026-10-21T17:56.",
-                            [FormulaExample(#"parseDate("2026-10-21")"#, "October 21, 2026")],
+                            [FormulaExample(#"parseDate("2022-01-01")"#, "@January 1, 2022")],
                             typing: Typing.fixed([[.text]], .date),
                             .eager { arguments, evaluator in
                                 guard let text = arguments.text(0), !text.isEmpty else { return .empty }
@@ -184,7 +184,8 @@ extension FormulaFunctions {
 
 /// Шаблон `formatDate` как Moment.js у Notion; названия месяцев и дней — на языке календаря (macOS).
 enum MomentFormat {
-    static let tokens = ["YYYY", "MMMM", "dddd", "MMM", "ddd", "YY", "MM", "Do", "DD", "HH", "hh", "mm", "ss", "Q", "M", "D", "d", "H", "h", "m", "s", "A", "a"]
+    static let tokens = ["YYYY", "MMMM", "dddd", "MMM", "ddd", "YY", "MM", "Do", "DD", "HH", "hh", "mm", "ss", "Q", "M", "D", "d", "H", "h", "m", "s", "A", "a",
+                         "Y"]
 
     static func format(_ date: Date, pattern: String, calendar: Calendar) -> String {
         let parts = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second, .weekday], from: date)
@@ -215,7 +216,7 @@ enum MomentFormat {
             }
             let hour12 = hour % 12 == 0 ? 12 : hour % 12
             let piece = switch token {
-            case "YYYY": String(parts.year!)
+            case "YYYY", "Y": String(parts.year!)
             case "YY": two(parts.year! % 100)
             case "Q": String(month / 3 + 1)
             case "MMMM": months[month]

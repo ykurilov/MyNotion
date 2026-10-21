@@ -9,7 +9,8 @@ public enum FormulaSection: String, CaseIterable, Sendable {
     case pages = "Страницы"
 }
 
-/// Пример для описания в редакторе: формула и её итог текстом (как «= 5» у Notion).
+/// Пример для описания в редакторе: формула и её итог в записи справки Notion (`FormulaText.notation`): `5`, `"текст"`,
+/// `[1, 2]`, `@October 21, 2026`, `Empty`. Примеры, что есть в справке Notion по формулам, взяты оттуда как есть.
 public struct FormulaExample: Sendable, Hashable {
     public let formula: String
     public let result: String
@@ -81,7 +82,7 @@ public enum FormulaFunctionCatalog {
     ]
 
     public static let builtins: [FormulaBuiltin] = [
-        FormulaBuiltin(symbol: "+", summary: "Складывает два числа или склеивает текст.", examples: [FormulaExample("3 + 2", "5"), FormulaExample("\"a\" + \"b\"", "ab")]),
+        FormulaBuiltin(symbol: "+", summary: "Складывает два числа или склеивает текст.", examples: [FormulaExample("3 + 2", "5"), FormulaExample("\"a\" + \"b\"", "\"ab\"")]),
         FormulaBuiltin(symbol: "-", summary: "Вычитает одно число из другого.", examples: [FormulaExample("5 - 3", "2")]),
         FormulaBuiltin(symbol: "*", summary: "Умножает два числа.", examples: [FormulaExample("5 * 3", "15")]),
         FormulaBuiltin(symbol: "/", summary: "Делит одно число на другое; на ноль — пусто.", examples: [FormulaExample("6 / 3", "2")]),
@@ -96,7 +97,7 @@ public enum FormulaFunctionCatalog {
         FormulaBuiltin(symbol: "and", summary: "Истина, если истинны оба условия. То же — &&.", examples: [FormulaExample("true and false", "false")]),
         FormulaBuiltin(symbol: "or", summary: "Истина, если истинно хотя бы одно. То же — ||.", examples: [FormulaExample("true or false", "true")]),
         FormulaBuiltin(symbol: "not", summary: "Обратное значение. То же — !.", examples: [FormulaExample("not true", "false")]),
-        FormulaBuiltin(symbol: "? :", summary: "Если условие истинно — первое значение, иначе второе.", examples: [FormulaExample("2 > 1 ? \"да\" : \"нет\"", "да")]),
+        FormulaBuiltin(symbol: "? :", summary: "Если условие истинно — первое значение, иначе второе.", examples: [FormulaExample("2 > 1 ? \"да\" : \"нет\"", "\"да\"")]),
         FormulaBuiltin(symbol: "true", summary: "Истина — флажок отмечен.", examples: [FormulaExample("true", "true")]),
         FormulaBuiltin(symbol: "false", summary: "Ложь — флажок снят.", examples: [FormulaExample("false", "false")]),
     ]

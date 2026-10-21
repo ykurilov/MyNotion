@@ -28,7 +28,7 @@ extension FormulaFunctions {
                                 return .text(compactId(evaluator.rowId))
                             }),
         FormulaFunctionInfo("let", .general, "let(имя, значение, выражение)", "Переменная: имя получает значение, выражение его использует.",
-                            [FormulaExample("let(x, 5, x * 2)", "10")],
+                            [FormulaExample(#"let(person, "Alan", "Hello, " + person + "!")"#, #""Hello, Alan!""#), FormulaExample("let(radius, 4, round(pi() * radius ^ 2))", "50")],
                             typing: { call in
                                 try call.arity(3...3)
                                 let name = try variable(call.arguments[0])
@@ -38,7 +38,7 @@ extension FormulaFunctions {
                                 try evaluator.with([try variable(arguments[0]): try evaluator.value(of: arguments[1])]).value(of: arguments[2])
                             }),
         FormulaFunctionInfo("lets", .general, "lets(имя, значение, имя2, значение2, …, выражение)", "Несколько переменных подряд; следующая видит предыдущие.",
-                            [FormulaExample("lets(a, 2, b, a + 3, a * b)", "10")],
+                            [FormulaExample(#"lets(a, "Hello", b, "world", a + " " + b)"#, #""Hello world""#), FormulaExample("lets(base, 3, height, 8, base * height / 2)", "12")],
                             typing: { call in
                                 try call.arity(3...Int.max)
                                 guard call.count % 2 == 1 else { throw FormulaError("Функция lets ждёт пары «имя, значение» и выражение в конце", at: call.range) }
