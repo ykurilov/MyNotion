@@ -9,13 +9,13 @@ import VisualStyle
 @MainActor
 @Suite("Блок базы в редакторе")
 struct DatabaseBlockTests {
-    @Test("Два пункта «/» по словам «база», «database»; «таблица» — по-прежнему только простая таблица")
+    @Test("Два пункта «/» по словам «база», «database», «таблица» (простая таблица — первой)")
     func slashItems() {
         let titles = PopupMenuItem.slashItems(matching: "база").map(\.title)
         #expect(titles == ["База данных — встроенная", "База данных — на всю страницу"])
         #expect(PopupMenuItem.slashItems(matching: "database").map(\.action) == [.insertDatabase(inline: true), .insertDatabase(inline: false)])
         #expect(BlockKind.database.rendersAsAttachment)
-        #expect(PopupMenuItem.slashItems(matching: "табл").map(\.action) == [.insertTable])
+        #expect(PopupMenuItem.slashItems(matching: "табл").map(\.action) == [.insertTable, .insertDatabase(inline: true), .insertDatabase(inline: false)])
     }
 
     @Test("Выбор в меню «/» — запрос «создать базу» у блока: пустой — заменить, с текстом — после него")

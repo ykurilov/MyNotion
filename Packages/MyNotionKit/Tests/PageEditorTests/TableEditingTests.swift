@@ -14,7 +14,8 @@ struct TableEditingTests {
         let editor = try EditorFixture([.paragraph("до"), .paragraph(), .paragraph("после")])
         editor.placeCaret(inBlock: 1)
         editor.type("/табл")
-        #expect(editor.textView.popups.visibleItems.map(\.action) == [.insertTable])
+        // По «табл» находятся и базы (004, contracts/database-ui.md): простая таблица — первой.
+        #expect(editor.textView.popups.visibleItems.map(\.action).first == .insertTable)
         editor.press(#selector(NSResponder.insertNewline(_:)))
         let table = try #require(editor.document.blocks.first { $0.kind == .table }).id
         editor.layoutViewport()

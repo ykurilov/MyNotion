@@ -11,9 +11,9 @@ extension BlockKindDescriptor {
         var descriptor = BlockKindDescriptor(kind: .database)
         descriptor.insertMenuItems = [
             PopupMenuItem(title: "База данных — встроенная", icon: .symbol("tablecells"),
-                          keywords: ["database", "inline", "база", "встроенная"], action: .insertDatabase(inline: true)),
+                          keywords: ["database", "inline", "база", "таблица", "встроенная"], action: .insertDatabase(inline: true)),
             PopupMenuItem(title: "База данных — на всю страницу", icon: .symbol("tablecells.fill"),
-                          keywords: ["database", "full page", "база", "страница"], action: .insertDatabase(inline: false)),
+                          keywords: ["database", "full page", "база", "таблица", "страница"], action: .insertDatabase(inline: false)),
         ]
         return descriptor
     }()
