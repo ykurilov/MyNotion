@@ -181,7 +181,7 @@ extension BlockFieldClocks {
 }
 
 extension Page {
-    init(row: Row) throws {
+    package init(row: Row) throws {
         self.init(
             id: try RowDecoding.uuid(row, "id"),
             title: row["title"],

@@ -1,6 +1,7 @@
 import Foundation
 import GRDB
 import NotesCore
+import Synchronization
 
 /// Открытый вид: схема базы, запись вида и итог его запроса.
 public struct OpenedView: Sendable {
@@ -59,5 +60,35 @@ public enum ViewQuery {
         }
         let rest = catalog.properties.map(\.id).filter { !listed.contains($0) && !hidden.contains($0) }
         return listed + rest
+    }
+}
+
+/// Последний запрос вида выигрывает (research R3: поиск на каждый символ — новый запрос, прежний отменяется):
+/// запрос с устаревшим билетом не отдаёт итог.
+public final class LatestViewQuery: Sendable {
+    public struct Ticket: Sendable, Hashable { let number: Int }
+
+    public let store: NotesStore
+    private let current = Mutex(0)
+
+    public init(store: NotesStore) {
+        self.store = store
+    }
+
+    /// Новый запрос: все прежние билеты устарели.
+    public func begin() -> Ticket {
+        Ticket(number: current.withLock { $0 += 1; return $0 })
+    }
+
+    public func isCurrent(_ ticket: Ticket) -> Bool { current.withLock { $0 == ticket.number } }
+
+    /// Выполнить на очереди чтения; `nil` — пока шёл запрос (или до него), начался новый.
+    public func run(_ spec: ViewQuerySpec, catalog: DatabaseCatalog, ticket: Ticket, now: Date = Date()) async throws -> ViewQueryResult? {
+        guard isCurrent(ticket) else { return nil }
+        let store = store
+        let result = try await Task.detached(priority: .userInitiated) {
+            try ViewQuery.rows(spec, catalog: catalog, in: store, now: now)
+        }.value
+        return isCurrent(ticket) ? result : nil
     }
 }

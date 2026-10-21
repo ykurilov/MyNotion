@@ -7,6 +7,18 @@ public struct ViewQueryResult: Sendable, Hashable {
     public var rowIds: [UUID]
     /// Сравнимое значение свойства группы у каждой строки; `nil` — «Нет …».
     public var groupKeys: [Double?]?
+
+    /// Группы подряд идущих строк с одним ключом (ключ группы — первым в порядке запроса).
+    public var groups: [(key: Double?, rows: Range<Int>)] {
+        guard let keys = groupKeys, !keys.isEmpty else { return [] }
+        var result: [(key: Double?, rows: Range<Int>)] = []
+        var start = 0
+        for index in 1...keys.count where index == keys.count || keys[index] != keys[start] {
+            result.append((keys[start], start..<index))
+            start = index
+        }
+        return result
+    }
 }
 
 /// Фильтр, поиск и сортировки вида — один запрос SQL по сравнимым колонкам с индексами (research R3): строки базы

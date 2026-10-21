@@ -82,7 +82,8 @@ struct DatabaseMigrationV9Tests {
              Set(try String.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name LIKE 'db_%' AND name NOT LIKE 'sqlite_%'")),
              try String.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'db_%' AND sql LIKE '%WITHOUT ROWID%' ORDER BY name"))
         }
-        #expect(tables == ["db_database", "db_property", "db_select_option", "db_cell", "db_relation_link", "db_view", "db_row_order", "db_computed"])
+        #expect(tables == ["db_database", "db_property", "db_select_option", "db_cell", "db_relation_link", "db_view", "db_row_order", "db_computed",
+                           "db_cell_search"], "восемь таблиц data-model.md и номера строк поиска значений")
         for index in ["db_property_by_database", "db_select_option_by_property", "db_cell_by_property_number", "db_cell_by_property_text",
                       "db_relation_link_by_row", "db_relation_link_by_target", "db_view_by_database", "db_row_order_by_view",
                       "db_computed_by_property_number", "db_computed_by_property_text"] {

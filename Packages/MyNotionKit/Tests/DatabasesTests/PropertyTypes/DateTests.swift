@@ -14,12 +14,17 @@ struct DateTests {
         #expect(type.comparables(TypeFixture.date("2026-10-21T15:15", hasTime: true), in: context).sortNumber == TypeFixture.seconds("2026-10-21T15:15"))
     }
 
+    /// Неразрывные пробелы macOS («2026 г.») — как обычные.
+    func shown(_ value: JSONValue, _ context: PropertyContext) -> String {
+        type.displayText(value, in: context).replacingOccurrences(of: "\u{00A0}", with: " ").replacingOccurrences(of: "\u{202F}", with: " ")
+    }
+
     @Test("Показ «Полный» на языке macOS; время 24 часа; диапазон через «→»")
     func display() {
-        #expect(type.displayText(TypeFixture.date("2026-10-21"), in: context) == "21 октября 2026 г.")
-        #expect(type.displayText(TypeFixture.date("2026-10-21T15:15", hasTime: true), in: TypeFixture.context(.date, ["timeFormat": "h24"]))
+        #expect(shown(TypeFixture.date("2026-10-21"), context) == "21 октября 2026 г.")
+        #expect(shown(TypeFixture.date("2026-10-21T15:15", hasTime: true), TypeFixture.context(.date, ["timeFormat": "h24"]))
                 == "21 октября 2026 г., 15:15")
-        #expect(type.displayText(TypeFixture.date("2026-10-21", end: "2026-10-23"), in: context) == "21 октября 2026 г. → 23 октября 2026 г.")
+        #expect(shown(TypeFixture.date("2026-10-21", end: "2026-10-23"), context) == "21 октября 2026 г. → 23 октября 2026 г.")
     }
 
     @Test("CSV как у Notion: «October 21, 2026», «October 21, 2026 3:15 PM», диапазон «… → …»; разбор — Notion и ISO")

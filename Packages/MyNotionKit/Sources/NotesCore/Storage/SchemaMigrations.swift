@@ -306,7 +306,8 @@ private func indexVersionFilesAndMoves(_ db: Database) throws {
 }
 
 /// Базы данных (004, data-model.md, «Миграция v9»): блок `database` (таблица блоков пересоздаётся с теми же rowid, как в v6)
-/// и восемь таблиц баз. `db_computed` и колонки `sortText`, `sortNumber`, `searchText` — только на этом Mac: их пишут
+/// и восемь таблиц баз. `db_computed`, `db_cell_search` (номер строки `search_index` для текстового значения ячейки)
+/// и колонки `sortText`, `sortNumber`, `searchText` — только на этом Mac: их пишут
 /// подписчики модуля `Databases`. `db_cell` и `db_computed` — без rowid: ячейки строки лежат рядом, видимые строки
 /// читаются одним проходом по ключу.
 private func addDatabases(_ db: Database) throws {
@@ -437,6 +438,13 @@ private func addDatabases(_ db: Database) throws {
         ) WITHOUT ROWID;
         CREATE INDEX db_computed_by_property_number ON db_computed(propertyId, sortNumber);
         CREATE INDEX db_computed_by_property_text ON db_computed(propertyId, sortText);
+
+        CREATE TABLE db_cell_search (
+            searchRowid INTEGER PRIMARY KEY,
+            rowId TEXT NOT NULL,
+            propertyId TEXT NOT NULL,
+            UNIQUE (rowId, propertyId)
+        );
         """)
 }
 

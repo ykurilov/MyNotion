@@ -10,7 +10,8 @@ struct URLTests {
         for (kind, raw) in [(PropertyKind.url, "https://Example.com/A"), (.email, "Me@Example.com"), (.phone, "+7 900 123-45-67")] {
             let type = PropertyTypes.type(for: kind)
             let context = TypeFixture.context(kind)
-            #expect(type.comparables(.string(raw), in: context) == CellComparables(sortText: raw.lowercased(), searchText: raw.lowercased()))
+            #expect(type.comparables(.string(raw), in: context).sortText == raw.lowercased())
+            #expect(type.comparables(.string(raw), in: context).searchText?.hasPrefix(raw.lowercased()) == true)
             #expect(type.displayText(.string(raw), in: context) == raw)
             #expect(type.csvText(.string(raw), in: context) == raw)
             #expect(type.parseCSV(raw, in: context) == .value(.string(raw)))

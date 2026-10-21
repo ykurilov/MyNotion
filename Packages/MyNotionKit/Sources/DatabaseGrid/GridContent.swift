@@ -122,10 +122,11 @@ public final class GridContent {
 
     nonisolated static func makeRows(_ ids: [UUID], catalog: DatabaseCatalog, columns: [GridColumn], store: NotesStore) throws -> [GridRow] {
         let snapshots = try RowWindowReader.read(ids, catalog: catalog, store: store)
+        let contexts = columns.map { catalog.context(for: $0.property) }
         return ids.map { id in
             guard let snapshot = snapshots[id] else { return GridRow(id: id, icon: nil, cells: columns.map { _ in .empty }) }
             return GridRow(id: id, icon: snapshot.icon,
-                           cells: columns.map { CellPresenter.present($0.property, in: snapshot, catalog: catalog) })
+                           cells: zip(columns, contexts).map { CellPresenter.present($0.property, in: snapshot, context: $1) })
         }
     }
 }

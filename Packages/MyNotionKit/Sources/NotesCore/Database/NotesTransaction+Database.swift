@@ -203,6 +203,9 @@ extension NotesTransaction {
             .flatMap(UUID.init(uuidString:))
     }
 
+    /// Строки `search_index` значений ячеек — с этого номера: ниже — названия страниц (`-rowid`) и блоки (`rowid`).
+    public static let cellSearchRowidOffset: Int64 = 1 << 40
+
     // MARK: Внутреннее
 
     private func saveRecord<Record: ClockedDatabaseRecord>(_ record: Record, stored: Record?, write: (Record) throws -> Void,
@@ -236,6 +239,8 @@ extension NotesTransaction {
             "DELETE FROM db_cell WHERE rowId = ?",
             "DELETE FROM db_computed WHERE rowId = ?",
             "DELETE FROM db_relation_link WHERE rowId = ?1 OR targetRowId = ?1",
+            "DELETE FROM search_index WHERE rowid IN (SELECT searchRowid + \(Self.cellSearchRowidOffset) FROM db_cell_search WHERE rowId = ?)",
+            "DELETE FROM db_cell_search WHERE rowId = ?",
             "DELETE FROM db_row_order WHERE rowId = ?",
             "DELETE FROM db_row_order WHERE viewId IN (SELECT id FROM db_view WHERE databaseId = ?)",
             "DELETE FROM db_select_option WHERE propertyId IN (SELECT id FROM db_property WHERE databaseId = ?)",

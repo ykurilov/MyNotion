@@ -51,6 +51,26 @@ public final class AppDatabase: Sendable {
         }
     }
 
+    /// Долгая фоновая запись (пересчёт формул, research R21): автоматическая выгрузка журнала WAL в основной файл
+    /// срабатывает на фиксации и задерживает её на десятки миллисекунд — и правку, ждущую очередь записи. На время
+    /// работы она выключается, а в конце журнал выгружается отдельным соединением (`PASSIVE`: запись не ждёт) и выгрузка
+    /// включается снова.
+    package func withoutAutoCheckpoint<T>(_ work: () throws -> T) throws -> T {
+        try dbWriter.writeWithoutTransaction { try $0.execute(sql: "PRAGMA wal_autocheckpoint = 0") }
+        defer {
+            try? checkpointPassively()
+            try? dbWriter.writeWithoutTransaction { try $0.execute(sql: "PRAGMA wal_autocheckpoint = 1000") }
+        }
+        return try work()
+    }
+
+    /// Выгрузить журнал WAL, не занимая очередь записи.
+    package func checkpointPassively() throws {
+        let connection = try DatabaseQueue(path: url.path)
+        defer { try? connection.close() }
+        try connection.writeWithoutTransaction { _ = try $0.checkpoint(.passive) }
+    }
+
     /// Закрыть соединения; дальше объект не используется.
     public func close() {
         try? dbWriter.close()
