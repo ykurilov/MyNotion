@@ -112,6 +112,7 @@ enum GalleryDatabasesScene {
             window.makeFirstResponder(nil)
         case .empty, .inlineEmpty, .inlineOverview, .formulaEditorEmpty, .formulaEditorResult, .formulaEditorError, .formulaEditorCycle,
              .formulaCells: break
+        default: break
         }
         await settle()
         return nil
