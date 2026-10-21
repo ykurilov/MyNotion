@@ -33,7 +33,9 @@ final class GridTextRenderer {
         return width
     }
 
-    func draw(_ text: String, in rect: CGRect, color: NSColor, alignment: Alignment, weight: NSFont.Weight = .regular, context: CGContext) {
+    /// `highlight` — найденное поиском в базе: серая плашка под каждым вхождением (US3, без регистра и «ё»).
+    func draw(_ text: String, in rect: CGRect, color: NSColor, alignment: Alignment, weight: NSFont.Weight = .regular, highlight: String? = nil,
+              context: CGContext) {
         guard rect.width > 4, !text.isEmpty else { return }
         let key = Key(text: text, weight: weight.rawValue, width: Int(rect.width))
         let line: CTLine
@@ -53,6 +55,9 @@ final class GridTextRenderer {
         var ascent: CGFloat = 0, descent: CGFloat = 0
         let width = CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, nil))
         let x = alignment == .right ? rect.maxX - width : rect.minX
+        if let highlight, !highlight.isEmpty {
+            SearchHighlight.fill(highlight, in: text, line: line, origin: x, rect: rect, context: context)
+        }
         // Вид перевёрнут: Core Text рисует снизу вверх — переворачиваем на время строки.
         context.saveGState()
         context.setFillColor(color.cgColor)

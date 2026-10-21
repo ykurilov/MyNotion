@@ -1,15 +1,24 @@
 import AppKit
 import Databases
 import NotesCore
+import VisualStyle
 
 /// Колонка сетки: свойство вида и его ширина.
 public struct GridColumn: Sendable, Hashable {
     public var property: DatabaseProperty
     public var width: CGFloat
+    /// «Переносить текст» (Q1): текст ячейки — несколькими строками, высота строки — по содержимому.
+    public var wraps: Bool
 
-    public init(property: DatabaseProperty, width: CGFloat) {
+    public init(property: DatabaseProperty, width: CGFloat, wraps: Bool = false) {
         self.property = property
         self.width = width
+        self.wraps = wraps
+    }
+
+    /// Ширина текста в ячейке: без полей, у названия — ещё без значка.
+    public var textWidth: CGFloat {
+        width - 2 * Metrics.DatabaseGrid.cellHorizontalPadding - (property.kind == .title ? 24 : 0)
     }
 
     /// Числа выровнены вправо (contracts/database-ui.md, «Таблица»).
@@ -21,6 +30,8 @@ public struct GridRow: Sendable, Hashable {
     public var id: UUID
     public var icon: String?
     public var cells: [CellPresentation]
+    /// Высота строки: обычная или по перенесённому тексту.
+    public var height: CGFloat = Metrics.DatabaseGrid.rowHeight
 }
 
 /// Строки вида для сетки (research R3): id строк по порядку из запроса, ячейки — только для видимых, порциями по
@@ -42,6 +53,10 @@ public final class GridContent {
     public private(set) var synchronousLoads = 0
     /// Порция пришла с очереди чтения: перерисовать её строки.
     public var onRowsLoaded: ((Range<Int>) -> Void)?
+    /// У прочитанных строк высота не обычная (перенос текста): раскладку сетки — заново.
+    public var onHeightsChange: (() -> Void)?
+    /// Есть колонки с переносом текста.
+    public var wrapsText: Bool { columns.contains(where: \.wraps) }
 
     public init(store: NotesStore, catalog: DatabaseCatalog, columns: [GridColumn], rowIds: [UUID], loadLimit: Int? = nil) {
         self.store = store
@@ -78,6 +93,7 @@ public final class GridContent {
         if let catalog { self.catalog = catalog }
         chunks = [:]
         loading = []
+        heights = [:]
         generation += 1
     }
 
@@ -88,6 +104,7 @@ public final class GridContent {
         if chunks[chunk] == nil {
             synchronousLoads += 1
             chunks[chunk] = try? readChunk(chunk, generation: generation)
+            if let rows = chunks[chunk] { remember(heights: rows, from: chunk * Self.chunkSize) }
         }
         let rows = chunks[chunk] ?? []
         let offset = index - chunk * Self.chunkSize
@@ -112,6 +129,7 @@ public final class GridContent {
                     self.loading.remove(chunk)
                     if self.chunks[chunk] == nil, let rows {
                         self.chunks[chunk] = rows
+                        self.remember(heights: rows, from: chunk * Self.chunkSize)
                         self.onRowsLoaded?(chunk * Self.chunkSize..<chunk * Self.chunkSize + rows.count)
                     }
                 }
@@ -128,6 +146,27 @@ public final class GridContent {
         else { return }
         let offset = index - chunk * Self.chunkSize
         if offset < rows.count { rows[offset] = fresh; chunks[chunk] = rows }
+        remember(heights: [fresh], from: index)
+    }
+
+    /// Высоты строк с переносом (по месту), пока строки не перечитаны заново; прочитанные не отпускаются вместе с
+    /// порцией — иначе раскладка прыгала бы при прокрутке назад.
+    private var heights: [Int: CGFloat] = [:]
+
+    /// Высота строки по месту без чтения: не прочитана — обычная.
+    public func knownHeight(at index: Int) -> CGFloat { heights[index] ?? Metrics.DatabaseGrid.rowHeight }
+
+    private func remember(heights rows: [GridRow], from start: Int) {
+        guard wrapsText else { return }
+        var changed = false
+        for (offset, row) in rows.enumerated() {
+            let fresh: CGFloat? = row.height == Metrics.DatabaseGrid.rowHeight ? nil : row.height
+            if heights[start + offset] != fresh {
+                heights[start + offset] = fresh
+                changed = true
+            }
+        }
+        if changed { onHeightsChange?() }
     }
 
     private func idsOf(_ chunk: Int) -> [UUID] {
@@ -143,10 +182,17 @@ public final class GridContent {
     nonisolated static func makeRows(_ ids: [UUID], catalog: DatabaseCatalog, columns: [GridColumn], store: NotesStore) throws -> [GridRow] {
         let snapshots = try RowWindowReader.read(ids, catalog: catalog, store: store)
         let contexts = columns.map { catalog.context(for: $0.property) }
+        let wrapped = columns.indices.filter { columns[$0].wraps }
         return ids.map { id in
             guard let snapshot = snapshots[id] else { return GridRow(id: id, icon: nil, cells: columns.map { _ in .empty }) }
-            return GridRow(id: id, icon: snapshot.icon,
-                           cells: zip(columns, contexts).map { CellPresenter.present($0.property, in: snapshot, context: $1) })
+            var row = GridRow(id: id, icon: snapshot.icon,
+                              cells: zip(columns, contexts).map { CellPresenter.present($0.property, in: snapshot, context: $1) })
+            for index in wrapped {
+                guard case .text(let text) = row.cells[index] else { continue }
+                row.height = max(row.height, WrappedText.rowHeight(text, width: columns[index].textWidth,
+                                                                   weight: columns[index].property.kind == .title ? .medium : .regular))
+            }
+            return row
         }
     }
 }

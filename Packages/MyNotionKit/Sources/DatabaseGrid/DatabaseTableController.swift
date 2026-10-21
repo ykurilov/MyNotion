@@ -9,14 +9,25 @@ public final class DatabaseTableController {
     public let store: NotesStore
     public let operations: DatabaseOperations
     public let databaseId: UUID
-    public private(set) var viewId: UUID
+    public internal(set) var viewId: UUID
     public private(set) var view: DatabaseView
     public private(set) var catalog: DatabaseCatalog
     public let content: GridContent
     /// Встроенная база: сетка показывает не больше предела загрузки, пока не нажали «Загрузить ещё».
     public let isInline: Bool
     /// Сколько строк показано сверх предела («Загрузить ещё» — ещё порция).
-    public private(set) var extraLoaded = 0
+    public internal(set) var extraLoaded = 0
+    /// Поиск в базе (US3); `nil` — поле закрыто.
+    public internal(set) var search: String?
+    /// Все группы вида (и скрытые, и пустые) — для списка групп; `nil` — без группировки.
+    public internal(set) var groups: [ViewGroup]?
+    /// Показанные группы с местами строк в сетке.
+    public internal(set) var sections: [GridGroupSection]?
+    /// Итоги колонок (Q1) — считаются в фоне после каждого перечитывания.
+    public internal(set) var totals = ColumnTotals.Result()
+    /// Итоги пересчитаны.
+    public var onTotalsChange: (() -> Void)?
+    var totalsTask: Task<Void, Never>?
 
     /// Строки или колонки сменились — перерисовать (и пересчитать высоту встроенной базы).
     public var onReload: (() -> Void)?
@@ -27,7 +38,7 @@ public final class DatabaseTableController {
 
     public init?(store: NotesStore, operations: DatabaseOperations, databaseId: UUID, viewId: UUID? = nil) {
         guard let viewId = viewId ?? (try? ViewQuery.firstViewId(of: databaseId, in: store)),
-              let opened = try? ViewQuery.open(viewId, in: store),
+              let opened = try? ViewQuery.present(viewId, in: store),
               let isInline = try? store.write({ try $0.database(databaseId)?.isInline }) else { return nil }
         self.store = store
         self.operations = operations
@@ -36,8 +47,11 @@ public final class DatabaseTableController {
         self.isInline = isInline
         view = opened.view
         catalog = opened.catalog
+        let shown = Self.shownRows(opened)
         content = GridContent(store: store, catalog: opened.catalog, columns: Self.columns(of: opened.view, catalog: opened.catalog),
-                              rowIds: opened.result.rowIds)
+                              rowIds: shown.rowIds)
+        groups = opened.groups
+        sections = shown.sections
         observer = NotificationCenter.default.addObserver(forName: DatabaseOperations.didChange, object: nil, queue: .main) { [weak self] note in
             let touched = note.userInfo?[DatabaseOperations.touchedKey] as? Set<UUID>
             MainActor.assumeIsolated { self?.databaseDidChange(touched) }
@@ -60,17 +74,21 @@ public final class DatabaseTableController {
     /// Колонки вида: видимые свойства по порядку и их ширины.
     static func columns(of view: DatabaseView, catalog: DatabaseCatalog) -> [GridColumn] {
         ViewQuery.visiblePropertyIds(of: view, catalog: catalog).compactMap { id in
-            catalog.propertiesById[id].map { GridColumn(property: $0, width: CGFloat(DatabaseColumns.width(of: $0, in: view))) }
+            catalog.propertiesById[id].map { GridColumn(property: $0, width: CGFloat(DatabaseColumns.width(of: $0, in: view)), wraps: view.wraps(id)) }
         }
     }
 
     /// Перечитать вид: схема, колонки, строки.
     public func reload() {
-        guard let opened = try? ViewQuery.open(viewId, in: store) else { return }
+        guard let opened = try? ViewQuery.present(viewId, in: store, search: search) else { return }
         view = opened.view
         catalog = opened.catalog
         content.loadLimit = shownLimit
-        content.replace(rowIds: opened.result.rowIds, columns: Self.columns(of: opened.view, catalog: opened.catalog), catalog: opened.catalog)
+        let shown = Self.shownRows(opened)
+        groups = opened.groups
+        sections = shown.sections
+        content.replace(rowIds: shown.rowIds, columns: Self.columns(of: opened.view, catalog: opened.catalog), catalog: opened.catalog)
+        recomputeTotals(rowIds: opened.rowIds)
         onReload?()
     }
 
@@ -84,6 +102,7 @@ public final class DatabaseTableController {
     /// Порядок и состав строк вида зависят от значений: фильтр, сортировка, группа.
     private var dependsOnValues: Bool {
         view.filter.map { $0 != .null } == true || !(view.sorts.array ?? []).isEmpty || view.group.map { $0 != .null } == true
+            || search != nil || !totals.overall.isEmpty
     }
 
     /// Строки вида, изменённые правкой ячеек.
@@ -122,9 +141,12 @@ public final class DatabaseTableController {
 
     /// Новая строка: внизу, вверху вида («Создать») или под строкой («+» при наведении). Возвращает её место в виде.
     @discardableResult
-    public func addRow(at placement: NewRowPlacement = .bottom) -> Int? {
+    public func addRow(at placement: NewRowPlacement = .bottom, groupKey: String? = nil) -> Int? {
         var rowId: UUID?
-        attempt { rowId = try operations.addRow(to: databaseId, in: viewId, at: placement) }
+        // Строка получает значения, при которых она видна в виде (фильтр, группа — FR-330).
+        let defaults = NewRowDefaults.make(filter: view.filterNode, group: groupKey.flatMap { key in view.groupSettings.map { (settings: $0, key: key) } },
+                                           catalog: catalog)
+        attempt { rowId = try operations.addRow(to: databaseId, in: viewId, at: placement, defaults: defaults) }
         if isInline, let rowId, let limit = shownLimit, content.rowIds.count >= limit, placement == .bottom {
             // Новая строка внизу встроенной базы должна быть видна: предел раздвигается на неё.
             extraLoaded += 1

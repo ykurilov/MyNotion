@@ -42,8 +42,27 @@ public final class DatabaseGridView: NSView {
     /// Правый щелчок по строке и щелчок по «⠿»: меню строки у точки (в координатах сетки).
     public var onRowMenu: ((Int, NSPoint) -> Void)?
     public var onRowSelectionChange: ((Set<Int>) -> Void)?
+    /// Высота таблицы сменилась без перечитывания (группа свёрнута, перенос): хозяин перекладывает блок.
+    public var onHeightChange: (() -> Void)?
     /// Сколько строк «+ Новая строка» внизу (0 — нет, у проб).
     public var showsNewRowButton: Bool { controller != nil }
+
+    // MARK: Вид (US3)
+
+    /// Показанные группы по порядку; `nil` — вид не сгруппирован.
+    public var groupSections: [GridGroupSection]? { didSet { if groupSections != oldValue { relayout() } } }
+    /// Итоги колонок под таблицей и под группами (Q1).
+    public var totals = ColumnTotals.Result() { didSet { if totals != oldValue { documentView.needsDisplay = true } } }
+    /// «+ Новая группа» внизу (группы по выбору и статусу).
+    public var showsNewGroup = false { didSet { if showsNewGroup != oldValue { relayout() } } }
+    /// Найденное поиском в базе — подсвечивается в ячейках.
+    public var searchHighlight: String? { didSet { if searchHighlight != oldValue { documentView.needsDisplay = true } } }
+    /// «▾» у заголовка группы.
+    public var onGroupToggle: ((String) -> Void)?
+    /// Щелчок по строке итогов под колонкой: меню «Посчитать ›» (`rect` — ячейка итога в координатах сетки).
+    public var onCalculateMenu: ((DatabaseProperty, NSRect) -> Void)?
+    /// «+ Новая группа»: новый вариант свойства группы.
+    public var onNewGroup: ((NSRect) -> Void)?
 
     public init(content: GridContent, scrollsVertically: Bool = true) {
         self.content = content
@@ -70,6 +89,7 @@ public final class DatabaseGridView: NSView {
         NotificationCenter.default.addObserver(self, selector: #selector(visibleAreaChanged), name: NSView.boundsDidChangeNotification,
                                                object: scrollView.contentView)
         content.onRowsLoaded = { [weak self] rows in self?.documentView.setNeedsDisplay(rows: rows) }
+        content.onHeightsChange = { [weak self] in self?.relayout() }
         hoverControls.grid = self
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
@@ -112,6 +132,7 @@ public final class DatabaseGridView: NSView {
                 : nil
         }
         selectedRows = selectedRows.filter { $0 < content.rowCount }
+        rebuildLayout()
         documentView.updateSize(minimumWidth: scrollView.contentSize.width)
         headerView.frame = NSRect(x: 0, y: 0, width: documentView.frame.width, height: Metrics.DatabaseGrid.headerHeight)
         documentView.needsDisplay = true
@@ -151,7 +172,7 @@ public final class DatabaseGridView: NSView {
 
     /// Прокрутить так, чтобы строка `index` была у верха.
     public func scroll(toRow index: Int) {
-        let y = CGFloat(index) * Metrics.DatabaseGrid.rowHeight
+        let y = documentView.rowRect(index).minY - Metrics.DatabaseGrid.headerHeight
         scrollView.contentView.scroll(to: NSPoint(x: scrollView.contentView.bounds.minX, y: y))
         scrollView.reflectScrolledClipView(scrollView.contentView)
     }
@@ -378,6 +399,56 @@ public final class DatabaseGridView: NSView {
         commitEditing(then: nil)
         selection = nil
         selectedRows = []
+    }
+}
+
+// MARK: Раскладка и полосы групп (US3)
+
+extension DatabaseGridView {
+    /// Раскладка заново: высоты строк (перенос), группы, итоги.
+    func rebuildLayout() {
+        let content = content
+        let wraps = content.wrapsText
+        documentView.layout = GridLayout(rowCount: content.rowCount, rowHeight: { wraps ? content.knownHeight(at: $0) : Metrics.DatabaseGrid.rowHeight },
+                                         groups: groupSections, showsNewRow: showsNewRowButton, hasTotals: showsNewRowButton,
+                                         showsNewGroup: showsNewGroup && showsNewRowButton)
+    }
+
+    /// Раскладка сменилась без новых строк (свернули группу, прочитались высоты): размер и рисунок.
+    func relayout() {
+        let height = documentView.tableHeight
+        rebuildLayout()
+        documentView.updateSize(minimumWidth: scrollView.contentSize.width)
+        documentView.needsDisplay = true
+        hoverControls.update()
+        if documentView.tableHeight != height { onHeightChange?() }
+    }
+
+    /// Щелчок по полосе: «▾» группы, «+ Новая строка» группы, ячейка итогов, «+ Новая группа».
+    func decorationClicked(_ item: GridDecoration, at point: NSPoint) {
+        switch item {
+        case .groupHeader(let index):
+            guard let section = groupSections?[safe: index] else { return }
+            onGroupToggle?(section.key)
+        case .groupNewRow(let index):
+            guard let section = groupSections?[safe: index], let controller, let row = controller.addRow(inGroup: section.key) else { return }
+            select(CellPosition(row: row, column: 0))
+            beginEditing()
+        case .groupTotals, .totals:
+            var x: CGFloat = 0
+            for column in content.columns {
+                if point.x >= x, point.x < x + column.width, let rect = documentView.layout.rect(of: item, width: documentView.bounds.width) {
+                    onCalculateMenu?(column.property, convert(NSRect(x: x, y: rect.minY, width: column.width, height: rect.height), from: documentView))
+                    return
+                }
+                x += column.width
+            }
+        case .newGroup:
+            guard let rect = documentView.layout.rect(of: .newGroup, width: 200) else { return }
+            onNewGroup?(convert(rect, from: documentView))
+        case .newRow:
+            addRowAtBottom()
+        }
     }
 }
 

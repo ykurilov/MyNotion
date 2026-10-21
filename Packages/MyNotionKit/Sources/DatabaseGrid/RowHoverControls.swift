@@ -126,8 +126,7 @@ final class RowHoverControls: NSView {
             if !moved, hypot(event.locationInWindow.x - start.x, event.locationInWindow.y - start.y) < 4 { return }
             moved = true
             let point = document.convert(event.locationInWindow, from: nil)
-            let index = Int(((point.y - Metrics.DatabaseGrid.headerHeight) / Metrics.DatabaseGrid.rowHeight).rounded())
-            target = min(max(index, 0), grid.content.rowCount)
+            target = min(document.layout.insertionIndex(at: point.y), grid.content.rowCount)
             document.dropRow = target
             document.autoscroll(with: event)
         }

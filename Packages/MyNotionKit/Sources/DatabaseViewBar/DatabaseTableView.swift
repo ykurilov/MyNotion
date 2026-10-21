@@ -110,6 +110,15 @@ public final class DatabaseTableView: NSView, NSTextFieldDelegate {
             rowMenu.show(rows: rows, of: grid, at: point, actions: rowMenuActions)
         }
         grid.onRowSelectionChange = { [weak self] rows in self?.rowSelectionChanged(rows) }
+        controller.onTotalsChange = { [weak self] in
+            guard let self else { return }
+            grid.totals = controller.totals
+        }
+        grid.onGroupToggle = { [weak self] key in self?.controller.toggleGroup(key) }
+        grid.onHeightChange = { [weak self] in
+            self?.needsLayout = true
+            self?.onHeightChange?()
+        }
         selectionBar.onDuplicate = { [weak self] in
             guard let self else { return }
             controller.duplicateRows(grid.selectedRows.sorted())
@@ -141,6 +150,11 @@ public final class DatabaseTableView: NSView, NSTextFieldDelegate {
         viewBar.showsTabs = !(mode == .inline && viewBar.tabs.count <= 1)
         if mode == .inline, titleField.currentEditor() == nil { titleField.stringValue = controller.title }
         loadMoreButton.isHidden = !controller.hasMoreRows
+        grid.groupSections = controller.sections
+        grid.showsNewGroup = controller.view.groupSettings.flatMap { controller.catalog.propertiesById[$0.propertyId] }
+            .map { [.select, .status, .multiSelect].contains($0.kind) && controller.view.groupSettings?.bucket?.string != "group" } ?? false
+        grid.searchHighlight = controller.searchHighlight
+        grid.totals = controller.totals
         grid.reloadData()
         needsLayout = true
         onHeightChange?()
@@ -161,7 +175,8 @@ public final class DatabaseTableView: NSView, NSTextFieldDelegate {
 
     /// Высота без вида (фабрика блока до показа): строк — по пределу загрузки.
     public static func height(rows: Int, hasMore: Bool, mode: Mode, barSharesTitleRow: Bool = true) -> CGFloat {
-        let grid = Metrics.DatabaseGrid.headerHeight + CGFloat(rows + 1) * Metrics.DatabaseGrid.rowHeight + 2
+        // Шапка, строки, «+ Новая строка» и строка итогов (Q1: у Notion она есть всегда, под мышью — «Посчитать»).
+        let grid = Metrics.DatabaseGrid.headerHeight + CGFloat(rows + 1) * Metrics.DatabaseGrid.rowHeight + GridLayout.totalsHeight + 2
         let top = mode == .inline ? titleHeight + (barSharesTitleRow ? 0 : ViewBarView.height) : ViewBarView.height
         return top + grid + (hasMore ? loadMoreHeight : 0) + 8
     }
