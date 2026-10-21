@@ -24,28 +24,28 @@ final class ViewFilterSortGroupTests: XCTestCase {
         let any = { (id: String) in app.descendants(matching: .any)[id] }
 
         // Фильтр: воронка → «Статус» → «Не равно» → «Готово».
-        any("database-view-bar-filter").click()
+        tap(any("database-view-bar-filter"))
         XCTAssertTrue(any("filter-by-Статус").waitForExistence(timeout: 5), "Нет списка «Фильтр по…»")
-        any("filter-by-Статус").click()
+        tap(any("filter-by-Статус"))
         XCTAssertTrue(any("filter-operator").waitForExistence(timeout: 5), "Окно плашки не открылось")
-        any("filter-operator").click()
+        tap(any("filter-operator"))
         XCTAssertTrue(any("filter-op-isNot").waitForExistence(timeout: 5))
-        any("filter-op-isNot").click()
+        tap(any("filter-op-isNot"))
         XCTAssertTrue(any("filter-option-Готово").waitForExistence(timeout: 5), "Нет варианта «Готово»")
-        any("filter-option-Готово").click()
+        tap(any("filter-option-Готово"))
         app.typeKey(.escape, modifierFlags: [])
         XCTAssertTrue(waitUntil { (try? self.view("Таблица", "filter"))?.contains("isNot") == true }, "Фильтр не записан")
         XCTAssertTrue(any("database-chip-filter").waitForExistence(timeout: 5), "Нет плашки фильтра")
 
         // Сортировка: ⇅ → «Срок».
-        any("database-view-bar-sort").click()
+        tap(any("database-view-bar-sort"))
         XCTAssertTrue(any("sort-by-Срок").waitForExistence(timeout: 5), "Нет списка «Сортировать по…»")
-        any("sort-by-Срок").click()
+        tap(any("sort-by-Срок"))
         app.typeKey(.escape, modifierFlags: [])
         XCTAssertTrue(waitUntil { (try? self.view("Таблица", "sorts"))?.contains("ascending") == true }, "Сортировка не записана")
 
         // Поиск «отчёт»: поле в строке вида, Esc закрывает.
-        any("database-view-bar-search").click()
+        tap(any("database-view-bar-search"))
         XCTAssertTrue(any("database-search-field").waitForExistence(timeout: 5), "Поле поиска не раскрылось")
         app.typeText("отчёт")
         XCTAssertTrue(any("database-search-field").exists)
@@ -56,23 +56,23 @@ final class ViewFilterSortGroupTests: XCTestCase {
         for _ in 0..<3 {
             grid.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: Self.columnWidth + 60, dy: Self.header / 2)).click()
             XCTAssertTrue(any("column-menu-hide").waitForExistence(timeout: 5), "Нет «Скрыть» в меню колонки")
-            any("column-menu-hide").click()
+            tap(any("column-menu-hide"))
         }
         XCTAssertTrue(waitUntil { (try? self.hiddenCount("Таблица")) == 3 }, "Скрыто: \(String(describing: try? hiddenCount("Таблица")))")
 
         // Группировка: настройки вида → «Группировка» → «Статус».
-        any("database-view-bar-settings").click()
+        tap(any("database-view-bar-settings"))
         XCTAssertTrue(any("view-settings-group").waitForExistence(timeout: 5), "Нет настроек вида")
-        any("view-settings-group").click()
+        tap(any("view-settings-group"))
         XCTAssertTrue(any("group-by").waitForExistence(timeout: 5))
-        any("group-by").click()
+        tap(any("group-by"))
         XCTAssertTrue(any("group-by-Статус").waitForExistence(timeout: 5))
-        any("group-by-Статус").click()
+        tap(any("group-by-Статус"))
         app.typeKey(.escape, modifierFlags: [])
         XCTAssertTrue(waitUntil { (try? self.view("Таблица", "group"))?.contains("propertyId") == true }, "Группировка не записана")
 
         // Второй вид «Все»: «+» в строке видов, имя в настройках.
-        any("database-view-add").click()
+        tap(any("database-view-add"))
         XCTAssertTrue(any("view-settings-name").waitForExistence(timeout: 5), "Настройки нового вида не открылись")
         app.typeKey("a", modifierFlags: .command)
         app.typeText("Все")
@@ -94,6 +94,12 @@ final class ViewFilterSortGroupTests: XCTestCase {
     }
 
     // MARK: Помощники
+
+    /// Щелчок по середине: кнопки строки вида и пункты окон открывают карточки, а не меню — ожидание меню XCUITest не нужно.
+    @MainActor
+    private func tap(_ element: XCUIElement) {
+        element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+    }
 
     private func waitUntil(timeout: TimeInterval = 10, _ condition: () -> Bool) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
