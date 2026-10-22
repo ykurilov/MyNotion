@@ -25,7 +25,7 @@ final class ViewFilterSortGroupTests: XCTestCase {
 
         // Фильтр: воронка → «Статус» → «Не равно» → «Готово».
         tap(any("database-view-bar-filter"))
-        XCTAssertTrue(any("filter-property-list").waitForExistence(timeout: 5), "Нет списка «Фильтр по…»")
+        XCTAssertTrue(any("filter-property-list-search").waitForExistence(timeout: 5), "Нет списка «Фильтр по…»")
         // Список длинный: «Статус» — ниже видимой части; поиск по списку оставляет его наверху.
         app.typeText("Статус")
         XCTAssertTrue(any("filter-by-Статус").waitForExistence(timeout: 5))
@@ -42,7 +42,7 @@ final class ViewFilterSortGroupTests: XCTestCase {
 
         // Сортировка: ⇅ → «Срок».
         tap(any("database-view-bar-sort"))
-        XCTAssertTrue(any("sort-property-list").waitForExistence(timeout: 5), "Нет списка «Сортировать по…»")
+        XCTAssertTrue(any("sort-property-list-search").waitForExistence(timeout: 5), "Нет списка «Сортировать по…»")
         app.typeText("Срок")
         XCTAssertTrue(any("sort-by-Срок").waitForExistence(timeout: 5))
         tap(any("sort-by-Срок"))
