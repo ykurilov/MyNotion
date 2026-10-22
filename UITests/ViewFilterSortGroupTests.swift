@@ -93,8 +93,9 @@ final class ViewFilterSortGroupTests: XCTestCase {
         }
         XCTAssertTrue(groupList.frame.contains(any("group-by-Статус").frame), "Статус не прокрутился в область панели")
         tap(any("group-by-Статус"))
+        XCTAssertTrue(any("group-by").waitForExistence(timeout: 5), "Не открылись настройки выбранной группировки")
         app.typeKey(.escape, modifierFlags: [])
-        XCTAssertTrue(waitUntil { !any("group-by-Статус").exists }, "Esc не закрыл настройки группировки")
+        XCTAssertTrue(waitUntil { !any("group-by").exists }, "Esc не закрыл настройки группировки")
         XCTAssertTrue(waitUntil { (try? self.view("Таблица", "group"))?.contains("propertyId") == true }, "Группировка не записана")
 
         // Второй вид «Все»: «+» в строке видов, имя в настройках.

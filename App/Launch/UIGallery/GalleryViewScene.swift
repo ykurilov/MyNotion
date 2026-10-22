@@ -76,7 +76,7 @@ enum GalleryViewScene {
                 try operations.setFilter(.condition(FilterCondition(propertyId: property("Часы"), op: .lessThan, value: 2)),
                                          of: controller.viewId)
                 let order = controller.groupOrder
-                if let last = order.last { try operations.setGroupCollapsed(last, true, order: order, in: controller.viewId) }
+                if let first = order.first { try operations.setGroupCollapsed(first, true, order: order, in: controller.viewId) }
                 try operations.setCalculation(.countAll, of: property("Название"), in: controller.viewId)
                 try operations.setCalculation(.sum, of: property("Часы"), in: controller.viewId)
             case .viewWrapText:
