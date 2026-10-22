@@ -22,6 +22,8 @@ final class OptionPickerView: NSView, CellPopupContent {
     private let list: OptionListView
     private let createRow = OptionCreateRow()
     private let menuCard = PopupCard()
+    /// «Изменить свойство» внизу окна статуса (`notion-status-cell-popup.png`).
+    private let editRow = ChoiceRow(title: "Изменить свойство", icon: "slider.horizontal.3", identifier: "option-edit-property")
     private var propertyContext: PropertyContext?
     private var kind: PropertyKind
     private var chosen: [SelectOption] = []
@@ -46,6 +48,12 @@ final class OptionPickerView: NSView, CellPopupContent {
         scroll.documentView = list
         addSubview(scroll)
         addSubview(createRow)
+        if hasEditRow { addSubview(editRow) }
+        editRow.onPress = { [weak self] in
+            guard let self, let edit = self.context.editProperty else { return }
+            self.context.close()
+            edit()
+        }
         searchBox.text = context.initialText ?? ""
         searchBox.onChange = { [weak self] _ in self?.highlighted = 0; self?.reload() }
         searchBox.onCommand = { [weak self] selector in self?.handle(selector) ?? false }
@@ -134,8 +142,11 @@ final class OptionPickerView: NSView, CellPopupContent {
 
     var preferredSize: NSSize {
         NSSize(width: Self.width, height: searchBox.height(forWidth: Self.width) + captionHeight + listHeight
-               + (offersCreation ? PropertyPopupMetrics.rowHeight : 0) + 8)
+               + (offersCreation ? PropertyPopupMetrics.rowHeight : 0) + editRowHeight + 8)
     }
+
+    private var hasEditRow: Bool { kind == .status && context.editProperty != nil }
+    private var editRowHeight: CGFloat { hasEditRow ? PropertyPopupMetrics.separatorHeight + PropertyPopupMetrics.rowHeight : 0 }
 
     override var fittingSize: NSSize { preferredSize }
 
@@ -150,6 +161,15 @@ final class OptionPickerView: NSView, CellPopupContent {
         list.frame = NSRect(x: 0, y: 0, width: bounds.width - (list.contentHeight > Self.maxListHeight ? 8 : 0), height: list.contentHeight)
         y += listHeight
         createRow.frame = NSRect(x: PropertyPopupMetrics.inset, y: y, width: bounds.width - 2 * PropertyPopupMetrics.inset, height: PropertyPopupMetrics.rowHeight)
+        if offersCreation { y += PropertyPopupMetrics.rowHeight }
+        editRow.frame = NSRect(x: PropertyPopupMetrics.inset, y: y + PropertyPopupMetrics.separatorHeight, width: bounds.width - 2 * PropertyPopupMetrics.inset,
+                               height: PropertyPopupMetrics.rowHeight)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard hasEditRow else { return }
+        Palette.popupDivider.setFill()
+        NSRect(x: 0, y: editRow.frame.minY - PropertyPopupMetrics.separatorHeight / 2, width: bounds.width, height: 1).fill()
     }
 
     // MARK: Действия

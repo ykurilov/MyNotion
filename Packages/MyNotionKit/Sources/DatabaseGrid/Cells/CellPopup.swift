@@ -16,6 +16,8 @@ public final class CellPopupContext {
     public var close: () -> Void = {}
     /// Высота содержимого окна сменилась.
     public var resize: () -> Void = {}
+    /// «Изменить свойство» — панель свойства справа (её открывает хозяин таблицы); `nil` — пункта нет.
+    public var editProperty: (() -> Void)?
 
     init(controller: DatabaseTableController, rowId: UUID, propertyId: UUID, initialText: String?) {
         self.controller = controller

@@ -12,6 +12,7 @@ extension DatabaseGridView {
         let host = CellPopupHost.shared
         context.close = { host.close() }
         context.resize = { host.resize() }
+        if let onEditProperty { context.editProperty = { onEditProperty(column.property) } }
         let popup = factory.make(context)
         reveal(position)
         host.onClose = { [weak self] in
