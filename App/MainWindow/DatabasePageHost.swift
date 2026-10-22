@@ -45,6 +45,7 @@ final class DatabaseBlockViewFactory: BlockViewFactory {
         menus.columnRect = { [weak view] propertyId in view?.columnHeaderRect(propertyId) }
         view.onColumnMenu = { property, rect, host in menus.showColumnMenu(for: property.id, below: rect, in: host) }
         view.onAddProperty = { rect, host in menus.showAddProperty(below: rect, in: host) }
+        view.onEditProperty = { property, host in menus.showEditProperty(property.id, in: host) }
         view.onViewSettings = { rect, host in menus.showPropertiesWindow(below: rect, in: host) }
         var actions = RowMenuActions()
         actions.isFavorite = { resolve()?.isFavorite($0) ?? false }

@@ -124,9 +124,6 @@ public struct DateCellValue: Sendable, Hashable {
     public var reminder: DateReminder?
     private var extra: [String: JSONValue] = [:]
 
-    /// Время, которое ставит «Включить время».
-    public static let defaultHour = 9
-
     public init(day: DateParts, timeZone: String) {
         start = day.sameDay
         hasTime = false
@@ -161,20 +158,30 @@ public struct DateCellValue: Sendable, Hashable {
         end = on ? (end ?? start) : nil
     }
 
-    /// «Включить время»: 9:00 по умолчанию; напоминание переходит на ближайшее из нового списка.
-    public mutating func setHasTime(_ on: Bool) {
+    /// «Включить время»: текущее время (как у Notion), `now` — часы и минуты сейчас в поясе значения; напоминание
+    /// переходит на ближайшее из нового списка.
+    public mutating func setHasTime(_ on: Bool, now: (hour: Int, minute: Int)? = nil) {
         guard on != hasTime else { return }
         hasTime = on
         if on {
-            start.hour = Self.defaultHour
-            start.minute = 0
-            end?.hour = Self.defaultHour
-            end?.minute = 0
+            let time = now ?? currentTime
+            start.hour = time.hour
+            start.minute = time.minute
+            end?.hour = time.hour
+            end?.minute = time.minute
         } else {
             start = start.sameDay
             end = end?.sameDay
         }
         reminder = reminder?.adapted(hasTime: on)
+    }
+
+    /// Часы и минуты сейчас в поясе значения.
+    var currentTime: (hour: Int, minute: Int) {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: timeZone) ?? .current
+        let parts = calendar.dateComponents([.hour, .minute], from: Date())
+        return (parts.hour ?? 0, parts.minute ?? 0)
     }
 
     public mutating func setTime(hour: Int, minute: Int, forEnd: Bool) {

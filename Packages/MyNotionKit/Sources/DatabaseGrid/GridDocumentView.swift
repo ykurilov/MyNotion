@@ -35,6 +35,8 @@ final class GridDocumentView: NSView, NSMenuItemValidation {
         super.init(frame: .zero)
         wantsLayer = true
         layerContentsRedrawPolicy = .onSetNeedsDisplay
+        // Файлы из Finder на ячейку «Файлы и медиа» (US2, `GridDocumentView+FileDrop.swift`).
+        registerForDraggedTypes([.fileURL])
         openButton.isHidden = true
         openButton.target = self
         openButton.action = #selector(openHoveredRow)

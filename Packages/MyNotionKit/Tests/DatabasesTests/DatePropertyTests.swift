@@ -43,11 +43,11 @@ struct DatePropertyTests {
         #expect(value.json["end"] == nil)
     }
 
-    @Test("«Включить время»: 9:00 по умолчанию, время сохраняется при смене дня; выключить — время уходит")
+    @Test("«Включить время»: текущее время, как у Notion; время сохраняется при смене дня; выключить — время уходит")
     func includeTime() {
         var value = DateCellValue(day: day(2026, 10, 21), timeZone: zone)
-        value.setHasTime(true)
-        #expect(value.json["start"] == "2026-10-21T09:00")
+        value.setHasTime(true, now: (hour: 17, minute: 42))
+        #expect(value.json["start"] == "2026-10-21T17:42")
         #expect(value.json["hasTime"] == true)
         value.setTime(hour: 15, minute: 15, forEnd: false)
         value.pick(day(2026, 10, 22), editingEnd: false)
@@ -132,5 +132,16 @@ struct DatePropertyTests {
         #expect(shown(["dateFormat": "dmy", "timeFormat": "h24"]) == "21/10/2026, 15:15 → 23/10/2026, 09:00")
         #expect(shown(["dateFormat": "ymd", "timeFormat": "hidden"]) == "2026/10/21 → 2026/10/23")
         #expect(shown(["dateFormat": "mdy", "timeFormat": "h12"]).hasPrefix("10/21/2026, 3:15"))
+    }
+
+    @Test("«Включить время» без подсказки — часы и минуты сейчас в поясе значения")
+    func includeTimeNow() {
+        var value = DateCellValue(day: day(2026, 10, 21), timeZone: zone)
+        let calendar = calendar
+        let before = calendar.dateComponents([.hour, .minute], from: Date())
+        value.setHasTime(true)
+        let after = calendar.dateComponents([.hour, .minute], from: Date())
+        let shown = value.json["start"]?.string ?? ""
+        #expect([before, after].map { String(format: "2026-10-21T%02d:%02d", $0.hour!, $0.minute!) }.contains(shown))
     }
 }
