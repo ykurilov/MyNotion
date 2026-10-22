@@ -30,22 +30,24 @@ LIVE=/tmp/mn-sync-live            # этот путь читает UITests/SyncT
 UITEST_DD=build/imac-uitest-dd
 RESULTS=build/imac-sync-live
 
-# Свой сервер гасится при любом выходе: по номеру процесса и по порту. Адрес стирается: обычный прогон
-# UI-тестов пропускает проверку двух Mac.
+# Завершаем только сервер, запущенный этим прогоном. Экземпляры приложения закрывает teardown UI-теста.
+server_pid=""
 stop_server() {
-  local pid
-  pid=$(cat $LIVE/server.pid 2>/dev/null || true); [[ -n $pid ]] && kill $pid 2>/dev/null || true
-  pid=$(lsof -tiTCP:$PORT -sTCP:LISTEN 2>/dev/null || true); [[ -n $pid ]] && kill $pid 2>/dev/null || true
-  pkill -f 'MyNotion.*.app/Contents/MacOS' 2>/dev/null || true
-  rm -f $LIVE/server-url
+  if [[ -n $server_pid ]]; then
+    kill $server_pid 2>/dev/null || true
+    rm -f $LIVE/server-url
+  fi
 }
 trap stop_server EXIT INT TERM
 
 # 1. Сервер на iMac.
 (cd server && pnpm install --frozen-lockfile --silent && pnpm --silent build)
-stop_server
+[[ -z $(lsof -tiTCP:$PORT -sTCP:LISTEN 2>/dev/null || true) ]] \
+  || fail "Порт $PORT занят: чужой сервер оставлен без изменений."
 rm -rf $LIVE; mkdir -p $LIVE
-(cd server && DATA_DIR=$LIVE/server PORT=$PORT nohup node dist/main.js > $LIVE/server.log 2>&1 & echo $! > $LIVE/server.pid)
+DATA_DIR=$LIVE/server PORT=$PORT node $WORK/server/dist/main.js > $LIVE/server.log 2>&1 &
+server_pid=$!
+print -r -- $server_pid > $LIVE/server.pid
 for _ in {1..50}; do curl -sf http://127.0.0.1:$PORT/health >/dev/null 2>&1 && break; sleep 0.2; done
 (cd server && DATA_DIR=$LIVE/server node dist/cli.js bootstrap --name 'Mac A' --token-only > $LIVE/token)
 echo http://127.0.0.1:$PORT > $LIVE/server-url
