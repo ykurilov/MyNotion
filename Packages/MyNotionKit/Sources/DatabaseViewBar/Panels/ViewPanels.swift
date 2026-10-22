@@ -38,7 +38,9 @@ public final class ViewPanels {
         }
     }
 
-    deinit {
+    isolated deinit {
+        settingsPanel?.stopWatching()
+        settingsPanel?.removeFromSuperview()
         if let observer { NotificationCenter.default.removeObserver(observer) }
     }
 
@@ -101,18 +103,16 @@ public final class ViewPanels {
         show(LayoutPage(panels: self), below: rect, in: view)
     }
 
-    /// «Настройки вида» (ползунки, «•••» шапки): панель справа на высоту `host`, пункты переходят на свои страницы с «←».
+    /// «Настройки вида»: панель справа в видимой части `host`, пункты переходят на свои страницы с «←».
     /// `selectName` — выделить имя (после «Дублировать вид»).
     public func showViewSettings(in host: NSView, selectName: Bool) {
         closeSettingsPanel()
         let panel = ViewSettingsPanel(panels: self)
         panel.onClose = { [weak self] in self?.closeSettingsPanel() }
-        let width = min(PropertyPopupMetrics.panelWidth, host.bounds.width)
-        panel.frame = NSRect(x: host.bounds.maxX - width, y: 0, width: width, height: host.bounds.height)
-        panel.autoresizingMask = [.minXMargin, .height]
-        host.addSubview(panel, positioned: .above, relativeTo: nil)
-        panel.watchOutsideClicks()
+        guard let overlay = host.window?.contentView else { return }
+        overlay.addSubview(panel, positioned: .above, relativeTo: nil)
         settingsPanel = panel
+        panel.watchOutsideClicks(anchoredTo: host)
         if selectName { panel.selectName() }
     }
 

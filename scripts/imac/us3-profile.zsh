@@ -15,7 +15,10 @@ bundle=$WORK/build/imac-uitest-dd-release/Build/Products/Release/PerformanceTest
 sampled=0
 for attempt in {1..900}; do
   # Полный путь bundle ограничивает выбор нашим xctest, чужих исполнителей не трогаем.
-  target=$(ps -axo pid=,command= | awk -v bundle="$bundle" 'index($0, bundle) && index($0, "/usr/bin/xctest") && !index($0, "awk") { print $1; exit }')
+  physical=$bundle
+  [[ -d ${bundle:h} ]] && physical=$(cd ${bundle:h} && pwd -P)/${bundle:t}
+  target=$(ps -axo pid=,command= | awk -v bundle="$bundle" -v physical="$physical" \
+    '!found && (index($0, bundle) || index($0, physical)) && index($0, "/usr/bin/xctest") && !index($0, "awk") { print $1; found=1 }')
   if [[ -n $target ]] && grep -q 'Test Case.*testViewChangesSearchAndGroupedScrollWithinBudget.*started' build/imac-uitest/uitest.log 2>/dev/null; then
     print -r -- "sample target=$target bundle=$bundle" >> $out/context.log
     sample $target 10 1 -file $out/sample.txt > $out/sample-command.log 2>&1 && sampled=1 || true

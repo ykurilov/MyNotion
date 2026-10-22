@@ -37,6 +37,62 @@ struct ViewPanelsViewsTests {
         return nil
     }
 
+    @Test("Настройки длинной таблицы ограничены viewport, список свойств прокручивается в окне")
+    func settingsUseVisibleTableArea() throws {
+        _ = NSApplication.shared
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
+                              styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        defer { panels.close(); window.orderOut(nil) }
+        let root = try #require(window.contentView)
+        let scroll = NSScrollView(frame: root.bounds.insetBy(dx: 40, dy: 30))
+        scroll.autoresizingMask = [.width, .height]
+        root.addSubview(scroll)
+        let document = FlippedPanelDocument(frame: NSRect(x: 0, y: 0, width: 900, height: 276_000))
+        scroll.documentView = document
+        root.layoutSubtreeIfNeeded()
+        panels.showViewSettings(in: document, selectName: false)
+        let panel = try #require(find(ViewSettingsPanel.self, "view-settings-panel", in: root))
+        let visible = document.convert(document.visibleRect, to: root).intersection(root.bounds)
+        #expect(visible.height > 0 && visible.height <= 600)
+        #expect(panel.superview === root)
+        #expect(panel.frame.height == visible.height)
+        #expect(panel.frame.maxX == visible.maxX)
+        #expect(panel.frame.minY == visible.minY)
+        panel.layoutSubtreeIfNeeded()
+        try #require(find(PropertyPopupRow.self, "view-settings-group", in: panel)).press()
+        panel.layoutSubtreeIfNeeded()
+        let list = try #require(find(PanelPage.self, "grouping-window", in: panel))
+        #expect(list.frame.height < visible.height)
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: 200_000))
+        scroll.reflectScrolledClipView(scroll.contentView)
+        NotificationCenter.default.post(name: NSWindow.didUpdateNotification, object: window)
+        let scrolled = document.convert(document.visibleRect, to: root).intersection(root.bounds)
+        #expect(panel.frame.height == scrolled.height)
+        #expect(panel.frame.minY == scrolled.minY)
+        #expect(panel.frame.maxX == scrolled.maxX)
+        window.setContentSize(NSSize(width: 700, height: 450))
+        root.layoutSubtreeIfNeeded()
+        NotificationCenter.default.post(name: NSWindow.didResizeNotification, object: window)
+        let resized = document.convert(document.visibleRect, to: root).intersection(root.bounds)
+        #expect(panel.frame.height == resized.height)
+        #expect(panel.frame.maxX == resized.maxX)
+        scroll.documentView = nil
+        NotificationCenter.default.post(name: NSWindow.didUpdateNotification, object: window)
+        #expect(panel.superview == nil, "При уходе со страницы overlay должен закрываться")
+        scroll.documentView = document
+        panels.showViewSettings(in: document, selectName: false)
+        #expect(find(ViewSettingsPanel.self, "view-settings-panel", in: root) != nil)
+        panels.close()
+        #expect(find(ViewSettingsPanel.self, "view-settings-panel", in: root) == nil)
+        var owner: ViewPanels? = ViewPanels(controller: controller)
+        weak var weakOwner = owner
+        owner?.showViewSettings(in: document, selectName: false)
+        #expect(find(ViewSettingsPanel.self, "view-settings-panel", in: root) != nil)
+        owner = nil
+        #expect(weakOwner == nil)
+        #expect(find(ViewSettingsPanel.self, "view-settings-panel", in: root) == nil, "Освобождение presenter убирает overlay")
+    }
+
     @Test("Простой фильтр выбора: условие, «•••», поиск и флажки вариантов; флажок пишет значение")
     func simpleFilterSelect() throws {
         let path = try t.operations.addFilter(for: t.select.id, to: t.base.viewId)
@@ -91,4 +147,8 @@ struct ViewPanelsViewsTests {
         sorts.rebuild()
         #expect(identifiers(sorts).contains("sort-level-direction-0"))
     }
+}
+
+private final class FlippedPanelDocument: NSView {
+    override var isFlipped: Bool { true }
 }

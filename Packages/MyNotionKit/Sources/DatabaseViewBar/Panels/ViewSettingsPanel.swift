@@ -4,7 +4,7 @@ import Databases
 import NotesCore
 import VisualStyle
 
-/// «Настройки вида» (`notion-view-settings-panel.png`): панель справа на высоту таблицы — поле имени вида, Раскладка ›,
+/// «Настройки вида» (`notion-view-settings-panel.png`): панель справа на высоту видимой таблицы — поле имени вида, Раскладка ›,
 /// Видимость свойств [N] ›, Фильтр ›, Сортировка ›, Группировка ›, —, Свойства ›. Пункт открывает свою страницу на месте
 /// панели с «←»; «×», Esc и щелчок мимо закрывают.
 @MainActor
@@ -17,6 +17,7 @@ final class ViewSettingsPanel: NSView {
     private var nameField: PropertyPopupField?
     private var valueRows: [ViewSettingsModel.Slot: PropertyPopupRow] = [:]
     private var monitor: Any?
+    private var windowObservers: [NSObjectProtocol] = []
     var onClose: (() -> Void)?
 
     init(panels: ViewPanels) {
@@ -29,7 +30,10 @@ final class ViewSettingsPanel: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
 
+    isolated deinit { stopWatching() }
+
     override var isFlipped: Bool { true }
+    override var acceptsFirstResponder: Bool { true }
 
     private var controller: DatabaseTableController { panels.controller }
 
@@ -52,6 +56,7 @@ final class ViewSettingsPanel: NSView {
 
     /// Главная страница (`nil`) или страница пункта.
     private func show(_ next: ViewSettingsModel.Slot?) {
+        window?.makeFirstResponder(self)
         commitName()
         page?.flush()
         page?.removeFromSuperview()
@@ -160,7 +165,30 @@ final class ViewSettingsPanel: NSView {
     override func cancelOperation(_ sender: Any?) { onClose?() }
 
     /// Щелчок мимо панели в её окне закрывает её (карточки окон — другие окна, их щелчки не считаются).
-    func watchOutsideClicks() {
+    func watchOutsideClicks(anchoredTo host: NSView) {
+        stopWatching()
+        guard let window = host.window else { return }
+        let place: @MainActor @Sendable () -> Void = { [weak self, weak host, weak window] in
+            guard let self, let window else { return }
+            guard let host, host.window === window, host.superview != nil, !host.isHiddenOrHasHiddenAncestor,
+                  let overlay = window.contentView else { self.onClose?(); return }
+            // Таблица — documentView высотой во все строки. Ограничиваем панель видимым viewport.
+            let visible = host.convert(host.visibleRect, to: overlay).intersection(overlay.bounds)
+            guard !visible.isEmpty else { self.onClose?(); return }
+            let width = min(PropertyPopupMetrics.panelWidth, visible.width)
+            let target = NSRect(x: visible.maxX - width, y: visible.minY, width: width, height: visible.height)
+            if self.frame != target { self.frame = target }
+        }
+        place()
+        window.makeFirstResponder(self)
+        for name in [NSWindow.didResizeNotification, NSWindow.didUpdateNotification] {
+            windowObservers.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { _ in
+                MainActor.assumeIsolated { place() }
+            })
+        }
+        windowObservers.append(NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.onClose?() }
+        })
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] event in
             guard let self, event.window === self.window else { return event }
             if !self.bounds.contains(self.convert(event.locationInWindow, from: nil)) { self.onClose?() }
@@ -171,6 +199,8 @@ final class ViewSettingsPanel: NSView {
     func stopWatching() {
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
+        windowObservers.forEach(NotificationCenter.default.removeObserver)
+        windowObservers.removeAll()
     }
 }
 

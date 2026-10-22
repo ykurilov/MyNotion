@@ -15,6 +15,8 @@ for attempt in {1..300}; do
   sleep 1
 done
 [[ -f $out/continue ]] || exit 3
+# Проверка геометрии/resize/cleanup и затронутых страниц до кликающего сценария.
+(cd Packages/MyNotionKit && swift test --scratch-path "$WORK/build/us3-swiftpm" --jobs 4 --filter DatabaseViewBarTests) > $out/unit.log 2>&1
 rc=0
 zsh scripts/imac/on-imac.sh uitest -only-testing:UITests/ViewFilterSortGroupTests/testFilterSortSearchHideGroupSecondViewAndRelaunch > $out/ui-run.log 2>&1 || rc=$?
 mkdir -p $out/ui

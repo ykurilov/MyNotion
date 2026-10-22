@@ -94,6 +94,7 @@ final class ViewFilterSortGroupTests: XCTestCase {
         XCTAssertTrue(groupList.frame.contains(any("group-by-Статус").frame), "Статус не прокрутился в область панели")
         tap(any("group-by-Статус"))
         app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(waitUntil { !any("group-by-Статус").exists }, "Esc не закрыл настройки группировки")
         XCTAssertTrue(waitUntil { (try? self.view("Таблица", "group"))?.contains("propertyId") == true }, "Группировка не записана")
 
         // Второй вид «Все»: «+» в строке видов, имя в настройках.
@@ -104,6 +105,8 @@ final class ViewFilterSortGroupTests: XCTestCase {
         app.typeKey(.return, modifierFlags: [])
         app.typeKey(.escape, modifierFlags: [])
         XCTAssertTrue(waitUntil { (try? self.viewNames())?.contains("Все") == true }, "Виды: \(String(describing: try? viewNames()))")
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier == %@ AND label == %@", "database-view-tab", "Все")).firstMatch.waitForExistence(timeout: 5),
+                      "Переименование не обновило содержимое вкладок")
 
         app.quit()
         XCTAssertNil(try view("Все", "filter").nilIfNull, "У «Все» не должно быть фильтра")
@@ -112,6 +115,7 @@ final class ViewFilterSortGroupTests: XCTestCase {
         // Перезапуск: настройки видов на месте, приложение открывает базу.
         app = library.launchApp()
         XCTAssertTrue(app.descendants(matching: .any)["database-page"].waitForExistence(timeout: 20), "После перезапуска база не открыта")
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier == %@ AND label == %@", "database-view-tab", "Все")).firstMatch.waitForExistence(timeout: 5))
         let tab = app.buttons.matching(NSPredicate(format: "identifier == %@ AND label == %@", "database-view-tab", "Таблица")).firstMatch
         XCTAssertTrue(tab.waitForExistence(timeout: 5), "Название вкладки не обновилось после переименования")
         tap(tab)

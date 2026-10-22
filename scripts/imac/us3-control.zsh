@@ -10,6 +10,9 @@ mkdir -p $out $control
 [[ -f $root/.us3-control.tar ]] || fail 'Нет архива контрольной ревизии'
 tar -xf $root/.us3-control.tar -C $control
 cp $root/.us3-control-revision $out/control-revision.txt
+shasum -a 256 Packages/MyNotionKit/Sources/DatabaseViewBar/Panels/ViewPanels.swift \
+  Packages/MyNotionKit/Sources/DatabaseViewBar/Panels/ViewSettingsPanel.swift \
+  Packages/MyNotionKit/Sources/DatabaseViewBar/Panels/FilterPages.swift > $out/us3-source-sha256.txt
 context() {
   date
   sw_vers
