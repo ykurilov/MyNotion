@@ -31,8 +31,11 @@ public final class PropertyMenuPresenter {
         }
     }
 
-    deinit {
+    isolated deinit {
         if let observer { NotificationCenter.default.removeObserver(observer) }
+        // Overlay принадлежит презентеру таблицы: смена страницы освобождает его вместе с монитором.
+        editPanel?.stopWatching()
+        editPanel?.removeFromSuperview()
     }
 
     // MARK: Меню колонки
@@ -192,11 +195,33 @@ public final class PropertyMenuPresenter {
         editor.onClose = { [weak self] in self?.closeEditPanel() }
         editor.onDelete = { [weak self] property in self?.confirmDelete(property) }
         panel.onCancel = { [weak self] in self?.closeEditPanel() }
-        let width = min(PropertyPopupMetrics.panelWidth, host.bounds.width)
-        panel.frame = NSRect(x: host.bounds.maxX - width, y: 0, width: width, height: host.bounds.height)
+        // Короткая таблица не ограничивает hit-test панели: настройки числа могут быть выше всей таблицы.
+        // Overlay живёт в содержимом окна; длинный редактор прокручивается внутри доступной высоты.
+        let container = host.window?.contentView ?? host
+        let place: @MainActor @Sendable () -> Void = { [weak host, weak container, weak panel] in
+            guard let host, let container, let panel else { return }
+            // NSView.clipsToBounds по умолчанию false: visibleRect может выходить за собственные bounds.
+            let visible = host.visibleRect.intersection(host.bounds)
+            let anchor = host.convert(visible, to: container).intersection(container.bounds)
+            guard !anchor.isEmpty else { return }
+            let width = min(PropertyPopupMetrics.panelWidth, anchor.width)
+            let available = container.isFlipped ? container.bounds.maxY - anchor.minY : anchor.maxY - container.bounds.minY
+            let height = min(max(0, available - 8), max(anchor.height, panel.editor.contentHeight))
+            let y = container.isFlipped ? anchor.minY : anchor.maxY - height
+            let frame = NSRect(x: anchor.maxX - width, y: y, width: width, height: height)
+            if panel.frame != frame {
+                panel.frame = frame
+                panel.needsLayout = true
+            }
+        }
         panel.autoresizingMask = [.minXMargin, .height]
-        host.addSubview(panel, positioned: .above, relativeTo: nil)
-        panel.watchOutsideClicks()
+        container.addSubview(panel, positioned: .above, relativeTo: nil)
+        editor.onResize = { [weak panel] in
+            place()
+            panel?.needsLayout = true
+        }
+        place()
+        panel.watchOutsideClicks(anchor: host, onResize: place)
         editPanel = panel
         editor.focusFirstField()
     }
@@ -329,13 +354,21 @@ final class PaddedPopupContent: NSView {
 @MainActor
 final class EditPropertyPanel: NSView {
     let editor: EditPropertyView
+    private let scroll = NSScrollView()
     var onCancel: (() -> Void)?
     private var monitor: Any?
+    private var resizeObserver: NSObjectProtocol?
+    private var updateObserver: NSObjectProtocol?
+    private var closeObserver: NSObjectProtocol?
 
     init(editor: EditPropertyView) {
         self.editor = editor
         super.init(frame: .zero)
-        addSubview(editor)
+        scroll.drawsBackground = false
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.documentView = editor
+        addSubview(scroll)
         setAccessibilityIdentifier("edit-property-panel")
     }
 
@@ -346,7 +379,8 @@ final class EditPropertyPanel: NSView {
 
     override func layout() {
         super.layout()
-        editor.frame = NSRect(x: 1, y: 0, width: bounds.width - 1, height: bounds.height)
+        scroll.frame = NSRect(x: 1, y: 0, width: max(0, bounds.width - 1), height: bounds.height)
+        editor.frame = NSRect(x: 0, y: 0, width: scroll.contentSize.width, height: max(bounds.height, editor.contentHeight))
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -362,7 +396,24 @@ final class EditPropertyPanel: NSView {
     override func cancelOperation(_ sender: Any?) { onCancel?() }
 
     /// Щелчок мимо панели в её окне закрывает её (окна-карточки — другие окна, их щелчки не считаются).
-    func watchOutsideClicks() {
+    func watchOutsideClicks(anchor: NSView, onResize: @escaping @MainActor () -> Void = {}) {
+        // Редактор может кэшировать вид прежней базы: исчезновение anchor из окна тоже закрывает overlay.
+        updateObserver = NotificationCenter.default.addObserver(forName: NSWindow.didUpdateNotification, object: window, queue: .main) { [weak self, weak anchor] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                guard let anchor, anchor.window === self.window, !anchor.isHiddenOrHasHiddenAncestor else {
+                    self.onCancel?()
+                    return
+                }
+                onResize()
+            }
+        }
+        closeObserver = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.onCancel?() }
+        }
+        resizeObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResizeNotification, object: window, queue: .main) { _ in
+            MainActor.assumeIsolated { onResize() }
+        }
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] event in
             guard let self, event.window === self.window else { return event }
             if !self.bounds.contains(self.convert(event.locationInWindow, from: nil)) { self.onCancel?() }
@@ -373,6 +424,12 @@ final class EditPropertyPanel: NSView {
     func stopWatching() {
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
+        if let resizeObserver { NotificationCenter.default.removeObserver(resizeObserver) }
+        resizeObserver = nil
+        if let updateObserver { NotificationCenter.default.removeObserver(updateObserver) }
+        updateObserver = nil
+        if let closeObserver { NotificationCenter.default.removeObserver(closeObserver) }
+        closeObserver = nil
     }
 }
 
