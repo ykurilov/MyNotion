@@ -72,6 +72,9 @@ enum GalleryViewScene {
             case .viewGrouping:
                 panels.showGrouping(below: button, in: table)
             case .viewGroupedTable:
+                // Короткие группы оставляют в кадре их итоги и свёрнутую группу, а не только первые 40 строк.
+                try operations.setFilter(.condition(FilterCondition(propertyId: property("Часы"), op: .lessThan, value: 2)),
+                                         of: controller.viewId)
                 let order = controller.groupOrder
                 if let last = order.last { try operations.setGroupCollapsed(last, true, order: order, in: controller.viewId) }
                 try operations.setCalculation(.countAll, of: property("Название"), in: controller.viewId)

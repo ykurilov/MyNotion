@@ -84,11 +84,14 @@ final class ViewFilterSortGroupTests: XCTestCase {
         XCTAssertTrue(any("view-settings-group").waitForExistence(timeout: 5), "Нет настроек вида")
         tap(any("view-settings-group"))
         XCTAssertTrue(any("group-by-Статус").waitForExistence(timeout: 5))
+        // NSView страницы не является AX-элементом; используем ближайшую доступную область прокрутки строки.
+        let groupList = try XCTUnwrap(app.scrollViews.containing(.any, identifier: "group-by-Статус").allElementsBoundByIndex.last,
+                                     "Нет области прокрутки свойств группировки")
         for _ in 0..<8 {
-            if any("grouping-window").frame.contains(any("group-by-Статус").frame) { break }
-            any("grouping-window").scroll(byDeltaX: 0, deltaY: -180)
+            if groupList.frame.contains(any("group-by-Статус").frame) { break }
+            groupList.scroll(byDeltaX: 0, deltaY: -180)
         }
-        XCTAssertTrue(any("grouping-window").frame.contains(any("group-by-Статус").frame), "Статус не прокрутился в область панели")
+        XCTAssertTrue(groupList.frame.contains(any("group-by-Статус").frame), "Статус не прокрутился в область панели")
         tap(any("group-by-Статус"))
         app.typeKey(.escape, modifierFlags: [])
         XCTAssertTrue(waitUntil { (try? self.view("Таблица", "group"))?.contains("propertyId") == true }, "Группировка не записана")
@@ -127,7 +130,7 @@ final class ViewFilterSortGroupTests: XCTestCase {
         XCTAssertTrue(any("filter-operator").waitForExistence(timeout: 5))
         app.typeKey(.escape, modifierFlags: [])
         tap(any("database-chip-advanced"))
-        XCTAssertTrue(any("advanced-filter-window").waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "advanced-filter-property").firstMatch.waitForExistence(timeout: 5))
         tap(app.descendants(matching: .any).matching(identifier: "advanced-filter-more").element(boundBy: 0))
         XCTAssertTrue(any("advanced-filter-turnIntoGroup").waitForExistence(timeout: 5))
         tap(any("advanced-filter-turnIntoGroup"))

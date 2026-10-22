@@ -338,7 +338,8 @@ final class AdvancedGroupBox: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let box = bounds.insetBy(dx: 0.5, dy: 0.5)
-        Palette.hoverBackground.withAlphaComponent(0.4).setFill()
+        // Цвет палитры уже содержит прозрачность (5% / 5,5%): замена её на 40% затемняет всю группу.
+        Palette.hoverBackground.setFill()
         let path = NSBezierPath(roundedRect: box, xRadius: Metrics.PopupMenu.rowCornerRadius, yRadius: Metrics.PopupMenu.rowCornerRadius)
         path.fill()
         Palette.searchFieldBorder.setStroke()
