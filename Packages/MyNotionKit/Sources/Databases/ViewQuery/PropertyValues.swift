@@ -25,8 +25,10 @@ public enum PropertyValues {
                 if let id = UUID(uuidString: row[0]), let date: Date = row[1] { values[id] = PropertyValue.pageDate(date, in: context) }
             }
         case .select, .status:
+            // Профиль US3: для группировки читаются 10k идентификаторов даже после фильтра. Тот же декодер,
+            // что у ViewQuerySQL.fetch, избегает Foundation UUID.init без изменения данных или формы запроса.
             try each("SELECT rowId, sortText FROM db_cell WHERE propertyId = ? AND sortText IS NOT NULL", [propertyId]) { row in
-                if let id = UUID(uuidString: row[0]), let option: String = row[1] { values[id] = .string(option) }
+                if let id = ViewQuerySQL.uuid(row[0]), let option: String = row[1] { values[id] = .string(option) }
             }
         case .multiSelect:
             try each("SELECT rowId, sortText FROM db_cell WHERE propertyId = ? AND sortText IS NOT NULL AND sortText != ''", [propertyId]) { row in

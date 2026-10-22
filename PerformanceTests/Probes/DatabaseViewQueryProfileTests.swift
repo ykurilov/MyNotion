@@ -26,6 +26,19 @@ final class DatabaseViewQueryProfileTests: XCTestCase {
         XCTAssertEqual(statusValues, 10_000)
         print("US3 QUERY PROFILE READY: tasks=\(count ?? 0), status values=\(statusValues ?? 0), matched=\(first.rowIds.count), groups=\(first.groups?.count ?? 0); без окон")
         fflush(nil)
+        if let path = ProcessInfo.processInfo.environment["MYNOTION_US3_QUERY_PROFILE_READY"] {
+            var spec = ViewQuerySpec(view: first.view)
+            spec.groupPropertyId = nil // Ровно тот SQL-путь, который использует ViewQuery.present.
+            var query = ViewQuerySQL(spec: spec, catalog: first.catalog)
+            let (sql, arguments) = query.build()
+            let plan = try ViewQuery.plan(spec, catalog: first.catalog, in: library.store)
+            print("US3 QUERY SQL: \(sql)\nUS3 QUERY ARGUMENTS: \(arguments)\nUS3 QUERY PLAN: \(plan.joined(separator: " | "))")
+            let ready: [String: Any] = ["sql": sql, "arguments": String(describing: arguments), "plan": plan, "pid": ProcessInfo.processInfo.processIdentifier,
+                                        "bundle": Bundle(for: Self.self).bundleURL.path,
+                                        "tasks": count ?? 0, "statusValues": statusValues ?? 0,
+                                        "matched": first.rowIds.count]
+            try JSONSerialization.data(withJSONObject: ready).write(to: URL(fileURLWithPath: path), options: .atomic)
+        }
         let until = Date().addingTimeInterval(14)
         var rounds = 0
         repeat {

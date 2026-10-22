@@ -16,7 +16,8 @@ public final class ViewPanels {
     private var menuCards: [Int: PopupCard] = [:]
     private var page: PanelPage?
     private var menuPages: [Int: PanelPage] = [:]
-    private var anchor: (rect: NSRect, view: NSView)?
+    private weak var anchorView: NSView?
+    private var anchorRect: NSRect?
     private var swapping = false
     private var settingsPanel: ViewSettingsPanel?
     nonisolated(unsafe) private var observer: NSObjectProtocol?
@@ -30,6 +31,8 @@ public final class ViewPanels {
             guard let self, !self.swapping else { return }
             self.page?.flush()
             self.page = nil
+            self.anchorView = nil
+            self.anchorRect = nil
             self.closeMenus(from: 1)
         }
         observer = NotificationCenter.default.addObserver(forName: DatabaseOperations.didChange, object: nil, queue: .main) { [weak self] _ in
@@ -39,6 +42,8 @@ public final class ViewPanels {
     }
 
     isolated deinit {
+        card.close()
+        for menuCard in menuCards.values { menuCard.close() }
         settingsPanel?.stopWatching()
         settingsPanel?.removeFromSuperview()
         if let observer { NotificationCenter.default.removeObserver(observer) }
@@ -118,6 +123,8 @@ public final class ViewPanels {
 
     public func close() {
         card.close()
+        anchorView = nil
+        anchorRect = nil
         closeMenus(from: 1)
         closeSettingsPanel()
     }
@@ -126,7 +133,8 @@ public final class ViewPanels {
 
     private func show(_ page: PanelPage, below rect: NSRect, in view: NSView) {
         closeMenus(from: 1)
-        anchor = (rect, view)
+        anchorRect = rect
+        anchorView = view
         page.onResize = { [weak self, weak page] in
             guard let self, let page, self.page === page else { return }
             self.card.resize(to: page.size)
@@ -226,7 +234,10 @@ public final class ViewPanels {
 
     /// Открытые окна — для проверок.
     var shownPage: PanelPage? { page }
-    var currentAnchor: (rect: NSRect, view: NSView)? { anchor }
+    var currentAnchor: (rect: NSRect, view: NSView)? {
+        guard let rect = anchorRect, let view = anchorView else { return nil }
+        return (rect, view)
+    }
 }
 
 /// Страница с полем, которое получает фокус при открытии.

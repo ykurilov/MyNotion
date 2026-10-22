@@ -37,6 +37,22 @@ struct ViewPanelsViewsTests {
         return nil
     }
 
+    @Test("Якорь фильтра не удерживает ушедшую таблицу и её presenter")
+    func filterAnchorDoesNotRetainItsOwner() throws {
+        let path = try t.operations.addFilter(for: t.select.id, to: t.base.viewId)
+        var owner: ViewPanels? = ViewPanels(controller: controller)
+        var host: PanelOwnerHost? = PanelOwnerHost(frame: NSRect(x: 0, y: 0, width: 500, height: 400))
+        host?.owner = owner
+        weak var weakHost = host
+        weak var weakOwner = owner
+        // Без окна карточка не показывается, но путь/якорь и содержимое фильтра собираются как при открытии.
+        owner?.showFilter(at: path, below: .zero, in: try #require(host))
+        owner = nil
+        host = nil
+        #expect(weakHost == nil)
+        #expect(weakOwner == nil, "Таблица удерживает presenter, поэтому якорь presenter должен быть слабым")
+    }
+
     @Test("Настройки длинной таблицы ограничены viewport, список свойств прокручивается в окне")
     func settingsUseVisibleTableArea() throws {
         _ = NSApplication.shared
@@ -52,7 +68,7 @@ struct ViewPanelsViewsTests {
         root.layoutSubtreeIfNeeded()
         panels.showViewSettings(in: document, selectName: false)
         let panel = try #require(find(ViewSettingsPanel.self, "view-settings-panel", in: root))
-        let visible = document.convert(document.visibleRect, to: root).intersection(root.bounds)
+        let visible = document.convert(document.visibleRect.intersection(document.bounds), to: root).intersection(root.bounds)
         #expect(visible.height > 0 && visible.height <= 600)
         #expect(panel.superview === root)
         #expect(panel.frame.height == visible.height)
@@ -66,14 +82,14 @@ struct ViewPanelsViewsTests {
         scroll.contentView.scroll(to: NSPoint(x: 0, y: 200_000))
         scroll.reflectScrolledClipView(scroll.contentView)
         NotificationCenter.default.post(name: NSWindow.didUpdateNotification, object: window)
-        let scrolled = document.convert(document.visibleRect, to: root).intersection(root.bounds)
+        let scrolled = document.convert(document.visibleRect.intersection(document.bounds), to: root).intersection(root.bounds)
         #expect(panel.frame.height == scrolled.height)
         #expect(panel.frame.minY == scrolled.minY)
         #expect(panel.frame.maxX == scrolled.maxX)
         window.setContentSize(NSSize(width: 700, height: 450))
         root.layoutSubtreeIfNeeded()
         NotificationCenter.default.post(name: NSWindow.didResizeNotification, object: window)
-        let resized = document.convert(document.visibleRect, to: root).intersection(root.bounds)
+        let resized = document.convert(document.visibleRect.intersection(document.bounds), to: root).intersection(root.bounds)
         #expect(panel.frame.height == resized.height)
         #expect(panel.frame.maxX == resized.maxX)
         scroll.documentView = nil
@@ -84,13 +100,40 @@ struct ViewPanelsViewsTests {
         #expect(find(ViewSettingsPanel.self, "view-settings-panel", in: root) != nil)
         panels.close()
         #expect(find(ViewSettingsPanel.self, "view-settings-panel", in: root) == nil)
-        var owner: ViewPanels? = ViewPanels(controller: controller)
-        weak var weakOwner = owner
-        owner?.showViewSettings(in: document, selectName: false)
-        #expect(find(ViewSettingsPanel.self, "view-settings-panel", in: root) != nil)
-        owner = nil
-        #expect(weakOwner == nil)
-        #expect(find(ViewSettingsPanel.self, "view-settings-panel", in: root) == nil, "Освобождение presenter убирает overlay")
+        weak var orphan: ViewSettingsPanel?
+        autoreleasepool {
+            var owner: ViewPanels? = ViewPanels(controller: controller)
+            weak var weakOwner = owner
+            owner?.showViewSettings(in: document, selectName: false)
+            orphan = find(ViewSettingsPanel.self, "view-settings-panel", in: root)
+            let panelWasFound = orphan != nil
+            #expect(panelWasFound)
+            owner = nil
+            let ownerReleased = weakOwner == nil
+            #expect(ownerReleased)
+            let overlayRemoved = find(ViewSettingsPanel.self, "view-settings-panel", in: root) == nil
+            #expect(overlayRemoved, "Освобождение presenter убирает overlay")
+            // AppKit может держать autoreleased snapshots subviews до конца пула.
+            // Даже до их освобождения уже снятые callbacks не должны обращаться к presenter.
+            NotificationCenter.default.post(name: NSWindow.didResizeNotification, object: window)
+            NotificationCenter.default.post(name: NSWindow.didUpdateNotification, object: window)
+            NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: window)
+        }
+        let panelReleased = orphan == nil
+        #expect(panelReleased, "После дренирования AppKit autorelease pool панель должна освобождаться")
+        document.frame.size.height = 150
+        document.clipsToBounds = false
+        scroll.contentView.scroll(to: .zero)
+        scroll.reflectScrolledClipView(scroll.contentView)
+        panels.showViewSettings(in: document, selectName: false)
+        let shortPanel = try #require(find(ViewSettingsPanel.self, "view-settings-panel", in: root))
+        shortPanel.layoutSubtreeIfNeeded()
+        #expect(shortPanel.frame.height <= 150, "visibleRect не должен расширять панель за bounds короткого host")
+        let mainScroll = try #require(find(NSScrollView.self, "view-settings-main-scroll", in: shortPanel))
+        #expect(mainScroll.frame.height < 150)
+        let mainDocument = try #require(mainScroll.documentView)
+        #expect(mainDocument.frame.height > mainScroll.frame.height,
+                "Короткая встроенная таблица оставляет все пункты настроек в прокрутке")
     }
 
     @Test("Простой фильтр выбора: условие, «•••», поиск и флажки вариантов; флажок пишет значение")
@@ -151,4 +194,8 @@ struct ViewPanelsViewsTests {
 
 private final class FlippedPanelDocument: NSView {
     override var isFlipped: Bool { true }
+}
+
+private final class PanelOwnerHost: NSView {
+    var owner: ViewPanels?
 }

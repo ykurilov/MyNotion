@@ -14,6 +14,7 @@ final class ViewSettingsPanel: NSView {
     private var header: PropertyPopupHeader?
     private var page: PanelPage?
     private let main = PropertyPopupStack()
+    private let mainScroll = NSScrollView()
     private var nameField: PropertyPopupField?
     private var valueRows: [ViewSettingsModel.Slot: PropertyPopupRow] = [:]
     private var monitor: Any?
@@ -24,6 +25,11 @@ final class ViewSettingsPanel: NSView {
         self.panels = panels
         super.init(frame: .zero)
         setAccessibilityIdentifier("view-settings-panel")
+        mainScroll.drawsBackground = false
+        mainScroll.hasVerticalScroller = true
+        mainScroll.autohidesScrollers = true
+        mainScroll.setAccessibilityIdentifier("view-settings-main-scroll")
+        mainScroll.documentView = main
         show(nil)
     }
 
@@ -43,7 +49,8 @@ final class ViewSettingsPanel: NSView {
         header?.frame = NSRect(x: content.minX, y: 0, width: content.width, height: PropertyPopupMetrics.headerHeight)
         let below = NSRect(x: content.minX, y: PropertyPopupMetrics.headerHeight, width: content.width,
                            height: content.height - PropertyPopupMetrics.headerHeight)
-        main.frame = below
+        mainScroll.frame = below
+        main.frame = NSRect(x: 0, y: 0, width: below.width, height: max(main.contentHeight, below.height))
         page?.frame = below
     }
 
@@ -62,7 +69,7 @@ final class ViewSettingsPanel: NSView {
         page?.removeFromSuperview()
         page = nil
         header?.removeFromSuperview()
-        main.removeFromSuperview()
+        mainScroll.removeFromSuperview()
         panels.closeMenus(from: 1)
         slot = next
         let header = PropertyPopupHeader(title: next.map(ViewSettingsModel.pageTitle) ?? "Настройки вида", showsBack: next != nil)
@@ -78,7 +85,7 @@ final class ViewSettingsPanel: NSView {
             (page as? FocusablePage)?.focusFirstField()
         } else {
             buildMain()
-            addSubview(main)
+            addSubview(mainScroll)
         }
         needsLayout = true
     }
@@ -173,7 +180,7 @@ final class ViewSettingsPanel: NSView {
             guard let host, host.window === window, host.superview != nil, !host.isHiddenOrHasHiddenAncestor,
                   let overlay = window.contentView else { self.onClose?(); return }
             // Таблица — documentView высотой во все строки. Ограничиваем панель видимым viewport.
-            let visible = host.convert(host.visibleRect, to: overlay).intersection(overlay.bounds)
+            let visible = host.convert(host.visibleRect.intersection(host.bounds), to: overlay).intersection(overlay.bounds)
             guard !visible.isEmpty else { self.onClose?(); return }
             let width = min(PropertyPopupMetrics.panelWidth, visible.width)
             let target = NSRect(x: visible.maxX - width, y: visible.minY, width: width, height: visible.height)

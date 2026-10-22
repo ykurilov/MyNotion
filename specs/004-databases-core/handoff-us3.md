@@ -70,7 +70,7 @@ AX-локаторе `grouping-window` (NSView страницы отсутств�
 для расширенного фильтра также ожидается реальная кнопка свойства. Эти новые локаторы ещё требуют прогона.
 Логи и вложения: `/tmp/us3-review-codex/ui/`.
 
-Галерея выполнилась без ошибок: `/tmp/us3-gallery-codex/`, 14 состояний × 2 темы (28 PNG), 1440×900.
+Галерея выполнилась без ошибок: `/tmp/us3-gallery-codex/`, 14 состояний × 2 темы (28 PNG), окно 1440×900 pt, PNG 2880×1800 px.
 Просмотр выявил неверную заливку вложенной группы: `withAlphaComponent(0.4)` заменял исходную alpha палитры 5% / 5,5%.
 Оставлен исходный `Palette.hoverBackground`; повтор снимка ещё предстоит. Fixture группированной таблицы ограничен
 числовым фильтром «Часы < 2», чтобы в кадре находились итоги, а не 43 строки первой группы; повтор также предстоит.
@@ -85,3 +85,75 @@ AX-доказательство хранится локально в `/tmp/us3-r
 а build-symlink удалила. После завершения текущих сборок только собственный build перемещён в
 `.imac-runner-us3-build` внутри собственной runner-копии, build ссылается туда. При новом sync ссылка восстанавливается;
 каждая правка всё равно проходит обычный incremental `build-for-testing`. Общие runner/очередь не изменены.
+
+## No-GUI профиль при заблокированном экране
+
+После прямой пробы hover экран iMac заблокирован: `CGSSessionScreenIsLocked=Yes`, SecureInput принадлежит loginwindow.
+Живые UI, галерея после правок и сравнение бюджетов **не запускались** до ручного unlock. Это внешнее ограничение,
+не падение MyNotion. T079/T084/T085 открыты. Общая функциональность US4 ещё не интегрирована.
+
+Release `build-for-testing -jobs 4` прошёл на iMac. `DatabaseViewQueryProfileTests` — opt-in тест без NSWindow,
+запуска приложения и ввода: копия эталона v3, повтор `ViewQuery.present` рабочего вида, сверка строк и групп.
+Первый круг: PASS, 358 повторов / 14,738 с; sample не получен (поиск PID через ps не нашёл реальный XCTest Agent).
+`/tmp/us3-query-profile-codex/`. Скрипт исправлен: ready.json от самого теста содержит PID и bundle;
+перед sample проверяется совпадение realpath bundle. Чужие процессы не выбираются.
+Второй круг: PASS, 239 повторов / 14,697 с, sample получен (`/tmp/us3-query-profile-codex2/sample.txt`, PID 52423).
+Оба круга подтвердили **10000 задач, 10000 значений статуса, 1592 строки после фильтра, 7 групп**.
+Число повторов под sample не является приёмочным временем.
+
+В 4064 выборках главного потока: `ViewQuery.present` — 4051; SQL-ветка — 2627 (≈65%), из них
+`ViewQuerySQL.fetch` 2548, `sqlite3_step` 2512; одна ветка B-tree/page reads содержит 407 `pread`.
+Ветка чтения PropertyValues — 1016 (≈25%), ветка UUID — 375 (≈9% общего). Декодер не основная причина.
+Контекст второго круга: load40,32 до сборки / 50,44 при sample; сторонний node383%CPU, ANECompilerService,
+Simulator. Это не доказательство причины прежнего превышения и не сравнение общей ветки с US3.
+
+После профиля scoped правка: только select/status в `PropertyValues.read` повторно использует существующий
+`ViewQuerySQL.uuid`; SQL, формат хранения и миграции не меняются. Добавлены differential-проверки с Foundation:
+правильные lower/upper/mixed/all-zero/all-FF, повреждение каждой позиции и длины, пробелы, braces,
+форма без дефисов, Unicode и NUL. Проверки прошли в повторе `/tmp/us3-lifecycle-green.log` (см. уточнение ниже).
+US4 подтвердил свой `28cd4b5`: только `ComputationHook.aliveRowsSQL`, выбор PK через `+parentId`.
+ViewQuery SQL не менялся; до точного EXPLAIN дальнейшей оптимизации SQL нет. Проба умеет сохранить точные
+SQL/аргументы/план в ready.json, `us3-query-profile.zsh --no-sample` — диагностический круг без sample;
+он также не заменяет бюджет открытия нарисованного вида.
+
+Доработано закрытие ViewPanels: якорь слабый (таблица удерживает presenter через callbacks), карточки закрываются
+при освобождении. Добавлен regression освобождения host/presenter без показа карточки. Панель ограничена
+`host.visibleRect.intersection(host.bounds)` до conversion и окном после неё; это учитывает macOS14+,
+где `clipsToBounds` по умолчанию false (согласовано с US4). Главная страница настроек прокручивается и у host150pt.
+Проверяются scroll200000, resize, удаление host, повторное открытие и освобождение overlay. Ни один unit не вызывает
+orderFront/makeKey/input. В старой галерее обеих тем выбранный checkbox был сплошным квадратом: локально в US3
+два слоя рисуются раздельно, общий ActionMenuIcon не меняется; свежий снимок пока pending.
+
+Манифест старой галереи проверен: 28 записей, 14 состояний × 2 темы, все файлы на месте, окно1440×900pt,
+PNG2880×1800px. Путь `/tmp/us3-gallery-codex/`. Новые состояния после правок ещё не отсняты.
+
+Уточнение текущего повтора: `/tmp/us3-unit-codex2.log` завершился SIGABRT, набор не принят.
+`.ips` (`/tmp/us3-unit-codex2-crash.ips`) локализует аварийное чтение unowned в отражении Swift Testing
+проваленного `#expect(orphan == nil)` после deinit presenter. Lifecycle-сценарий сохранён;
+для адресного red-повтора проверяется Boolean без отражения объекта. Причина удержания панели
+ещё исследуется; 265 тестов не объявляются пройденными. Живой UI остаётся заблокирован экраном iMac.
+
+Lifecycle red→green (22.10): `/tmp/us3-lifecycle-red.log` — 1 тест / 1 failed expectation,
+без SIGABRT после проверки Boolean. Presenter освобождается и overlay удаляется немедленно;
+провалена только проверка weak-панели до дренирования AppKit autorelease pool. Fixture исправлен:
+владелец не удерживается, после его deinit отправляются resize/update/willClose notifications,
+weak-панель проверяется после autoreleasepool. Product-код между red/green не менялся.
+Адресный green: **4 теста / 2 набора, PASS 0,429 с**, включая lifetime, слабый якорь и UUID differential.
+Затем **265 тестов / 57 наборов, PASS 14,752 с**, пять затронутых модулей,
+`/tmp/us3-lifecycle-green.log`, exit0. Lifecycle-сценарий сохранён и усилен.
+SIGABRT первого прогона — чтение unowned из диагностического Mirror преждевременного failed expectation;
+после штатного pool панель освобождается, уведомления не вызывают обращений к освобождённому presenter.
+Это подтверждение unit-пути, живые UI/галерея и бюджет после правок остаются непроверенными.
+
+No-GUI Release повтор без sample: **1/1 PASS 14,681 с**, 373 повтора (не приёмочное время),
+`/tmp/us3-query-nosample-fetch/build/us3-query-profile/{ready.json,test.log,context.log,build.log}`.
+Обычный build-for-testing прошёл до запуска; sampled=0, no_sample=1, test_exit=0.
+Эталон снова: 10000 задач / 10000 статусов / 1592 строки / 7 групп. Точный план сохранён:
+`page_by_parent(parentId=?)`; covering indexes db_cell по property+text и property+number;
+LIKE-подзапрос пользуется text-index только по propertyId; два LEFT JOIN db_computed — PRIMARY KEY
+(rowId,propertyId), db_row_order — индекс(viewId,rowId), затем TEMP B-TREE FOR ORDER BY.
+Это иной запрос, чем US4 aliveRows(id IN batch500): здесь AND с NOT IN и OR(date-range, multiSelect LIKE),
+поэтому перенос +parentId/PK-плана без отдельного доказательства не выполнялся. SQL не изменён.
+Профиль устанавливает SQL как главную ветку, но не выделяет виновный оператор; относить всю стоимость
+к LIKE или ORDER BY по одному EXPLAIN нельзя. Load24,86/44,17/55,60, сторонний node369%CPU;
+ни сравнение общей ветки с US3, ни бюджет50мс этим прогоном не подтверждены.

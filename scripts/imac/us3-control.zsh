@@ -32,6 +32,7 @@ for folder in ['MyNotion-reference-library-v5', 'MyNotion-db004-sample-v3']:
 PY
 }
 # Не изменяем эталон: штатные тесты берут его копию. Обе ревизии идут подряд в одном слоте.
+failed=0
 for variant in common us3; do
   cd $root
   [[ $variant == common ]] && cd $control
@@ -45,4 +46,6 @@ for variant in common us3; do
   context > $out/$variant/context-after.log
   cp build/imac-uitest/uitest.log $out/$variant/uitest.log
   print -r -- "$variant exit=$rc" | tee -a $out/exit-codes.log
+  (( rc == 0 )) || failed=1
 done
+exit $failed

@@ -149,7 +149,18 @@ final class ChoiceRowView: NSView {
         let titleY: CGFloat = choice.caption == nil ? (highlight.height - style.lineHeight) / 2 : 5
         var x = padding
         if let icon = choice.icon {
-            ActionMenuIcon.draw(icon, color: color, in: NSRect(x: x, y: titleY, width: 20, height: 20))
+            let iconRect = NSRect(x: x, y: titleY, width: 20, height: 20)
+            if icon == "checkmark.square.fill" {
+                // Одноцветная palette SF Symbols закрашивает и квадрат, и его галочку одним цветом.
+                // Разделяем два слоя локально, не меняя значки остальных меню приложения.
+                let side = Metrics.Checkbox.size
+                let box = NSRect(x: iconRect.midX - side / 2, y: iconRect.midY - side / 2, width: side, height: side)
+                color.setFill()
+                NSBezierPath(roundedRect: box, xRadius: Metrics.Checkbox.cornerRadius, yRadius: Metrics.Checkbox.cornerRadius).fill()
+                ActionMenuIcon.draw("checkmark", color: Palette.popupMenuBackground, in: box, inkSide: side - 5)
+            } else {
+                ActionMenuIcon.draw(icon, color: color, in: iconRect)
+            }
             x += 20 + Metrics.PopupMenu.iconToTitleSpacing
         }
         var end = bounds.maxX - padding
