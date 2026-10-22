@@ -395,6 +395,78 @@ struct FormulaRecomputeTests {
         #expect(observed.withLock { $0.contains(row) }, "вид строки получает правку даже при прежнем вычисленном кэше")
     }
 
+
+    @Test("Чужая корзина и возврат пересчитывают цепочку связи, сохраняя несвязанные живые формулы")
+    @MainActor
+    func indirectEditSelectsDependentProperties() throws {
+        let start = Date(timeIntervalSince1970: 1_792_600_000)
+        clock.now = start
+        let minutes = try addFormula("Минут сейчас", to: sample.tasksId,
+                                     #"dateBetween(now(), parseDate("2026-01-01T00:00Z"), "minutes")"#)
+        let count = try addFormula("Имен проектов", to: sample.tasksId, #"prop("Проект (имя)").length()"#)
+        queue.waitUntilIdle()
+        let row = try rows(of: sample.tasksId)[0]
+        let projectId = try store.write { try $0.relationLinks(propertyId: task("Проект"), rowId: row).first!.targetRowId }
+        let before = try #require(computed(row, minutes)?.number)
+        let deadline = try computed(row, task("Срок проекта"))
+        #expect(try computed(row, count) == .number(1))
+        clock.now = start.addingTimeInterval(61)
+        let operations = DatabaseOperations(store: store)
+        try operations.trashRows([projectId])
+        #expect(try computed(row, task("Проект (имя)")) == .array([]))
+        #expect(try computed(row, count) == .number(0), "formula→formula closure после связи")
+        #expect(try computed(row, task("Срок проекта")) == nil)
+        #expect(try computed(row, minutes)?.number == before)
+        try operations.setRowsTrashed([projectId], false)
+        #expect(try computed(row, task("Проект (имя)")) == projectNames(of: row))
+        #expect(try computed(row, count) == .number(1))
+        #expect(try computed(row, task("Срок проекта")) == deadline)
+        #expect(try computed(row, minutes)?.number == before)
+        let done = try store.write { try $0.cell(rowId: row, propertyId: task("Сделано"))?.value?.bool ?? false }
+        try operations.setCell(rowId: row, propertyId: task("Сделано"), value: .bool(!done))
+        #expect(try computed(row, minutes)?.number == before + 1, "direct правка сохранила прежний полный пересчёт")
+    }
+
+    @Test("Кэш graph после правки формулы: неявное имя страницы, rollup→formula, корзина и стирание цели")
+    @MainActor
+    func indirectDependenciesAndSchemaInvalidation() throws {
+        let label = try addFormula("Имя связи", to: sample.tasksId, #""старое""#)
+        let labelChain = try addFormula("Имя с меткой", to: sample.tasksId, #"prop("Имя связи") + "!""#)
+        let dateChain = try addFormula("Дата сводки", to: sample.tasksId, #"formatDate(prop("Срок проекта"), "YYYY-MM-DD")"#)
+        queue.waitUntilIdle()
+        let row = try rows(of: sample.tasksId)[0]
+        let projectId = try store.write { try $0.relationLinks(propertyId: task("Проект"), rowId: row).first!.targetRowId }
+        let operations = DatabaseOperations(store: store)
+        // Убираем явного читателя Названия: переименование обязано заметить само format(связь).
+        try operations.setDeleted(task("Проект (имя)"), true)
+        queue.waitUntilIdle()
+        let hours = try store.write { try $0.cell(rowId: row, propertyId: task("Часы"))?.value?.number ?? 0 }
+        try operations.setCell(rowId: row, propertyId: task("Часы"), value: .number(hours + 1)) // graph закэширован
+        _ = try operations.setFormula(label, display: #"format(prop("Проект"))"#)
+        queue.waitUntilIdle()
+        try store.write { tx in
+            var page = try tx.page(projectId)!
+            page.title = "Новое имя проекта"
+            try tx.updatePage(page)
+        }
+        #expect(try computed(row, label) == .string("Новое имя проекта"), "имя без current.prop(Название)")
+        #expect(try computed(row, labelChain) == .string("Новое имя проекта!"))
+        try operations.setCell(rowId: projectId, propertyId: project("Срок"), value: ["start": "2027-03-08", "hasTime": false])
+        #expect(try computed(row, dateChain) == .string("2027-03-08"), "rollup→formula closure в той же транзакции")
+        try operations.trashRows([projectId])
+        #expect(try computed(row, label) == .string(""))
+        #expect(try computed(row, labelChain) == .string("!"))
+        #expect(try computed(row, task("Срок проекта")) == nil)
+        try operations.setRowsTrashed([projectId], false)
+        #expect(try computed(row, labelChain) == .string("Новое имя проекта!"))
+        #expect(try computed(row, dateChain) == .string("2027-03-08"))
+        try operations.trashRows([projectId])
+        try PageTreeOperations(store: store).deleteForever(projectId)
+        #expect(try computed(row, labelChain) == .string("!"))
+        #expect(try computed(row, task("Срок проекта")) == nil)
+        #expect(try store.write { try $0.relationLinks(propertyId: task("Проект"), rowId: row).isEmpty })
+    }
+
 }
 
 /// Подменённые часы.

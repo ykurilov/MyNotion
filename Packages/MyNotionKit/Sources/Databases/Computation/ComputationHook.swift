@@ -98,6 +98,7 @@ public final class ComputationHook: NotesWriteHook {
         // или вернулась (ячейка связи без формул сама не перечитается).
         let directDatabases = Set(touched.keys)
         var announced: Set<UUID> = []
+        var indirectProperties: [UUID: Set<UUID>] = [:]
         for (databaseId, rows) in touched {
             let gone = rows.filter { $0.value == nil }.map(\.key)
             guard !gone.isEmpty else { continue }
@@ -122,6 +123,9 @@ public final class ComputationHook: NotesWriteHook {
                     .union(dirty[databaseId] == nil ? [] : graph.formulas[databaseId]?.computedIds ?? [])
                 for (relation, readers) in graph.readers(of: databaseId, changed: changed) {
                     let linked = try ComputationGraph.rows(linkingTo: Set(rows.keys), through: relation, in: db)
+                    if !linked.isEmpty {
+                        indirectProperties[relation.databaseId, default: []].formUnion(readers.relationReaders[relation.id] ?? readers.computedIds)
+                    }
                     for row in linked where dirty[relation.databaseId]?.contains(row) != true {
                         next[relation.databaseId, default: [:]][row] = .some(readers.computedIds)
                     }
@@ -135,10 +139,14 @@ public final class ComputationHook: NotesWriteHook {
         for databaseId in graph.readingOrder(order) {
             guard let rows = dirty[databaseId], let formulas = graph.formulas[databaseId], !formulas.isEmpty else { continue }
             let alive = try Self.aliveRows(Array(rows), of: databaseId, in: db)
+            // Чужая правка касается только читателей связи. Прямые правки базы сохраняют полный пересчёт.
+            var selected = directDatabases.contains(databaseId) ? nil : indirectProperties[databaseId]
             if !formulas.rollupIds.isEmpty {
-                try RollupRecompute(catalog: formulas.catalog, calendar: calendar, in: db).recompute(rows: alive, in: transaction)
+                let rollups = try RollupRecompute(catalog: formulas.catalog, propertyIds: selected, calendar: calendar, in: db)
+                try rollups.recompute(rows: alive, in: transaction)
+                selected = selected.map { $0.union(rollups.propertyIds) }
             }
-            try FormulaRecompute(store: store, catalog: formulas.catalog, now: now, calendar: calendar).recompute(rows: alive, in: transaction)
+            try FormulaRecompute(store: store, catalog: formulas.catalog, propertyIds: selected, now: now, calendar: calendar).recompute(rows: alive, in: transaction)
             if !directDatabases.contains(databaseId) { announced.formUnion(alive) }
         }
         guard !announced.isEmpty else { return }
