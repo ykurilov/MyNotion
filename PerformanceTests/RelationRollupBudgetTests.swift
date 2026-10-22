@@ -58,9 +58,17 @@ final class RelationRollupBudgetTests: XCTestCase {
         }
 
         var trash: [Double] = [], restore: [Double] = []
-        for _ in 0..<5 {
-            trash.append(try ProbeEditor.measure { try operations.trashRows([big]) })
-            restore.append(try ProbeEditor.measure { try operations.setRowsTrashed([big], false) })
+        let profile = try ColdTrashProfile.requested()
+        for round in 0..<5 {
+            // Профиль выбранного первого вызова; паузы вне измеряемого участка, обычный замер их не использует.
+            if round == 0 { try profile?.beforeFirst(.trash) }
+            let elapsed = try ProbeEditor.measure { try operations.trashRows([big]) }
+            trash.append(elapsed)
+            if round == 0 { try profile?.afterFirst(.trash, milliseconds: elapsed) }
+            if round == 0 { try profile?.beforeFirst(.restore) }
+            let restored = try ProbeEditor.measure { try operations.setRowsTrashed([big], false) }
+            restore.append(restored)
+            if round == 0 { try profile?.afterFirst(.restore, milliseconds: restored) }
         }
         queue.waitUntilIdle()
 

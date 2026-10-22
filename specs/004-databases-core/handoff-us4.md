@@ -45,16 +45,87 @@
 - «Дублировать» базу со связями (spec, Edge Cases) не трогал — это копия ветки 003.
 
 
-## Продолжение Codex (22.10.2026)
+## Продолжение Codex, 22.10.2026 - передача координатору
 
-- Влита интеграционная ветка (`1d48e1b`); US2 и RelationCellView остаются вместе в CellPopups.all, добавлена регрессия реестра.
-- `6a07c09`: безопасные iMac-скрипты, без убийства SecurityAgent и чужих MyNotion; координатор внёс как `ca563af`.
-- Числовые настройки сводки реализованы через NumberSettingsView (вложенный configKey), без дублирования панели или форматтера US2.
-  У RollupSettingsView динамическая высота; добавлена галерея rollup-number-settings в обеих темах (всего 9 состояний US4).
-- Unit на iMac после всех этих правок: 57/57, 8 наборов, `/tmp/us4-codex-unit2.log`. Начальный прогон после слияния - 37/37,
-  `/tmp/us4-codex-unit.log`. Все - no-fallback, 4 потока. DatabaseGridView.swift вручную не менялся.
-- UI-сценарий дополнен выбором точности сводки. Live-сценарий заменяет число через ⌘A (иначе редактор дописывал к прежнему),
-  открывает «Проекты» второго клиента и проверяет добавление связей с обеих сторон вместе со сводками 17/14.
-- Старый `/tmp/us4-uitest8` провален; hierarchy показывает перекрывающие CoreServicesUIAgent предупреждения ChatGPT.
-  Старый `/tmp/us4-perf.log` - замер другой задачи 003. Устаревшее ожидающее UI с PID65048 отменено до запуска по указанию
-  координатора (exit130), а не зачтено как проверка. Свежие GUI-итоги фиксируются в quickstart.md.
+Работа только в существующей `MyNotion-004-us4`, ветка `004-us4`. Основной checkout не изменялся,
+`DatabaseGridView.swift` вручную не правился. Все сборки/тесты - iMac через
+`imac-run --no-fallback --wait 1800`, максимум 4 потока; VM не использовалась.
+
+### Коммиты
+
+- `1d48e1b` - слияние общей ветки; фабрики US2 и RelationCellView сохранены вместе в CellPopups.all.
+- `6a07c09` - безопасные iMac-скрипты, координатор внёс как `ca563af`: SecurityAgent и чужие MyNotion
+  не завершаются; live очищает только PID собственного node, чужой занятый порт означает ошибку.
+- `14df50d` - числовая панель сводки через NumberSettingsView/NumberDisplay US2, вложенный numberFormat,
+  динамическая высота редактора, галерея rollup-number-settings, расширенные UI/live проверки.
+- `28cd4b5` - aliveRows: PK lookup с `+parentId`, дедупликация, batch 500 id (501 bind), сохранение
+  parent/trashed/template семантики. Correctness и EXPLAIN на настоящей схеме с 10 000 строками.
+- `b488dd5` - PropertyMenuPresenter: overlay contentView, host.visibleRect∩host.bounds, координаты окна,
+  scroll, resize/onResize, cleanup monitor/observers на close/removal/deinit. Реальная ошибка decimals
+  была закрытием родительской панели при правильном click, а не неверным locator.
+- `effe16d` - отдельный ComputedWriter conditional UPSERT: неизменный persisted JSON не переписывается,
+  но sort/search/isLive восстанавливаются. NULL, массивы, числа, новые строки и уведомления проверены.
+- `3d7e658` - scoped dependency fix Graph+Hook: indirect базы пересчитывают читателей связи и closure
+  существующих FormulaRecompute/RollupRecompute. Direct базы и announce сохранены. Учтено неявное имя
+  связанной страницы для format/join; graph инвалидируется после правки формулы/схемы.
+
+### Подтверждено
+
+- Все затронутые наборы после dependency fix: **73 теста / 10 наборов PASS, 7,379 с**.
+  `/tmp/us4-dependent-fix-fetch/build/us4-dependent-fix/unit.log`.
+  Проверены formula→formula, rollup→formula, цепочки между базами, rename/trash/restore/erase цели,
+  schema/formula invalidation и сохранение независимого now при indirect правке.
+- Дополнительно усилена title regression: штатный явный читатель Названия удалён, rename обязан
+  заметить один format(связь). **19 тестов / 1 набор PASS, 2,924 с**.
+  `/tmp/us4-ui-prebuild-fetch/build/us4-ui-prebuild/unit.log`. Production после принятого бюджета не менялся.
+- Геометрия presenter и обычные свойства US2: **20/20, 3 набора PASS, 0,452 с**.
+  `/tmp/us4-cold-profile3-fetch/build/us4-cold-profile-03/unit.log`.
+- Приёмочный native Release cold-budget без sample/gate и диагностических env:
+  **1 тест PASS, 3,724 с**, `/tmp/us4-dependent-fix-fetch/build/us4-dependent-fix/budget.log`, budget.exit=0.
+  Эталон 10 000 задач / 500 проектов, крупный проект 1000 задач.
+  Trash **73,4 / 44,7 / 59,9 / 40,4 / 43,3 мс**;
+  restore **170,4 / 86,2 / 98,5 / 105,1 / 94,0 мс**, предел **200 мс** сохранён.
+  p95 edit **3,4 мс**, relink **5,4 мс**, оба <=10 мс; **500/500** сводок совпали с прямым подсчётом.
+  Измеряется transaction+ComputationHook, не отрисовка.
+
+Ранние холодные нарушения сохранены в quickstart: исходный trash 359,2; после PK 260,8;
+после UPSERT restore 210,266 мс. Профили не заменяют приёмку. Restore sample содержит всего 6 main отсчётов:
+причина подтверждается также кодом и регрессиями, точная доля времени по нему не заявляется.
+Профили и отдельные exit-коды: `/tmp/us4-cold-profile-fetch/`, `/tmp/us4-cold-profile3-fetch/`,
+`/tmp/us4-restore-profile-fetch/`. Opt-in helper ColdTrashProfile пишет собственный PID/первый вызов;
+паузы находятся вне измерения, обычный budget helper не активирует.
+
+### Открытые живые проверки
+
+**T089/T093/T094 остаются [ ].** Координатор ещё не получил unlock от Юрия. US3/hover сообщили
+`CGSSessionScreenIsLocked=Yes`, loginwindow; нового собственного preflight US4 после этого нет.
+До свежего unlock/preflight UI не запускать, системные окна не обходить и чужие процессы не завершать.
+
+Первый свежий GUI-проход до блокировки:
+- RelationRollupTests FAIL на decimals choice-2 после 70,556 с. Правильный click подтверждён снимками
+  и Synthesized Event; presenter исправлен и прошёл unit, но живой повтор ещё не выполнен.
+- Галерея остановилась на пропущенном `.rollupNumberSettings` в общем switch. Case добавлен,
+  последующие Release-сборки прошли. Живые 9 состояний × 2 темы и сверка с Notion ещё открыты.
+- Live **1 PASS, 32,997 с**: два экземпляра на одном iMac со своими SQLite/локальным сервером,
+  не два физических Mac. Двустороннее добавление сохранило 5 связей и суммы 17/14; initial snapshot 1,6 с.
+  Старые 0,0 с считали только ожидание после Return. Таймер перенесён перед Return с пределом 10 с;
+  обновлённую версию live ещё повторить.
+
+Артефакты первого GUI: `/tmp/us4-codex-review/{ui,live,perf}/`, desktop.png и windows.json.
+Успешные live-снимки:
+- `/tmp/us4-codex-review/live/attachments/relations-mac-a_0_F189C88C-1939-48BA-9F78-6D939671897C.png`
+- `/tmp/us4-codex-review/live/attachments/relations-mac-b_0_88CED882-D405-4431-B18B-C65F6E58E427.png`
+
+Debug build-for-testing завершён без запуска приложения, **build.exit=0**.
+Журнал `/tmp/us4-ui-prebuild-fetch/build/us4-ui-prebuild/build.log`.
+Собственная копия iMac: `/Users/ykurilov/.imac-runner/work/MyNotion-004-us4_-1c9044f6`.
+Products: `build/imac-uitest-dd/Build/Products`, Debug/MyNotion.app. Не повторять идентичную сборку.
+После unlock согласовать GUI с US3/hover, затем подготовленный `/tmp/us4-final-gui.sh` через
+`scripts/imac/run-on-imac.sh lock -- "$(cat /tmp/us4-final-gui.sh)"`.
+Сценарий делает desktop preflight, ждёт маркер `build/us4-final-review/run-ui` после осмотра,
+переиспользует UI bundle для RelationRollupTests и Debug App для relation/rollup gallery, затем live.
+Результаты UI/галереи/live и exit-коды раздельные. До осмотра preflight маркер не создавать.
+После галереи визуально сверить 18 снимков с Notion, а не засчитать одно наличие файлов.
+
+Координатору: интегрировать коммиты US4 в согласованном порядке US4→US3; открытые UI-задачи при интеграции
+не отмечать выполненными. Подробные таблицы проверок и ограничений - quickstart.md, раздел US4.

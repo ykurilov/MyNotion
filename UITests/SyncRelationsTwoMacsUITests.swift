@@ -62,12 +62,13 @@ final class SyncRelationsTwoMacsUITests: XCTestCase {
         XCTAssertTrue(first.descendants(matching: .any)["database-cell-editor"].waitForExistence(timeout: 5), "Нет правки числа на первом Mac")
         first.typeKey("a", modifierFlags: .command)
         first.typeText("10")
-        first.typeKey(.return, modifierFlags: [])
         let edited = Date()
+        first.typeKey(.return, modifierFlags: [])
         XCTAssertTrue(waitFor(timeout: 10) { (try? self.rollup(databaseA, "Дом")) == "13" }, "Правка не записалась на первом Mac")
         XCTAssertTrue(waitFor(timeout: 20) { (try? self.rollup(databaseB, "Дом")) == "13" },
                       "Сводка второго Mac после правки: \(String(describing: try? rollup(databaseB, "Дом")))")
         let delay = Date().timeIntervalSince(edited)
+        XCTAssertLessThanOrEqual(delay, 10, "Правка часов не дошла до сводки второго Mac за 10 с")
 
         // Шаг 3 связей: добавление с обоих клиентов, в том числе с ответной стороны.
         first.activate()
