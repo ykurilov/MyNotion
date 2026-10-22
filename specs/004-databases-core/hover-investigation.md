@@ -70,3 +70,31 @@ scripts/imac/run-on-imac.sh uitest \
 ### Отдельная проверка кеша обложки без GUI
 
 `imac-run --no-sync --no-fallback --wait 1800`, `swift test --jobs 4 --filter CoverCacheLayoutTests` на iMac: **1 тест, 2 варианта (иконка есть/нет), прошёл за 1.348 s**. Сначала нарисовано тело без обложки, затем setCover(height:280), ширина1200→900→1200; во всех шести состояниях тёмных пикселей на обложке вне иконки0, название ниже обложки. Журнал `/tmp/cover-cache-final.log` (сборка162.25s, rc0). Простая гипотеза stale rendered text после setCover/resize в невидимом fixture не подтвердилась. Реальное прокручивание и возврат страницы эта проверка не покрывает.
+
+
+## Разблокированный iMac, 22.10, 14:40-14:46 WITA
+
+В собственную ветку влит общий `4961489` (merge `556cc39`), fixtures сохранены. В одном согласованном проходе и его ограниченном продолжении использован GUI queue no-fallback. Новая incremental сборка **НЕ состоялась**: Xcode27.1 требует принятия лицензии (реальный текст в `/tmp/hover-live-unlocked.log`). `build_app` возвратил0 из-за последнего присваивания APP; координатор уведомлён, US4 отдельно исправил fail-fast. Запущен прежний сохранённый Debug app, поэтому приведённые ниже наблюдения являются baseline старого приложения, **не проверкой merged4961489**. Новых сборок при отсутствии лицензии не запускали.
+
+### Реальное движение и снимки
+
+Свежая изолированная база, существующий VisualSamplePage, без ввода текста. Видимость окна подтверждена desktop PNG и AX (окно2629, процесс22770); после нативного клика по заголовку и Escape correction отсутствовала. `move_cursor(scope:desktop)` физически переместил указатель по видимому heading1 и следующему paragraph:26 точек, get_cursor_position подтвердил конечные позиции720/835 и720/883 points. Форма текста на просмотренных кадрах стабильна; ручки над этими строками не появились, поэтому полная работа hover не засчитана. Транспортная гонка SCP (сценарий прочитал ещё пустой command3.json) прервала первую серию до scroll. Остаток выполнен одним конечным скриптом без сборки и интерактивных command-файлов, по согласованию с US3.
+
+Уточнение Юрия по настоящему снимку: проблема под обложкой — пересечение серой строки «Заголовок 2» с крупным page-title. Dark-pixels-inside-cover тест этого не покрывает.
+
+В продолжении создана отдельная база `~/work/shots/hover-exact/exact.sqlite`: page-title «Заголовок 2», no icon, first heading2 с текстом «Заголовок 2», cover gradients_8, width1740. **Отличия от снимка Юрия:** gradients_8 оказался бирюзово-коралловым, не фиолетовым; first heading заполнен, хотя серая строка у Юрия может оказаться подсказкой ПУСТОГО heading. Поэтому точное воспроизведение ещё не достигнуто.
+
+- Начальное окно: AX page-title frame x796.5,y519,w718,h50 (desktop points). По пикселям чёрные буквы title занимают y530…559, bodyheading y597…614: строки не пересекаются.
+-24 реальных moves в продолжении; область desktop x1580…3050,y1010…1390 native pixels включает title/firstheading. Все6 кадров наведения побайтно совпадают с initial (число пикселей с разницей>8 равно0). Native cursor подтверждён. Это исключает наблюдённую деформацию в данных дискретных кадрах, но не кратковременные изменения между ними.
+- Реальная прокрутка вниз10 и вверх50 lines выполнена: на scroll.png обложка/текст переместились, ручки видны у пункта списка; на scroll-return.png вернулись. Title/bodyheading не пересекались в изученных кадрах.
+- set_window_frame1000→1740: оба effect=confirmed, ширина действительно изменилась. В narrow.png и wide-return.png title/bodyheading раздельны; вертикальные полосы букв остались530…559 и597…614 points.
+- Возврат через другую страницу **не выполнен**: row AX-локатор не нашёл AXCell, StopIteration. Изменение no-cover→cover на уже открытой странице и редактирование ещё не проверены. Не объявлять эти сценарии пройденными.
+
+Артефакты: `/tmp/hover-exact.log`, `/tmp/hover-exact-artifacts/{actions.jsonl,initial-window.png,heading-0.png,heading-5.png,heading-11.png,scroll.png,scroll-return.png,narrow.png,wide-return.png}`, `/tmp/hover-unlocked-artifacts/`. Все снимки изучены. GUI освобождён и передан US3; новых серий при отсутствии лицензии не поставлено.
+
+### Проверка исходника после снимка Юрия
+
+- `PageHeaderView.titleTop`:40 с cover/noicon,32 безcover/noicon. `height(forWidth:)` включает высоту title и gap20. `PageTextView.textContainerOrigin.y` равен header.frame.maxY. Готовое состояние выше согласуется с этими формулами.
+- `setCover` синхронно меняет coverSlot/header.hasCover и зовёт layoutColumn; последний выставляет header.frame, textContainerInset, invalidateTextContainerOrigin и updateEmptyParagraphHint. Отдельная needsLayout/viewport invalidation при смене только начала контейнера не задана (в отличие от applyLayout). Это **кандидат для проверки динамического добавления**, не установленная причина.
+- Серая строка у Юрия может быть не дублированным title, а empty-heading placeholder: persistentPlaceholder рисуется в BlockLayoutFragment через Palette.textSecondary; при фокусе отдельный emptyParagraphHint NSTextField той же окраски ставится через markerLine+textContainerOrigin-baseline. Текущие live fixtures с непустым heading этот путь не покрыли. После лицензии требуется пустой heading с разными режимами фокуса и различимые контрольные title/body строки, проверка их границ между собой и изменение noicon/no-cover→cover в уже открытом окне.
+- Удалять ensureLayout или менять origin/viewport без подтверждения причины не стали. Production исходники редактора остаются без правок; hover и overlap открыты.
