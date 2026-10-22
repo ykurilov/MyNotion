@@ -409,3 +409,36 @@ LIKE-подзапрос пользуется text-index только по proper
 Профиль устанавливает SQL как главную ветку, но не выделяет виновный оператор; относить всю стоимость
 к LIKE или ORDER BY по одному EXPLAIN нельзя. Load24,86/44,17/55,60, сторонний node369%CPU;
 ни сравнение общей ветки с US3, ни бюджет50мс этим прогоном не подтверждены.
+
+## Совместная проверка US4 + US3 после интеграции (22.10, iMac 12:28–12:33)
+
+Проверен ровно merged HEAD `4eca0a205cc1874b9ce835ab82a1f63d118c4f14`, fast-forward в прежней
+`MyNotion-004-us3`. До прогона runner сверил SHA256 **1007 tracked файлов** App/Packages/PerformanceTests/
+UITests/scripts/project.yml с локальным merged HEAD: все OK. Исходники в процессе не менялись.
+Один последовательный `imac-run --no-fallback --no-setup --wait 1800`, jobs4; собственный защищённый кеш
+`.imac-runner-us3-build`, восстановлен только build-symlink. Основной checkout не менялся.
+
+- `swift test --scratch-path ../../build/us3-swiftpm --jobs 4 --filter
+  "DatabasesTests|DatabaseGridTests|DatabaseViewBarTests|DatabaseRowPageTests|UIGalleryTests|FormulasTests|SyncTests|NotesCoreTests"`
+  — **680 тестов / 120 наборов PASS 29,324 с**, exit0. Formula/BackgroundRecompute и BackgroundTypeChange
+  включены через DatabasesTests; проверены также NotesTransaction/Sync по влиянию US4.
+- Затем обычный `xcodegen generate -q` и `xcodebuild -scheme MyNotion -configuration Debug
+  -destination 'platform=macOS,arch=arm64' -derivedDataPath build/imac-uitest-dd -jobs 4 build-for-testing -quiet`
+  — **exit0**. Есть compiler warnings и предупреждения о stale cache files, ошибок сборки нет.
+  Приложение и UI-тесты не запускались, test-without-building не применялся.
+- Ручная проверка слияния: оба gallery handlers/tearDown и catalog/cases сохранены; Cells registry содержит
+  US2 Option/Date/Files popup и US4 Relation popup, Relation/Rollup grid types; начальный todo статус в writeRow
+  и US4 erasedLinks в NotesTransaction сохранены. US3 ViewPanels/ViewSettingsPanel совпадают с895fb3f;
+  PropertyMenuPresenter сохраняет US4 overlay/lifecycle и US3 действия фильтра/сортировки/итогов/setViewId.
+  Соответствующие registry/default-row/relation/presenter tests входят в зелёный joint набор.
+
+Артефакты `/tmp/us3-joint-4eca0a2/build/us3-joint-4eca0a2/`: `unit.log`, `build.log`, `unit.exit`, `build.exit`,
+`source-check.log`, `expected-source.sha256`, `revision.txt`, `context.log`, `xcodegen.log`.
+Общий журнал `/tmp/us3-joint-4eca0a2-run.log`. macOS27.0.1, Xcode26.6; load до11,25/44,78/59,78,
+после59,59/49,50/56,71. Это проверка корректности/компиляции, не измерение бюджета.
+
+Scoped исправлений после слияния не потребовалось. Бюджеты US4 повторно не запускались.
+T079/T084/T085 и живые UI/галерея/контроль US3 не засчитаны: подтверждения unlock нет, живых проб не было.
+Прежний локальный контрольный архив0240ecc сейчас устарел и не использовался. После интеграции сравнивать
+текущую общую ветку с самой собой бессмысленно; для выяснения регрессии US3 контрольной ревизией после US4
+служит `9b4b05d` (если координатор не выберет другой baseline), исследуемая merged ревизия — `4eca0a2`.
