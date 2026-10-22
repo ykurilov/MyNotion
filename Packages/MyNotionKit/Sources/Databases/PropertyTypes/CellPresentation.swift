@@ -8,10 +8,24 @@ public enum CellPresentation: Sendable, Hashable {
     /// Плашки вариантов и связей: название и цвет Notion.
     case chips([Chip])
     case checkbox(Bool)
+    /// Число полосой или кольцом (US2, «Показывать как»).
+    case meter(NumberMeter)
 
     public struct Chip: Sendable, Hashable {
         public var title: String
         public var color: OptionColor
+        /// Плашка статуса — со скруглением в полвысоты и точкой цвета (Notion 7.39).
+        public var showsDot = false
+        /// Картинка из ячейки «Файлы и медиа» — уменьшенной копией вместо плашки.
+        public var thumbnailId: UUID? = nil
+    }
+
+    /// Число в виде полосы или кольца: доля заполнения (0…1), цвет Notion и текст числа (`nil` — «Показывать число» выкл).
+    public struct NumberMeter: Sendable, Hashable {
+        public var fraction: Double
+        public var color: OptionColor
+        public var isRing: Bool
+        public var text: String?
     }
 
     /// Текст показа (поиск, буфер, CSV-подобный вид).
@@ -21,6 +35,7 @@ public enum CellPresentation: Sendable, Hashable {
         case .text(let text): text
         case .chips(let chips): chips.map(\.title).joined(separator: ", ")
         case .checkbox(let checked): checked ? "Yes" : "No"
+        case .meter(let meter): meter.text ?? ""
         }
     }
 }
@@ -47,15 +62,24 @@ public enum CellPresenter {
             return text.isEmpty ? .empty : .text(text)
         case .select, .status:
             guard let option = context.option(row.cells[property.id])?.option else { return .empty }
-            return .chips([CellPresentation.Chip(title: option.name, color: option.optionColor)])
+            return .chips([CellPresentation.Chip(title: option.name, color: option.optionColor, showsDot: property.kind == .status)])
         case .multiSelect:
             let chips = (row.cells[property.id]?.array ?? []).compactMap { context.option($0)?.option }
                 .map { CellPresentation.Chip(title: $0.name, color: $0.optionColor) }
             return chips.isEmpty ? .empty : .chips(chips)
         case .checkbox: return .checkbox(row.cells[property.id]?.bool ?? false)
         case .files:
-            let names = FilesType.names(row.cells[property.id])
-            return names.isEmpty ? .empty : .chips(names.map { CellPresentation.Chip(title: $0, color: .default) })
+            let items = FilesValue.items(row.cells[property.id])
+            return items.isEmpty ? .empty : .chips(items.map { item in
+                var chip = CellPresentation.Chip(title: item.name, color: .default)
+                if FilesValue.isImage(item), case .file(let ref) = item { chip.thumbnailId = ref.id }
+                return chip
+            })
+        case .number:
+            guard let number = row.cells[property.id]?.number else { return .empty }
+            let text = type.displayText(row.cells[property.id], in: context)
+            if let meter = NumberDisplay.meter(number, text: text, config: context.config) { return .meter(meter) }
+            return .text(text)
         default:
             guard let value = row.cells[property.id] else { return .empty }
             let text = type.displayText(value, in: context)

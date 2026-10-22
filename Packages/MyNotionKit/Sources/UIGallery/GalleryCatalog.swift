@@ -118,6 +118,9 @@ public enum GalleryDatabases: Hashable, Sendable, CaseIterable {
     /// настройки вида, меню вкладки, поиск, таблица с группами и итогами, перенос текста, меню «Посчитать».
     case viewBarActive, viewFilterSimple, viewFilterAdvanced, viewFilterDate, viewSorts, viewVisibility, viewGrouping, viewGroupedTable,
          viewWrapText, viewLayout, viewSettings, viewTabMenu, viewSearch, viewCalculateMenu
+    /// US2: окна выбора, статуса, даты, файлов, меню варианта, настройки выбора, статуса и числа, плашки и полоса с кольцом.
+    case typeSelectPicker, typeMultiSelectPicker, typeStatusPicker, typeOptionMenu, typeDatePicker, typeDateFormats, typeFilesPopup,
+         typeSelectSettings, typeStatusSettings, typeNumberSettings, typeChipsAndMeters
 }
 
 public enum GalleryMarkdownExport: String, Hashable, Sendable, CaseIterable {
@@ -337,6 +340,23 @@ public enum GalleryCatalog {
         GalleryState("view-tab-menu", .databases(.viewTabMenu), "Меню вкладки вида: переименовать, изменить, дублировать, удалить", section: "Базы"),
         GalleryState("view-search", .databases(.viewSearch), "Поиск в базе «отчёт»: поле в строке вида, найденное подсвечено", section: "Базы"),
         GalleryState("view-calculate-menu", .databases(.viewCalculateMenu), "Строка итогов и меню «Посчитать ›»", section: "Базы"),
+        // US2, сверка — `notion-select-*.png`, `notion-status-cell-popup.png`, `notion-edit-property-*.png`, `notion-date-format-options.png`.
+        GalleryState("type-select-picker", .databases(.typeSelectPicker), "Окно выбора: «Найти вариант…», «Выберите вариант или создайте его», ручки",
+                     section: "Базы"),
+        GalleryState("type-multi-select-picker", .databases(.typeMultiSelectPicker), "Множественный выбор: выбранные плашки с «×», поиск и «Создать»",
+                     section: "Базы"),
+        GalleryState("type-status-picker", .databases(.typeStatusPicker), "Окно статуса: группы «К выполнению», «В работе», «Завершено»", section: "Базы"),
+        GalleryState("type-option-menu", .databases(.typeOptionMenu), "Меню «⋯» варианта: имя, «Удалить», 10 цветов с галочкой", section: "Базы"),
+        GalleryState("type-date-picker", .databases(.typeDatePicker), "Окно даты: начало и конец, календарь с понедельника, время, «Напомнить»",
+                     section: "Базы"),
+        GalleryState("type-date-formats", .databases(.typeDateFormats), "Окно даты с подменю «Формат даты»", section: "Базы"),
+        GalleryState("type-files-popup", .databases(.typeFilesPopup), "Окно файлов: файлы и ссылка в ячейке, «Загрузить» / «Ссылка»", section: "Базы"),
+        GalleryState("type-select-settings", .databases(.typeSelectSettings), "Изменить свойство выбора: «Сортировка», варианты с ручками", section: "Базы"),
+        GalleryState("type-status-settings", .databases(.typeStatusSettings), "Изменить свойство статуса: три группы с «+»", section: "Базы"),
+        GalleryState("type-number-settings", .databases(.typeNumberSettings), "Изменить свойство числа: формат, знаки, «Показывать как» — полоса",
+                     section: "Базы"),
+        GalleryState("type-chips-meters", .databases(.typeChipsAndMeters), "Плашки 10 цветов, статус с точкой, полоса и кольцо числа, даты с концом",
+                     section: "Базы"),
     ]
 
     /// Обратные ссылки (US5, contracts/pages-ui.md, «Обратные ссылки»): строка под названием и список источников.

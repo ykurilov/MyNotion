@@ -37,6 +37,8 @@ public final class DatabaseTableView: NSView, NSTextFieldDelegate {
     public var onHeightChange: (() -> Void)?
     /// Меню колонки, «+» и «•••» шапки — окна свойств (хозяин подключает `PropertyMenuPresenter`).
     public var onColumnMenu: ((DatabaseProperty, NSRect, NSView) -> Void)?
+    /// «Изменить свойство» из окна ячейки статуса: панель справа (`PropertyMenuPresenter.showEditProperty`).
+    public var onEditProperty: ((DatabaseProperty, NSView) -> Void)?
     public var onAddProperty: ((NSRect, NSView) -> Void)?
     public var onViewSettings: ((NSRect, NSView) -> Void)?
     /// Окна вида (US3): хозяин открывает `ViewPanels` у кнопки или плашки (`rect` — в координатах `view`).
@@ -114,6 +116,10 @@ public final class DatabaseTableView: NSView, NSTextFieldDelegate {
         grid.onColumnMenu = { [weak self] property, rect in
             guard let self else { return }
             onColumnMenu?(property, convert(rect, from: grid), self)
+        }
+        grid.onEditProperty = { [weak self] property in
+            guard let self else { return }
+            onEditProperty?(property, self)
         }
         grid.onAddProperty = { [weak self] rect in
             guard let self else { return }

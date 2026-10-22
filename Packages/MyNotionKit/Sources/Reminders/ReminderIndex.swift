@@ -88,6 +88,7 @@ public struct ReminderIndex: Sendable {
                 return (id, row["title"])
             }) { first, _ in first }
             let title = titles[entry.pageId].map { $0.isEmpty ? Page.untitledTitle : $0 } ?? Page.untitledTitle
+            if let cell = try Self.cellContent(of: entry, calendar: calendar, in: db) { return (title, cell) }
             guard let row = try Row.fetchOne(db, sql: "SELECT text, textStyles FROM block WHERE id = ?", arguments: [entry.blockId.indexText]),
                   let runs = try? JSONDecoder().decode([StyledRun].self, from: Data((row["textStyles"] as String).utf8)) else {
                 return (title, "")
@@ -99,6 +100,35 @@ public struct ReminderIndex: Sendable {
     }
 
     static let bodyLength = 100
+
+    /// Напоминание ячейки даты (`blockId` — свойство, `pageId` — строка, research R16): «Срок: 10 мая 2030 г., 15:00».
+    /// Не ячейка — `nil`.
+    static func cellContent(of entry: ReminderEntry, calendar: Calendar, in db: Database) throws -> String? {
+        guard let row = try Row.fetchOne(db, sql: """
+            SELECT p.name, c.value FROM db_property p JOIN db_cell c ON c.propertyId = p.id AND c.rowId = ? WHERE p.id = ?
+            """, arguments: [entry.pageId.indexText, entry.blockId.indexText]) else { return nil }
+        let name: String = row[0]
+        let value = (row[1] as String?).flatMap { try? JSONDecoder().decode(JSONValue.self, from: Data($0.utf8)) }
+        guard let start = value?["start"]?.string else { return name }
+        let zone = value?["timeZone"]?.string.flatMap(TimeZone.init(identifier:)) ?? calendar.timeZone
+        let parts = start.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
+        var zoned = calendar
+        zoned.timeZone = zone
+        guard parts.count >= 3, let date = zoned.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2],
+                                                                           hour: parts.count > 3 ? parts[3] : 0,
+                                                                           minute: parts.count > 4 ? parts[4] : 0)) else { return name }
+        let formatter = DateFormatter()
+        formatter.locale = calendar.locale ?? .current
+        formatter.timeZone = zone
+        formatter.dateStyle = .long
+        var text = formatter.string(from: date)
+        if value?["hasTime"]?.bool == true {
+            formatter.dateStyle = .none
+            formatter.dateFormat = "HH:mm"
+            text += ", " + formatter.string(from: date)
+        }
+        return name + ": " + text
+    }
 }
 
 extension ReminderEntry {

@@ -73,6 +73,7 @@ final class DatabaseBlockViewFactory: BlockViewFactory {
             guard let controller, let propertyId = controller.view.groupSettings?.propertyId else { return }
             controller.editView { operations, _ in try operations.addGroupOption(to: propertyId) }
         }
+        view.onEditProperty = { property, host in menus.showEditProperty(property.id, in: host) }
         var actions = RowMenuActions()
         actions.isFavorite = { resolve()?.isFavorite($0) ?? false }
         actions.toggleFavorite = { resolve()?.toggleFavorite($0) }

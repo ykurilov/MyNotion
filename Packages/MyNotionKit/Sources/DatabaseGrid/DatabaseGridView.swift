@@ -35,6 +35,8 @@ public final class DatabaseGridView: NSView {
 
     /// Щелчок по шапке колонки: меню колонки под ней (`rect` — в координатах сетки).
     public var onColumnMenu: ((DatabaseProperty, NSRect) -> Void)?
+    /// «Изменить свойство» из окна ячейки (окно статуса, US2): панель свойства справа.
+    public var onEditProperty: ((DatabaseProperty) -> Void)?
     /// «+» в шапке: новое свойство.
     public var onAddProperty: ((NSRect) -> Void)?
     /// «•••» в шапке: настройки вида.
@@ -254,7 +256,8 @@ public final class DatabaseGridView: NSView {
             if text == nil { controller.toggleCheckbox(row: position.row, column: position.column) }
             return
         case .inPlace: break
-        case .popup, .none: return
+        case .popup: return openCellPopup(replacingWith: text)
+        case .none: return
         }
         editor?.removeFromSuperview()
         let initial = text ?? controller.editingText(row: position.row, column: position.column)
