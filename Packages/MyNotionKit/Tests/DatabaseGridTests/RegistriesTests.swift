@@ -18,6 +18,14 @@ struct RegistriesTests {
         #expect(CellKind.for(.select).editing == .popup && CellKind.for(.text).editing == .inPlace && CellKind.for(.formula).editing == .none)
     }
 
+    @Test("Окна US2 и US4 зарегистрированы вместе: выбор, статус, дата, файлы и связь")
+    func cellPopups() {
+        let kinds: Set<PropertyKind> = [.select, .multiSelect, .status, .date, .files, .relation]
+        #expect(Set(CellPopups.all.flatMap { $0.kinds }) == kinds)
+        for kind in kinds { #expect(CellPopups.factory(for: kind) != nil) }
+        #expect(CellPopups.factory(for: .rollup) == nil)
+    }
+
     @Test("Список типов «+» и «Сменить тип» — строки по две, как у Notion; ID серый, если в базе уже есть")
     func typePicker() {
         let rows = PropertyTypePicker.rows(existingKinds: [.title, .uniqueId])

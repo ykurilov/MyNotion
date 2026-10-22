@@ -11,16 +11,24 @@ final class NumberSettingsView: TypeSettingsView {
     nonisolated static let settings = PropertyTypeSettings(kinds: [.number]) { NumberSettingsView(context: $0) }
 
     private var divideField: PropertyPopupField?
+    private let configKey: String?
 
-    override init(context: PropertyTypeSettingsContext) {
+    override convenience init(context: PropertyTypeSettingsContext) {
+        self.init(context: context, configKey: nil)
+    }
+
+    /// Сводка использует те же строки и операции, но хранит оформление внутри `numberFormat`.
+    init(context: PropertyTypeSettingsContext, configKey: String?, showsNote: Bool = true, defaultFormat: String = "number") {
+        self.configKey = configKey
         super.init(context: context)
-        let config = context.property.config
+        var config = configKey.map { context.property.config[$0] ?? .emptyObject } ?? context.property.config
+        if config["format"] == nil { config["format"] = .string(defaultFormat) }
         let format = NumberDisplay.format(config["format"]?.string)
         let decimals = config["decimals"]?.number.map(Int.init)
         _ = row("Формат числа", icon: "number", detail: format.title, identifier: "number-format") { [weak self] row in
             self?.showChoices(NumberDisplay.formats.map { .init(id: $0.id, title: $0.title, detail: $0.code) }, checked: format.id, besides: row,
                               width: 280, filterPlaceholder: "Фильтр форматов…", identifier: "number-format-list") { id in
-                self?.updateConfig { $0["format"] = id == "number" ? nil : .string(id) }
+                self?.updateConfig { $0["format"] = id == "number" && self?.configKey == nil ? nil : .string(id) }
             }
         }
         _ = row("Знаки после запятой", icon: "textformat.123", detail: NumberDisplay.decimalsTitle(decimals), identifier: "number-decimals") { [weak self] row in
@@ -62,11 +70,22 @@ final class NumberSettingsView: TypeSettingsView {
             showNumber.onToggle = { [weak self] on in self?.updateConfig { $0["showAs"]?["showNumber"] = .bool(on) } }
             stack.append(showNumber, height: PropertyPopupMetrics.rowHeight, inset: 0)
         }
-        stack.append(NoteLabel("Изменения применяются ко всем видам с этим свойством."), height: 36, inset: 0)
+        if showsNote {
+            stack.append(NoteLabel("Изменения применяются ко всем видам с этим свойством."), height: 36, inset: 0)
+        }
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
+
+    override func updateConfig(_ edit: (inout JSONValue) -> Void) {
+        guard let configKey else { return super.updateConfig(edit) }
+        super.updateConfig { config in
+            var number = config[configKey] ?? .emptyObject
+            edit(&number)
+            config[configKey] = number
+        }
+    }
 
     private func commitDivisor(_ text: String) {
         guard let number = NumberDisplay.parse(text), number > 0 else { return NSSound.beep() }

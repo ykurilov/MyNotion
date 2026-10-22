@@ -22,7 +22,9 @@ struct RollupType: PropertyType {
 
     func displayText(_ value: JSONValue?, in context: PropertyContext) -> String {
         guard let number = percent(value, in: context) else { return computed.displayText(value, in: context) }
-        return NumberType.format(number, config: ["format": "percent"], locale: context.locale)
+        var config = context.config["numberFormat"] ?? .emptyObject
+        if config["format"] == nil { config["format"] = "percent" }
+        return NumberType.format(number, config: config, locale: context.locale)
     }
 
     func csvText(_ value: JSONValue?, in context: PropertyContext) -> String {

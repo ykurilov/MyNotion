@@ -48,9 +48,19 @@ final class SyncRelationsTwoMacsUITests: XCTestCase {
                       "Сводка второго Mac: \(String(describing: try? rollup(databaseB, "Дом"))), \(String(describing: try? rollup(databaseB, "Работа")))")
         let arrival = Date().timeIntervalSince(joined)
 
+        // Открытая таблица второго клиента, а не только совпадение SQLite на диске.
+        let projects = second.outlines["page-tree"].outlineRows.containing(NSPredicate(format: "value == %@", "Проекты")).firstMatch
+        XCTAssertTrue(projects.waitForExistence(timeout: 10), "Нет базы «Проекты» на втором Mac")
+        second.activate()
+        projects.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        let secondGrid = second.descendants(matching: .any).matching(identifier: "database-grid").element(boundBy: 0)
+        XCTAssertTrue(secondGrid.waitForExistence(timeout: 10), "«Проекты» не открылись на втором Mac")
+
         // Шаг 2: правка часов «Позвонить» на первом Mac — сводка «Дома» на втором пересчитана.
         first.activate()
         grid.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: 280 + 60, dy: 33 + 33 / 2)).click()
+        XCTAssertTrue(first.descendants(matching: .any)["database-cell-editor"].waitForExistence(timeout: 5), "Нет правки числа на первом Mac")
+        first.typeKey("a", modifierFlags: .command)
         first.typeText("10")
         first.typeKey(.return, modifierFlags: [])
         let edited = Date()
@@ -58,6 +68,25 @@ final class SyncRelationsTwoMacsUITests: XCTestCase {
         XCTAssertTrue(waitFor(timeout: 20) { (try? self.rollup(databaseB, "Дом")) == "13" },
                       "Сводка второго Mac после правки: \(String(describing: try? rollup(databaseB, "Дом")))")
         let delay = Date().timeIntervalSince(edited)
+
+        // Шаг 3 связей: добавление с обоих клиентов, в том числе с ответной стороны.
+        first.activate()
+        grid.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: 540, dy: 49.5)).click()
+        XCTAssertTrue(first.descendants(matching: .any)["relation-picker-search"].waitForExistence(timeout: 5))
+        first.typeText("Работа")
+        first.typeKey(.return, modifierFlags: [])
+        first.typeKey(.escape, modifierFlags: [])
+        second.activate()
+        secondGrid.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: 340, dy: 49.5)).click()
+        XCTAssertTrue(second.descendants(matching: .any)["relation-picker-search"].waitForExistence(timeout: 5))
+        second.typeText("Сдать отчёт")
+        second.typeKey(.return, modifierFlags: [])
+        second.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(waitFor(timeout: 20) {
+            [databaseA, databaseB].allSatisfy {
+                (try? self.links($0)) == 5 && (try? self.rollup($0, "Дом")) == "17" && (try? self.rollup($0, "Работа")) == "14"
+            }
+        }, "Связи с двух сторон или их сводки не сошлись")
         let summary = String(format: "Связи на двух Mac: всё со сводкой дошло за %.1f с после подключения; правка часов → сводка второго Mac за %.1f с", arrival, delay)
         print(summary)
         add(XCTAttachment(string: summary))

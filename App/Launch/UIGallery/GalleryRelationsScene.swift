@@ -13,14 +13,14 @@ enum GalleryRelationsScene {
     private static var menus: PropertyMenuPresenter?
 
     static func handles(_ kind: GalleryDatabases) -> Bool {
-        [.relationNewSettings, .relationSettings, .relationTargetChooser, .relationLimitChooser, .rollupSettings, .rollupCalculateMenu,
+        [.relationNewSettings, .relationSettings, .relationTargetChooser, .relationLimitChooser, .rollupSettings, .rollupNumberSettings, .rollupCalculateMenu,
          .relationProjectsTable, .relationPicker].contains(kind)
     }
 
     static func show(_ kind: GalleryDatabases, model: MainWindowModel, window: NSWindow) async -> String? {
         let store = model.store
         guard let sample = try? DatabaseSampleGenerator(taskCount: 300, projectCount: 20).ensure(in: store) else { return "эталона нет" }
-        let onProjects = [.rollupSettings, .rollupCalculateMenu, .relationProjectsTable].contains(kind)
+        let onProjects = [.rollupSettings, .rollupNumberSettings, .rollupCalculateMenu, .relationProjectsTable].contains(kind)
         model.library.reloadTree()
         model.select(onProjects ? sample.projectsId : sample.tasksId)
         await settle()
@@ -39,8 +39,16 @@ enum GalleryRelationsScene {
             case .relationSettings, .relationLimitChooser:
                 presenter.showEditProperty(sample.taskProperties["Проект"]!, in: table)
                 if kind == .relationLimitChooser { await press("relation-limit", in: window) }
-            case .rollupSettings, .rollupCalculateMenu:
-                presenter.showEditProperty(sample.projectProperties["Сумма часов"]!, in: table)
+            case .rollupSettings, .rollupNumberSettings, .rollupCalculateMenu:
+                let propertyId = sample.projectProperties["Сумма часов"]!
+                if kind == .rollupNumberSettings, let property = try store.write({ try $0.property(propertyId) }) {
+                    var config = property.config
+                    config["numberFormat"] = ["format": "numberWithSeparators", "decimals": 2,
+                                               "showAs": ["style": "bar", "divideBy": 500, "color": "blue", "showNumber": true]]
+                    try model.databaseOperations.setPropertyConfig(propertyId, config)
+                    await settle()
+                }
+                presenter.showEditProperty(propertyId, in: table)
                 if kind == .rollupCalculateMenu { await press("rollup-calculation", in: window) }
             case .relationPicker:
                 // Окно ячейки связи первой задачи: выбранный проект с «−» и «Выбрать ещё».

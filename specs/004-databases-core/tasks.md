@@ -236,7 +236,7 @@ description: "Задачи: базы данных — основа"
 - [x] T091 [US4] Сводки в `PK/Sources/Databases/Computation/Rollups.swift` рядом с формулами US5; обход связей в формулах (`current.prop`) — через тот же индекс (T088)
 - [x] T092 [US4] Ячейки и настройки `PK/Sources/DatabaseGrid/Cells/{Relation,Rollup}Cell.swift`, `PropertySettings/{RelationSettings,RollupSettings}.swift` («Связана с», «Лимит», «Ответное свойство», «Связь → Свойство → Вычислить»), окно выбора строк цели (T089)
 - [ ] T093 [US4] Состояния галереи: настройки новой связи, окно выбора с выбранными, ячейка связи, настройки сводки и меню вычислений — в обеих темах; сверка с Notion
-- [ ] T094 [US4] Живая проверка двух Mac `scripts/vm/sync-live-check.sh` (свой сервер в виртуальном Mac): шаги 1–3 quickstart.md; затронутые тесты зелёные; замер правки с пересчётом сводки; запись в quickstart.md; коммит
+- [ ] T094 [US4] Живая проверка двух клиентов `scripts/imac/sync-live-check.sh --test SyncRelationsTwoMacsUITests` (свой сервер на iMac): шаги 1–3 quickstart.md; затронутые тесты зелёные; замер правки с пересчётом сводки; запись в quickstart.md; коммит
 
 **Checkpoint**: US4 работает и проверяется сама.
 

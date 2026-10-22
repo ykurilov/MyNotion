@@ -59,6 +59,10 @@ public enum CellPresenter {
                 return .chips(items.map { CellPresentation.Chip(title: ($0["title"]?.string).flatMap { $0.isEmpty ? nil : $0 } ?? Page.untitledTitle, color: .default) })
             }
             let text = type.displayText(value, in: context)
+            if property.kind == .rollup, let number = value.number,
+               let meter = NumberDisplay.meter(number, text: text, config: context.config["numberFormat"] ?? .emptyObject) {
+                return .meter(meter)
+            }
             return text.isEmpty ? .empty : .text(text)
         case .select, .status:
             guard let option = context.option(row.cells[property.id])?.option else { return .empty }

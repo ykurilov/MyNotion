@@ -49,4 +49,27 @@ struct NumberDisplayTests {
         plain.config = ["format": "percent"]
         #expect(CellPresenter.present(plain, in: row, context: PropertyContext(property: plain, locale: Locale(identifier: "en_US"))) == .text("40%"))
     }
+    @Test("Числовая сводка: формат и знаки, полоса/кольцо, проценты и возврат к числу")
+    func rollupPresentation() {
+        var property = DatabaseProperty(databaseId: UUID(), name: "Часов", kind: .rollup,
+                                        config: ["calculation": "sum", "numberFormat": ["decimals": 2,
+                                                "showAs": ["style": "bar", "divideBy": 10, "color": "blue", "showNumber": true]]],
+                                        sortKey: .between(nil, nil))
+        let row = RowSnapshot(id: UUID(), title: "", icon: nil, createdAt: Date(), updatedAt: Date(), cells: [:],
+                              computed: [property.id: 2.5], relations: [:])
+        func present() -> CellPresentation {
+            CellPresenter.present(property, in: row, context: PropertyContext(property: property, locale: Locale(identifier: "en_US")))
+        }
+        #expect(present() == .meter(.init(fraction: 0.25, color: .blue, isRing: false, text: "2.50")))
+        property.config["numberFormat"]?["showAs"]?["style"] = "ring"
+        property.config["numberFormat"]?["showAs"]?["showNumber"] = false
+        #expect(present() == .meter(.init(fraction: 0.25, color: .blue, isRing: true, text: nil)))
+        property.config["numberFormat"]?["showAs"] = nil
+        #expect(present() == .text("2.50"))
+        property.config = ["calculation": "percentChecked", "numberFormat": ["decimals": 1]]
+        #expect(present() == .text("250.0%"))
+        property.config["numberFormat"]?["format"] = "number"
+        #expect(present() == .text("2.5"))
+    }
+
 }

@@ -92,6 +92,14 @@ final class RelationRollupTests: XCTestCase {
             XCTAssertTrue(option.waitForExistence(timeout: 5), "Нет пункта \(item)")
             option.click()
         }
+        XCTAssertTrue(element(app, "number-format").waitForExistence(timeout: 5), "Нет формата числовой сводки")
+        let decimals = element(app, "number-decimals")
+        XCTAssertTrue(decimals.waitForExistence(timeout: 5), "Нет знаков после запятой у сводки")
+        decimals.click()
+        let two = element(app, "choice-2")
+        XCTAssertTrue(two.waitForExistence(timeout: 5))
+        two.click()
+        XCTAssertTrue(waitUntil { (try? self.config("Проекты", "Часов"))?.contains("decimals") == true })
         app.typeKey(.escape, modifierFlags: [])
         XCTAssertTrue(waitUntil(timeout: 10) { (try? self.computed("Проекты", "Часов", row: "Дом")) == "5" },
                       "Сводка: \(String(describing: try? computed("Проекты", "Часов", row: "Дом")))")

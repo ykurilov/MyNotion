@@ -160,3 +160,29 @@ UI: `scripts/imac/run-on-imac.sh uitest -only-testing:UITests/FormulaEditorTests
 с другого Mac раньше варианта); тест `SelectOptionOperationsTests.newOptionShiftsPositions`.
 Галерея: `scripts/imac/run-on-imac.sh gallery --only type-` — 11 состояний US2 × 2 темы.
 
+
+
+## US4 «Связи и сводки» (22.10.2026, iMac, продолжение Codex)
+
+В `004-us4` влита `004-databases-core` (merge `1d48e1b`), сохранены окна US2 и `RelationCellView.factory` в
+`CellPopups.all`. Все прогоны ниже - через `imac-run --no-fallback --wait 1800`, не более 4 потоков; UI и галерея -
+через `scripts/imac/run-on-imac.sh`. Основной Mac приложение не запускал, виртуальный Mac не использовался.
+
+- Затронутые модули: `swift test --jobs 4 --filter "RelationOperationsTests|RollupRecomputeTests|RelationLinkMergeTests|PropertyMenuTests|DatePropertyTests"`
+  в `Packages/MyNotionKit`: **37 тестов, 4 набора, 0 ошибок**, 2,894 с после сборки. Журнал: `/tmp/us4-codex-unit.log`.
+  Проверены обе стороны связи, лимиты, создание строки в цели, отмена, корзина/возврат/стирание цели, вычисления сводки,
+  встречные добавления и снятия связей двух клиентов, пересчёт сводок после слияния; также изменения дат из US2.
+- После добавления числовой панели: тот же прогон с дополнительными фильтрами
+  `NumberDisplayTests|PropertyMenuViewsTests|RegistriesTests|GalleryDatabaseStatesTests`: **57 тестов, 8 наборов, 0 ошибок**, 4,281 с.
+  Журнал: `/tmp/us4-codex-unit2.log`. Проверены сохранение вложенного `numberFormat` без изменения связи/вычисления,
+  отмена/повтор оформления, высота панели после смены вида, текст/полоса/кольцо, точность процентов и явный числовой формат;
+  реестр одновременно сохраняет окна US2 и US4.
+- Старый прогон `/tmp/us4-uitest8` не был успешным: `RelationRollupTests` не нашёл `add-property-name`;
+  hierarchy `CoreServicesUIAgent` подтверждает перекрывающие системные предупреждения про ChatGPT и невозможность открыть приложение.
+  Это ограничение среды, а не подтверждение сценария. Старый `/tmp/us4-perf.log` относится к 003 и не является замером US4.
+- Безопасная уборка (`6a07c09`): `close_stale_prompts` только сообщает об активном SecurityAgent; никакого завершения
+  системных процессов. Живая проверка завершает только PID собственного node-сервера; занятый чужим процессом порт - ошибка.
+  Экземпляры приложения закрывает teardown UI-теста. Сервер проверки локальный, боевой сервер не затронут.
+
+Числовая сводка переиспользует `NumberSettingsView` US2 для формата, знаков после запятой, полосы/кольца, цвета, делителя
+и переключателя числа; настройки хранятся в `numberFormat`, а полоса/кольцо используют `NumberDisplay.meter`. Проверки новой панели приведены ниже.

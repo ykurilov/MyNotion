@@ -56,6 +56,44 @@ struct PropertyMenuViewsTests {
         #expect(single.contentHeight > list.contentHeight)
     }
 
+    @Test("Числовая сводка переиспользует панель числа: вложенные настройки сохраняют связь и вычисление")
+    func rollupNumberSettings() throws {
+        let property = try operations.addProperty(to: base.databaseId, name: "Часов", kind: .rollup,
+                                                  config: ["calculation": "sum", "relationPropertyId": "relation", "targetPropertyId": "hours"])
+        let context = PropertyTypeSettingsContext(property: property, store: store, operations: operations, viewId: base.viewId)
+        let number = NumberSettingsView(context: context, configKey: "numberFormat", showsNote: false)
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        operations.undoManager = undo
+        undo.beginUndoGrouping()
+        number.updateConfig { $0["decimals"] = 2 }
+        undo.endUndoGrouping()
+        undo.beginUndoGrouping()
+        number.updateConfig { $0["showAs"] = NumberDisplay.showAs(.ring, keeping: $0) }
+        undo.endUndoGrouping()
+        undo.undo()
+        #expect(try store.write { try $0.property(property.id)?.config["numberFormat"]?["showAs"] } == nil)
+        undo.redo()
+        operations.undoManager = nil
+        let config = try #require(try store.write { try $0.property(property.id)?.config })
+        #expect(config["calculation"] == "sum" && config["relationPropertyId"] == "relation" && config["targetPropertyId"] == "hours")
+        #expect(config["numberFormat"]?["decimals"] == 2)
+        #expect(config["numberFormat"]?["showAs"]?["style"] == "ring")
+        #expect(config["showAs"] == nil && config["decimals"] == nil)
+        let current = try #require(try store.write { try $0.property(property.id) })
+        let rollup = RollupSettingsView(context: PropertyTypeSettingsContext(property: current, store: store, operations: operations, viewId: base.viewId))
+        let compact = rollup.fittingSize.height
+        var resized = false
+        rollup.onHeightChange = { resized = true }
+        var fresh = config
+        fresh["numberFormat"]?["showAs"] = nil
+        try operations.setPropertyConfig(property.id, fresh)
+        rollup.refresh()
+        #expect(resized && rollup.fittingSize.height < compact)
+        #expect(RollupSettingsView.hasNumberResult(.sum) && RollupSettingsView.hasNumberResult(.percentChecked))
+        #expect(!RollupSettingsView.hasNumberResult(.showOriginal) && !RollupSettingsView.hasNumberResult(.dateRange))
+    }
+
     @Test("Окно «Свойства»: «Новое свойство» и «Удалённые свойства» появляются после удаления")
     func propertiesWindow() throws {
         let note = try operations.addProperty(to: base.databaseId, name: "Заметка", kind: .text)

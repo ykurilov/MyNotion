@@ -8,7 +8,8 @@ import VisualStyle
 /// связанной базы) → «Вычислить ›» (набор по типу свойства), внизу — «Изменения применяются ко всем видам с этим
 /// свойством». Каждая правка — шаг ⌘Z; итоги всех строк пересчитываются в фоне.
 @MainActor
-final class RollupSettingsView: NSView {
+final class RollupSettingsView: NSView, PropertyTypeSettingsResizing {
+    var onHeightChange: (() -> Void)?
     nonisolated static let settings = PropertyTypeSettings(kinds: [.rollup]) { RollupSettingsView(context: $0) }
 
     private let context: PropertyTypeSettingsContext
@@ -55,6 +56,7 @@ final class RollupSettingsView: NSView {
         stack.removeAll()
         build()
         needsLayout = true
+        onHeightChange?()
     }
     override var fittingSize: NSSize { NSSize(width: frame.width, height: stack.contentHeight) }
 
@@ -100,6 +102,15 @@ final class RollupSettingsView: NSView {
         calculationRow.isEnabled = target != nil
         calculationRow.onPress = { [weak self] in self?.chooseCalculation() }
         stack.append(calculationRow, height: PropertyPopupMetrics.rowHeight)
+
+        // Только скалярный числовой итог: списки «как есть» и даты не получают оформление числа.
+        if Self.hasNumberResult(calculation) {
+            let fresh = PropertyTypeSettingsContext(property: property, store: context.store, operations: context.operations, viewId: context.viewId)
+            let percent = Set<Calculation>([.percentEmpty, .percentNotEmpty, .percentChecked, .percentUnchecked]).contains(calculation)
+            let number = NumberSettingsView(context: fresh, configKey: "numberFormat", showsNote: false,
+                                            defaultFormat: percent ? "percent" : "number")
+            stack.append(number, height: number.fittingSize.height, inset: 0)
+        }
 
         let note = NSTextField(wrappingLabelWithString: "Изменения применяются ко всем видам с этим свойством")
         note.font = Typography.popupMenuSectionHeader.font
@@ -166,6 +177,10 @@ final class RollupSettingsView: NSView {
 
     /// Вычисления сводки по типу свойства цели — разделами, как меню Notion «Calculate» (Show original, Show unique,
     /// Count ›, Percent ›, More options ›): у числа — числа, у даты — даты, у флажка — отметки.
+    static func hasNumberResult(_ calculation: Calculation) -> Bool {
+        Calculation.common.contains(calculation) || Calculation.numeric.contains(calculation) || Calculation.checkbox.contains(calculation)
+    }
+
     static func calculations(for kind: PropertyKind) -> [(String?, [Calculation])] {
         var sections: [(String?, [Calculation])] = [(nil, Calculation.rollupOnly), ("Количество", Array(Calculation.common.prefix(5))),
                                                     ("Проценты", Array(Calculation.common.suffix(2)))]

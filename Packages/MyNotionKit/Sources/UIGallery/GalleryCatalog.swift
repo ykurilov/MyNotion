@@ -121,6 +121,7 @@ public enum GalleryDatabases: Hashable, Sendable, CaseIterable {
     case relationTargetChooser
     case relationLimitChooser
     case rollupSettings
+    case rollupNumberSettings
     case rollupCalculateMenu
     case relationProjectsTable
     case relationPicker
@@ -333,6 +334,8 @@ public enum GalleryCatalog {
         GalleryState("relation-target-chooser", .databases(.relationTargetChooser), "Окно «Связать с базой»: «Эта база» и базы по названию", section: "Базы"),
         GalleryState("relation-limit-chooser", .databases(.relationLimitChooser), "Окно лимита: «1 страница» и «Без лимита» с галочкой", section: "Базы"),
         GalleryState("rollup-settings", .databases(.rollupSettings), "Сводка «Сумма часов»: «Связь — Задачи», «Свойство — Часы», «Вычислить — Сумма»",
+                     section: "Базы"),
+        GalleryState("rollup-number-settings", .databases(.rollupNumberSettings), "Числовая сводка: формат, знаки после запятой, полоса, цвет и делитель",
                      section: "Базы"),
         GalleryState("rollup-calculate-menu", .databases(.rollupCalculateMenu), "Меню «Вычислить»: как есть, уникальные, количество, проценты, числа",
                      section: "Базы"),
