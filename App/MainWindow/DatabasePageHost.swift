@@ -39,14 +39,41 @@ final class DatabaseBlockViewFactory: BlockViewFactory {
             resolve()?.openRow(rowId, mode: openMode ?? controller.openMode, inNewTab: inNewTab)
         }
         view.onOpenAsPage = { resolve()?.open(PageOpenRequest(pageId: databaseId)) }
-        // Меню колонки, «+» и окно «Свойства» (T039); «•••» шапки — пока окно «Свойства» (настройки вида — US3).
+        // Меню колонки, «+» и окно «Свойства» (T039); окна вида — фильтр, сортировка, настройки вида (US3).
         let menus = PropertyMenuPresenter(store: library.store, operations: model.databaseOperations, databaseId: databaseId,
                                           viewId: controller.viewId)
+        let panels = ViewPanels(controller: controller)
         menus.columnRect = { [weak view] propertyId in view?.columnHeaderRect(propertyId) }
         view.onColumnMenu = { property, rect, host in menus.showColumnMenu(for: property.id, below: rect, in: host) }
         view.onAddProperty = { rect, host in menus.showAddProperty(below: rect, in: host) }
+        view.onViewSettings = { _, host in panels.showViewSettings(in: host, selectName: false) }
+        panels.onShowProperties = { rect, host in menus.showPropertiesWindow(below: rect, in: host) }
+        view.onViewCommand = { command, rect, host in
+            switch command {
+            case .addFilter: panels.showAddFilter(below: rect, in: host)
+            case .filter(let path): panels.showFilter(at: path, below: rect, in: host)
+            case .sorts: panels.showSorts(below: rect, in: host)
+            case .settings(let selectName): panels.showViewSettings(in: host, selectName: selectName)
+            }
+        }
+        view.onViewSwitch = { viewId in
+            panels.close()
+            menus.setViewId(viewId)
+        }
+        menus.onOpenFilter = { [weak view] path, propertyId in
+            guard let view else { return }
+            view.revealChips()
+            panels.showFilter(at: path, below: view.columnHeaderRect(propertyId) ?? view.bounds, in: view)
+        }
+        view.grid.onCalculateMenu = { [weak view] property, rect in
+            guard let view else { return }
+            menus.showCalculateMenu(for: property.id, below: view.convert(rect, from: view.grid), in: view)
+        }
+        view.grid.onNewGroup = { [weak controller] _ in
+            guard let controller, let propertyId = controller.view.groupSettings?.propertyId else { return }
+            controller.editView { operations, _ in try operations.addGroupOption(to: propertyId) }
+        }
         view.onEditProperty = { property, host in menus.showEditProperty(property.id, in: host) }
-        view.onViewSettings = { rect, host in menus.showPropertiesWindow(below: rect, in: host) }
         var actions = RowMenuActions()
         actions.isFavorite = { resolve()?.isFavorite($0) ?? false }
         actions.toggleFavorite = { resolve()?.toggleFavorite($0) }

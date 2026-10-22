@@ -38,9 +38,11 @@ extension NotesTransaction {
             .map(SelectOption.init(row:))
     }
 
-    public func views(ofDatabase databaseId: UUID) throws -> [DatabaseView] {
-        try Row.fetchAll(database, sql: "SELECT * FROM db_view WHERE databaseId = ? ORDER BY sortKey, id",
-                         arguments: [databaseId.databaseText]).map(DatabaseView.init(row:))
+    /// Виды базы по порядку вкладок; удалённые («Удалить вид» US3 — след `layoutOptions.deletedAt`) — только по просьбе.
+    public func views(ofDatabase databaseId: UUID, includingDeleted: Bool = false) throws -> [DatabaseView] {
+        let deleted = includingDeleted ? "" : " AND json_extract(layoutOptions, '$.deletedAt') IS NULL"
+        return try Row.fetchAll(database, sql: "SELECT * FROM db_view WHERE databaseId = ?\(deleted) ORDER BY sortKey, id",
+                                arguments: [databaseId.databaseText]).map(DatabaseView.init(row:))
     }
 
     public func view(_ id: UUID) throws -> DatabaseView? {

@@ -59,6 +59,11 @@ public enum PropertyMenu {
     public struct Entry: Sendable {
         public let slot: PropertyMenuSlot?
         public let title: String
+
+        public init(slot: PropertyMenuSlot?, title: String) {
+            self.slot = slot
+            self.title = title
+        }
         public var isSeparator: Bool { slot == nil }
     }
 

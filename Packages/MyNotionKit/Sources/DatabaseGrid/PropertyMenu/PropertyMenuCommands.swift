@@ -10,6 +10,11 @@ public enum PropertyMenuOutcome: Sendable, Hashable {
     case confirmDelete
     /// Новая колонка («Вставить слева / справа»): под ней окно имени и типа, как у Notion.
     case configureNew(UUID)
+    /// «Фильтр» (US3): плашка свойства добавлена — открыть её окно.
+    case openFilter(FilterPath)
+    /// «Сортировка ›» и «Посчитать ›» (US3): подменю у пункта.
+    case openSortMenu
+    case openCalculateMenu
 }
 
 /// Пункты US1 меню колонки и их действия над базой (contracts/database-ui.md, «Меню колонки»): окна рисует
@@ -20,7 +25,7 @@ public struct PropertyMenuCommands {
     public let store: NotesStore
     public let operations: DatabaseOperations
     public let databaseId: UUID
-    public let viewId: UUID?
+    public var viewId: UUID?
 
     public init(store: NotesStore, operations: DatabaseOperations, databaseId: UUID, viewId: UUID?) {
         self.store = store
@@ -33,6 +38,8 @@ public struct PropertyMenuCommands {
     public var handledSlots: Set<PropertyMenuSlot> {
         var slots: Set<PropertyMenuSlot> = [.editProperty, .changeType, .duplicate, .delete]
         if viewId != nil { slots.formUnion([.insertLeft, .insertRight]) }
+        // Пункты вида (US3) — только у колонки вида.
+        if viewId != nil { slots.formUnion([.filter, .sort, .group, .calculate, .hide, .wrap]) }
         return slots
     }
 
@@ -40,7 +47,11 @@ public struct PropertyMenuCommands {
     public static let panelSlots: Set<PropertySettingsSlot> = [.name, .type, .duplicate, .delete]
 
     public func entries(for property: DatabaseProperty) -> [PropertyMenu.Entry] {
-        PropertyMenu.entries(items: PropertyMenuItem.all, property: property, handled: handledSlots)
+        let wraps = (viewId.flatMap { id in try? store.write { try $0.view(id) } })?.wraps(property.id) ?? false
+        return PropertyMenu.entries(items: PropertyMenuItem.all, property: property, handled: handledSlots).map { entry in
+            // «Переносить текст» / «Не переносить» — по состоянию колонки (Notion «Wrap / Unwrap content»).
+            entry.slot == .wrap && wraps ? PropertyMenu.Entry(slot: .wrap, title: "Не переносить текст") : entry
+        }
     }
 
     /// Выбор пункта: вставка и копия пишутся сразу, остальные пункты открывают своё окно.
@@ -56,7 +67,22 @@ public struct PropertyMenuCommands {
         case .duplicate:
             try operations.duplicateProperty(property.id, in: viewId)
             return .done
-        case .filter, .sort, .group, .calculate, .hide, .wrap:
+        case .filter:
+            guard let viewId else { return .done }
+            return .openFilter(try operations.addFilter(for: property.id, to: viewId))
+        case .sort: return .openSortMenu
+        case .calculate: return .openCalculateMenu
+        case .group:
+            guard let viewId else { return .done }
+            try operations.group(by: property.id, in: viewId)
+            return .done
+        case .hide:
+            guard let viewId else { return .done }
+            try operations.setVisible(property.id, false, in: viewId)
+            return .done
+        case .wrap:
+            guard let viewId, let view = try store.write({ try $0.view(viewId) }) else { return .done }
+            try operations.setWrap(property.id, !view.wraps(property.id), in: viewId)
             return .done
         }
     }

@@ -24,6 +24,10 @@ final class GridDocumentView: NSView, NSMenuItemValidation {
     private var hoverCell: CellPosition?
     let openButton = GridOpenButton()
     let linkButton = GridLinkButton()
+    /// Раскладка по вертикали (US3): высоты строк, группы, итоги; ставит сетка.
+    var layout = GridLayout()
+    /// Полоса под мышью (итоги — серое «Посчитать», «+ Новая строка» группы).
+    var hoverDecoration: GridDecoration? { didSet { if hoverDecoration != oldValue { needsDisplay = true } } }
     /// Место вставки при перетаскивании строки (линия над строкой).
     var dropRow: Int? { didSet { if dropRow != oldValue { needsDisplay = true } } }
     private var dragAnchor: CellPosition?
@@ -56,9 +60,12 @@ final class GridDocumentView: NSView, NSMenuItemValidation {
 
     var tableWidth: CGFloat { content.columns.reduce(0) { $0 + $1.width } }
     var showsNewRow: Bool { grid?.showsNewRowButton ?? false }
-    var rowsHeight: CGFloat { Metrics.DatabaseGrid.headerHeight + CGFloat(content.rowCount) * Metrics.DatabaseGrid.rowHeight }
-    var tableHeight: CGFloat { rowsHeight + (showsNewRow ? Metrics.DatabaseGrid.rowHeight : 0) }
-    var newRowRect: NSRect { NSRect(x: 0, y: rowsHeight, width: max(tableWidth, 120), height: Metrics.DatabaseGrid.rowHeight) }
+    var rowsHeight: CGFloat { layout.rowsBottom }
+    var tableHeight: CGFloat { layout.height }
+    var newRowRect: NSRect {
+        guard let rect = layout.rect(of: .newRow, width: max(tableWidth, 120)) else { return .zero }
+        return rect
+    }
 
     func updateSize(minimumWidth: CGFloat) {
         let extra = showsNewRow ? GridHeaderView.trailingButtonsWidth + 140 : 0
@@ -71,16 +78,11 @@ final class GridDocumentView: NSView, NSMenuItemValidation {
     }
 
     func rows(in rect: NSRect) -> Range<Int> {
-        let rowHeight = Metrics.DatabaseGrid.rowHeight
-        let top = max(0, Int(((rect.minY - Metrics.DatabaseGrid.headerHeight) / rowHeight).rounded(.down)))
-        let bottom = min(content.rowCount, Int(((rect.maxY - Metrics.DatabaseGrid.headerHeight) / rowHeight).rounded(.up)))
-        return top < bottom ? top..<bottom : top..<top
+        let rows = layout.rows(from: rect.minY, to: rect.maxY)
+        return rows.lowerBound..<min(rows.upperBound, content.rowCount)
     }
 
-    func rowRect(_ index: Int) -> NSRect {
-        NSRect(x: 0, y: Metrics.DatabaseGrid.headerHeight + CGFloat(index) * Metrics.DatabaseGrid.rowHeight, width: bounds.width,
-               height: Metrics.DatabaseGrid.rowHeight)
-    }
+    func rowRect(_ index: Int) -> NSRect { layout.rowRect(index, width: bounds.width) }
 
     func cellRect(row: Int, column: Int) -> NSRect {
         let x = content.columns.prefix(column).reduce(0) { $0 + $1.width }
@@ -92,8 +94,7 @@ final class GridDocumentView: NSView, NSMenuItemValidation {
 
     /// Ячейка под точкой документа; вне строк или колонок — `nil`.
     func position(at point: NSPoint) -> CellPosition? {
-        guard point.y >= Metrics.DatabaseGrid.headerHeight, point.y < rowsHeight else { return nil }
-        let row = Int((point.y - Metrics.DatabaseGrid.headerHeight) / Metrics.DatabaseGrid.rowHeight)
+        guard point.y >= Metrics.DatabaseGrid.headerHeight, let row = layout.row(at: point.y), row < content.rowCount else { return nil }
         var x: CGFloat = 0
         for (index, column) in content.columns.enumerated() {
             if point.x >= x, point.x < x + column.width { return CellPosition(row: row, column: index) }
@@ -105,8 +106,8 @@ final class GridDocumentView: NSView, NSMenuItemValidation {
     /// Ближайшая ячейка (протяжка за край таблицы).
     func nearestPosition(to point: NSPoint) -> CellPosition? {
         guard content.rowCount > 0, !content.columns.isEmpty else { return nil }
-        let clamped = NSPoint(x: min(max(point.x, 0), tableWidth - 1),
-                              y: min(max(point.y, Metrics.DatabaseGrid.headerHeight), rowsHeight - 1))
+        let row = min(layout.nearestRow(to: point.y), content.rowCount - 1)
+        let clamped = NSPoint(x: min(max(point.x, 0), tableWidth - 1), y: rowRect(row).midY)
         return position(at: clamped)
     }
 
@@ -145,25 +146,29 @@ final class GridDocumentView: NSView, NSMenuItemValidation {
             }
             context.setFillColor(lineColor)
             context.fill(CGRect(x: 0, y: rect.maxY - lineWidth, width: tableWidth, height: lineWidth))
+            context.fill(CGRect(x: tableWidth, y: rect.minY, width: lineWidth, height: rect.height))
             guard let row = content.row(at: index) else { continue }
             for (column, minX, width) in columnRanges {
-                let cell = CGRect(x: minX, y: rect.minY, width: width, height: rect.height - lineWidth)
+                // В высокой строке (перенос текста) содержимое — у верха ячейки, как у Notion.
+                let cell = CGRect(x: minX, y: rect.minY, width: width, height: min(rect.height, Metrics.DatabaseGrid.rowHeight) - lineWidth)
                 context.setFillColor(lineColor)
                 if column > 0 { context.fill(CGRect(x: minX, y: rect.minY, width: lineWidth, height: rect.height)) }
                 if grid?.editor?.position == CellPosition(row: index, column: column) { continue }
                 let isTitle = content.columns[column].property.kind == .title
+                if content.columns[column].wraps, case .text(let string) = row.cells[column] {
+                    drawWrapped(string, in: CGRect(x: minX, y: rect.minY, width: width, height: rect.height - lineWidth),
+                                column: content.columns[column], icon: isTitle ? .some(row.icon) : nil, context: context)
+                    continue
+                }
                 draw(row.cells[column], in: cell, column: content.columns[column], icon: isTitle ? .some(row.icon) : nil,
                      reservesOpen: isTitle && hoverRow == index, context: context)
             }
         }
-        if tableWidth >= dirtyRect.minX, tableWidth <= dirtyRect.maxX, let first = rows.first, let last = rows.last {
-            context.setFillColor(lineColor)
-            context.fill(CGRect(x: tableWidth, y: rowRect(first).minY, width: lineWidth, height: rowRect(last).maxY - rowRect(first).minY))
-        }
         if showsNewRow, newRowRect.intersects(dirtyRect) { drawNewRow(context: context) }
+        drawDecorations(in: dirtyRect, context: context)
         drawSelection(context: context, dirtyRect: dirtyRect)
         if let dropRow {
-            let y = dropRow < content.rowCount ? rowRect(dropRow).minY : rowsHeight
+            let y = dropRow < content.rowCount ? rowRect(dropRow).minY : (content.rowCount > 0 ? rowRect(content.rowCount - 1).maxY : rowsHeight)
             context.setFillColor(Palette.dropIndicator.cgColor)
             context.fill(CGRect(x: 0, y: y - 1.5, width: tableWidth, height: 3))
         }
@@ -219,7 +224,7 @@ final class GridDocumentView: NSView, NSMenuItemValidation {
         case .empty: break
         case .text(let string):
             text.draw(string, in: inner, color: Palette.textPrimary, alignment: column.alignsRight ? .right : .left,
-                      weight: column.property.kind == .title ? .medium : .regular, context: context)
+                      weight: column.property.kind == .title ? .medium : .regular, highlight: grid?.searchHighlight, context: context)
         case .checkbox(let checked):
             let size = Metrics.DatabaseGrid.checkboxSize
             let box = CGRect(x: inner.minX, y: rect.midY - size / 2, width: size, height: size)
@@ -295,10 +300,12 @@ final class GridDocumentView: NSView, NSMenuItemValidation {
         guard grid?.controller != nil, let point else {
             hoverRow = nil
             hoverNewRow = false
+            hoverDecoration = nil
             placeButtons()
             return
         }
         hoverNewRow = showsNewRow && newRowRect.contains(point)
+        hoverDecoration = layout.decoration(at: point.y)?.item
         let position = position(at: point)
         hoverRow = position?.row
         hoverCell = position
@@ -354,6 +361,10 @@ final class GridDocumentView: NSView, NSMenuItemValidation {
         didDrag = false
         if showsNewRow, newRowRect.contains(point) {
             grid.addRowAtBottom()
+            return
+        }
+        if let decoration = layout.decoration(at: point.y), decoration.item != .newRow {
+            grid.decorationClicked(decoration.item, at: point)
             return
         }
         guard let position = position(at: point) else {

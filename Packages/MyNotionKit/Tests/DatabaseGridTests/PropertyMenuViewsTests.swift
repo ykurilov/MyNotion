@@ -29,7 +29,8 @@ struct PropertyMenuViewsTests {
         var chosen: [PropertyMenuSlot] = []
         let menu = ColumnMenuView(property: note, entries: commands.entries(for: note)) { slot, _ in chosen.append(slot) }
         #expect(menu.nameField.text == "Заметка")
-        #expect(menu.actions.outline == ["Изменить свойство", "Сменить тип", "—", "Вставить слева", "Вставить справа", "Дублировать свойство", "Удалить свойство"])
+        #expect(menu.actions.outline == ["Изменить свойство", "Сменить тип", "—", "Фильтр", "Сортировка", "Группировка", "Посчитать", "Скрыть",
+                                         "Переносить текст", "—", "Вставить слева", "Вставить справа", "Дублировать свойство", "Удалить свойство"])
         _ = menu.nameField.onCommand?(#selector(NSResponder.moveDown(_:)))
         _ = menu.nameField.onCommand?(#selector(NSResponder.moveDown(_:)))
         _ = menu.nameField.onCommand?(#selector(NSResponder.insertNewline(_:)))

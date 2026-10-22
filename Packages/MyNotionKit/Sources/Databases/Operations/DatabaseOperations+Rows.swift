@@ -102,6 +102,17 @@ extension DatabaseOperations {
         guard try transaction.database(databaseId) != nil else { throw NotesStoreError.invalidRecord("это не база") }
         let page = try transaction.createPage(title: title, parentId: databaseId)
         try UniqueIds.assign(toRow: page.id, ofDatabase: databaseId, in: transaction)
+        // Первый живой вариант группы «К выполнению»; явные значения вида/шаблона записываются поверх.
+        let statuses = try Row.fetchAll(transaction.database, sql: """
+            SELECT p.id, (SELECT o.id FROM db_select_option o
+                WHERE o.propertyId = p.id AND o.deletedAt IS NULL AND o.statusGroup = 'todo'
+                ORDER BY o.sortKey, o.id LIMIT 1) AS optionId
+            FROM db_property p WHERE p.databaseId = ? AND p.type = 'status' AND p.deletedAt IS NULL
+            """, arguments: [databaseId.databaseText])
+        for status in statuses {
+            guard let optionId: String = status["optionId"], let propertyId = UUID(uuidString: status["id"]) else { continue }
+            try transaction.setCell(rowId: page.id, propertyId: propertyId, value: .string(optionId))
+        }
         guard let viewId else { return page.id }
         switch placement {
         case .bottom:

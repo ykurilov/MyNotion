@@ -58,7 +58,7 @@ struct DatabaseExportSnapshot: Sendable {
         let options = try Row.fetchAll(db, sql: """
             SELECT o.* FROM db_select_option o JOIN db_property p ON p.id = o.propertyId WHERE p.databaseId = ? ORDER BY o.sortKey, o.id
             """, arguments: [id]).map(SelectOption.init(row:))
-        let views = try Row.fetchAll(db, sql: "SELECT * FROM db_view WHERE databaseId = ? ORDER BY sortKey, id", arguments: [id])
+        let views = try Row.fetchAll(db, sql: "SELECT * FROM db_view WHERE databaseId = ? AND json_extract(layoutOptions, '$.deletedAt') IS NULL ORDER BY sortKey, id", arguments: [id])
             .map(DatabaseView.init(row:))
         let pages = try Row.fetchAll(db, sql: "SELECT * FROM page WHERE parentId = ? AND trashedAt IS NULL ORDER BY sortKey, id", arguments: [id])
             .map(Page.init(row:))

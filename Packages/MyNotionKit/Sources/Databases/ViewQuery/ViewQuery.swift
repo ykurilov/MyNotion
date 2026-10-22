@@ -28,8 +28,19 @@ public enum ViewQuery {
     /// Первый вид базы (по порядку вкладок).
     public static func firstViewId(of databaseId: UUID, in store: NotesStore) throws -> UUID? {
         try store.database.dbWriter.read { db in
-            try String.fetchOne(db, sql: "SELECT id FROM db_view WHERE databaseId = ? ORDER BY sortKey, id LIMIT 1",
+            try String.fetchOne(db, sql: """
+                SELECT id FROM db_view WHERE databaseId = ? AND json_extract(layoutOptions, '$.deletedAt') IS NULL ORDER BY sortKey, id LIMIT 1
+                """,
                                 arguments: [databaseId.databaseText]).flatMap(UUID.init(uuidString:))
+        }
+    }
+
+    /// Виды базы по порядку вкладок (без удалённых) — чтением, без записи.
+    public static func views(of databaseId: UUID, in store: NotesStore) throws -> [DatabaseView] {
+        try store.database.dbWriter.read { db in
+            try Row.fetchAll(db, sql: """
+                SELECT * FROM db_view WHERE databaseId = ? AND json_extract(layoutOptions, '$.deletedAt') IS NULL ORDER BY sortKey, id
+                """, arguments: [databaseId.databaseText]).map(DatabaseView.init(row:))
         }
     }
 

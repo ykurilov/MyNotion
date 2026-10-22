@@ -51,6 +51,26 @@ public final class PopupCard {
         present(content, card: Self.cardFrame(size: size, from: point, in: windowContent.bounds), in: window)
     }
 
+    /// Выпадающий список под `anchor` левым краем по нему (кнопка «условие ▾» в окне фильтра): место считается в окне
+    /// приложения, а карточка — дочерняя окна якоря, и щелчок в ней не закрывает карточку, где кнопка.
+    public func show(_ content: NSView, size: NSSize, below anchor: NSView, gap: CGFloat = Metrics.PopupMenu.anchorSpacing) {
+        guard let window = anchor.window else { return }
+        var root = window
+        while let parent = root.parent { root = parent }
+        guard let rootContent = root.contentView else { return }
+        let anchorInRoot = root.convertFromScreen(window.convertToScreen(anchor.convert(anchor.bounds, to: nil)))
+        let card = Self.cardFrame(size: size, from: NSPoint(x: anchorInRoot.minX, y: anchorInRoot.minY - gap), in: rootContent.bounds)
+        present(content, card: window.convertFromScreen(root.convertToScreen(card)), in: window)
+    }
+
+    /// Новый размер открытой карточки, верхний левый угол на месте (в окне фильтра прибавилась строка): без пересоздания —
+    /// поле в фокусе не теряет ввод.
+    public func resize(to size: NSSize) {
+        guard let panel else { return }
+        let card = panel.frame.insetBy(dx: PopupCardPanel.shadowMargin, dy: PopupCardPanel.shadowMargin)
+        panel.setCard(NSRect(x: card.minX, y: card.maxY - size.height, width: size.width, height: size.height))
+    }
+
     /// Где встанет карточка размером `size` от точки `point` (координаты окна) внутри `bounds`: левым верхним углом в точке,
     /// как меню строки панели Notion 7.39 от середины «⋯»; не влезает вниз — вверх, низом по точке; не влезает вправо — влево,
     /// правым краем по точке. Всегда целиком в окне с полем 8.

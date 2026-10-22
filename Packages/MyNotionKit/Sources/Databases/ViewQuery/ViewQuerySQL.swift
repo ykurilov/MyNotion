@@ -87,6 +87,18 @@ public struct ViewQuerySQL {
         var ids: [UUID] = []
         var keys: [Double?] = []
         let grouped = spec.groupPropertyId != nil
+        if !grouped {
+            // Без групп — одна колонка: курсор строк и разбор UUID из байтов без Foundation (10 000 строк вида — ≈ 10 мс
+            // разницы на каждую смену фильтра или сортировки).
+            let statement = try db.cachedStatement(sql: sql)
+            statement.arguments = arguments
+            let cursor = try String.fetchCursor(statement)
+            ids.reserveCapacity(10_000)
+            while let text = try cursor.next() {
+                if let id = Self.uuid(text) { ids.append(id) }
+            }
+            return ViewQueryResult(rowIds: ids, groupKeys: nil)
+        }
         let rows = try Row.fetchCursor(db, sql: sql, arguments: arguments)
         while let row = try rows.next() {
             guard let id = UUID(uuidString: row[0]) else { continue }
@@ -366,7 +378,9 @@ public struct ViewQuerySQL {
             case .select, .status, .multiSelect:
                 let matching = (catalog.options[property.id] ?? []).filter { SortableText.make($0.name).contains(needle) }.map(\.id.databaseText)
                 if property.kind == .multiSelect { multiOptionIds += matching.map { (id, $0) } } else { optionIds += matching }
-            case .uniqueId, .files, .number: otherCells.append(id)
+            // Числа и ID не ищутся (их текст поиска не в индексе — чтение каждой ячейки стоило бы десятки мс на символ);
+            // имена файлов ищутся.
+            case .files: otherCells.append(id)
             default: break
             }
         }
@@ -395,6 +409,37 @@ public struct ViewQuerySQL {
             whereArguments += ids + [pattern]
         }
         return parts.isEmpty ? "0" : "(" + parts.joined(separator: " OR ") + ")"
+    }
+
+    /// UUID из текста «xxxxxxxx-xxxx-…» (36 знаков, любой регистр); иное — `UUID(uuidString:)`.
+    static func uuid(_ text: String) -> UUID? {
+        var text = text
+        return text.withUTF8 { bytes -> UUID? in
+            guard bytes.count == 36 else { return nil }
+            var raw = [UInt8](repeating: 0, count: 16)
+            var index = 0, byte = 0
+            func nibble(_ c: UInt8) -> UInt8? {
+                switch c {
+                case 48...57: c - 48
+                case 97...102: c - 87
+                case 65...70: c - 55
+                default: nil
+                }
+            }
+            while index < 36 {
+                if index == 8 || index == 13 || index == 18 || index == 23 {
+                    guard bytes[index] == 45 else { return nil }
+                    index += 1
+                    continue
+                }
+                guard let high = nibble(bytes[index]), let low = nibble(bytes[index + 1]) else { return nil }
+                raw[byte] = high << 4 | low
+                byte += 1
+                index += 2
+            }
+            return UUID(uuid: (raw[0], raw[1], raw[2], raw[3], raw[4], raw[5], raw[6], raw[7], raw[8], raw[9], raw[10], raw[11], raw[12],
+                               raw[13], raw[14], raw[15]))
+        } ?? UUID(uuidString: text)
     }
 
     static func escapedLike(_ text: String) -> String {

@@ -125,6 +125,10 @@ public enum GalleryDatabases: Hashable, Sendable, CaseIterable {
     case rollupCalculateMenu
     case relationProjectsTable
     case relationPicker
+    /// US3: вид — строка вида с синими значками и плашками, окна фильтра, сортировки, видимости, группировки, раскладки,
+    /// настройки вида, меню вкладки, поиск, таблица с группами и итогами, перенос текста, меню «Посчитать».
+    case viewBarActive, viewFilterSimple, viewFilterAdvanced, viewFilterDate, viewSorts, viewVisibility, viewGrouping, viewGroupedTable,
+         viewWrapText, viewLayout, viewSettings, viewTabMenu, viewSearch, viewCalculateMenu
     /// US2: окна выбора, статуса, даты, файлов, меню варианта, настройки выбора, статуса и числа, плашки и полоса с кольцом.
     case typeSelectPicker, typeMultiSelectPicker, typeStatusPicker, typeOptionMenu, typeDatePicker, typeDateFormats, typeFilesPopup,
          typeSelectSettings, typeStatusSettings, typeNumberSettings, typeChipsAndMeters
@@ -342,6 +346,27 @@ public enum GalleryCatalog {
         GalleryState("relation-picker", .databases(.relationPicker), "Окно ячейки связи: поиск, «1 выбрано» с «−», «Выбрать ещё», «В «Проекты»»",
                      section: "Базы"),
         GalleryState("relation-projects-table", .databases(.relationProjectsTable), "«Проекты»: ответная связь «Задачи» плашками, сводки числом", section: "Базы"),
+        // US3, сверка — `notion-filter-*.png`, `notion-sort-*.png`, `notion-group-*.png`, `notion-view-*.png`, `notion-calculate-*.png`.
+        GalleryState("view-bar-active", .databases(.viewBarActive), "Вид «Задачи — работа»: синие фильтр и сортировка, плашки, группы по статусу",
+                     section: "Базы"),
+        GalleryState("view-filter-simple", .databases(.viewFilterSimple), "Окно плашки фильтра: «Статус не равно», флажки вариантов", section: "Базы"),
+        GalleryState("view-filter-advanced", .databases(.viewFilterAdvanced), "Расширенный фильтр: «Где», «И/Или», вложенная группа в рамке",
+                     section: "Базы"),
+        GalleryState("view-filter-date", .databases(.viewFilterDate), "Фильтр по дате: «Относительно сегодня», «Эта неделя»", section: "Базы"),
+        GalleryState("view-sorts", .databases(.viewSorts), "Окно сортировки: два уровня с ручками, «+ Добавить сортировку»", section: "Базы"),
+        GalleryState("view-visibility", .databases(.viewVisibility), "Видимость свойств: показанные и скрытые, глаз и ручка", section: "Базы"),
+        GalleryState("view-grouping", .databases(.viewGrouping), "Группировка: «Группировать по», порядок, «Скрывать пустые», список групп",
+                     section: "Базы"),
+        GalleryState("view-grouped-table", .databases(.viewGroupedTable), "Таблица с группами: заголовки, свёрнутая группа, итоги под группами",
+                     section: "Базы"),
+        GalleryState("view-wrap-text", .databases(.viewWrapText), "Перенос текста в колонке «Описание»: высота строки по тексту", section: "Базы"),
+        GalleryState("view-layout", .databases(.viewLayout), "Раскладка: «Таблица», перенос всего текста, «Открывать строки», «Предел загрузки»",
+                     section: "Базы"),
+        GalleryState("view-settings", .databases(.viewSettings), "Настройки вида справа: имя, раскладка, видимость, фильтр, сортировка, группировка",
+                     section: "Базы"),
+        GalleryState("view-tab-menu", .databases(.viewTabMenu), "Меню вкладки вида: переименовать, изменить, дублировать, удалить", section: "Базы"),
+        GalleryState("view-search", .databases(.viewSearch), "Поиск в базе «отчёт»: поле в строке вида, найденное подсвечено", section: "Базы"),
+        GalleryState("view-calculate-menu", .databases(.viewCalculateMenu), "Строка итогов и меню «Посчитать ›»", section: "Базы"),
         // US2, сверка — `notion-select-*.png`, `notion-status-cell-popup.png`, `notion-edit-property-*.png`, `notion-date-format-options.png`.
         GalleryState("type-select-picker", .databases(.typeSelectPicker), "Окно выбора: «Найти вариант…», «Выберите вариант или создайте его», ручки",
                      section: "Базы"),
