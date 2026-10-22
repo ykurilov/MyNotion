@@ -4,6 +4,28 @@
 Общая ветка с US2 подтянута (`52baa29`); безопасные сценарии iMac из US4 приняты (`9337fd0`, исходный `6a07c09`).
 Основной checkout и интеграционная ветка не изменялись. Субагенты не запускались.
 
+## Состояние передачи после независимых проверок
+
+Собственные последние правки — `895fb3f`; общая `0240ecc` подтянута merge `287414d` без конфликтов.
+Merge добавил только ранее проверенные hover/cover unit и их отчёт; product-исходники после зелёных 265 не менялись.
+**265/57 unit PASS**, Release no-window SQL probe **1/1 PASS**. Слот освобождён, своих pending прогонов нет.
+T079/T084/T085 остаются открыты: текущий основной UI, свежая галерея исправлений, live Notion и сравнение
+бюджетов ждут ручного unlock iMac и согласования GUI с US4/hover. Прежние превышения50/100мс сохранены.
+Координатор интегрирует после US4; основной checkout агент US3 не менял.
+
+Для будущего контроля подготовлен исходный архив общей0240ecc, не checkout/worktree;
+`.us3-control.tar` и `.us3-control-revision` намеренно не коммитятся. Перед сравнением после US4 обновить из этой папки:
+
+```sh
+git archive 004-databases-core App Packages PerformanceTests UITests scripts project.yml .gitignore > .us3-control.tar
+git rev-parse 004-databases-core > .us3-control-revision
+scripts/imac/run-on-imac.sh lock -- zsh scripts/imac/us3-validation.zsh --skip-unit
+```
+
+Последняя команда только после подтверждённого unlock и согласования очереди. В том же GUI-слоте проверить
+`build/us3-validation/{desktop.png,windows.json}`; при чистом экране создать `continue`, иначе `abort`.
+`--skip-unit` разрешён только без новых product-правок после текущих зелёных units; сборки UI/Release обычные.
+
 ## Реализация
 
 Сохранены операции вида, простые и расширенные фильтры, несколько сортировок, поиск, вкладки и их меню,
