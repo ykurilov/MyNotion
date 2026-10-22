@@ -242,3 +242,43 @@ Product исходники остаются merged4eca0a2. До получени
 `scripts/imac/run-on-imac.sh lock -- zsh scripts/imac/us3-validation.zsh --skip-unit`,
 затем передать экран US4. Снимков новой серии US3 ещё нет. Подготовленные shell-изменения пока
 проверены чтением/diff-check; фактический прогон harness после blocker ещё предстоит.
+
+## После снятия toolchain blocker: prebuild PASS, повторная блокировка экрана
+
+По поручению нового координатора d966f02a серия возобновлена; порядок hover → US3 → US4 сохранён.
+На восстановленном Xcode27.1 через последовательные no-GUI jobs `imac-run --no-fallback --no-setup
+--wait 1800`, jobs4, собственный protected cache выполнены:
+
+- обычный MyNotion Debug build-for-testing: **exit0**, `/tmp/us3-live-prebuild.log`,
+  `/tmp/us3-live-4961489/prebuild/debug/build.log`; перед ним firstLaunch-status успешен;
+- MyNotionPerformance Release build-for-testing merged US3: **exit0**;
+- тот же Release build-for-testing baseline9b4b05d: **exit0**, в том же последовательном job;
+  `/tmp/us3-live-release-prebuild.log`, `/tmp/us3-live-4961489/prebuild/release/`
+  (`us3.exit`, `baseline.exit`, оба build.log и xcodegen.log).
+
+Приложения и тесты этими prebuild не запускались. Product исходники не отличаются от merged4eca0a2.
+У baseline product9b4b05d; одинаковый безопасный lib/on-imac harness применён к обеим ревизиям.
+Исходники LaunchAndMemoryTests/TabsPerformanceTests/TypingAndNavigationTests между ревизиями одинаковы.
+Новый DatabaseViewPerformanceTests отсутствует в baseline и предназначен для отдельного обычного US3 прогона.
+
+Пока hover первым готовил regression и живую пробу, обе Release сборки были вынесены из будущего GUI-слота.
+После него hover **передал экран**, но его свежий preflight снова чёрный, ioreg содержит
+`CGSSessionScreenIsLocked=Yes`, `kCGSSessionSecureInputPID=650`. Его guard exit78 **до сборки/запуска**.
+Артефакты hover: iMac `/Users/ykurilov/work/shots/empty-heading-current/{preflight.png,session.txt,actions.jsonl}`;
+локально `/tmp/empty-heading-preflight.png` (4480×2520, чёрный), `/tmp/empty-heading-live.log`.
+US4 независимо подтвердил locked/PID650 read-only ioreg. US3 при известной блокировке GUI job не ставил,
+не создавал собственный снимок и не выжидал заведомый UI timeout. CGSession/блокировка/чужие процессы не менялись.
+Новая причина остановки — lockscreen; прежний Xcode license/firstLaunch blocker снят.
+
+Основной UI, inline UI,28 gallery, ordinary view budget и control9b4b05d-vs4eca0a2 **не выполнялись**.
+T079/T084/T085 остаются открыты; prebuild не подтверждает UI или бюджет. Прежние превышения50/100мс сохранены.
+Своих pending/running jobs и занятых GUI слотов нет. US4 уведомлён напрямую: при подтверждённом unlock
+по-прежнему ожидает передачу после US3.
+
+Уточнение harness: галерея выполняет обычный build_app Debug в собственной `build/imac-uitest-dd`,
+которую уже подготовил prebuild, вместо второго полного Debug кеша. Контекст стадий включает ps/uptime/date.
+`zsh -n scripts/imac/us3-validation.zsh` и `zsh -n scripts/imac/us3-control.zsh` на iMac: **exit0**,
+`/tmp/us3-live-harness-syntax.log`. Это синтаксическая проверка, фактическая полная серия ещё не выполнена.
+Manifest `/tmp/us3-live-4961489/prepared-source.sha256` только подготовлен; runner source-check GUI серии
+ещё не состоялся и не засчитан. Для возобновления обновить manifest при изменении source и выполнить
+fresh preflight в собственном согласованном GUI-слоте; после серии передать US4.

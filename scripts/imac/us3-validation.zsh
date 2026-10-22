@@ -25,7 +25,7 @@ done
 if [[ ${1:-} != --skip-unit ]]; then
   (cd Packages/MyNotionKit && swift test --scratch-path "$WORK/build/us3-swiftpm" --jobs 4 --filter DatabaseViewBarTests) > $out/unit.log 2>&1
 fi
-stage() { print -r -- "$1" | tee $out/stage; date >> $out/context.log; uptime >> $out/context.log; }
+stage() { print -r -- "$1" | tee $out/stage; date >> $out/context.log; uptime >> $out/context.log; ps -axo pcpu,pid,comm | sort -nr | sed -n '1,15p' >> $out/context.log; }
 failed=0
 stage UI
 rc=0
@@ -39,7 +39,15 @@ print -r -- "ui_exit=$rc" | tee $out/exit-codes.log
 (( rc == 0 )) || failed=1
 stage gallery
 rc=0
-zsh scripts/imac/on-imac.sh gallery --only view- > $out/gallery-run.log 2>&1 || rc=$?
+# Галерея использует тот же собственный Debug DerivedData; обычный build всё равно обязателен.
+(
+  source scripts/imac/lib.sh
+  require_toolchain
+  build_app Debug build/imac-uitest-dd || exit $?
+  close_stale_prompts
+  mkdir -p build/imac-gallery
+  run_app --ui-gallery $WORK/build/imac-gallery --ui-gallery-only view-
+) > $out/gallery-run.log 2>&1 || rc=$?
 [[ ! -d build/imac-gallery ]] || mv build/imac-gallery $out/gallery
 print -r -- "gallery_exit=$rc" | tee -a $out/exit-codes.log
 (( rc == 0 )) || failed=1
