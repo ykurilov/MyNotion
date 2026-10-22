@@ -453,3 +453,33 @@ T079/T084/T085 и живые UI/галерея/контроль US3 не зас�
 secureInputPID 650, `/tmp/us4-joint27-session-preflight.log`. GUI US4 не запускался.
 Сценарий сохранён в `/tmp/us4-final-gui.sh` и `scripts/imac/us4-review.sh`; он требует успешный
 свежий prebuild и осмотр desktop перед marker run-ui. **T089/T093/T094 остаются [ ].**
+
+## Возобновление GUI: экран разблокирован, новая блокировка Xcode (22.10, 14:42)
+
+Координатор подтвердил loginDone/onConsole=Yes, отсутствие ScreenIsLocked; hover выполнил свою первую серию
+и передал GUI US3. US3 живую серию **не запускал**: после обновления Xcode US4 обнаружил build exit69
+до компиляции, сообщение требует принять лицензионные соглашения. Свежая read-only проверка US3:
+`xcode-select -p` → `/Users/ykurilov/Applications/Xcode.app/Contents/Developer`, Xcode27.1 build27A9275;
+`xcodebuild -version` exit0, `xcodebuild -checkFirstLaunchStatus` exit69.
+Лог `/tmp/us3-xcode-license-4961489.log`. Лицензия, блокировка экрана, чужие процессы не менялись.
+Это новый toolchain blocker, а не прежний lockscreen и не результат проверки MyNotion.
+Принятая joint проверка680/build относится к Xcode26.6; свежей проверкой27.1 её не подменяем.
+
+Common4961489 и безопасный fail-fast patch a7a298c подтянуты (локальный merge e7ab212).
+Product исходники остаются merged4eca0a2. До получения подтверждения устранения Xcode blocker новых
+сборок/GUI jobs не ставили; своих pending/занятых слотов нет. T079/T084/T085 остаются открыты.
+
+Подготовлены, но ещё не выполнены изменения harness:
+- `us3-validation.zsh --skip-unit`: оба main/inline теста ViewFilterSortGroupTests,28 gallery view PNG,
+  обычный view budget, контроль; принятые680units/US4budgets не повторяются. Предыдущий SQLsample без новой
+  гипотезы не повторяется. Перед preflight toolchain-status guard, свежие результаты изолированы от старых.
+- Baseline архив точно9b4b05d (`.us3-control-revision`), merged product4eca0a2; в обеих контрольных копиях
+  один безопасный lib/on-imac harness a7a298c. Product baseline и тестовые пороги не меняются.
+- Уникальный выход `build/us3-validation-4961489-<timestamp>`, путь в `build/us3-validation-current`;
+  перед `continue` прочитать desktop/windows именно в нём; при перекрытии/блокировке `abort`.
+  Выход control — `build/us3-control-results-9b4b05d-vs-4eca0a2-<timestamp>`, pointer `build/us3-control-current`.
+
+После подтверждения восстановления Xcode согласовать свободный GUI, выполнить свежий preflight через
+`scripts/imac/run-on-imac.sh lock -- zsh scripts/imac/us3-validation.zsh --skip-unit`,
+затем передать экран US4. Снимков новой серии US3 ещё нет. Подготовленные shell-изменения пока
+проверены чтением/diff-check; фактический прогон harness после blocker ещё предстоит.

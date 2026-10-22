@@ -4,12 +4,17 @@
 set -euo pipefail
 source ${0:A:h}/lib.sh
 root=$WORK
-out=$root/build/us3-control-results
-control=$root/build/us3-control-source
+out=$root/build/us3-control-results-9b4b05d-vs-4eca0a2-$(date +%Y%m%d-%H%M%S)
+control=$root/build/us3-control-source-9b4b05d
 mkdir -p $out $control
+print -r -- "$out" > $root/build/us3-control-current
 [[ -f $root/.us3-control.tar ]] || fail 'Нет архива контрольной ревизии'
 tar -xf $root/.us3-control.tar -C $control
+# Обе ревизии используют один fail-fast harness; product исходники baseline остаются9b4b05d.
+cp $root/scripts/imac/lib.sh $control/scripts/imac/lib.sh
+cp $root/scripts/imac/on-imac.sh $control/scripts/imac/on-imac.sh
 cp $root/.us3-control-revision $out/control-revision.txt
+print -r -- "merged product 4eca0a2, common docs4961489" > $out/us3-revision.txt
 shasum -a 256 Packages/MyNotionKit/Sources/DatabaseViewBar/Panels/ViewPanels.swift \
   Packages/MyNotionKit/Sources/DatabaseViewBar/Panels/ViewSettingsPanel.swift \
   Packages/MyNotionKit/Sources/DatabaseViewBar/Panels/FilterPages.swift > $out/us3-source-sha256.txt
@@ -37,6 +42,7 @@ for variant in common us3; do
   cd $root
   [[ $variant == common ]] && cd $control
   mkdir -p $out/$variant
+  [[ ! -d build/imac-uitest ]] || mv build/imac-uitest $out/$variant/previous-uitest
   context > $out/$variant/context-before.log
   rc=0
   zsh scripts/imac/on-imac.sh uitest --release \
@@ -44,7 +50,11 @@ for variant in common us3; do
     -only-testing:PerformanceTests/TabsPerformanceTests \
     -only-testing:PerformanceTests/TypingAndNavigationTests > $out/$variant/run.log 2>&1 || rc=$?
   context > $out/$variant/context-after.log
-  cp build/imac-uitest/uitest.log $out/$variant/uitest.log
+  if [[ -f build/imac-uitest/uitest.log ]]; then
+    cp build/imac-uitest/uitest.log $out/$variant/uitest.log
+  else
+    print 'Свежий result не создан, см. run.log' > $out/$variant/no-fresh-result.txt
+  fi
   print -r -- "$variant exit=$rc" | tee -a $out/exit-codes.log
   (( rc == 0 )) || failed=1
 done
