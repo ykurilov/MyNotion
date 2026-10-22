@@ -61,11 +61,11 @@ final class SortPage: PanelPage {
         _ = row("Добавить сортировку", icon: "plus", identifier: "sort-add") { [weak self] row in
             guard let self else { return }
             let choices = model.addChoices(catalog: catalog).map { choice in
-                PanelChoice(title: choice.name, icon: CellKind.for(choice.kind).symbol) { [weak self] in
+                PanelChoice(title: choice.name, icon: CellKind.for(choice.kind).symbol, identifier: "sort-by-\(choice.name)") { [weak self] in
                     self?.edit { try $0.sort(by: choice.id, ascending: true, in: $1) }
                 }
             }
-            self.panels.showMenu(ChoiceMenuView(choices: choices, searchPlaceholder: "Сортировать по…"), below: row, level: self.menuLevel)
+            self.panels.showMenu(ChoiceMenuView(choices: choices, searchPlaceholder: "Сортировать по…", identifier: "sort-add-property-list"), below: row, level: self.menuLevel)
         }
         _ = row("Удалить сортировку", icon: "trash", destructive: true, identifier: "sort-delete") { [weak self] _ in
             self?.edit { try $0.removeAllSorts(in: $1) }

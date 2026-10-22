@@ -7,7 +7,7 @@ import XCTest
 
 /// Замеры вида US3 (T085) на эталоне баз: «Задачи» — 10 000 строк, окно 1440×900. Смена фильтра, сортировки, группировки
 /// и видимости — от правки до нарисованной таблицы p95 ≤ 100 мс; поиск — на каждый символ p95 ≤ 50 мс; прокрутка вида с
-/// группами, итогами и переносом текста — кадр p95 ≤ 16 мс; открытие «Задачи — работа» p95 ≤ 100 мс.
+/// группами, итогами и переносом текста — кадр p95 ≤ 16 мс; открытие «Задачи — работа» p95 ≤ 50 мс.
 @MainActor
 final class DatabaseViewPerformanceTests: XCTestCase {
     static let changeBudgetMs = 100.0
@@ -148,7 +148,7 @@ final class DatabaseViewPerformanceTests: XCTestCase {
             Вид US3: фильтр p95 \(p95(warm(filters))) мс, сортировка \(p95(warm(sorts))) мс, группировка \(p95(warm(groups))) мс, \
             видимость \(p95(warm(visibility))) мс (предел 100); поиск на символ p95 \(p95(searches)) мс (предел 50); \
             открытие «Задачи — работа» p95 \(p95(opens)) мс; прокрутка с группами и переносом — \(frames.count) кадров, \
-            p95 \(p95(frames)) мс (предел 16), снимок \(shotPath); части (медиана): \
+            p95 \(p95(frames)) мс (предел 16), худший \(ProbeEditor.format(frames.max() ?? 0)) мс (предел 50), снимок \(shotPath); части (медиана): \
             \(parts.sorted { $0.key < $1.key }.map { "\($0.key) \(ProbeEditor.format(ProbeEditor.median($0.value)))" }.joined(separator: ", "))
             """
         print(summary)
@@ -158,7 +158,8 @@ final class DatabaseViewPerformanceTests: XCTestCase {
         XCTAssertLessThanOrEqual(ProbeEditor.p95(warm(groups)), Self.changeBudgetMs, "Смена группировки дольше 100 мс")
         XCTAssertLessThanOrEqual(ProbeEditor.p95(warm(visibility)), Self.changeBudgetMs, "Смена видимости дольше 100 мс")
         XCTAssertLessThanOrEqual(ProbeEditor.p95(searches), Self.searchBudgetMs, "Поиск: символ дольше 50 мс")
-        XCTAssertLessThanOrEqual(ProbeEditor.p95(opens), Self.changeBudgetMs, "Открытие «Задачи — работа» дольше 100 мс")
+        XCTAssertLessThanOrEqual(ProbeEditor.p95(opens), 50, "Открытие «Задачи — работа» дольше 50 мс")
+        XCTAssertLessThanOrEqual(frames.max() ?? 0, 50, "Прокрутка с группами: худший кадр больше 50 мс")
         XCTAssertLessThanOrEqual(ProbeEditor.p95(frames), Self.frameBudgetMs, "Прокрутка с группами: кадр p95 больше 16 мс")
     }
 }

@@ -17,12 +17,12 @@ public final class ViewBarView: NSView {
         }
     }
 
-    public var tabs: [Tab] = [] { didSet { rebuild() } }
+    public var tabs: [Tab] = [] { didSet { if tabs != oldValue { rebuild() } } }
     public var activeTabId: UUID? { didSet { needsDisplay = true } }
-    public var showsTabs = true { didSet { rebuild() } }
+    public var showsTabs = true { didSet { if showsTabs != oldValue { rebuild() } } }
     /// Действия кнопок по местам; кнопки без действия нет.
     public var actions: [ViewBarSlot: (NSView) -> Void] = [:] { didSet { rebuild() } }
-    public var isInline = false { didSet { rebuild() } }
+    public var isInline = false { didSet { if isInline != oldValue { rebuild() } } }
     /// Синие значки: фильтр и сортировка вида заданы (Notion — значок синеет).
     public var activeSlots: Set<ViewBarSlot> = [] { didSet { if activeSlots != oldValue { buttons.forEach { $0.needsDisplay = true } } } }
     /// Щелчок по вкладке: неактивная — открыть вид, активная — её меню (как у Notion); правый щелчок — меню.

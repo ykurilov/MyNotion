@@ -49,9 +49,7 @@ struct NewRowDefaultsTests {
         #expect(try defaults(rule(t.select, .is, ids)).cells[t.select.id] == .string(t.optionKey(t.options[1])))
         #expect(try defaults(rule(t.select, .isNot, ids)).isEmpty)
         let status = try t.quiet.addProperty(to: t.base.databaseId, name: "Статус", kind: .status)
-        let done = try t.store.write { tx throws in
-            try tx.saveOption(SelectOption(propertyId: status.id, name: "Готово", color: .green, sortKey: .between(nil, nil), statusGroup: .complete))
-        }
+        let done = try #require(try t.catalog().options[status.id]?.first { $0.statusGroup == .complete })
         #expect(try defaults(rule(status, .isInGroup, "complete")).cells[status.id] == .string(done.id.databaseText))
     }
 
@@ -87,6 +85,41 @@ struct NewRowDefaultsTests {
         #expect(try defaults(nil, group: (GroupSettings(propertyId: t.check.id), "checked")).cells[t.check.id] == true)
         #expect(try defaults(nil, group: (GroupSettings(propertyId: t.date.id, bucket: "day"), "2026-10-22")).cells[t.date.id]?["start"] == "2026-10-22")
         #expect(try defaults(nil, group: (GroupSettings(propertyId: t.date.id), "2026-10")).isEmpty)
+    }
+
+    @Test("Новая строка: первый вариант «К выполнению», фильтр и группа главнее; отмена и возврат")
+    func statusDefault() throws {
+        let status = try t.quiet.addProperty(to: t.base.databaseId, name: "Статус", kind: .status)
+        let initial = try t.catalog().options[status.id] ?? []
+        let first = try #require(initial.first { $0.statusGroup == .todo })
+        let done = try #require(initial.first { $0.statusGroup == .complete })
+        let second = try t.store.write { tx throws in
+            try tx.saveOption(SelectOption(propertyId: status.id, name: "Позже", color: .gray,
+                                            sortKey: .between(first.sortKey, nil), statusGroup: .todo))
+        }
+        let options = (first, second, done)
+        func value(_ row: UUID) throws -> JSONValue? {
+            try t.store.write { try $0.cells(ofRow: row).first { $0.propertyId == status.id }?.value }
+        }
+        var row = UUID()
+        try t.step { row = try t.operations.addRow(to: t.base.databaseId, in: t.base.viewId) }
+        #expect(try value(row) == .string(options.0.id.databaseText))
+        t.undo.undo()
+        #expect(try t.store.write { try $0.page(row)?.trashedAt } != nil)
+        t.undo.redo()
+        #expect(try value(row) == .string(options.0.id.databaseText))
+        let filtered = try t.quiet.addRow(to: t.base.databaseId, in: t.base.viewId,
+                                          defaults: defaults(rule(status, .is, .string(options.2.id.databaseText))))
+        #expect(try value(filtered) == .string(options.2.id.databaseText))
+        let grouped = try t.quiet.addRow(to: t.base.databaseId, in: t.base.viewId,
+                                         defaults: defaults(nil, group: (GroupSettings(propertyId: status.id), options.1.id.databaseText)))
+        #expect(try value(grouped) == .string(options.1.id.databaseText))
+        let emptyGroup = try t.quiet.addRow(to: t.base.databaseId, in: t.base.viewId,
+                                            defaults: defaults(nil, group: (GroupSettings(propertyId: status.id), GroupSettings.emptyKey)))
+        #expect(try value(emptyGroup) == nil)
+        let emptyFilter = try t.quiet.addRow(to: t.base.databaseId, in: t.base.viewId,
+                                             defaults: defaults(rule(status, .isEmpty)))
+        #expect(try value(emptyFilter) == nil)
     }
 
     @Test("Строка со значениями видна в отфильтрованном виде; «Создать» — вверху; ⌘Z убирает её одним шагом")

@@ -23,6 +23,10 @@ public struct NewRowDefaults: Sendable, Hashable {
             guard let property = catalog.propertiesById[condition.propertyId] else { continue }
             defaults.apply(condition, property: property, catalog: catalog, now: now, calendar: calendar)
         }
+        if let group, group.key == GroupSettings.emptyKey,
+           let property = catalog.propertiesById[group.settings.propertyId], property.kind == .status {
+            defaults.cells[property.id] = .null
+        }
         if let group, group.key != GroupSettings.emptyKey, let property = catalog.propertiesById[group.settings.propertyId],
            let value = groupValue(group.key, settings: group.settings, property: property, catalog: catalog) {
             if property.kind == .title, let title = value.string { defaults.title = title } else { defaults.cells[property.id] = value }
@@ -54,6 +58,7 @@ public struct NewRowDefaults: Sendable, Hashable {
         case .number:
             if [.equals, .is].contains(condition.op), let number = value.number { cells[property.id] = .number(number) }
         case .select, .status:
+            if property.kind == .status, condition.op == .isEmpty { cells[property.id] = .null }
             if condition.op == .is, let id = value.array?.first?.string ?? value.string { cells[property.id] = .string(id) }
             if condition.op == .isInGroup, let group = value.string.flatMap(StatusGroup.init(rawValue:)),
                let option = (catalog.options[property.id] ?? []).first(where: { $0.statusGroup == group }) {

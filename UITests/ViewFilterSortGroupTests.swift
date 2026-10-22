@@ -46,14 +46,28 @@ final class ViewFilterSortGroupTests: XCTestCase {
         app.typeText("Срок")
         XCTAssertTrue(any("sort-by-Срок").waitForExistence(timeout: 5))
         tap(any("sort-by-Срок"))
+        XCTAssertTrue(any("sort-add").waitForExistence(timeout: 5))
+        tap(any("sort-add"))
+        XCTAssertTrue(any("sort-add-property-list-search").waitForExistence(timeout: 5))
+        app.typeText("Название")
+        tap(any("sort-by-Название"))
+        XCTAssertTrue(any("sort-level-property-1").waitForExistence(timeout: 5), "Нет второго уровня сортировки")
         app.typeKey(.escape, modifierFlags: [])
         XCTAssertTrue(waitUntil { (try? self.view("Таблица", "sorts"))?.contains("ascending") == true }, "Сортировка не записана")
 
         // Поиск «отчёт»: поле в строке вида, Esc закрывает.
         tap(any("database-view-bar-search"))
         XCTAssertTrue(any("database-search-field").waitForExistence(timeout: 5), "Поле поиска не раскрылось")
-        app.typeText("отчёт")
-        XCTAssertTrue(any("database-search-field").exists)
+        var query = ""
+        for character in "отчт" {
+            query.append(character)
+            app.typeText(String(character))
+            XCTAssertTrue(waitUntil { any("database-search-field").value as? String == query }, "Поиск потерял фокус при вводе \(query)")
+        }
+        // Вставка в середину сохраняет курсор при обновлении результатов.
+        app.typeKey(.leftArrow, modifierFlags: [])
+        app.typeText("ё")
+        XCTAssertTrue(waitUntil { any("database-search-field").value as? String == "отчёт" }, "Курсор поиска сброшен")
         app.typeKey(.escape, modifierFlags: [])
         XCTAssertTrue(waitUntil { !any("database-search-field").exists }, "Esc не закрыл поиск")
 
@@ -65,13 +79,17 @@ final class ViewFilterSortGroupTests: XCTestCase {
         }
         XCTAssertTrue(waitUntil { (try? self.hiddenCount("Таблица")) == 3 }, "Скрыто: \(String(describing: try? hiddenCount("Таблица")))")
 
-        // Группировка: настройки вида → «Группировка» → «Область» (список свойств по алфавиту без поиска — берём видимое;
-        // группы по статусу проверяют модульные тесты и замер).
+        // Группировка по статусу: длинный список свойств прокручивается внутри панели.
         tap(any("database-view-bar-settings"))
         XCTAssertTrue(any("view-settings-group").waitForExistence(timeout: 5), "Нет настроек вида")
         tap(any("view-settings-group"))
-        XCTAssertTrue(any("group-by-Область").waitForExistence(timeout: 5), "Нет списка «Группировать по»")
-        tap(any("group-by-Область"))
+        XCTAssertTrue(any("group-by-Статус").waitForExistence(timeout: 5))
+        for _ in 0..<8 {
+            if any("grouping-window").frame.contains(any("group-by-Статус").frame) { break }
+            any("grouping-window").scroll(byDeltaX: 0, deltaY: -180)
+        }
+        XCTAssertTrue(any("grouping-window").frame.contains(any("group-by-Статус").frame), "Статус не прокрутился в область панели")
+        tap(any("group-by-Статус"))
         app.typeKey(.escape, modifierFlags: [])
         XCTAssertTrue(waitUntil { (try? self.view("Таблица", "group"))?.contains("propertyId") == true }, "Группировка не записана")
 
@@ -91,10 +109,61 @@ final class ViewFilterSortGroupTests: XCTestCase {
         // Перезапуск: настройки видов на месте, приложение открывает базу.
         app = library.launchApp()
         XCTAssertTrue(app.descendants(matching: .any)["database-page"].waitForExistence(timeout: 20), "После перезапуска база не открыта")
+        let tab = app.buttons.matching(NSPredicate(format: "identifier == %@ AND label == %@", "database-view-tab", "Таблица")).firstMatch
+        XCTAssertTrue(tab.waitForExistence(timeout: 5), "Название вкладки не обновилось после переименования")
+        tap(tab)
+        XCTAssertTrue(any("database-view-bar-filter").waitForExistence(timeout: 5))
+        tap(any("database-view-bar-search"))
+        XCTAssertTrue(any("database-search-field").waitForExistence(timeout: 5))
+        app.typeText("отчёт")
+        XCTAssertTrue(waitUntil { any("database-search-field").value as? String == "отчёт" })
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(waitUntil { !any("database-search-field").exists })
+        // Эталонный рабочий вид: вложение правила расширенного фильтра и отмена через клавиатуру.
+        let workTab = app.buttons.matching(NSPredicate(format: "identifier == %@ AND label == %@", "database-view-tab", "Задачи — работа")).firstMatch
+        tap(workTab)
+        let originalFilter = try view("Задачи — работа", "filter")
+        tap(any("database-view-bar-filter"))
+        XCTAssertTrue(any("filter-operator").waitForExistence(timeout: 5))
+        app.typeKey(.escape, modifierFlags: [])
+        tap(any("database-chip-advanced"))
+        XCTAssertTrue(any("advanced-filter-window").waitForExistence(timeout: 5))
+        tap(app.descendants(matching: .any).matching(identifier: "advanced-filter-more").element(boundBy: 0))
+        XCTAssertTrue(any("advanced-filter-turnIntoGroup").waitForExistence(timeout: 5))
+        tap(any("advanced-filter-turnIntoGroup"))
+        XCTAssertTrue(waitUntil { (try? self.view("Задачи — работа", "filter")) != originalFilter }, "Вложенная группа не записана")
+        app.typeKey(.escape, modifierFlags: [])
+        app.typeKey("z", modifierFlags: .command)
+        XCTAssertTrue(waitUntil { (try? self.view("Задачи — работа", "filter")) == originalFilter }, "Отмена не вернула расширенный фильтр")
         app.quit()
         XCTAssertTrue(try view("Таблица", "filter").contains("isNot"))
         XCTAssertTrue(try view("Таблица", "group").contains("propertyId"))
         XCTAssertEqual(try hiddenCount("Таблица"), 3)
+    }
+
+    @MainActor
+    func testInlineSearchKeepsFocusAcrossResultUpdates() throws {
+        let app = library.launchApp()
+        app.createPage(titled: "Поиск встроенной базы")
+        app.typeText("/встроенная")
+        XCTAssertTrue(app.popupItem("database-inline").waitForExistence(timeout: 5))
+        app.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(app.descendants(matching: .any)["database-inline"].waitForExistence(timeout: 5))
+        tap(app.descendants(matching: .any)["database-view-bar-search"])
+        let field = app.textFields["database-search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        var query = ""
+        for character in "кот" {
+            query.append(character)
+            app.typeText(String(character))
+            XCTAssertTrue(waitUntil { field.value as? String == query }, "Встроенная база потеряла фокус поиска")
+        }
+        app.typeKey(.leftArrow, modifierFlags: [])
+        app.typeText("с")
+        XCTAssertTrue(waitUntil { field.value as? String == "кост" })
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(waitUntil { !field.exists })
+        app.quit()
     }
 
     // MARK: Помощники
