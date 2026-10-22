@@ -148,12 +148,27 @@ public final class ComputationHook: NotesWriteHook {
         }
     }
 
-    /// Строки базы, которые есть и не в корзине.
+    /// Одна привязка родителя и до 500 id: ниже даже старого предела SQLite в 999 параметров.
+    static let aliveRowsBatchSize = 500
+
+    static func aliveRowsSQL(rowCount: Int) -> String {
+        let marks = Array(repeating: "?", count: rowCount).joined(separator: ",")
+        // Unary + исключает индекс parentId из выбора планировщика, сохраняя сравнение TEXT UUID.
+        // Иначе даже для нескольких id SQLite читает всю базу через page_by_parent.
+        return "SELECT id FROM page WHERE +parentId = ? AND trashedAt IS NULL AND id IN (\(marks))"
+    }
+
+    /// Строки базы, которые есть и не в корзине. Признак шаблона здесь, как и прежде, не фильтруется.
     static func aliveRows(_ rows: [UUID], of databaseId: UUID, in db: Database) throws -> [UUID] {
-        guard !rows.isEmpty else { return [] }
-        let marks = Array(repeating: "?", count: rows.count).joined(separator: ",")
-        return try String.fetchAll(db, sql: "SELECT id FROM page WHERE parentId = ? AND trashedAt IS NULL AND id IN (\(marks))",
-                                   arguments: StatementArguments([databaseId.databaseText] + rows.map(\.databaseText))).compactMap(UUID.init(uuidString:))
+        let unique = Array(Set(rows))
+        var alive: [UUID] = []
+        for start in stride(from: 0, to: unique.count, by: aliveRowsBatchSize) {
+            let batch = unique[start..<min(start + aliveRowsBatchSize, unique.count)]
+            let statement = try db.cachedStatement(sql: aliveRowsSQL(rowCount: batch.count))
+            let found = try String.fetchAll(statement, arguments: StatementArguments([databaseId.databaseText] + batch.map(\.databaseText)))
+            alive.append(contentsOf: found.compactMap(UUID.init(uuidString:)))
+        }
+        return alive
     }
 
     // MARK: Полный пересчёт — в фоне после фиксации
