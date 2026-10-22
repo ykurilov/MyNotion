@@ -15,10 +15,10 @@ public struct PropertyTypeSettings: Sendable {
         self.makeView = makeView
     }
 
-    /// Описатели историй (US1 — префикс ID; US2 — число, выбор, статус, дата).
+    /// Описатели историй (US1 — префикс ID; US2 — число, выбор, статус, дата; US4 — связь и сводка).
     public static var all: [PropertyTypeSettings] {
         [UniqueIdSettingsView.settings, NumberSettingsView.settings, SelectSettingsView.settings, StatusSettingsView.settings,
-         DateSettingsView.settings]
+         DateSettingsView.settings, RelationSettingsView.settings, RollupSettingsView.settings]
     }
 
     static func settings(for kind: PropertyKind) -> PropertyTypeSettings? { all.first { $0.kinds.contains(kind) } }

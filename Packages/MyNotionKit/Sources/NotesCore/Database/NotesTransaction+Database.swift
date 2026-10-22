@@ -252,6 +252,9 @@ extension NotesTransaction {
     /// свойства, варианты, виды и вычисленное.
     func eraseDatabaseRecords(ofPage pageId: UUID) throws {
         let id = pageId.databaseText
+        changes.database.erasedLinks += try Row.fetchAll(database, sql: """
+            SELECT * FROM db_relation_link WHERE (rowId = ?1 OR targetRowId = ?1) AND isPresent = 1
+            """, arguments: [id]).map(RelationLink.init(row:))
         for sql in [
             "DELETE FROM db_cell WHERE rowId = ?",
             "DELETE FROM db_computed WHERE rowId = ?",

@@ -160,3 +160,125 @@ UI: `scripts/imac/run-on-imac.sh uitest -only-testing:UITests/FormulaEditorTests
 с другого Mac раньше варианта); тест `SelectOptionOperationsTests.newOptionShiftsPositions`.
 Галерея: `scripts/imac/run-on-imac.sh gallery --only type-` — 11 состояний US2 × 2 темы.
 
+
+
+## US4 «Связи и сводки» - проверка Codex, 22.10.2026
+
+Работа велась только в `MyNotion-004-us4`, ветка `004-us4`. Интеграционная ветка влита merge-коммитом
+`1d48e1b`; фабрики US2 и `RelationCellView.factory` сохранены вместе в `CellPopups.all`.
+Все сборки и тесты - iMac, `imac-run --no-fallback --wait 1800`, до 4 потоков. Основной Mac приложение,
+Swift/Xcode-сборки и тесты не запускал; Cua VM не использовалась. `DatabaseGridView.swift` вручную не менялся.
+
+### Реализация и регрессии
+
+- `14df50d`: числовая сводка переиспользует `NumberSettingsView` и `NumberDisplay` US2. Вложенный `numberFormat`
+  хранит формат, точность, полосу/кольцо, цвет, делитель и показ числа. Настройки связи/вычисления сохраняются;
+  undo/redo, проценты, форматирование и общий реестр US2+US4 проверены.
+- `28cd4b5`: aliveRows ищет заданные UUID по PK. На эталоне EXPLAIN исходного запроса выбирал
+  `page_by_parent (parentId=?)`; `+parentId` сохраняет сравнение TEXT UUID и выбирает PK `(id=?)`.
+  Parent/trashed/template семантика сохранена, id дедуплицируются и разбиваются по 500 с параметром родителя
+  (501 bind, ниже даже старого лимита SQLite 999). Регрессии на 10 000 строках проверяют результат для 1003 id,
+  дубликаты между пачками, чужого родителя, корзину, missing/template и план по id без привязки к имени индекса.
+- `b488dd5`: панель свойства перенесена в contentView окна, длинный редактор прокручивается. Учитываются
+  `host.visibleRect ∩ host.bounds`, координаты contentView, размер окна и editor.onResize. Monitor и observers
+  удаляются при закрытии, удалении/скрытии host и deinit presenter. Проверены короткая таблица, реальный hit-test
+  строки decimals, документ 276452pt с прокруткой, resize/close, removal/reopen/deinit и обычное число US2.
+- `effe16d`: UPSERT вычисленного кэша пропускает физический UPDATE только при совпадении value, sortText,
+  sortNumber, searchText и isLive через `IS NOT`. Сравнивается persisted JSON TEXT. Отсутствующий NULL-итог
+  вставляется для fillMissing. Проверены SQL NULL/JSON null, boolean/number, списки и порядок, текст,
+  нормализация числа и восстановление sort/search/isLive при том же value. db_computed не содержит часов,
+  updatedAt или outbox; announce/onFinished остаются выше. Регрессия подтверждает didChange при неизменном
+  результате зависимой формулы.
+- `3d7e658`: scoped dependency fix: indirect база пересчитывает читателей затронутой связи через существующий propertyIds
+  и closure формул, включая rollup→formula. Direct базы и announce сохраняют прежнее поведение. Кэш graph
+  учитывает relationReaders и неявное отображаемое имя страницы для format/join без current.prop(Название).
+  Проверены formula→formula, rollup→formula и цепочки между базами, rename/trash/restore/erase цели,
+  смена формулы и инвалидирование graph, независимый now/dateBetween и direct dependency edit.
+
+| Проверка на iMac | Фактический результат | Журнал |
+|---|---|---|
+| После слияния | 37 тестов, 4 набора, PASS | `/tmp/us4-codex-unit.log` |
+| Числовая панель/US2/реестры | 57 тестов, 8 наборов, PASS | `/tmp/us4-codex-unit2.log` |
+| PK/корректность/EXPLAIN | 65 тестов, 8 наборов, PASS | `/tmp/us4-alive-fix-fetch/build/us4-alive-fix/unit.log` |
+| Геометрия presenter | 20 тестов, 3 набора, PASS, 0,452 с | `/tmp/us4-cold-profile3-fetch/build/us4-cold-profile-03/unit.log` |
+| Conditional UPSERT + Formula/Background/Rollup/Relations/Sync/UI-unit | 69 тестов, 10 наборов, PASS, 5,553 с | `/tmp/us4-cache-fix-fetch/build/us4-cache-fix/unit.log` |
+| Дополнительные persisted JSON/invalidation + формулы | 19 тестов, 2 набора, PASS, 2,143 с | `/tmp/us4-restore-profile-fetch/build/us4-restore-profile-01/unit.log` |
+| Scoped dependency fix, все затронутые наборы | 73 теста, 10 наборов, PASS, 7,379 с | `/tmp/us4-dependent-fix-fetch/build/us4-dependent-fix/unit.log` |
+| Усиленный implicit-title случай без штатного явного читателя Названия | 19 тестов, 1 набор, PASS, 2,924 с | `/tmp/us4-ui-prebuild-fetch/build/us4-ui-prebuild/unit.log` |
+
+Прогоны частично перекрываются: числа в таблице не суммируются в число уникальных тестов.
+
+### Холодный бюджет - принят
+
+Эталон: 10 000 задач, 500 проектов, один проект с 1000 задачами; настоящие NotesStore/ComputationHook.
+Измеряется транзакция с пересчётом, без отрисовки. Это не замер paint latency.
+Первый вызов каждого этапа сохранён; прогретые повторы его не заменяют, предел 200 мс не менялся.
+
+| Изменение | Первый trash, мс | Первый restore, мс | Приёмочный результат |
+|---|---:|---:|---|
+| До оптимизаций | 359,2 | 169,9 | FAIL: trash > 200 |
+| PK aliveRows | 260,8 | 171,7 | FAIL: trash > 200 |
+| Conditional UPSERT | 102,5 | 210,266 | FAIL: restore > 200 |
+| Scoped dependency fix | **73,4** | **170,4** | **PASS: 1 тест, 0 ошибок, 3,724 с** |
+
+Последний прогон - native Release PerformanceTests.xctest, без sample, gate и обеих диагностических env-переменных:
+`/tmp/us4-dependent-fix-fetch/build/us4-dependent-fix/budget.log`, `budget.exit=0`.
+Trash: **73,4 / 44,7 / 59,9 / 40,4 / 43,3 мс**; restore: **170,4 / 86,2 / 98,5 / 105,1 / 94,0 мс**.
+p95 правки часов со сводками - **3,4 мс**, связи - **5,4 мс**, оба <= 10 мс.
+Правка часов у проекта на 1000 задач - 18,7 мс (диагностическая строка). Сводки **500/500** совпали с подсчётом напрямую.
+Предыдущие полные журналы сохранены в `/tmp/us4-codex-review/perf/`, `/tmp/us4-alive-fix-fetch/`, `/tmp/us4-cache-fix-fetch/`.
+Старый `/tmp/us4-perf.log` относится к задаче 003 и не засчитывается как проверка US4.
+
+### Профили - отдельно от приёмочных замеров
+
+Сэмплировались только собственные PID, после проверки ps с абсолютным путём нужного bundle.
+Диагностические паузы стоят вне измеряемого участка; normal budget их не использует.
+
+| Срез | Первый вызов под sample | Наблюдение | Артефакты |
+|---|---:|---|---|
+| Trash до PK, PID777 | 1319,479 мс | Из 63 отсчётов внутри hook 33 в aliveRows, всего pread49 | `/tmp/us4-cold-profile-fetch/build/us4-cold-profile-01/` |
+| Trash после PK, PID60438 | 1517,272 мс | Из 24 отсчётов hook 17 в ComputedWriter, 3 в aliveRows; pread6 | `/tmp/us4-cold-profile3-fetch/build/us4-cold-profile-03/` |
+| Первый restore после UPSERT, PID73443 | 1408,934 мс | Всего 6 main отсчётов в FormulaRecompute, включая несвязанный dateBetween | `/tmp/us4-restore-profile-fetch/build/us4-restore-profile-01/` |
+
+Последний sample слишком мал для оценки долей времени. Причина лишнего полного пересчёта подтверждается
+также кодом и регрессиями; исправление соответствует contracts/formulas.md «Пересчёт», а итоговый бюджет
+подтверждён отдельным непрофилированным запуском. Ни один профилированный результат не является приёмочным.
+`PerformanceTests/ColdTrashProfile.swift` поддерживает opt-in `MYNOTION_RELATION_PROFILE_DIR` и фазу
+`MYNOTION_RELATION_PROFILE_PHASE=trash|restore` (по умолчанию trash); записывает фактический PID и first-<phase>-ms.
+
+### Живые UI, галерея и синхронизация
+
+Первый свежий GUI-слот подтверждён собственным desktop preflight: прежних TCC/ChatGPT предупреждений не было.
+Артефакты: `/tmp/us4-codex-review/desktop.png`, `windows.json`. Системные процессы и разрешения не менялись.
+
+- `SyncRelationsTwoMacsUITests`: **1 тест PASS, 32,997 с**, `live/uitest.log` и `live.log`, exit0.
+  Два экземпляра на одном iMac, свои SQLite и локальный сервер; это не два физических Mac.
+  Первичная доставка связей со сводками - 1,6 с. Добавления с обеих сторон сохранили 5 связей и сводки 17/14.
+  Прежние 0,0 с измеряли только ожидание после возврата XCUITest-команды, не полную задержку от Return.
+  Таймер перенесён перед Return; эту версию live ещё предстоит повторить.
+- `RelationRollupTests`: **FAIL**, 1 ошибка после 70,556 с на choice-2. Предыдущие действия сценария дошли до
+  настройки суммы. `decimals-click.png`, Synthesized Event (1483,667) и `decimals-failure.png` подтверждают
+  правильный click и реальное закрытие родительской панели из-за bounds короткой таблицы. Это не ошибка locator.
+  Presenter исправлен и проверен 20 unit, но живой повтор ещё открыт. Старый `/tmp/us4-uitest8` также не PASS:
+  hierarchy показывает перекрывающий CoreServicesUIAgent ChatGPT.
+- Первый свежий запуск галереи остановился на отсутствующем `.rollupNumberSettings` в общем switch.
+  Case добавлен; последующие Release-сборки приложения прошли. Саму галерею ещё предстоит получить и сверить:
+  9 состояний US4 × 2 темы, включая новую числовую панель. T093 не закрыта.
+
+Снимки предыдущего успешного live:
+- `/tmp/us4-codex-review/live/attachments/relations-mac-a_0_F189C88C-1939-48BA-9F78-6D939671897C.png`
+- `/tmp/us4-codex-review/live/attachments/relations-mac-b_0_88CED882-D405-4431-B18B-C65F6E58E427.png`
+
+Сейчас GUI не запускался: US3/hover сообщили `CGSSessionScreenIsLocked=Yes`, loginwindow, а координатор
+не получил подтверждение unlock. Это переданная коллегами причина, нового собственного preflight US4 ещё нет.
+До ручной разблокировки - только no-GUI проверки. Debug build-for-testing завершён без запуска окон, build.exit=0; журнал `/tmp/us4-ui-prebuild-fetch/build/us4-ui-prebuild/build.log`.
+Готовые Products находятся в `build/imac-uitest-dd/Build/Products` собственной копии iMac.
+После unlock требуется свежий preflight; сценарий `/tmp/us4-final-gui.sh` выполняется через
+`scripts/imac/run-on-imac.sh lock` (no-fallback, ожидание 1800 с). Он должен проверить RelationRollupTests,
+галерею 18 снимков и live с новым таймером, с отдельными exit-кодами. Для галереи переиспользуется свежий
+Debug App из UI derived data, чтобы не собирать идентичное приложение во втором derived data.
+
+`6a07c09` (интегрирован координатором как ca563af): close_stale_prompts только предупреждает, SecurityAgent
+и чужие MyNotion не завершаются. Live заканчивает только PID собственного node-сервера; чужой занятый порт - ошибка.
+Прогоны завершали только своё ожидание по проверенному PID/пути, очередь iMac не обходилась.
+**T089/T093/T094 остаются открытыми до живого UI/галереи и повторного live.** Холодный data-budget отдельно зелёный.

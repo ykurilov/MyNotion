@@ -114,6 +114,17 @@ public enum GalleryDatabases: Hashable, Sendable, CaseIterable {
     case formulaEditorError
     case formulaEditorCycle
     case formulaCells
+    /// US4: панель новой связи и настроенной двусторонней, окна «Связана с» и «Лимит», панель сводки и «Вычислить»,
+    /// таблица «Проекты» со сводками и ответной связью.
+    case relationNewSettings
+    case relationSettings
+    case relationTargetChooser
+    case relationLimitChooser
+    case rollupSettings
+    case rollupNumberSettings
+    case rollupCalculateMenu
+    case relationProjectsTable
+    case relationPicker
     /// US2: окна выбора, статуса, даты, файлов, меню варианта, настройки выбора, статуса и числа, плашки и полоса с кольцом.
     case typeSelectPicker, typeMultiSelectPicker, typeStatusPicker, typeOptionMenu, typeDatePicker, typeDateFormats, typeFilesPopup,
          typeSelectSettings, typeStatusSettings, typeNumberSettings, typeChipsAndMeters
@@ -315,6 +326,22 @@ public enum GalleryCatalog {
         GalleryState("formula-editor-cycle", .databases(.formulaEditorCycle), "Редактор с кругом «Итог → Сумма → Итог», «Готово» неактивно", section: "Базы"),
         GalleryState("formula-cells", .databases(.formulaCells), "Ячейки формул всех типов итога: число, текст, флажок, дата, список, страницы",
                      section: "Базы"),
+        // US4, сверка — `notion-relation-*.png`, `notion-rollup-*.png`.
+        GalleryState("relation-new-settings", .databases(.relationNewSettings), "Новая связь: «Связана с — Выбрать», «Лимит», «Ответное свойство» выключено",
+                     section: "Базы"),
+        GalleryState("relation-settings", .databases(.relationSettings), "Связь «Проект»: «Связана с — Проекты» серым, лимит, ответное свойство «Задачи»",
+                     section: "Базы"),
+        GalleryState("relation-target-chooser", .databases(.relationTargetChooser), "Окно «Связать с базой»: «Эта база» и базы по названию", section: "Базы"),
+        GalleryState("relation-limit-chooser", .databases(.relationLimitChooser), "Окно лимита: «1 страница» и «Без лимита» с галочкой", section: "Базы"),
+        GalleryState("rollup-settings", .databases(.rollupSettings), "Сводка «Сумма часов»: «Связь — Задачи», «Свойство — Часы», «Вычислить — Сумма»",
+                     section: "Базы"),
+        GalleryState("rollup-number-settings", .databases(.rollupNumberSettings), "Числовая сводка: формат, знаки после запятой, полоса, цвет и делитель",
+                     section: "Базы"),
+        GalleryState("rollup-calculate-menu", .databases(.rollupCalculateMenu), "Меню «Вычислить»: как есть, уникальные, количество, проценты, числа",
+                     section: "Базы"),
+        GalleryState("relation-picker", .databases(.relationPicker), "Окно ячейки связи: поиск, «1 выбрано» с «−», «Выбрать ещё», «В «Проекты»»",
+                     section: "Базы"),
+        GalleryState("relation-projects-table", .databases(.relationProjectsTable), "«Проекты»: ответная связь «Задачи» плашками, сводки числом", section: "Базы"),
         // US2, сверка — `notion-select-*.png`, `notion-status-cell-popup.png`, `notion-edit-property-*.png`, `notion-date-format-options.png`.
         GalleryState("type-select-picker", .databases(.typeSelectPicker), "Окно выбора: «Найти вариант…», «Выберите вариант или создайте его», ручки",
                      section: "Базы"),

@@ -2,8 +2,9 @@ import Foundation
 import NotesCore
 import Synchronization
 
-/// Очередь полных пересчётов в фоне (research R21): новая формула, правка формулы, смена типа или удаление свойства,
-/// от которого зависят формулы, «живые» формулы раз в минуту, первое заполнение. Запросы к одной базе склеиваются;
+/// Очередь полных пересчётов в фоне (research R21): новая формула или сводка, их правка, смена типа или удаление свойства,
+/// от которого они зависят, корзина базы-цели, «живые» формулы раз в минуту, первое заполнение. Сводки — раньше формул:
+/// формула может читать сводку. Запросы к одной базе склеиваются;
 /// пересчёт идёт на служебном потоке, пока ячейки показывают прежний итог.
 public final class FormulaRecomputeQueue: Sendable {
     public let store: NotesStore
@@ -41,7 +42,12 @@ public final class FormulaRecomputeQueue: Sendable {
     private func run(_ databaseId: UUID) {
         guard let entry = pending.withLock({ $0.removeValue(forKey: databaseId) }) else { return }
         do {
-            let recompute = try FormulaRecompute(store: store, databaseId: databaseId, propertyIds: entry, now: now, calendar: calendar)
+            let rollups = try store.database.dbWriter.read { db in
+                try RollupRecompute(catalog: DatabaseCatalog.read(databaseId, in: db), propertyIds: entry, calendar: calendar, in: db)
+            }
+            try rollups.recomputeAll(in: store)
+            let recompute = try FormulaRecompute(store: store, databaseId: databaseId, propertyIds: entry.map { $0.union(rollups.propertyIds) },
+                                                 now: now, calendar: calendar)
             let report = try recompute.recomputeAll()
             finished.withLock { $0 }?(databaseId, report)
         } catch {
@@ -60,14 +66,14 @@ public final class FormulaRecomputeQueue: Sendable {
         }
     }
 
-    /// Первое заполнение: базы, где у формул нет итогов части строк (после миграции, восстановления, синхронизации),
+    /// Первое заполнение: базы, где у формул и сводок нет итогов части строк (после миграции, восстановления, синхронизации),
     /// пересчитываются в фоне. Сама проверка — тоже в фоне.
     public func fillMissing() {
         queue.async { [self] in
             let missing = (try? store.database.dbWriter.read { db in
                 try String.fetchAll(db, sql: """
                     SELECT DISTINCT p.databaseId FROM db_property p JOIN page r ON r.parentId = p.databaseId AND r.trashedAt IS NULL
-                    WHERE p.type = 'formula' AND p.deletedAt IS NULL
+                    WHERE p.type IN ('formula', 'rollup') AND p.deletedAt IS NULL
                       AND NOT EXISTS (SELECT 1 FROM db_computed c WHERE c.rowId = r.id AND c.propertyId = p.id)
                     """).compactMap(UUID.init(uuidString:))
             }) ?? []

@@ -65,7 +65,7 @@ public struct CellPopupFactory: Sendable {
 }
 
 public enum CellPopups {
-    public static var all: [CellPopupFactory] { [OptionPickerView.factory, DateCellView.factory, FilesCellView.factory] }
+    public static var all: [CellPopupFactory] { [OptionPickerView.factory, DateCellView.factory, FilesCellView.factory, RelationCellView.factory] }
 
     public static func factory(for kind: PropertyKind) -> CellPopupFactory? { all.first { $0.kinds.contains(kind) } }
 }

@@ -4,17 +4,19 @@
 # первый экземпляр подключается токеном bootstrap, второй (копия приложения со своим bundle id) — кодом.
 # Боевой сервер не трогается. Итог: задержки и снимки обоих окон в --out.
 #
-#   scripts/imac/sync-live-check.sh [--out <папка на этом Mac>]
+#   scripts/imac/sync-live-check.sh [--out <папка на этом Mac>] [--test <класс UI-теста>]
+# --test: другой сценарий двух Mac (например, SyncRelationsTwoMacsUITests — связи и сводки US4); по умолчанию — SyncTwoMacsUITests.
 set -euo pipefail
 
 REPO=${0:A:h:h:h}
 
 if [[ ${MN_ON_IMAC:-} != 1 ]]; then
   # Основной Mac: весь сценарий — одной серией на iMac под местом «экран».
-  OUT=/tmp/mn-sync-live-$(date +%H%M%S); [[ ${1:-} == --out ]] && OUT=$2
+  OUT=/tmp/mn-sync-live-$(date +%H%M%S); TEST=SyncTwoMacsUITests
+  while (( $# )); do case $1 in --out) OUT=$2; shift 2;; --test) TEST=$2; shift 2;; *) shift;; esac; done
   cd $REPO; stage=$(mktemp -d /tmp/mynotion-imac.XXXXXX); rc=0
   imac-run --gui --no-fallback --no-setup --wait ${MYNOTION_IMAC_WAIT:-1800} --fetch build/imac-sync-live --out $stage \
-    -- 'MN_ON_IMAC=1 zsh scripts/imac/sync-live-check.sh' || rc=$?
+    -- "MN_ON_IMAC=1 MN_LIVE_TEST=$TEST zsh scripts/imac/sync-live-check.sh" || rc=$?
   # openrsync кладёт итоги под полным путём копии на iMac — ищем папку, где бы она ни оказалась.
   src=($stage/build/imac-sync-live(N/) $stage/**/build/imac-sync-live(N/D))
   if (( $#src )); then rm -rf $OUT; mkdir -p ${OUT:h}; mv $src[1] $OUT; print -- "Итог: $OUT"; fi
@@ -61,7 +63,7 @@ codesign --force --deep -s - $LIVE/MyNotionB.app 2>/dev/null
 
 # 3. UI-тест.
 close_stale_prompts; rc=0
-xctest_run $UITEST_DD/Build/Products $RESULTS -only-testing:UITests/SyncTwoMacsUITests || rc=$?
+xctest_run $UITEST_DD/Build/Products $RESULTS -only-testing:UITests/${MN_LIVE_TEST:-SyncTwoMacsUITests} || rc=$?
 
 # 4. Журналы экземпляров и сервера — к итогам; уборка секретов в связке ключей.
 cat $LIVE/mac-a.log $LIVE/mac-b.log 2>/dev/null || true

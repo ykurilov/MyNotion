@@ -93,6 +93,7 @@ public final class DatabaseOperations {
         touched.formUnion(changes.database.properties.map(\.record.databaseId))
         touched.formUnion(changes.database.views.map(\.record.databaseId))
         touched.formUnion(changes.database.cells.map(\.rowId))
+        touched.formUnion(changes.database.relationLinks.flatMap { [$0.record.rowId, $0.record.targetRowId] })
         return touched
     }
 

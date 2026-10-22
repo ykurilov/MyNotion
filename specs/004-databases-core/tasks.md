@@ -225,18 +225,18 @@ description: "Задачи: базы данных — основа"
 
 ### Tests for User Story 4
 
-- [ ] T086 [P] [US4] `PK/Tests/DatabasesTests/RelationOperationsTests.swift`: связь с другой и своей базой, лимит «1 страница» снимает прежнюю, ответное свойство (вкл/выкл позже — связи на месте), удаление свойства-пары, правка с любой стороны; ⌘Z каждого
-- [ ] T087 [P] [US4] `PK/Tests/SyncTests/RelationLinkMergeTests.swift`: связи с двух клиентов, снятие и добавление одной связи одновременно — «позднее побеждает»; связь без строки-цели хранится
-- [ ] T088 [P] [US4] `PK/Tests/DatabasesTests/RollupTests.swift`: каждое вычисление contracts; пересчёт при правке, корзине, возврате, стирании строки-цели; сводка по формуле
+- [x] T086 [P] [US4] `PK/Tests/DatabasesTests/RelationOperationsTests.swift`: связь с другой и своей базой, лимит «1 страница» снимает прежнюю, ответное свойство (вкл/выкл позже — связи на месте), удаление свойства-пары, правка с любой стороны; ⌘Z каждого
+- [x] T087 [P] [US4] `PK/Tests/SyncTests/RelationLinkMergeTests.swift`: связи с двух клиентов, снятие и добавление одной связи одновременно — «позднее побеждает»; связь без строки-цели хранится
+- [x] T088 [P] [US4] `PK/Tests/DatabasesTests/RollupRecomputeTests.swift` (имя `RollupTests` уже занято тестом типа): каждое вычисление contracts; пересчёт при правке, корзине, возврате, стирании строки-цели; сводка по формуле
 - [ ] T089 [P] [US4] XCUITest `UITests/RelationRollupTests.swift`: сценарии spec, US4; «Найти или создать страницу…» создаёт строку в цели
 
 ### Implementation for User Story 4
 
-- [ ] T090 [US4] Операции `PK/Sources/Databases/Operations/DatabaseOperations+Relations.swift` (T086, T087)
-- [ ] T091 [US4] Сводки в `PK/Sources/Databases/Computation/Rollups.swift` рядом с формулами US5; обход связей в формулах (`current.prop`) — через тот же индекс (T088)
-- [ ] T092 [US4] Ячейки и настройки `PK/Sources/DatabaseGrid/Cells/{Relation,Rollup}Cell.swift`, `PropertySettings/{RelationSettings,RollupSettings}.swift` («Связана с», «Лимит», «Ответное свойство», «Связь → Свойство → Вычислить»), окно выбора строк цели (T089)
+- [x] T090 [US4] Операции `PK/Sources/Databases/Operations/DatabaseOperations+Relations.swift` (T086, T087)
+- [x] T091 [US4] Сводки в `PK/Sources/Databases/Computation/Rollups.swift` рядом с формулами US5; обход связей в формулах (`current.prop`) — через тот же индекс (T088)
+- [x] T092 [US4] Ячейки и настройки `PK/Sources/DatabaseGrid/Cells/{Relation,Rollup}Cell.swift`, `PropertySettings/{RelationSettings,RollupSettings}.swift` («Связана с», «Лимит», «Ответное свойство», «Связь → Свойство → Вычислить»), окно выбора строк цели (T089)
 - [ ] T093 [US4] Состояния галереи: настройки новой связи, окно выбора с выбранными, ячейка связи, настройки сводки и меню вычислений — в обеих темах; сверка с Notion
-- [ ] T094 [US4] Живая проверка двух Mac `scripts/vm/sync-live-check.sh` (свой сервер в виртуальном Mac): шаги 1–3 quickstart.md; затронутые тесты зелёные; замер правки с пересчётом сводки; запись в quickstart.md; коммит
+- [ ] T094 [US4] Живая проверка двух клиентов `scripts/imac/sync-live-check.sh --test SyncRelationsTwoMacsUITests` (свой сервер на iMac): шаги 1–3 quickstart.md; затронутые тесты зелёные; замер правки с пересчётом сводки; запись в quickstart.md; коммит
 
 **Checkpoint**: US4 работает и проверяется сама.
 

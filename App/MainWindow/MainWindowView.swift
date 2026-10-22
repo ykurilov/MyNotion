@@ -68,6 +68,9 @@ struct MainWindowView: View {
         if options.opensFormulaEditorDemo, case .success(let library) = library {
             FormulaEditorDemo.editorReady(model: model ?? library.firstWindow)
         }
+        if options.opensRelationsDemo, case .success(let library) = library {
+            RelationsDemo.editorReady(model: model ?? library.firstWindow, linked: options.linksRelationsDemo, opening: options.relationsDemoDatabase ?? "Задачи")
+        }
         if let benchmarkURL = options.typingBenchmarkURL, case .success(let library) = library {
             TypingBenchmark.editorReady(model: model ?? library.firstWindow, reportTo: benchmarkURL)
         }
