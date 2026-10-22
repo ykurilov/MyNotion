@@ -39,8 +39,11 @@ require_ui_automation() {
 # Сборка приложения: build_app <Debug|Release> <папка сборки>; путь к .app — в APP.
 build_app() {
   local config=$1 dd=$2
-  xcodegen generate -q
-  xcodebuild -scheme MyNotion -configuration $config -derivedDataPath $dd -jobs $JOBS build -quiet
+  # errexit не действует внутри функции, если вызывающий код проверяет её через if/||.
+  # Сбрасываем прежний путь и явно возвращаем ошибку каждой стадии до присваивания APP.
+  unset APP
+  xcodegen generate -q || return $?
+  xcodebuild -scheme MyNotion -configuration $config -derivedDataPath $dd -jobs $JOBS build -quiet || return $?
   APP=$WORK/$dd/Build/Products/$config/MyNotion.app
 }
 

@@ -13,8 +13,8 @@ rm -f $out/ready.json $out/sample.txt $out/sample-command.log $out/test.log
 date > $out/context.log
 uptime >> $out/context.log
 ps -axo pcpu,pid,comm | sort -nr | sed -n '1,15p' >> $out/context.log
-xcodegen generate -q
-xcodebuild -scheme MyNotionPerformance -configuration Release -derivedDataPath $dd -jobs 4 build-for-testing -quiet > $out/build.log 2>&1
+xcodegen generate -q || exit $?
+xcodebuild -scheme MyNotionPerformance -configuration Release -derivedDataPath $dd -jobs 4 build-for-testing -quiet > $out/build.log 2>&1 || exit $?
 runs=($dd/Build/Products/*.xctestrun)
 run=$runs[1]
 cp $run $out/original.xctestrun

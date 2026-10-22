@@ -24,11 +24,12 @@ W=/tmp/mn-sync-memory
 REFLIB=~/.imac-runner/mynotion-reflib
 
 stop_all() { pkill -x MyNotion 2>/dev/null || true; kill $(cat $W/server.pid 2>/dev/null) 2>/dev/null || true; }
-trap stop_all EXIT INT TERM
 
 # Сервер и приложение Release.
 (cd server && pnpm install --frozen-lockfile --silent && pnpm --silent build)
-build_app Release build/imac-dd-release
+build_app Release build/imac-dd-release || exit $?
+# Не устанавливаем legacy cleanup до успешной сборки: ошибка не должна закрыть чужое приложение.
+trap stop_all EXIT INT TERM
 stop_all; rm -rf $W; mkdir -p $W
 (cd server && DATA_DIR=$W/server PORT=$PORT nohup node dist/main.js > $W/server.log 2>&1 & echo $! > $W/server.pid)
 for _ in {1..50}; do curl -sf http://127.0.0.1:$PORT/health >/dev/null 2>&1 && break; sleep 0.2; done

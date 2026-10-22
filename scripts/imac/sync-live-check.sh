@@ -55,8 +55,8 @@ for _ in {1..50}; do curl -sf http://127.0.0.1:$PORT/health >/dev/null 2>&1 && b
 echo http://127.0.0.1:$PORT > $LIVE/server-url
 
 # 2. Приложение для UI-теста и его копия со своим bundle id — «второй Mac».
-xcodegen generate -q
-xcodebuild -scheme MyNotion -derivedDataPath $UITEST_DD -jobs $JOBS build-for-testing -quiet
+xcodegen generate -q || exit $?
+xcodebuild -scheme MyNotion -derivedDataPath $UITEST_DD -jobs $JOBS build-for-testing -quiet || exit $?
 cp -R $UITEST_DD/Build/Products/Debug/MyNotion.app $LIVE/MyNotionB.app
 /usr/libexec/PlistBuddy -c 'Set :CFBundleIdentifier cloud.kurilov.mynotion.second' $LIVE/MyNotionB.app/Contents/Info.plist
 codesign --force --deep -s - $LIVE/MyNotionB.app 2>/dev/null

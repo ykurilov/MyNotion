@@ -129,3 +129,27 @@ Products: `build/imac-uitest-dd/Build/Products`, Debug/MyNotion.app. Не пов
 
 Координатору: интегрировать коммиты US4 в согласованном порядке US4→US3; открытые UI-задачи при интеграции
 не отмечать выполненными. Подробные таблицы проверок и ограничений - quickstart.md, раздел US4.
+
+## Возобновление на совместном коде
+
+В `004-us4` fast-forward общей `4961489` выполнен без конфликтов, исходники сохранены.
+Координатор сообщил unlock и порядок hover→US3→US4. Собственная обязательная incremental Debug
+сборка остановилась **exit69 до компиляции**: выбранный Xcode требует принятия лицензии.
+`/tmp/us4-joint-prebuild-fetch/build/us4-joint-prebuild/build.log`; build.exit отсутствует.
+Выбран `/Users/ykurilov/Applications/Xcode.app/Contents/Developer`, версия 27.1; старый
+`/Applications/Xcode.app` версии 16.4 не подходит проекту. Лицензия/выбор toolchain не менялись.
+Координатор и US3 уведомлены. До ручного устранения блокировки новый bundle не готов; прежний
+Debug bundle не является проверкой совместного source. GUI-слот не занят, fresh preflight не выполнялся.
+Units 680 и принятый cold-budget не повторялись. Подготовленный `/tmp/us4-final-gui.sh` сохранён.
+
+### Fail-fast сборок iMac
+
+Исправлен `scripts/imac/lib.sh`: build_app сбрасывает APP до генерации и явно возвращает ошибку
+xcodegen/xcodebuild, даже когда вызывается внутри if/|| и errexit не действует. Call sites gallery/run,
+UI build-for-testing, live и query-profile явно прекращают выполнение до запуска старого App/bundle.
+Memory helper прекращает выполнение до установки legacy cleanup trap при ошибке сборки; его существующий
+широкий stop_all не использовался и требует отдельной правки перед будущим запуском memory-сценария.
+Локальная разрешённая shell-проверка `zsh scripts/imac/tests/build-failure.zsh`: **15 PASS**,
+без настоящих Xcode/Swift/app действий. Проверены generator42/build69, if/||/pipefail, сброс stale APP,
+отсутствие запуска App/UI-test/cleanup при failure и успешное присваивание APP. `zsh -n` и diff-check PASS.
+Реальные сборки по-прежнему заблокированы лицензией Xcode27.1, не повторялись.
