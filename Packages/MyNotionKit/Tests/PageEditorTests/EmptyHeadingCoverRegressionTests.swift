@@ -1,10 +1,11 @@
 import AppKit
 import Testing
+import Foundation
 @testable import PageEditor
 import VisualStyle
 
 /// Регрессия по снимку Юрия 22.10: серая подсказка пустого heading2 не пересекает page-title.
-/// Подготовлено после source-анализа; до снятия Xcode license blocker НЕ запускалось.
+/// До исправления setCover ловит уже нарисованные абзацы поверх шапки после добавления обложки.
 /// Невидимое окно проверяет координаты и рисунок; живые transition/return проверяются отдельно на iMac.
 @MainActor
 @Suite("Пустой заголовок под обложкой: title, подсказка и блок")
@@ -92,6 +93,13 @@ struct EmptyHeadingCoverRegressionTests {
                                    "\(stage), \(focus): persistent placeholder не нарисован на строке блока")
             #expect(!ink.intersects(title), "\(stage): persistent hint \(ink) поверх title \(title)")
             let color = try #require(pixels.strongestInkColor(in: block, over: Palette.pageBackground.resolved(in: .aqua)))
+            print("EMPTY-COVER stage=\(stage) focus=\(focus) title=\(title) block=\(block) hint=\(view.emptyParagraphHint.frame) color=\(color)")
+            if stage == "добавление к открытой странице" || colorDistance(color, Palette.textSecondary.resolved(in: .aqua)) >= 0.1,
+               let directory = ProcessInfo.processInfo.environment["EMPTY_COVER_SHOTS"] {
+                try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+                let data = try #require(pixels.bitmap.representation(using: .png, properties: [:]))
+                try data.write(to: URL(fileURLWithPath: directory).appendingPathComponent("\(stage)-\(focus).png"))
+            }
             #expect(colorDistance(color, Palette.textSecondary.resolved(in: .aqua)) < 0.1,
                     "\(stage): измерена не серая placeholder-строка")
         }
