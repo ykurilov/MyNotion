@@ -38,3 +38,35 @@ scripts/imac/run-on-imac.sh uitest \
 ## Ограничения
 
 Прямые вызовы `mouseMoved` в невидимом окне не проверяют реальный цикл tracking areas активного окна, вход/выход мыши, поведение слоёв на экране или промежуточные кадры. Для исправления требуется воспроизведение в активном окне на iMac и подтверждение причины. Проверки ручного наведения, меню и редактирования пока не пройдены.
+
+
+## Продолжение 22.10, 10:13-10:38 WITA
+
+Исправления production-кода по-прежнему нет: обе жалобы требуют подтверждённого живого воспроизведения.
+
+### Готовые страницы и UI
+
+В `EditorScenarioFixture` добавлены изолированные страницы через NotesCore до запуска приложения. Для отдельной проверки перекрытия есть cover `solid_blue`, иконка, длинное название, heading, paragraph и 80 абзацев для прокрутки. Набор текста для подготовки больше не требуется.
+
+`/tmp/hover-cover-live-2.log`, `/tmp/hover-cover-live-2/attachments/`:
+
+- `CoverTextOverlapTests`: начальная геометрия cover/title/icon и наличие ручки первого блока прошли; затем XCTest остановился на `page-tree.hover(): Not hittable`. Снимок пикселей, scroll, resize и return **не выполнены**. Начальную геометрию нельзя распространять на остальные состояния.
+- `HoverFlickerProbeTests`: после клика под последним пунктом не нашёл ручки; медленные проходы, сравнение текста, меню и редактирование **не выполнены**. На финальном PNG виден correction-popup около `dsa`. Это ошибка подготовки/управления пробой, не доказательство отсутствия мерцания.
+- Снимок последней пробы: `/tmp/hover-cover-live-2/attachments/915ABDE7-15CA-4E5E-A4C6-2EDAF01B1757.png`.
+
+### Прямая CuaDriver серия
+
+Согласована с US3 после освобождения US4; запуск через `run-on-imac.sh lock`, no-fallback, wait 1800. Приложение Debug собрано только на iMac с jobs 4. Синхронизация удалила прежний `build/`; собственный восстановленный кеш сохранён в `.imac-runner-hover-build`, `build` ссылается на него. Новая база `~/work/shots/hover-direct/probe.sqlite` создана через существующий VisualSamplePage, затем при закрытом приложении в неё добавлена синяя обложка. До проверки текст не вводился.
+
+Живой проход остановлен до движения мыши: CuaDriver вернул полностью чёрный desktop PNG 4480x2520, `bring_to_front` не подтвердил фокус (`workspace_frontmost_pid=650`), `get_window_state` вернул `ax_window_unresolved`, 0 AXWindow. MyNotion PID12498 жив, WindowServer видел собственное окно2549; отсутствие AX относится ко всем приложениям. `ioreg` подтвердил `CGSSessionScreenIsLocked=Yes`, `SecureInputPID=650` (loginwindow). `check_permissions`: Accessibility=true, Screen Recording=true; `health_report`: overall=ok, AX trusted. Новых MyNotion crashlog не найдено. GUI-слот освобождён, US3 и координатор предупреждены. Требуется ручная разблокировка сеанса; вслепую клики не выполнялись.
+
+Ошибка диагностики: после уже наблюдённого чёрного кадра в команду ошибочно попал `CGSession -suspend`, который не является читающим. Команда могла повторно закрепить блокировку; координатор уведомлён. Состояние сеанса далее не менялось, TCC и чужие процессы не трогались.
+
+Артефакты: `/tmp/hover-direct.log`, `/tmp/hover-direct-desktop.png`, `/tmp/hover-direct-artifacts/hover-direct/{health.json,permissions.json,ioreg.txt,processes.txt,result-1.json,desktop-current.png}`. Служебный `seed.png` снят до добавления cover; он не доказывает отсутствие перекрытия.
+
+Следующий живой проход после разблокировки: подтвердить активность и масштаб, Esc и визуальное отсутствие correction, реальные движения по видимому heading/paragraph с кадрами; затем реальные scroll/resize/return. Не считать отсутствие доступных ручек или AX успешной проверкой. Гипотезы mouseMoved/ensureLayout и inset/cache обложки остаются отдельными.
+
+
+### Отдельная проверка кеша обложки без GUI
+
+`imac-run --no-sync --no-fallback --wait 1800`, `swift test --jobs 4 --filter CoverCacheLayoutTests` на iMac: **1 тест, 2 варианта (иконка есть/нет), прошёл за 1.348 s**. Сначала нарисовано тело без обложки, затем setCover(height:280), ширина1200→900→1200; во всех шести состояниях тёмных пикселей на обложке вне иконки0, название ниже обложки. Журнал `/tmp/cover-cache-final.log` (сборка162.25s, rc0). Простая гипотеза stale rendered text после setCover/resize в невидимом fixture не подтвердилась. Реальное прокручивание и возврат страницы эта проверка не покрывает.
