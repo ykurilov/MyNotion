@@ -442,3 +442,14 @@ T079/T084/T085 и живые UI/галерея/контроль US3 не зас�
 Прежний локальный контрольный архив0240ecc сейчас устарел и не использовался. После интеграции сравнивать
 текущую общую ветку с самой собой бессмысленно; для выяснения регрессии US3 контрольной ревизией после US4
 служит `9b4b05d` (если координатор не выберет другой baseline), исследуемая merged ревизия — `4eca0a2`.
+
+### US4 joint27: свежий bundle, повторно заблокированный экран
+
+После устранения лицензии подготовлен Debug build-for-testing на общем dc5235f/a7a298c:
+**imac-run exit0, build.exit=0**, Xcode 27.1 build 27A9275.
+Журналы `/tmp/us4-joint27-prebuild-fetch/build/us4-joint27-prebuild/{build.log,build.exit,toolchain.log}`.
+Принятые unit/cold-budget не повторялись, product-код US4 не менялся.
+До передачи GUI от US3 повторная read-only проверка подтвердила `CGSSessionScreenIsLocked=Yes`,
+secureInputPID 650, `/tmp/us4-joint27-session-preflight.log`. GUI US4 не запускался.
+Сценарий сохранён в `/tmp/us4-final-gui.sh` и `scripts/imac/us4-review.sh`; он требует успешный
+свежий prebuild и осмотр desktop перед marker run-ui. **T089/T093/T094 остаются [ ].**

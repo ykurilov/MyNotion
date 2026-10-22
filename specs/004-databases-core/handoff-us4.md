@@ -153,3 +153,22 @@ Memory helper прекращает выполнение до установки 
 без настоящих Xcode/Swift/app действий. Проверены generator42/build69, if/||/pipefail, сброс stale APP,
 отсутствие запуска App/UI-test/cleanup при failure и успешное присваивание APP. `zsh -n` и diff-check PASS.
 Реальные сборки по-прежнему заблокированы лицензией Xcode27.1, не повторялись.
+
+## Joint27: toolchain разблокирован, bundle подготовлен
+
+После сообщения координатора повторена только обязательная no-GUI Debug build-for-testing на совместных
+исходниках common dc5235f/a7a298c (merge 57aba9b). **imac-run exit0, build.exit=0**,
+Xcode 27.1 build 27A9275. Артефакты `/tmp/us4-joint27-prebuild-fetch/build/us4-joint27-prebuild/`:
+`build.log`, `build.exit`, `toolchain.log`. Приложение не запускалось; units/cold-budget не повторялись.
+Живая серия ожидает прямую передачу GUI от US3. Подготовленный `/tmp/us4-final-gui.sh` сохранён также
+как `scripts/imac/us4-review.sh` для воспроизводимого прогона. Отдельный guard требует свежий
+build.exit=0 до preflight и использования bundle; результаты идут в build/us4-joint27-review.
+
+### Повторная блокировка после prebuild27
+
+До передачи GUI от US3 hover сообщил GUI preflight exit78 при повторной блокировке.
+Собственная read-only проверка US4 подтвердила `CGSSessionScreenIsLocked=Yes`,
+`kCGSSessionSecureInputPID=650`, loginDone/onConsole=Yes.
+`/tmp/us4-joint27-session-preflight.log`. Состояние сеанса не менялось, GUI US4 не ставился;
+новых результатов RelationRollupTests/18 gallery/live нет. Bundle27.1 готов и сохранён.
+T089/T093/T094 остаются открытыми; после нового unlock нужен свежий GUI preflight и передача от US3.
