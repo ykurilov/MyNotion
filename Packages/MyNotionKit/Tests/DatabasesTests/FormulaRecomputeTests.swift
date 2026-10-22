@@ -2,6 +2,7 @@ import Foundation
 import Formulas
 import GRDB
 import Testing
+import Synchronization
 @testable import Databases
 @testable import NotesCore
 
@@ -373,6 +374,27 @@ struct FormulaRecomputeTests {
         queue.waitUntilIdle()
         for row in tasks { #expect(try hasComputed(row, task("Итог"))) }
     }
+
+    @Test("Неизменный итог формулы не теряет уведомление о правке исходной ячейки")
+    @MainActor
+    func unchangedResultStillAnnouncesEdit() throws {
+        let constant = try addFormula("Ноль часов", to: sample.tasksId, #"prop("Часы") * 0"#)
+        queue.waitUntilIdle()
+        let row = try rows(of: sample.tasksId)[0]
+        #expect(try computed(row, constant) == .number(0))
+        let before = try store.write { try $0.cell(rowId: row, propertyId: task("Часы"))?.value?.number ?? 0 }
+        let observed = Mutex<Set<UUID>>([])
+        let key = DatabaseOperations.touchedKey
+        let observer = NotificationCenter.default.addObserver(forName: DatabaseOperations.didChange, object: nil, queue: .main) { note in
+            if let rows = note.userInfo?[key] as? Set<UUID> { observed.withLock { $0.formUnion(rows) } }
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        let operations = DatabaseOperations(store: store)
+        try operations.setCell(rowId: row, propertyId: task("Часы"), value: .number(before + 1))
+        #expect(try computed(row, constant) == .number(0))
+        #expect(observed.withLock { $0.contains(row) }, "вид строки получает правку даже при прежнем вычисленном кэше")
+    }
+
 }
 
 /// Подменённые часы.

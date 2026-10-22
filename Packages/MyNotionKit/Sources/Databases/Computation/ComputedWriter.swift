@@ -25,9 +25,14 @@ public enum ComputedWriter {
         INSERT INTO db_computed (rowId, propertyId, value, sortText, sortNumber, searchText, isLive) VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(rowId, propertyId) DO UPDATE SET value = excluded.value, sortText = excluded.sortText,
             sortNumber = excluded.sortNumber, searchText = excluded.searchText, isLive = excluded.isLive
+        WHERE db_computed.value IS NOT excluded.value OR db_computed.sortText IS NOT excluded.sortText
+            OR db_computed.sortNumber IS NOT excluded.sortNumber OR db_computed.searchText IS NOT excluded.searchText
+            OR db_computed.isLive IS NOT excluded.isLive
         """
 
-    /// В транзакции правки: итоги её строк, без сверки.
+    /// В транзакции правки: итоги её строк. Совпадающий кэш не переписывает вторичные индексы.
+    /// NULL-итог без записи вставляется: наличие строки отмечает завершённое вычисление.
+    /// Часы/события правки принадлежат NotesTransaction и ComputationHook, а не локальному кэшу.
     public static func write(_ values: [ComputedValue], in transaction: NotesTransaction) throws {
         try write(values, in: transaction.database)
     }
