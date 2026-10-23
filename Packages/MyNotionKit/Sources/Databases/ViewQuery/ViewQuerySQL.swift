@@ -32,6 +32,8 @@ public struct ViewQuerySQL {
     public var calendar: Calendar
 
     private var joins: [String] = []
+    /// Свойство выбора или статуса, чей вариант читается третьей колонкой (`fetch(in:optionValuesOf:)`).
+    private var optionValueProperty: DatabaseProperty?
     private var joinArguments: [DatabaseValueConvertible?] = []
     private var whereArguments: [DatabaseValueConvertible?] = []
 
@@ -72,8 +74,9 @@ public struct ViewQuerySQL {
             order.append("p.sortKey")
         }
         order.append("p.id")
+        let optionColumn = optionValueProperty.map { ", \(join($0, table: "db_cell")).sortText AS optionValue" } ?? ""
         let sql = """
-            SELECT p.id, \(groupColumn) AS groupKey FROM page p
+            SELECT p.id, \(groupColumn) AS groupKey\(optionColumn) FROM page p
             \(joins.joined(separator: "\n"))
             WHERE \(conditions.joined(separator: " AND "))
             ORDER BY \(order.joined(separator: ", "))
@@ -106,6 +109,26 @@ public struct ViewQuerySQL {
             if grouped { keys.append(row[1]) }
         }
         return ViewQueryResult(rowIds: ids, groupKeys: grouped ? keys : nil)
+    }
+
+    /// Строки вида и вариант выбора или статуса `property` у каждой из них — тем же запросом (группы вида, T085):
+    /// значения читаются только у строк, прошедших фильтр, а не у всех строк базы. Пустого варианта в словаре нет —
+    /// как у `PropertyValues.read`.
+    public mutating func fetch(in db: Database, optionValuesOf property: DatabaseProperty) throws -> (rowIds: [UUID], values: [UUID: JSONValue]) {
+        optionValueProperty = property
+        defer { optionValueProperty = nil }
+        let (sql, arguments) = build()
+        let statement = try db.cachedStatement(sql: sql)
+        statement.arguments = arguments
+        var ids: [UUID] = []
+        var values: [UUID: JSONValue] = [:]
+        let rows = try Row.fetchCursor(statement)
+        while let row = try rows.next() {
+            guard let id = Self.uuid(row[0]) else { continue }
+            ids.append(id)
+            if let option: String = row[2] { values[id] = .string(option) }
+        }
+        return (ids, values)
     }
 
     // MARK: Сортировки
