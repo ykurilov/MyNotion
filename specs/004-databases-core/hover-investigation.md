@@ -127,3 +127,26 @@ Source-цепочки уточнены: focused hint использует firstR
 Единственный поставленный GUI-проход остановлен read-only preflight до сборки/запуска: `CGSSessionScreenIsLocked=Yes`, `kCGSSessionSecureInputPID=650`. Сохранены `/tmp/empty-heading-preflight.png` (полностью чёрный), `/tmp/empty-heading-session.txt`; оригиналы iMac `~/work/shots/empty-heading-current/{preflight.png,session.txt,actions.jsonl}`. Guard возвратил78. Состояние сеанса НЕ меняли, кликов вслепую не делали, GUI освобождён и напрямую передан US3 (тот предупреждён о блокировке). Свежую build затем выполнили без GUI.
 
 После сообщения координатора об unlock остаётся один живой проход на свежем app: пустой heading2/noicon; различимые title/placeholder; persistent↔focused hint; add-cover к уже открытой странице; scroll/return, resize, реальные hover-движения и ручки. Unit red→green доказывает исправление найденного setCover overlay, но НЕ завершает живую приёмку и не устанавливает причину первоначального hover flicker. Hover остаётся отдельным незакрытым наблюдением.
+
+
+## Живая приёмка исправления 23.10, после wake дисплея
+
+Координатор установил причину чёрных кадров: display sleep (pmset displaysleep10, screenLock off), а не запрос пароля. Сигналы ScreenIsLocked/loginwindow сами по себе не различали эти случаи. По его разрешению добавлен только `caffeinate -u -t 2` перед preflight; остальные настройки сеанса не менялись. После wake desktop видим, системных препятствий нет.
+
+Общая `6e09da8` подтянута (merge `71e4c9b`). Один GUI-проход через run-on-imac.sh lock, no-fallback, wait1800, jobs4. Новая Debug-сборка **build.exit0**; новая SQLite fixture «Название страницы», no icon, первый heading2 ПУСТОЙ. Подготовка через VisualSamplePage+собственную SQLite при закрытом приложении, без набора dsa/автокоррекции. Новый app PID58627/window3205. Исходный GUI-контроллер завершился0, RELEASE; экран передан US3 напрямую, после него US4. Никаких новых GUI для разбора изображений не занимали.
+
+### Фактически выполнено
+
+- Страница открыта без cover; проверены body-focus (подсказка с кареткой) и title-focus (persistent placeholder). Реальным наведением в header появилась штатная «Добавить обложку»; нажата эта кнопка на УЖЕ открытой странице. Cover появился, title/placeholder/последующие абзацы сдвинулись вместе, наложения нет.
+- После add-cover focused placeholder и persistent placeholder по отдельности видны ниже title. AX title frame y519,h50 при wide1740. PNG `cover-added.png`, `focused-cover.png`.
+- Реальная прокрутка down10/up50 lines: title AX y519→319→519, текст и обложка действительно перемещались. `scrolled.png`, `scroll-return.png`; строки не пересекаются.
+- Реальный resize1740→1000→1740: AX title width718→535→718; кадры `narrow.png`, `wide-return.png`, наложения нет.
+- Реальный переход в «Подстраница первая» подтверждён AX title этой страницы. Первый клик возврата попал в «Показать все»: появившийся раздел «Недавние» сдвинул дерево. После свежего снимка координаты исправлены, возврат в «Название страницы» подтверждён AX title y519,h50 и `page-return-confirmed.png`. Кадр `page-return.png` показывает ошибочную промежуточную страницу «Недавние», НЕ считать его успешным возвратом.
+-27 реальных native pointer moves:9 по title,9 по filled heading1,9 по paragraph. get_cursor_position подтвердил1010/541,1010/692,1010/740 points, соответствующие видимым строкам. Для каждой строки3 sample PNG сравнили с baseline: во всех9 ROI число пикселей с разницей>8 равно0. Деформация текста в этих дискретных кадрах не воспроизвелась. Это не доказывает отсутствия изменений между кадрами.
+- Ручки над heading/paragraph в hover readback НЕ появились; после scroll они видны у списка. Поэтому полная приёмка поведения ручек/исходного flicker остаётся открытой, их исправление этим проходом не доказано. Меню ручки и редактирование в этой серии не проверялись. Не связывать этот остаток с причиной cover overlap без доказательств.
+
+### Отдельное наблюдение о рисунке cover
+
+Штатный random cover выбрал gradients_3 («Сумеречный»), но его рисунок на window И desktop PNG почти белый с пастельными полосами; после возврата рисунок меняется. Это отдельный видимый дефект render градиента, не наложение title/placeholder и не доказанная причина hover. В текущей scoped правке CoverGallery не менялась; требуется отдельная диагностика.
+
+Артефакты: локально `/tmp/empty-heading-live-23-final/`, iMac `~/work/shots/empty-heading-live-23/`: `build.exit`, `build.log`, `preflight.png`, `session.txt`, `actions.jsonl`, `result-1.json`…`result-6.json`, window и desktop PNG. Показательные кадры: `focused-cover.png`, `narrow.png`, `page-return-confirmed.png`; градиент также виден на `cover-added-desktop.png`. Журнал `/tmp/empty-heading-live-23.log`. Исправление setCover прошло живую геометрическую приёмку add-cover/empty hint/scroll/resize/page-return; общий hover и render градиента не объявляются исправленными.
