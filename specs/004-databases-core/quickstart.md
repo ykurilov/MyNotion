@@ -618,3 +618,36 @@ SQL/хранение/миграции не менялись, причина open
 
 Граница приёмки: T079 закрыта,28gallery выполнены; T084 остаётся из-за live Notion,
 T085 из-за реальных performance failures. Основной checkout не изменялся, worktree сохраняется.
+
+### US4: финальный живой PASS, 23.10.2026
+
+После прямой передачи GUI от US3 выполнена адресная серия на совместном product 4eca0a2,
+Xcode 27.1, own защищённый `.imac-runner-us4-build` со ссылкой build. Fresh preflight после разрешённого
+`caffeinate -u -t 2` показал живой экран без перекрывающего modal; прежний флаг ScreenIsLocked
+координатор связал с display sleep, screenLock=off. Никакие настройки/чужие процессы не менялись.
+
+| Проверка | Итог |
+|---|---|
+| RelationRollupTests (с decimals2) | **1 PASS, 65,886 с**, ui.exit0 |
+| Relation gallery | **12/12**, 6 состояний в двух темах, 26 с, exit0 |
+| Rollup gallery (включая number settings) | **6/6**, 3 состояния в двух темах, 13 с, exit0 |
+| SyncRelationsTwoMacsUITests | **1 PASS, 28,235 с**, live.exit0 |
+| Initial delivery / Return→remote rollup | **1,4 с / 0,8 с**, новый таймер перед Return, предел 10 с сохранён |
+
+Live подтвердил 5 связей и суммы 17/14 с обеих сторон, открытый вид второго клиента. Два экземпляра
+на одном iMac, отдельные SQLite и локальный сервер; проверка двух физических Mac не заявляется.
+Все 18 gallery PNG осмотрены и сверены с локальными эталонами Notion: relation chooser/limit/related
+property/picker/chips, rollup calculate и number settings, две темы, панели в пределах окна.
+Сохраняется оговорённый вариант единого списка вычислений с разделами вместо вложенных submenu Notion.
+
+Артефакты `/tmp/us4-joint27-review/` (ui/uitest.log, live/uitest.log, live.log, gallery-relation/,
+gallery-rollup/, desktop.png/json, windows.json, четыре отдельных .exit0).
+Live screenshots: `live/attachments/relations-mac-a_0_67BF2735-5D89-46CF-9182-CCC4447E5B26.png`
+и `relations-mac-b_0_8033D41C-45E2-475B-A7A5-9430D3235482.png`. Оба attachments показывают рабочий стол
+с передним окном второго клиента 17/14; равенство обоих хранилищ проверено assertions.
+
+Первая guard-попытка остановилась до preflight/App из-за удалённого rsync обычного build (exit3).
+После этого выполнено вынужденное восстановление bundle в защищённом кэше: no-GUI process/build.exit0,
+`/tmp/us4-protected27-prebuild-fetch/`; GUI runner `/tmp/us4-joint27-gui2-run.log` завершился 0.
+Product не менялся, принятые 680 units и холодный budget 73,4/170,4 не повторялись.
+**T089/T093/T094 закрыты [x] по этим фактическим PASS.** Старые FAIL/блокировки выше - история.

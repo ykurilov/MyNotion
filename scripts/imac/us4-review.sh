@@ -2,6 +2,8 @@
 # Только на iMac через run-on-imac.sh lock после передачи GUI от US3.
 # build/us4-joint27-prebuild/build.exit=0 обязателен; marker run-ui — после осмотра desktop.
 set +e
+# rsync защищает .imac-runner-*; обычный build может удаляться при следующем sync.
+test -e build || ln -s .imac-runner-us4-build build
 review=build/us4-joint27-review
 if test "$(cat build/us4-joint27-prebuild/build.exit 2>/dev/null)" != 0; then
   echo "blocked: current Debug prebuild did not pass"
@@ -9,6 +11,8 @@ if test "$(cat build/us4-joint27-prebuild/build.exit 2>/dev/null)" != 0; then
 fi
 mkdir -p "$review"
 rm -f "$review/run-ui"
+# Разрешённое пробуждение погасшего дисплея; настройки блокировки не меняются.
+caffeinate -u -t 2
 ioreg -n Root -d1 > "$review/session.txt"
 ~/.local/bin/cua-driver call get_desktop_state "{\"screenshot_out_file\":\"$PWD/$review/desktop.png\"}" > "$review/desktop.json" 2>&1
 ~/.local/bin/cua-driver call list_windows '{"on_screen_only":true}' > "$review/windows.json" 2>&1

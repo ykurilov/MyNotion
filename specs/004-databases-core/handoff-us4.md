@@ -1,5 +1,10 @@
 # Передача: US4 «Связи и сводки» (волна C, T086–T094)
 
+**Итог 23.10.2026:** T086–T094 подтверждены; RelationRollupTests PASS 65,886 с, галерея 18/18
+визуально проверена в двух темах, live PASS 28,235 с (initial 1,4 с, Return→remote rollup 0,8 с).
+Артефакты `/tmp/us4-joint27-review/`. Подробный итог и ограничения в последнем разделе; прежние
+блокировки и FAIL ниже сохранены как история диагностики, они не являются текущим статусом.
+
 Ветка `004-us4`, папка `/Volumes/YurySSD/Мои приложения/MyNotion-004-us4` (git worktree от `004-databases-core`). В неё уже влита
 `004-us2` до `12982ce` (окна ячеек нужны окну связи) — при слиянии в основную ветку порядок US2 → US4 → US3 сохраняется сам.
 
@@ -172,3 +177,49 @@ build.exit=0 до preflight и использования bundle; результ
 `/tmp/us4-joint27-session-preflight.log`. Состояние сеанса не менялось, GUI US4 не ставился;
 новых результатов RelationRollupTests/18 gallery/live нет. Bundle27.1 готов и сохранён.
 T089/T093/T094 остаются открытыми; после нового unlock нужен свежий GUI preflight и передача от US3.
+
+## Финальная адресная серия, 23.10.2026
+
+После прямой передачи GUI от US3 выполнен fresh preflight и единая серия через
+`scripts/imac/run-on-imac.sh lock -- 'bash scripts/imac/us4-review.sh'`. No-fallback, wait 1800, jobs 4.
+Product source (`App/Packages/PerformanceTests/UITests`) совпадает с совместным 4eca0a2; product-правок
+не потребовалось. Принятые 680 joint unit и cold-budget 73,4/170,4 мс не повторялись.
+
+Guard первой попытки остановил выполнение до preflight из-за удалённого при rsync обычного build
+(`/tmp/us4-joint27-gui-run.log`, exit3); App не запускался. Это ошибка подготовки кэша, не product failure.
+Bundle восстановлен no-GUI в **.imac-runner-us4-build**, защищённом runner filter `P .imac-runner-*`;
+`build` создаётся как ссылка. `/tmp/us4-protected27-prebuild-run.log`, process exit0/build.exit0,
+логи `/tmp/us4-protected27-prebuild-fetch/`. Последующая GUI-синхронизация сохранила bundle.
+Разрешённый `caffeinate -u -t 2` перед ioreg будит погасший дисплей, настройки блокировки не меняет.
+Координатор выяснил, что прежний ScreenIsLocked-флаг относился к display sleep при screenLock=off.
+
+| Этап | Фактический результат | Артефакт |
+|---|---|---|
+| Fresh desktop preflight | живой экран, без перекрывающих modal; фоновое DeepL update и уведомление Xcode не перекрыли тест | desktop.png/json, windows.json, session.txt |
+| RelationRollupTests | **1 PASS, 65,886 с**, ui.exit0; relation/create row/undo/redo/sum/decimals2/edit hours | ui/uitest.log |
+| Relation gallery | **6 состояний ×2 темы =12/12**, 26 с, gallery-relation.exit0 | gallery-relation/ |
+| Rollup gallery | **3 состояния ×2 темы =6/6**, 13 с, gallery-rollup.exit0 | gallery-rollup/ |
+| SyncRelationsTwoMacsUITests | **1 PASS, 28,235 с**, live.exit0; initial 1,4 с, Return→remote rollup **0,8 с <10 с** | live/uitest.log, live.log |
+
+Корень всех артефактов `/tmp/us4-joint27-review/`; внешний runner
+`/tmp/us4-joint27-gui2-run.log` exit0, отдельные ui/gallery-relation/gallery-rollup/live.exit все 0.
+Live проверил 5 связей и суммы 17/14 в обеих базах после добавлений с обеих сторон; второй клиент открыл
+таблицу «Проекты». Это два экземпляра на одном iMac с отдельными SQLite и локальным сервером, не два
+физических Mac. Attachments обоих имён содержат снимки рабочего стола с тем же передним окном второго
+клиента; визуально подтверждают открытую таблицу 17/14, равенство обеих SQLite подтверждают assertions.
+
+Осмотрены все 18 PNG, сверены локальные notion-relation/rollup эталоны: новая/двусторонняя связь,
+выбор базы и лимита, выбранные страницы с минусом/«Выбрать ещё», таблица с ответной связью и сводками,
+настройки relation→property→calculate, формат/точность/полоса/кольцо/цвет/divideBy/showNumber.
+Обе темы без перекрытия/выхода панелей за окно. Сохранён ранее документированный вариант: вычисления
+одним прокручиваемым списком с разделами вместо вложенных Notion submenu; pixel-identical сравнение
+не заявляется. T093 закрыта по фактической генерации и визуальному осмотру 18 снимков.
+
+Актуальные снимки:
+- `/tmp/us4-joint27-review/gallery-rollup/rollup-number-settings--1440x900--dark.png`
+- `/tmp/us4-joint27-review/gallery-relation/relation-picker--1440x900--light.png`
+- `/tmp/us4-joint27-review/live/attachments/relations-mac-a_0_67BF2735-5D89-46CF-9182-CCC4447E5B26.png`
+- `/tmp/us4-joint27-review/live/attachments/relations-mac-b_0_8033D41C-45E2-475B-A7A5-9430D3235482.png`
+
+**T089/T093/T094 отмечены [x] только после PASS.** GUI-слот освобождён, координатор и US3 уведомлены.
+Основной checkout не правился; интеграцию финального harness/docs/tasks коммита выполняет координатор.
