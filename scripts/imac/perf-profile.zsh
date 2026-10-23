@@ -1,7 +1,7 @@
 #!/bin/zsh
 # На iMac внутри `imac-run --gui` (место «экран»): профиль превышений T085 — открытие вида, вкладки, запуск,
 # место прокрутки. Не приёмочный замер: цифры бюджета дают сами тесты бюджета без sample.
-#   perf-profile.zsh [open] [tabs] [launch] [fresh] [scroll] [scrollexp]   — без аргументов open tabs launch scroll
+#   perf-profile.zsh [open] [tabs] [launch] [fresh] [freshreg] [scroll] [scrollexp]   — без аргументов open tabs launch scroll
 set -euo pipefail
 source ${0:A:h}/lib.sh
 require_toolchain
@@ -14,7 +14,7 @@ parts=($@)
 context() { date; uptime; ps -axo pcpu,pid,comm | sort -nr | sed -n '1,10p'; }
 context > $out/context.log
 
-if (( ${parts[(I)open]} || ${parts[(I)tabs]} || ${parts[(I)launch]} || ${parts[(I)fresh]} )); then
+if (( ${parts[(I)open]} || ${parts[(I)tabs]} || ${parts[(I)launch]} || ${parts[(I)fresh]} || ${parts[(I)freshreg]} )); then
   xcodegen generate -q
   xcodebuild -scheme MyNotionPerformance -configuration Release -derivedDataPath $dd -jobs $JOBS build-for-testing -quiet > $out/build.log 2>&1
 fi
@@ -89,7 +89,7 @@ if (( ${parts[(I)launch]} )); then
   rm -f $out/launch/*.sqlite*
 fi
 
-if (( ${parts[(I)fresh]} )); then
+if (( ${parts[(I)fresh]} || ${parts[(I)freshreg]} )); then
   # Первый запуск только что собранного приложения: копия бандла — новый файл, которого система ещё не запускала.
   print 'stage fresh' | tee -a $out/stages.log
   mkdir -p $out/fresh
@@ -105,17 +105,26 @@ if (( ${parts[(I)fresh]} )); then
     pkill -f "^$bundle/Contents/MacOS/MyNotion" || true
     sleep 1
   }
+  # freshreg: та же копия, но до первого запуска её регистрирует LaunchServices — так видно, его ли это цена.
+  lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+  kinds=()
+  (( ${parts[(I)fresh]} )) && kinds+=(copy)
+  (( ${parts[(I)freshreg]} )) && kinds+=(reg)
   for round in 1 2 3; do
-    copy=$out/fresh/copy$round/MyNotion.app
-    mkdir -p ${copy:h}
-    cp -R $app $copy
-    fresh_once copy$round-first $copy
-    fresh_once copy$round-second $copy
+    for kind in $kinds; do
+      copy=$out/fresh/$kind$round/MyNotion.app
+      mkdir -p ${copy:h}
+      cp -R $app $copy
+      [[ $kind == reg ]] && $lsregister -f $copy
+      sleep 3
+      fresh_once $kind$round-first $copy
+      fresh_once $kind$round-second $copy
+    done
   done
   fresh_once original $app
   du -sh $app $app/Contents/MacOS/MyNotion > $out/fresh/size.txt 2>&1 || true
   otool -L $app/Contents/MacOS/MyNotion >> $out/fresh/size.txt 2>&1 || true
-  rm -rf $out/fresh/copy*
+  rm -rf $out/fresh/copy* $out/fresh/reg*
 fi
 
 if (( ${parts[(I)scroll]} )); then
