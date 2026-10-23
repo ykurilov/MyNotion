@@ -44,7 +44,16 @@ extension PageTextView {
         let start = mapper.paragraphStart(ofBlockAt: index)
         guard let location = storage.location(storage.documentRange.location, offsetBy: start) else { return }
         let clip = scrollView.contentView
-        let top = layoutManager.textViewportLayoutController.relocateViewport(to: location) + textContainerOrigin.y
+        var top = layoutManager.textViewportLayoutController.relocateViewport(to: location) + textContainerOrigin.y
+        // Блок в первых экранах: всё выше него — сразу точной раскладкой, а не оценкой. Иначе выше потом уточнялось уже
+        // после раскладки видимой области, и абзацы под блоком оставались на старых местах: заголовок у верха области
+        // возвращался на 20–70 точек ниже (замер вкладок: 2 возврата из 110). Раскладка с начала у начала страницы
+        // недорогая — виды блоков (`BlockViewHosting`) делают её там всё равно.
+        if top - textContainerOrigin.y < clip.bounds.height * 2,
+           let end = storage.location(location, offsetBy: max(0, mapper.characterRange(ofBlocksAt: index..<index + 1).length)) {
+            layoutManager.ensureLayout(for: NSTextRange(location: storage.documentRange.location, end: end) ?? storage.documentRange)
+            top = paragraphTop(ofBlockAt: index) ?? top
+        }
         blockViews.withoutUpdatesOnScroll {
             clip.scroll(to: NSPoint(x: clip.bounds.minX, y: max(0, top + place.offset)))
             scrollView.reflectScrolledClipView(clip)
