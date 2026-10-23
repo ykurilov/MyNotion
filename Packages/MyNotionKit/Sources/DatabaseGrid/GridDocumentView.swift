@@ -138,6 +138,7 @@ final class GridDocumentView: NSView, NSMenuItemValidation {
             x += column.width
         }
         let selectedRows = grid?.selectedRows ?? []
+        content.prepareRows(rows)
         for index in rows {
             let rect = rowRect(index)
             if selectedRows.contains(index) {
