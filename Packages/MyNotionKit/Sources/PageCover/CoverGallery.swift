@@ -131,11 +131,14 @@ public enum CoverGallery {
     }
 
     private static func bitmap(side: Int, colors: [UInt32]) -> CGImage? {
-        var bytes = colors.flatMap { [UInt8($0 >> 16 & 0xFF), UInt8($0 >> 8 & 0xFF), UInt8($0 & 0xFF), 0xFF] }
-        guard let space = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
-        return bytes.withUnsafeMutableBytes { buffer in
-            CGContext(data: buffer.baseAddress, width: side, height: side, bitsPerComponent: 8, bytesPerRow: side * 4, space: space,
-                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)?.makeImage()
-        }
+        let bytes: [UInt8] = colors.flatMap { [UInt8($0 >> 16 & 0xFF), UInt8($0 >> 8 & 0xFF), UInt8($0 & 0xFF), 0xFF] }
+        // Картинка живёт дольше bitmap(). CGContext с внешним указателем оставлял её
+        // с освобождённым буфером массива; provider удерживает собственные данные.
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let provider = CGDataProvider(data: Data(bytes) as CFData) else { return nil }
+        return CGImage(width: side, height: side, bitsPerComponent: 8, bitsPerPixel: 32,
+                       bytesPerRow: side * 4, space: space,
+                       bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                       provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
     }
 }
