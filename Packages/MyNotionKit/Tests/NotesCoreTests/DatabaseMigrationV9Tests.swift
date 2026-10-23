@@ -60,7 +60,7 @@ struct DatabaseMigrationV9Tests {
         let before = try { let db = try AppDatabase.open(at: folder.databaseURL, migrations: Self.upToV8); defer { db.close() }
             return try Self.contentDump(db) }()
 
-        let database = try AppDatabase.open(at: folder.databaseURL)
+        let database = try AppDatabase.open(at: folder.databaseURL, migrations: DatabaseMigrationV10Tests.upToV9)
         defer { database.close() }
         #expect(try database.appliedSchemaVersion() == "v9")
         #expect(try Self.contentDump(database) == before, "Содержимое 001–003 не изменилось, rowid блоков те же")

@@ -31,7 +31,7 @@ final class ReferenceMigrationTests: XCTestCase {
                              seconds, pages, version ?? "—", backup ? "есть" : "нет")
         print(summary)
         add(XCTAttachment(string: summary))
-        XCTAssertEqual(version, "v9", "через v7 до текущей схемы")
+        XCTAssertEqual(version, "v10", "через v7 до текущей схемы")
         XCTAssertTrue(backup, "Перед миграцией нет копии MyNotion.backup-v6.sqlite")
         XCTAssertLessThanOrEqual(seconds, Self.budgetSeconds, "Миграция эталона дольше 2 с")
     }
@@ -64,7 +64,7 @@ final class ReferenceMigrationTests: XCTestCase {
                              seconds, pages, version ?? "—", backups.joined(separator: ", "))
         print(summary)
         add(XCTAttachment(string: summary))
-        XCTAssertEqual(version, "v9")
+        XCTAssertEqual(version, "v10")
         XCTAssertTrue(backup, "Перед миграцией нет копии базы")
         XCTAssertLessThanOrEqual(seconds, Self.budgetSeconds, "Миграция эталона дольше 2 с")
     }

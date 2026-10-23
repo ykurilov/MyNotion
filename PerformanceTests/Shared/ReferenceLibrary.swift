@@ -18,6 +18,17 @@ enum ReferenceLibrary {
             try ReferenceLibraryGenerator().generate(at: base)
             try DatabaseSampleGenerator().generate(at: url, base: base)
         }
+        try migrate(url)
         return url
+    }
+
+    /// Эталон, созданный прошлой схемой (v9 до индекса v10), мигрирует здесь, при подготовке: иначе миграция и копия
+    /// базы попали бы в замеренный запуск. Свежий эталон — уже текущей схемы, открытие ничего не меняет.
+    static func migrate(_ url: URL) throws {
+        try AppDatabase.open(at: url).close()
+        let folder = url.deletingLastPathComponent()
+        for name in try FileManager.default.contentsOfDirectory(atPath: folder.path) where name.contains(".backup-v") {
+            try FileManager.default.removeItem(at: folder.appendingPathComponent(name))
+        }
     }
 }
