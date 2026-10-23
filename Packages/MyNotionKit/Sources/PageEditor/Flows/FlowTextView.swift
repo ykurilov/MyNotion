@@ -106,7 +106,7 @@ extension PageTextView {
               let end = storage.location(start, offsetBy: characters.length),
               let range = NSTextRange(location: start, end: end) else { return }
         textLayoutManager.invalidateLayout(for: range)
-        textLayoutManager.textViewportLayoutController.layoutViewport()
+        layoutKeepingScrollAnchor { textLayoutManager.textViewportLayoutController.layoutViewport() }
         needsDisplay = true
         (self as? FlowTextView)?.onContentChange?()
     }

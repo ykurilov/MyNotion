@@ -879,7 +879,7 @@ public class PageTextView: NSTextView {
 
     /// После раскладки видимой области — виды блоков на свои абзацы, возвращённое место прокрутки — на своё.
     public override func layout() {
-        super.layout()
+        layoutKeepingScrollAnchor { super.layout() }
         blockViews.update()
         keepScrollAnchor()
     }

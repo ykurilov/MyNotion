@@ -85,6 +85,16 @@ extension PageTextView {
         scrollAnchor?.visibleTop = clip.bounds.minY
     }
 
+    /// Раскладка видимой области, после которой TextKit 2 сам сдвигает прокрутку, уточнив высоты выше неё
+    /// (`textViewportLayoutControllerDidLayout`). Это не чужая прокрутка: якорь принимает новое место, а потом ставит
+    /// блок обратно. Иначе он отпускался посреди возврата места, когда колонки выше узнавали свою высоту (T085).
+    func layoutKeepingScrollAnchor(_ layout: () -> Void) {
+        guard let anchor = scrollAnchor, let clip = enclosingScrollView?.contentView,
+              abs(clip.bounds.minY - anchor.visibleTop) < 0.5 else { return layout() }
+        layout()
+        scrollAnchor?.visibleTop = clip.bounds.minY
+    }
+
     /// Верх абзаца блока в координатах текста по разложенному фрагменту; `nil` — абзац не разложен.
     func paragraphTop(ofBlockAt index: Int) -> CGFloat? {
         guard let layoutManager = textLayoutManager, let storage = textContentStorage,
