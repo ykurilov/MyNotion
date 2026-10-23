@@ -97,6 +97,27 @@ struct PageScrollPlaceTests {
         #expect(abs(restored.offset - saved.offset) <= 1, "сдвиг был \(saved.offset), стал \(restored.offset)")
     }
 
+    @Test("Под названием уже после возврата места появилась строка (обратные ссылки) — блок остаётся на месте")
+    func placeHoldsWhenHeaderGrows() throws {
+        let fixture = try longPage()
+        try scroll(fixture, to: 300)
+        let place = PageScrollPlace()
+        place.attach(fixture.textView)
+        let saved = try #require(place.current())
+
+        let reopened = try EditorFixture(reopening: fixture)
+        reopened.window.displayIfNeeded()
+        reopened.textView.restoreScrollPlace(saved)
+        // Счёт обратных ссылок читается в фоне и приходит после открытия: шапка выше на строку, текст ниже.
+        reopened.textView.setUnderTitle(NSView(), height: 19)
+        reopened.window.displayIfNeeded()
+
+        place.attach(reopened.textView)
+        let restored = try #require(place.current())
+        #expect(restored.blockId == saved.blockId)
+        #expect(abs(restored.offset - saved.offset) <= 1, "сдвиг был \(saved.offset), стал \(restored.offset)")
+    }
+
     @Test("Человек прокрутил сам — якорь отпущен: перекладка выше больше не двигает страницу")
     func ownScrollReleasesAnchor() throws {
         let fixture = try longPage()
