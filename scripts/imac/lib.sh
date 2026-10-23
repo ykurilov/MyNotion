@@ -69,6 +69,18 @@ run_app() {
   cat $out/stdout $out/stderr 2>/dev/null || true
 }
 
+# Замер — только на тихой машине: свежая сборка будит Spotlight (mds_stores до 130 % CPU на минуту-две), и
+# цифры замера под ним — шум (T085). Ждём, пока индексатор не уймётся (не дольше 5 мин), и пишем, сколько ждали.
+wait_for_quiet_indexer() {
+  local busy waited=0
+  while (( waited < 300 )); do
+    busy=$(ps -axo pcpu=,comm= | awk '/mds_stores|\/mds$|fseventsd/ { s += $1 } END { printf "%d", s }')
+    (( busy < 15 )) && break
+    sleep 5; (( waited += 5 ))
+  done
+  print -- "[MyNotion/iMac] индексатор: ждали ${waited} с, нагрузка ${busy} % CPU; $(uptime | sed 's/.*load/load/')"
+}
+
 # Прогон собранных UI-тестов: xctest_run <папка Products> <папка итогов> [аргументы xcodebuild...]
 # Итоги: <папка итогов>/uitest.log, result.xcresult, вложения (снимки) в attachments/.
 # MYNOTION_UITEST_VIA_TERMINAL=1 — запасной путь: прогон из Терминала в сеансе пользователя, как в виртуальном Mac.
