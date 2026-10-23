@@ -202,7 +202,7 @@ description: "Задачи: базы данных — основа"
 - [x] T076 [P] [US3] `PK/Tests/DatabasesTests/ViewSettingsOperationsTests.swift`: фильтр простой и расширенный (правило, группа, «Превратить в группу», «Удалить фильтр»), сортировки (добавить, переставить, ✕, «Удалить сортировку» — все), видимость, группировка (свойство, шаг, порядок, скрытые и свёрнутые, «Скрывать пустые» по умолчанию), виды (добавить, переименовать, дублировать «Таблица (1)», удалить — не последний), «Открывать строки», «Предел загрузки», перенос, итоги колонок — каждая с ⌘Z
 - [x] T077 [P] [US3] `PK/Tests/DatabasesTests/NewRowDefaultsTests.swift`: значения новой строки по каждому условию contracts и по группе; «Создать» — вверх вида
 - [x] T078 [P] [US3] `PK/Tests/DatabasesTests/ColumnCalculationTests.swift`: каждое вычисление contracts по строкам после фильтра и поиска, у групп — свои
-- [ ] T079 [P] [US3] XCUITest `UITests/ViewFilterSortGroupTests.swift`: сценарии spec, US3 на эталоне 10 000; второй вид со своими настройками; перезапуск
+- [x] T079 [P] [US3] XCUITest `UITests/ViewFilterSortGroupTests.swift`: сценарии spec, US3 на эталоне 10 000; второй вид со своими настройками; перезапуск
 
 ### Implementation for User Story 3
 

@@ -96,7 +96,7 @@ final class ViewFilterSortGroupTests: XCTestCase {
         XCTAssertTrue(any("group-by").waitForExistence(timeout: 5), "Не открылись настройки выбранной группировки")
         app.typeKey(.escape, modifierFlags: [])
         XCTAssertTrue(waitUntil { !any("group-by").exists }, "Esc не закрыл настройки группировки")
-        XCTAssertTrue(waitUntil { (try? self.view("Таблица", "group"))?.contains("propertyId") == true }, "Группировка не записана")
+        XCTAssertTrue(waitUntil { (try? self.view("Таблица", "grouping"))?.contains("propertyId") == true }, "Группировка не записана")
 
         // Второй вид «Все»: «+» в строке видов, имя в настройках.
         tap(any("database-view-add"))
@@ -145,7 +145,7 @@ final class ViewFilterSortGroupTests: XCTestCase {
         XCTAssertTrue(waitUntil { (try? self.view("Задачи — работа", "filter")) == originalFilter }, "Отмена не вернула расширенный фильтр")
         app.quit()
         XCTAssertTrue(try view("Таблица", "filter").contains("isNot"))
-        XCTAssertTrue(try view("Таблица", "group").contains("propertyId"))
+        XCTAssertTrue(try view("Таблица", "grouping").contains("propertyId"))
         XCTAssertEqual(try hiddenCount("Таблица"), 3)
     }
 
@@ -211,9 +211,13 @@ final class ViewFilterSortGroupTests: XCTestCase {
 
     private static let tasks = "(SELECT id FROM page WHERE title = 'Задачи' AND parentId IS NULL AND trashedAt IS NULL AND id IN (SELECT pageId FROM db_database))"
 
-    /// Поле вида базы «Задачи» по имени вида (`filter`, `sorts`, `group`, `columns`).
+    /// Поле вида базы «Задачи» по имени вида (`filter`, `sorts`, `grouping`, `columns`).
     private func view(_ name: String, _ field: String) throws -> String {
-        try query("SELECT COALESCE(\(field), '') FROM db_view WHERE databaseId = \(Self.tasks) AND name = ? LIMIT 1", [name]).first?.first ?? ""
+        guard ["filter", "sorts", "grouping", "columns"].contains(field) else {
+            throw Failure.sql("Неизвестная колонка db_view: \(field)")
+        }
+        let quoted = field.replacingOccurrences(of: "\"", with: "\"\"")
+        return try query("SELECT COALESCE(\"\(quoted)\", '') FROM db_view WHERE databaseId = \(Self.tasks) AND name = ? LIMIT 1", [name]).first?.first ?? ""
     }
 
     private func hiddenCount(_ name: String) throws -> Int {

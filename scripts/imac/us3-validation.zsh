@@ -11,6 +11,8 @@ xcodebuild -checkFirstLaunchStatus > $out/toolchain-status.log 2>&1
 [[ ! -d build/imac-uitest ]] || mv build/imac-uitest $out/preexisting-uitest
 [[ ! -d build/imac-gallery ]] || mv build/imac-gallery $out/preexisting-gallery
 rm -f $out/preflight-ready $out/continue $out/abort
+# Разрешённое координатором пробуждение дисплея; настройки screen lock не меняются.
+caffeinate -u -t 2
 ~/.local/bin/cua-driver call get_desktop_state "{\"screenshot_out_file\":\"$out/desktop.png\"}" > $out/desktop.json
 ~/.local/bin/cua-driver call list_windows '{}' > $out/windows.json
 touch $out/preflight-ready

@@ -523,3 +523,98 @@ T079/T084/T085 остаются открыты; prebuild не подтвержд
 Manifest `/tmp/us3-live-4961489/prepared-source.sha256` только подготовлен; runner source-check GUI серии
 ещё не состоялся и не засчитан. Для возобновления обновить manifest при изменении source и выполнить
 fresh preflight в собственном согласованном GUI-слоте; после серии передать US4.
+
+## Живая приёмка US3 на iMac, 23.10: UI/галерея выполнены, бюджет остаётся открытым
+
+Координатор установил, что прежний чёрный экран был гашением дисплея при screenLock=off,
+а не подтверждённой парольной блокировкой. По его прямому разрешению перед preflight добавлен
+`caffeinate -u -t 2`; настройки screen lock/CGSession и чужие процессы не менялись.
+После прямой передачи hover выполнен собственный свежий preflight, видимый экран без blocking dialogs.
+Серия шла через `scripts/imac/run-on-imac.sh lock`, no-fallback/wait1800, builds jobs4,
+с сохранением protected cache. GUI после последнего адресного теста передан US4 напрямую, своих jobs/pending нет.
+
+Исследуемый product ровно merged4eca0a2; baseline после US4 —9b4b05d.
+В первоначальной и финальной runner-копии все **1008 SHA256 inputs совпали**.
+Product-код в этой живой серии не менялся; новые правки только UI-helper, caffeinate guard и документы.
+Принятые680units не повторялись; US4 budgets не повторялись. Каждый UI source change проходил обычный
+Debug build-for-testing перед test execution, устаревший bundle не использовался.
+
+### UI (T079 закрыта)
+
+- Inline search: **PASS54,446с**, посимвольный поиск, курсор при вставке в середину, Esc после реального обновления.
+- Main: **PASS107,983с**, 1test/0fail, exit0; фильтр,2sorts, поиск/курсор/Esc,3hidden,
+  scroll списка группировки/Статус, Esc, новый вид «Все», обновление имени вкладки, перезапуск,
+  возврат к исходной вкладке и поиску, превращение правила в группу, Cmd-Z, persistence checks после quit.
+- Первый круг main был red86,018с из-за test-helper SQL `COALESCE(group,...)`: reserved keyword и неверное storage-name.
+  Реальная колонка называется `grouping` (SchemaMigrations), модель — `group`. Промежуточные повторы86,759/107,817с
+  выявили второй оставшийся callsite в финальной проверке. Оба исправлены, имена quoted, helper проверяет allowlist
+  filter/sorts/grouping/columns вместо молчаливого SQLite double-quoted literal fallback. Последний полный main — green.
+  Ни одна проверка не удалена/не ослаблена. Исходные red-журналы сохранены.
+
+### Галерея (визуальная часть T084 выполнена, live Notion по-прежнему не принят)
+
+**14 состояний ×2 темы =28/28 PNG, exit0 за57с**. Manifest:28 записей,14unique states,14light/14dark,
+каждый файл существует, окно1440×900pt, все PNG2880×1800px. Просмотрены все28 через обзорные листы,
+дополнительно оригиналы simple-filter dark/settings light: галочка контрастная, вложенная группа не залита
+непрозрачным серым, группы/итоги/перенос видны, настройки ограничены viewport окна.
+Снимки `/tmp/us3-live-23/series/gallery/`; contact-sheets `/tmp/us3-live-23/gallery-{light,dark}-{1,2}.png`,
+порядок в contact-sheets.json. Исходные PNG не изменялись; ImageMagick применён только для обзоров.
+Live Notion сравнение не повторялось и не засчитано; T084 остаётся открытой по этому условию.
+
+### Обычный view budget, без sample
+
+| Проверка | p95,мс | Порог,мс | Итог |
+|---|---:|---:|---|
+| Фильтр |67,9|100|PASS|
+| Сортировка |54,1|100|PASS|
+| Группировка |64,4|100|PASS|
+| Видимость |64,5|100|PASS|
+| Поиск на символ |22,5|50|PASS|
+| Открытие «Задачи — работа» |55,2|50|**FAIL**|
+| Scroll,400 кадров |12,8|16|PASS|
+| Худший scroll frame |16,3|50|PASS|
+
+1test/1failure,14,144с, exit65. Это реальное превышение55,153416>50; порог не ослаблен, T085 не закрыта.
+Медианы частей: запрос31,2; операция/перечитывание33,8; передача15,9; поиск:запрос21,4/кадр13,5/перечитать5,6;
+раскладка0,3/рисование0,1мс. Эти части разных операций не складываются в единый open estimate.
+Load у старта view-budget3,42/3,59/5,45; sample не запускался, слепых повторов бюджета нет.
+
+### Сопоставимый контроль baseline9b4b05d → merged4eca0a2
+
+Одна последовательная пара на одном iMac/macOS27.0.1/Xcode27.1, одинаковые исходники трёх probes,
+одинаковый безопасный lib/on-imac harness. Обе ревизии:3tests,5failed assertions, exit65;
+TypingAndNavigation PASS, LaunchAndMemory/Tabs failed. Числа не освобождают от порогов.
+
+| Проверка |baseline9b4|merged4eca|Порог/итог|
+|---|---:|---:|---|
+| Первый EditorReady,с |1,178|1,285|оба>1,0 FAIL|
+| Остальные4запуска,с |0,724/0,727/0,743/0,824|0,848/0,686/0,709/0,674|PASS|
+| Idle memory max,МБ |64,5|63,8|≤200 PASS|
+| Tabs p95,мс |69,6|70,2|оба>50 FAIL|
+| Back p95,мс |99,9|98,8|оба>50 FAIL|
+| Forward p95,мс |68,8|69,2|оба>50 FAIL|
+| Восстановление scroll |86/110|86/110|оба FAIL|
+| Heap delta20tabs,МБ |2,7|3,1|≤5 PASS|
+| Запуск10tabs,с |0,670/0,640/0,649|0,671/0,808/0,754|≤1 PASS|
+| Переход страниц p95,мс |36,5|39,4|≤50 PASS|
+| Набор1000/10000blocks p95,мс |12,9/28,9|15,1/34,7|PASS|
+
+Контроль подтверждает наличие этих превышений и до US3 в данной паре; он не является статистическим доказательством
+отсутствия любой регрессии. Старый heap+90МБ не повторился: обе актуальные ревизии в пределах5МБ.
+Load baseline3,31/3,52/5,35→5,24/4,29/5,33; merged5,24/4,29/5,33→4,64/4,40/5,19.
+Reference hashes совпадают до/после у обеих: v5 `88f7e00b2bb8c9f6450113b0ef03e39b7afbbb706fe08d7bc652daafb84839c6`,
+db004-v3 `c8c703f4fc15fde909c436efa1d3b2f8ed3cda692e9f7f9dfbbb4545ff09db22`.
+SQL/хранение/миграции не менялись, причина open55,2 и shared tab/scroll failures остаётся открытой.
+
+### Артефакты
+
+- `/tmp/us3-live-23/preflight.png`, windows.json; initial-source-check.log, final-expected-source.sha256;
+- `/tmp/us3-live-23/series/ui/uitest.log` (main red/inlinePASS), retry1/, retry2/ (оба red);
+- `/tmp/us3-live-23/main-final/{test.exit,run.log,result/uitest.log,result/attachments/}` (mainPASS);
+- `/tmp/us3-live-23/series/gallery/{manifest.json,index.html,*.png}`;
+- `/tmp/us3-live-23/series/view-budget/uitest.log`, probe-shots/ и series/context.log;
+- `/tmp/us3-live-23/control/{common,us3}/{uitest.log,context-before.log,context-after.log}`;
+- `/tmp/us3-live-series23.log`, `/tmp/us3-main-{retry,retry2,final}-23.log`.
+
+Граница приёмки: T079 закрыта,28gallery выполнены; T084 остаётся из-за live Notion,
+T085 из-за реальных performance failures. Основной checkout не изменялся, worktree сохраняется.
