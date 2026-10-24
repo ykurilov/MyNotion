@@ -49,11 +49,11 @@ final class SessionContext {
         }
         pageTree.onIconChange = { [weak self, host] pageId, _ in
             self?.touchedPages.insert(pageId)
-            host.treeDidChange([pageId])
+            host.iconDidChange(pageId)
         }
         pageTree.onAppearanceChange = { [weak self, host] pageId in
             self?.touchedPages.insert(pageId)
-            host.treeDidChange([pageId])
+            host.appearanceDidChange(pageId)
         }
         databases.onChange = { [weak self, host] pageIds in
             self?.touchedPages.formUnion(pageIds)

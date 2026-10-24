@@ -105,7 +105,7 @@ let package = Package(
         .target(name: "ControlClient", dependencies: ["ControlProtocol"]),
         // Выполнение команд без окна: только через операции 001–004 (research R2, R3).
         .target(name: "ControlCommands", dependencies: ["ControlProtocol", "NotesCore", "Databases", "Formulas", "PageVersions", "PageSearch",
-                                                        "Attachments", "MarkdownExport", "NotionImport", "Navigation", "PageMarkdown",
+                                                        "Attachments", "MarkdownExport", "NotionImport", "Navigation", "PageMarkdown", "PageCover",
                                                         .product(name: "GRDB", package: "GRDB.swift")]),
         // Страница ↔ Markdown для агента (research R5).
         .target(name: "PageMarkdown", dependencies: ["NotesCore", "MarkdownExport", "NotionImport", "Attachments"]),
@@ -143,7 +143,7 @@ let package = Package(
         .testTarget(name: "ControlServerTests", dependencies: ["ControlServer", "ControlProtocol"]),
         .testTarget(name: "ControlClientTests", dependencies: ["ControlClient", "ControlServer", "ControlProtocol"]),
         .testTarget(name: "ControlCommandsTests", dependencies: ["ControlCommands", "ControlProtocol", "NotesCore", "Databases", "PageVersions",
-                                                                 "MarkdownExport", "NotionImport", "Attachments", "Sync", "PageSearch", "Backlinks",
+                                                                 "MarkdownExport", "NotionImport", "Attachments", "Sync", "PageSearch", "Backlinks", "PageCover",
                                                                  .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "PageMarkdownTests", dependencies: ["PageMarkdown", "NotesCore", "MarkdownExport", "NotionImport", "Attachments", "PageEditor"],
                     resources: [.copy("Fixtures")]),

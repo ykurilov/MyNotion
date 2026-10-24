@@ -72,7 +72,7 @@ public enum PageJSON {
             return PageCover(source: .file(ref), offset: offset)
         }
         throw ControlError(.invalidValue, "Обложка — {\"gallery\": …}, {\"attachmentId\": …} или null",
-                           hint: #"Пример: {"gallery":"gradient-3","offset":0.5}"#, details: ["argument": "cover"])
+                           hint: #"Пример: {"gallery":"gradients_3","offset":0.5}"#, details: ["argument": "cover"])
     }
 
     public static func appearance(_ json: ControlJSON, attachments: AttachmentLookup) throws(ControlError) -> PageAppearance {
