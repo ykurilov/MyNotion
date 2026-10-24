@@ -19,7 +19,8 @@
   "args": { "parent": "Проекты", "title": "Встреча 24.10" },
   "agent": "Codex",                      // --agent или MYNOTION_AGENT; по умолчанию "агент"
   "timeoutMs": 30000,                    // --timeout; по умолчанию 30 000, для import/export — 600 000
-  "cwd": "/Users/ykurilov/work"          // папка клиента: относительные пути файлов считаются от неё
+  "cwd": "/Users/ykurilov/work",         // папка клиента: относительные пути файлов считаются от неё
+  "human": true                          // только с --human: приложение добавит в ответ строку "text"
 }
 ```
 
@@ -31,6 +32,8 @@
 { "id": "c0a8…", "ok": true,  "data": { … }, "warnings": [ { "code": "markdown_unsupported", "message": "…", "line": 12 } ] }
 { "id": "c0a8…", "ok": false, "error": { "code": "page_not_found", "message": "Страница «Проекты/Встрча» не найдена", "hint": "Проверьте путь: mynotion page tree --depth 2", "details": { … } } }
 ```
+
+С `human` в итоговой строке есть `"text": "✓ Создана «Встреча 24.10» (3f2a91c0) в «Проекты»"` — её печатает `--human`; без неё клиент печатает данные сам.
 
 Ход долгой команды (до итоговой): `{"id":"…","progress":{"done":120,"total":900,"stage":"Страницы"}}`.
 
