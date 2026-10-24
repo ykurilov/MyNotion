@@ -79,4 +79,22 @@ struct TextPointerCursorTests {
         #expect(NSCursor.current == NSCursor.arrow, "Шапка унаследовала I-beam")
     }
 
+
+    @Test("Текстовый родитель не заменяет курсор разделителя колонок")
+    func embeddedCursorIsPreserved() throws {
+        let fixture = try EditorFixture([.paragraph("Текст")])
+        let view = fixture.textView
+        view.layoutSubtreeIfNeeded()
+        let divider = ColumnDividerView(frame: NSRect(x: view.textContainerOrigin.x + 100,
+                                                     y: view.textContainerOrigin.y + 5, width: 12, height: 40))
+        view.addSubview(divider)
+        let location = divider.convert(NSPoint(x: 6, y: 20), to: nil)
+        let event = try #require(NSEvent.mouseEvent(with: .mouseMoved, location: location,
+            modifierFlags: [], timestamp: 0, windowNumber: fixture.window.windowNumber,
+            context: nil, eventNumber: 1, clickCount: 0, pressure: 0))
+        NSCursor.resizeLeftRight.set()
+        view.mouseMoved(with: event)
+        #expect(NSCursor.current == NSCursor.resizeLeftRight)
+    }
+
 }
