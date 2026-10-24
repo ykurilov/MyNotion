@@ -18,6 +18,7 @@ enum DatabaseProbeLibrary {
             try autoreleasepool { try DatabaseSampleGenerator().generate(at: source) }
             print("Эталон баз: создан за \(String(format: "%.1f", Date().timeIntervalSince(started))) с")
         }
+        try ReferenceLibrary.migrate(source)
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("MyNotion-db-probe-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let url = folder.appendingPathComponent("MyNotion.sqlite")

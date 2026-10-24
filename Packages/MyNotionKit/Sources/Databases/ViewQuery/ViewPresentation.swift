@@ -29,14 +29,20 @@ extension ViewQuery {
         spec.groupPropertyId = nil
         if search != nil { spec.searchPropertyIds = visiblePropertyIds(of: view, catalog: catalog) }
         var query = ViewQuerySQL(spec: spec, catalog: catalog, now: now)
-        let rowIds = try query.fetch(in: db).rowIds
-        var groups: [ViewGroup]?
-        if let settings = view.groupSettings, let property = catalog.propertiesById[settings.propertyId],
-           PropertyTypes.type(for: property.kind).isGroupable {
-            let context = catalog.context(for: property)
-            let values = try PropertyValues.read(property, of: catalog.databaseId, context: context, in: db)
-            groups = ViewGrouping.groups(rowIds: rowIds, values: values, settings: settings, context: context)
+        guard let settings = view.groupSettings, let property = catalog.propertiesById[settings.propertyId],
+              PropertyTypes.type(for: property.kind).isGroupable else {
+            return ViewPresentation(catalog: catalog, view: view, rowIds: try query.fetch(in: db).rowIds, groups: nil)
         }
+        let context = catalog.context(for: property)
+        let rowIds: [UUID], values: [UUID: JSONValue]
+        if property.kind == .select || property.kind == .status {
+            // Вариант — тем же запросом и только у найденных строк (профиль T085: 10 000 значений ради 1 600 строк).
+            (rowIds, values) = try query.fetch(in: db, optionValuesOf: property)
+        } else {
+            rowIds = try query.fetch(in: db).rowIds
+            values = try PropertyValues.read(property, of: catalog.databaseId, context: context, in: db)
+        }
+        let groups = ViewGrouping.groups(rowIds: rowIds, values: values, settings: settings, context: context)
         return ViewPresentation(catalog: catalog, view: view, rowIds: rowIds, groups: groups)
     }
 }

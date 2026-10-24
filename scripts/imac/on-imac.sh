@@ -30,6 +30,7 @@ case $mode in
     scheme=MyNotion; [[ $CONFIG == Release ]] && scheme=MyNotionPerformance
     xcodegen generate -q || exit $?
     xcodebuild -scheme $scheme -configuration $CONFIG -derivedDataPath $UITEST_DD -jobs $JOBS build-for-testing -quiet || exit $?
+    [[ $CONFIG == Release ]] && wait_for_quiet_indexer
     xctest_run $UITEST_DD/Build/Products build/imac-uitest "$@";;
   *)
     sed -n '2,8p' $0; exit 2;;

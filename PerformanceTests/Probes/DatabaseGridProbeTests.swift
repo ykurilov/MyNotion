@@ -136,6 +136,52 @@ final class DatabaseGridProbeTests: XCTestCase {
         XCTAssertLessThanOrEqual(ProbeEditor.p95(checks), Self.editBudgetMs, "Правка флажка: p95 больше 50 мс")
     }
 
+    /// Быстрая прокрутка, пока порции не пришли (T085, ревью): между кадрами нет хода цикла событий, поэтому порции,
+    /// прочитанные фоном, в сетку не ложатся — каждая новая видимая строка читается на главном потоке. Кадр — те же
+    /// пределы 16 / 50 мс. Для сравнения — тот же шаг, когда порции успевают лечь в сетку между кадрами.
+    func testFastScrollBeforeChunksArriveWithinBudget() throws {
+        let library = try DatabaseProbeLibrary.copy()
+        defer { library.store.database.close(); try? FileManager.default.removeItem(at: library.folder) }
+        let window = DatabaseProbeWindow()
+        defer { window.close() }
+        var lines: [String] = [], worst: [Double] = [], p95s: [Double] = []
+        for (label, step, landing) in [("240 pt", Self.scrollStep, false), ("экран", CGFloat(0), false),
+                                       ("240 pt, порции приходят", Self.scrollStep, true)] {
+            let grid = try DatabaseProbeGrid.open(viewId: library.sample.tableViewId, store: library.store)
+            window.show(grid)
+            window.render()
+            let shift = step > 0 ? step : grid.scrollView.contentSize.height
+            let maxY = grid.scrollView.documentView!.frame.height - grid.scrollView.contentSize.height
+            let readBefore = grid.content.rowsReadOnMainThread
+            var frames: [Double] = []
+            var y: CGFloat = 0
+            while y < maxY, frames.count < 300 {
+                y = min(y + shift, maxY)
+                let target = y
+                frames.append(ProbeEditor.measure {
+                    grid.scrollView.contentView.scroll(to: NSPoint(x: 0, y: target))
+                    grid.scrollView.reflectScrolledClipView(grid.scrollView.contentView)
+                    window.render()
+                })
+                if landing { RunLoop.current.run(until: Date().addingTimeInterval(0.001)) }
+            }
+            let read = grid.content.rowsReadOnMainThread - readBefore
+            lines.append("""
+                по \(label): \(frames.count) кадров, p95 \(ProbeEditor.format(ProbeEditor.p95(frames))) мс, медиана \
+                \(ProbeEditor.format(ProbeEditor.median(frames))) мс, худший \(ProbeEditor.format(frames.max() ?? 0)) мс; \
+                строк на главном потоке \(read) (\(ProbeEditor.format(Double(read) / Double(max(1, frames.count)))) на кадр)
+                """)
+            worst.append(frames.max() ?? 0)
+            p95s.append(ProbeEditor.p95(frames))
+            window.pump(300)
+        }
+        let summary = "Проба сетки: быстрая прокрутка до прихода порций — " + lines.joined(separator: "; ")
+        print(summary)
+        add(XCTAttachment(string: summary))
+        XCTAssertLessThanOrEqual(p95s.max() ?? 0, Self.frameBudgetMs, "Быстрая прокрутка: кадр p95 больше 16 мс")
+        XCTAssertLessThanOrEqual(worst.max() ?? 0, Self.worstFrameBudgetMs, "Быстрая прокрутка: худший кадр больше 50 мс")
+    }
+
     /// Снимок сетки: в каждой целиком видимой строке у названия нарисован текст. Возвращает число таких строк и строки без текста.
     private func check(_ grid: DatabaseGridView, label: String, shots: inout [String]) throws -> (rows: Int, problems: [String]) {
         let bitmap = try XCTUnwrap(DatabaseProbeShots.snapshot(grid))

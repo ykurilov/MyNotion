@@ -204,4 +204,21 @@ struct CollapsingTests {
         editor.perform(.setKind(.bulletItem))
         #expect(editor.textView.hiddenParagraphs.hiddenBlockIds.isEmpty)
     }
+
+    /// Открытие страницы ставит отступы детям цитат, выносок и переключателей (T085, профиль переключения вкладок):
+    /// абзацы перебираются по порядку блоков, и поиск начала абзаца идёт от прошлого, а не с начала текста.
+    /// Вразнобой (порядок множества) 3 000 детей стоили 0,42 с, по порядку — 0,03 с (iMac, отладочная сборка).
+    @Test("3 000 детей цитаты: отступы ставятся одним проходом по тексту")
+    func nestedAdjustmentsInOnePass() throws {
+        let children = (0..<3_000).map { Spec(kind: .paragraph, text: "Строка \($0)", indent: 1) }
+        let editor = try EditorFixture([Spec(kind: .quote, text: "Цитата")] + children)
+        let textView = editor.textView
+        let clock = ContinuousClock()
+        let elapsed = clock.measure { textView.refreshBlockStructure() }
+        #expect(elapsed < .milliseconds(150), "отступы 3 000 детей: \(elapsed)")
+        let storage = try #require(textView.textStorage)
+        let first = try #require(storage.attribute(.paragraphStyle, at: editor.textLocation(ofBlock: 1), effectiveRange: nil) as? NSParagraphStyle)
+        let last = try #require(storage.attribute(.paragraphStyle, at: editor.textLocation(ofBlock: 3_000), effectiveRange: nil) as? NSParagraphStyle)
+        #expect(last.headIndent == first.headIndent && first.headIndent > 0, "дети цитаты сдвинуты одинаково")
+    }
 }

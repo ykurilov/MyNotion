@@ -19,8 +19,20 @@ require_toolchain() {
 }
 
 # Окна и `open` работают, только если на iMac кто-то вошёл в систему (там автовход).
+# Погасший экран блокирует сеанс: окна не видны, AppKit их не рисует, и замеры памяти и времени выходят не о
+# приложении (T085: куча вкладок 95 → 190 МБ вместо 33 → 36). Экран будится; не проснулся — прогон не идёт.
 require_gui_session() {
   [[ $(stat -f %Su /dev/console) == $USER ]] || fail "На iMac не открыт сеанс пользователя $USER: окнам негде появиться."
+  local tries
+  for tries in 1 2 3 4 5; do
+    screen_is_locked || return 0
+    caffeinate -u -t 2
+  done
+  fail "Экран iMac заблокирован и не проснулся: окна не видны, замеры недействительны."
+}
+
+screen_is_locked() {
+  ioreg -n Root -d1 | grep -q '"CGSSessionScreenIsLocked"=Yes'
 }
 
 # XCUITest без окна пароля: режим разработчика и режим автоматизации без подтверждения.
@@ -67,6 +79,18 @@ run_app() {
   mkdir -p $out; rm -f $out/stdout $out/stderr
   open -W -n $APP --stdout $out/stdout --stderr $out/stderr --args "$@"
   cat $out/stdout $out/stderr 2>/dev/null || true
+}
+
+# Замер — только на тихой машине: свежая сборка будит Spotlight (mds_stores до 130 % CPU на минуту-две), и
+# цифры замера под ним — шум (T085). Ждём, пока индексатор не уймётся (не дольше 5 мин), и пишем, сколько ждали.
+wait_for_quiet_indexer() {
+  local busy waited=0
+  while (( waited < 300 )); do
+    busy=$(ps -axo pcpu=,comm= | awk '/mds_stores|\/mds$|fseventsd/ { s += $1 } END { printf "%d", s }')
+    (( busy < 15 )) && break
+    sleep 5; (( waited += 5 ))
+  done
+  print -- "[MyNotion/iMac] индексатор: ждали ${waited} с, нагрузка ${busy} % CPU; $(uptime | sed 's/.*load/load/')"
 }
 
 # Прогон собранных UI-тестов: xctest_run <папка Products> <папка итогов> [аргументы xcodebuild...]

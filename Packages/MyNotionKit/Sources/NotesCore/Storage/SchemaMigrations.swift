@@ -21,6 +21,7 @@ public struct SchemaMigrations: Sendable {
         Step(version: "v7", migrate: addPagesNavigation),
         Step(version: "v8", migrate: indexVersionFilesAndMoves),
         Step(version: "v9", migrate: addDatabases),
+        Step(version: "v10", migrate: indexLiveRowsOfParent),
     ])
 
     /// Та же схема плюс ещё один шаг — для проверки миграций.
@@ -448,6 +449,12 @@ private func addDatabases(_ db: Database) throws {
             UNIQUE (rowId, propertyId)
         );
         """)
+}
+
+/// Строки базы для вида (004, T085): живые дети страницы — без корзины и шаблонов — по одному индексу, и `id` строки
+/// берётся из него же, не читая страниц. Только индекс: данные и синхронизируемая схема не меняются.
+private func indexLiveRowsOfParent(_ db: Database) throws {
+    try db.execute(sql: "CREATE INDEX page_live_by_parent ON page(parentId, trashedAt, isTemplate, sortKey, id)")
 }
 
 private func addSidebarCollapsed(_ db: Database) throws {

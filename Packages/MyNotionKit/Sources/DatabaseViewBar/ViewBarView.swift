@@ -167,11 +167,35 @@ final class ViewBarTabView: NSView {
             NSBezierPath(roundedRect: bounds, xRadius: 14, yRadius: 14).fill()
         }
         let color = active ? Palette.textPrimary : Palette.textSecondary
-        let configuration = NSImage.SymbolConfiguration(pointSize: 12, weight: .medium).applying(.init(paletteColors: [color]))
-        NSImage(systemSymbolName: "tablecells", accessibilityDescription: nil)?.withSymbolConfiguration(configuration)?
+        ViewBarSymbols.image("tablecells", pointSize: 12, weight: .medium, color: color)?
             .draw(in: NSRect(x: 10, y: (bounds.height - 13) / 2, width: 16, height: 13))
         let title = NSAttributedString(string: tab.name, attributes: [.font: font, .foregroundColor: color])
         title.draw(at: NSPoint(x: 32, y: (bounds.height - title.size().height) / 2))
+    }
+}
+
+/// Значки строки вида, один раз на символ, цвет и оформление: новый `NSImage` при каждой отрисовке заново подбирал
+/// представление символа — около 2 мс на открытие вида базы (профиль T085).
+@MainActor
+enum ViewBarSymbols {
+    private struct Key: Hashable {
+        let symbol: String
+        let pointSize: CGFloat
+        let weight: CGFloat
+        let color: ObjectIdentifier
+        let appearance: NSAppearance.Name
+    }
+
+    private static var images: [Key: NSImage] = [:]
+
+    static func image(_ symbol: String, pointSize: CGFloat, weight: NSFont.Weight, color: NSColor) -> NSImage? {
+        let key = Key(symbol: symbol, pointSize: pointSize, weight: weight.rawValue, color: ObjectIdentifier(color),
+                      appearance: NSAppearance.currentDrawing().name)
+        if let image = images[key] { return image }
+        let configuration = NSImage.SymbolConfiguration(pointSize: pointSize, weight: weight).applying(.init(paletteColors: [color]))
+        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?.withSymbolConfiguration(configuration)
+        images[key] = image
+        return image
     }
 }
 
@@ -222,9 +246,8 @@ final class ViewBarIconButton: NSView {
             NSBezierPath(roundedRect: bounds, xRadius: 5, yRadius: 5).fill()
         }
         let color = isActive() ? Palette.activeViewControl : Palette.textSecondary
-        let configuration = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular).applying(.init(paletteColors: [color]))
         setAccessibilityValue(isActive() ? "активен" : nil)
-        guard let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?.withSymbolConfiguration(configuration) else { return }
+        guard let image = ViewBarSymbols.image(symbol, pointSize: 13, weight: .regular, color: color) else { return }
         image.draw(in: NSRect(x: (bounds.width - image.size.width) / 2, y: (bounds.height - image.size.height) / 2, width: image.size.width,
                               height: image.size.height))
     }

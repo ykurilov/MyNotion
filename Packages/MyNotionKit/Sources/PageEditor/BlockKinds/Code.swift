@@ -246,6 +246,6 @@ extension PageTextView {
               let start = storage.location(storage.documentRange.location, offsetBy: mapper.paragraphStart(ofBlockAt: index)),
               let end = storage.location(start, offsetBy: 1), let range = NSTextRange(location: start, end: end) else { return }
         layoutManager.invalidateLayout(for: range)
-        if window != nil { layoutManager.textViewportLayoutController.layoutViewport() }
+        if window != nil { layoutKeepingScrollAnchor { layoutManager.textViewportLayoutController.layoutViewport() } }
     }
 }
