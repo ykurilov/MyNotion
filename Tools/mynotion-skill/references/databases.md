@@ -44,6 +44,12 @@ mynotion db row trash Задачи Отчёт Звонок          # restore �
 mynotion db relation link Задачи Отчёт Клиент --to Альфа --to Бета   # unlink — убрать
 ```
 
+```json
+{"ok":true,"data":{"count":1,"row":{"id":"…","title":"Отчёт","values":{"Часы":2,"Статус":"В работе"}},
+  "rows":[{"id":"…","title":"Отчёт","values":{"Часы":2,"Статус":"В работе"}}]}}
+```
+
+- `count` — сколько строк добавлено, `rows` — они же целиком (`id`, `title`, `values`). `row` — одна строка, только когда добавляли одну (без `--rows`).
 - Пачка пишется одним шагом. Ошибка в любой строке не пишет ничего: `error.details.row` — номер строки с нуля.
 - Значение связи в `--values` задаёт весь набор. `relation link`/`unlink` добавляют и убирают по одной.
 
@@ -118,6 +124,8 @@ mynotion db option add Задачи Статус Ревью --group inProgress -
 mynotion db option move Задачи Статус Ревью --group complete   # rename --name, color --color, delete
 ```
 
+- `db create` создаёт базу только со свойством «Название» и одним видом «Таблица». Остальное добавляет `db prop add`.
+- Новое свойство `status` само получает варианты «Не начато» (группа `todo`), «В работе» (`inProgress`), «Готово» (`complete`). Свои — `db option add`.
 - Типы: `title`, `text`, `number`, `select`, `multiSelect`, `status`, `date`, `checkbox`, `url`, `email`, `phone`, `files`, `createdTime`, `lastEditedTime`, `relation`, `rollup`, `formula`, `uniqueId`.
 - Связь: `target` — база, `limit` — `one` или `none`, `related` — имя ответного свойства в другой базе. `related: false` убирает ответное свойство.
 - Сводка: `relation` — свойство-связь, `property` — свойство в связанной базе, `calculation` — функция (`showOriginal`, `countAll`, `sum`…).
