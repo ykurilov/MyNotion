@@ -15,7 +15,7 @@ final class PageIconTests: XCTestCase {
 
         // Без иконки «Добавить иконку» появляется только под мышью над шапкой и ставит случайную.
         let addIcon = app.descendants(matching: .any)["add-page-icon"]
-        app.outlines["page-tree"].hover()
+        app.outlines["page-tree"].outlineRows.firstMatch.hover()
         XCTAssertTrue(waitForAbsence(addIcon), "«Добавить иконку» видна, когда мышь не над шапкой")
         app.pageTitle.hover()
         XCTAssertTrue(addIcon.waitForExistence(timeout: 5), "«Добавить иконку» не появилась при наведении")
