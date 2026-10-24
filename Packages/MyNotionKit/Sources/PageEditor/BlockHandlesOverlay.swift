@@ -333,9 +333,20 @@ extension PageTextView {
     public override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
         updateBlockHandles(atWindowPoint: event.locationInWindow)
-        // mouseMoved и cursorUpdate приходят раздельно. После обновления chrome
-        // не оставляем в текстовой колонке курсор, унаследованный от другой области.
-        let point = convert(event.locationInWindow, from: nil)
+        updatePointer(atWindowPoint: event.locationInWindow)
+    }
+
+    public override func cursorUpdate(with event: NSEvent) {
+        if textPointerRect.contains(convert(event.locationInWindow, from: nil)) {
+            updatePointer(atWindowPoint: event.locationInWindow)
+        } else {
+            super.cursorUpdate(with: event)
+        }
+    }
+
+    /// Одинаковое правило для обоих порядков доставки mouseMoved/cursorUpdate.
+    private func updatePointer(atWindowPoint windowPoint: NSPoint) {
+        let point = convert(windowPoint, from: nil)
         let target = hitTest(convert(point, to: superview))
         var hit = target
         while let child = hit, child !== self {
