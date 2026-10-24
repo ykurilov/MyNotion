@@ -108,10 +108,10 @@ extension CommandSession {
 
     /// Страница базы в ответе (`kind: database`).
     func databasePageJSON(_ databaseId: UUID) throws -> ControlJSON {
-        let index = PageIndex(try host.store.pageOutline())
+        let index = try PageQueries.chain(of: databaseId, in: host.store)
         guard let page = index.byId[databaseId] else { throw NotesStoreError.pageNotFound(databaseId) }
         let path = (index.ancestors(of: page) + [page]).map(\.displayTitle)
-        return PageJSON.encode(page, kind: .database, path: path, hasChildren: index.pages.contains { $0.parentId == databaseId },
+        return PageJSON.encode(page, kind: .database, path: path, hasChildren: try PageQueries.hasChildren(databaseId, in: host.store),
                                inTrash: index.isInTrash(page))
     }
 

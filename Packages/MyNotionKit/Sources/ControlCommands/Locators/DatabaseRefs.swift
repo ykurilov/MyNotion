@@ -86,9 +86,11 @@ public struct DatabaseRefs {
                   includeTrashed || page.trashedAt == nil else { throw rowNotFound(text) }
             return page
         }
-        let rows = try read { try store.pageOutline() }.filter { $0.parentId == databaseId && (includeTrashed || $0.trashedAt == nil) }
+        let idPrefix = PageLocator.isIdPrefix(pointer) ? pointer.lowercased() : nil
+        let rows = try read { try PageQueries.children(of: databaseId, titled: pointer, idPrefix: idPrefix, in: store) }
+            .filter { includeTrashed || $0.trashedAt == nil }
         var matches: [Page] = []
-        if PageLocator.isIdPrefix(pointer) { matches = rows.filter { $0.id.controlText.hasPrefix(pointer.lowercased()) } }
+        if let idPrefix { matches = rows.filter { $0.id.controlText.hasPrefix(idPrefix) } }
         if matches.isEmpty {
             let key = PagePath.normalized(pointer)
             matches = rows.filter { PagePath.normalized($0.displayTitle) == key }
