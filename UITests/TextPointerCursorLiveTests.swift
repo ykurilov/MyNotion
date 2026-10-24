@@ -47,6 +47,9 @@ final class TextPointerCursorLiveTests: XCTestCase {
             let attachment = XCTAttachment(image: cursor.image)
             attachment.name = "cursor-reference-\(name)"; attachment.lifetime = .keepAlways; add(attachment)
         }
+        // После успешной калибровки проверяем все области даже при ошибке одного control.
+        // Ошибки остаются failures, но один gutter не скрывает результат cover/icon.
+        continueAfterFailure = true
         let sampler = TextCursorSampler(beam: beam)
         let timer = Timer(timeInterval: 0.01, repeats: true) { _ in MainActor.assumeIsolated { sampler.sample() } }
         RunLoop.main.add(timer, forMode: .common)

@@ -55,6 +55,11 @@ struct TextPointerCursorTests {
             context: nil, eventNumber: 1, clickCount: 0, pressure: 0))
         view.mouseMoved(with: moved)
         #expect(NSCursor.current == NSCursor.arrow, "Ручка унаследовала I-beam от текста после mouseMoved")
+        let update = try #require(NSEvent.enterExitEvent(with: .cursorUpdate, location: location,
+            modifierFlags: [], timestamp: 0, windowNumber: fixture.window.windowNumber,
+            context: nil, eventNumber: 2, trackingNumber: 0, userData: nil))
+        view.cursorUpdate(with: update)
+        #expect(NSCursor.current == NSCursor.arrow, "cursorUpdate родителя затёр стрелку ручки")
     }
 
 
