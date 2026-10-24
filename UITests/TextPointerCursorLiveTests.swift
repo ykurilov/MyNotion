@@ -70,16 +70,36 @@ final class TextPointerCursorLiveTests: XCTestCase {
             XCTAssertEqual(cursor.hotSpot, expected.hotSpot, name)
             XCTAssertEqual(cursor.image.size, expected.image.size, name)
         }
+        func freshCursor() throws -> (CGPoint, CGSize) {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            process.arguments = ["-l", "JavaScript", "-e", "ObjC.import('AppKit'); var c=$.NSCursor.currentSystemCursor; JSON.stringify({x:c.hotSpot.x,y:c.hotSpot.y,w:c.image.size.width,h:c.image.size.height})"]
+            let output = Pipe(); process.standardOutput = output
+            try process.run()
+            let data = output.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            XCTAssertEqual(process.terminationStatus, 0)
+            let value = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Double])
+            return (CGPoint(x: try XCTUnwrap(value["x"]), y: try XCTUnwrap(value["y"])),
+                    CGSize(width: try XCTUnwrap(value["w"]), height: try XCTUnwrap(value["h"])))
+        }
+        func checkFresh(_ name: String, _ expected: NSCursor) throws {
+            let value = try freshCursor()
+            XCTAssertEqual(app.state, .runningForeground, "Чтение курсора сменило активное приложение")
+            print("FRESH-SYSTEM-CURSOR \(name) timestamp=\(Date().timeIntervalSince1970) actual=\(value) expected=\(expected.hotSpot)/\(expected.image.size) runner=\(String(describing: NSCursor.currentSystem?.hotSpot))")
+            XCTAssertEqual(value.0, expected.hotSpot, name)
+            XCTAssertEqual(value.1, expected.image.size, name)
+        }
         func checkControl(_ name: String, _ expected: NSCursor) throws {
             let started = Date()
             while Date().timeIntervalSince(started) < 1 {
-                if let cursor = NSCursor.currentSystem, cursor.hotSpot == expected.hotSpot,
-                   cursor.image.size == expected.image.size { break }
+                let value = try freshCursor()
+                if value.0 == expected.hotSpot && value.1 == expected.image.size { break }
                 RunLoop.current.run(until: Date().addingTimeInterval(0.05))
             }
-            print("CURSOR-CONTROL-SETTLE \(name) elapsed=\(Date().timeIntervalSince(started)) timestamp=\(Date().timeIntervalSince1970)")
-            for sample in 0..<5 {
-                try check("\(name)-stable-\(sample)", expected)
+            print("CURSOR-CONTROL-SETTLE \(name) elapsed=\(Date().timeIntervalSince(started))")
+            for sample in 0..<3 {
+                try checkFresh("\(name)-stable-\(sample)", expected)
                 RunLoop.current.run(until: Date().addingTimeInterval(0.05))
             }
         }
@@ -89,6 +109,7 @@ final class TextPointerCursorLiveTests: XCTestCase {
             for step in 0..<12 {
                 hover(CGPoint(x: title.minX + 12 + CGFloat(step) * 8, y: y))
                 try check("\(name)-move-\(step)", beam)
+                try checkFresh("\(name)-move-\(step)", beam)
             }
             // Пока мышь стоит, ловим возврат стрелки после обновления tracking/cursor rects.
             for sample in 0..<20 {
@@ -99,6 +120,7 @@ final class TextPointerCursorLiveTests: XCTestCase {
             XCTAssertGreaterThan(sampler.samples - previousSamples, 0, "Фоновый сбор курсора не работал")
             XCTAssertEqual(sampler.wrong, 0, "Указатель менялся во время движения/остановки")
             sampler.region = nil
+            try checkFresh("\(name)-stopped", beam)
             let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
             shot.name = "text-cursor-\(name)"; shot.lifetime = .keepAlways; add(shot)
             if name != "empty" {

@@ -12,7 +12,10 @@ struct CoverPointerCursorTests {
         let host = NSTextView(frame: NSRect(x: 0, y: 0, width: 1200, height: 800))
         host.addSubview(view)
         view.frame = NSRect(x: 0, y: 0, width: 1200, height: 200)
-        defer { withExtendedLifetime(host) {} }
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: true)
+        window.contentView = host
+        window.makeFirstResponder(host)
+        defer { withExtendedLifetime(window) {} }
         let event = try #require(NSEvent.enterExitEvent(with: .cursorUpdate, location: .zero,
             modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
             eventNumber: 1, trackingNumber: 0, userData: nil))
