@@ -180,8 +180,8 @@ final class PagesLibrary {
         openDocuments.document(for: pageId)?.adoptIcon(of: stored)
     }
 
-    /// Правки с другого Mac легли в базу; открытые страницы их уже приняли (research R5).
-    private func remoteChangesApplied() {
+    /// Правки с другого Mac (или записи команд мимо документов) легли в базу; открытые страницы их уже приняли (research R5).
+    func remoteChangesApplied() {
         reloadTree()
         // Ячейки, свойства, виды с другого Mac: открытые таблицы перечитывают себя.
         DatabaseOperations.announce(nil)

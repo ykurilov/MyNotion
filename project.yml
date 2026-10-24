@@ -86,6 +86,18 @@ targets:
         product: DatabaseRowPage
       - package: MyNotionKit
         product: NotionSchemaFetch
+      # 005: управление из командной строки. Сама команда `mynotion` лежит внутри пакета: обновляется вместе с приложением.
+      - package: MyNotionKit
+        product: ControlProtocol
+      - package: MyNotionKit
+        product: ControlServer
+      - package: MyNotionKit
+        product: ControlCommands
+      - target: mynotion-cli
+        embed: true
+        copy:
+          destination: wrapper
+          subpath: Contents/Helpers
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion
@@ -100,6 +112,20 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
         ENABLE_HARDENED_RUNTIME: NO
         ENABLE_APP_SANDBOX: NO
+  # 005: команда `mynotion` для агентов (research R14). Цель не «mynotion»: на диске без учёта регистра её служебная папка совпала бы с папкой MyNotion.
+  mynotion-cli:
+    type: tool
+    platform: macOS
+    sources:
+      - Tools/mynotion
+    dependencies:
+      - package: MyNotionKit
+        product: ControlProtocol
+      - package: MyNotionKit
+        product: ControlClient
+    settings:
+      base:
+        PRODUCT_NAME: mynotion
   UITests:
     type: bundle.ui-testing
     platform: macOS
@@ -202,6 +228,11 @@ schemes:
         - package: MyNotionKit/NavigationTests
         - package: MyNotionKit/PagePickerTests
         - package: MyNotionKit/PageCoverTests
+        - package: MyNotionKit/ControlProtocolTests
+        - package: MyNotionKit/ControlServerTests
+        - package: MyNotionKit/ControlClientTests
+        - package: MyNotionKit/ControlCommandsTests
+        - package: MyNotionKit/PageMarkdownTests
         - UITests
     profile:
       config: Release
