@@ -10,6 +10,7 @@ import time
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--out', type=pathlib.Path, default=pathlib.Path.home() / 'work/shots/text-cursor-final')
 parser.add_argument('--results', default='build/text-cursor-final')
+parser.add_argument('--pointer-only', action='store_true', help='Rerun only the cursor test after the native hover test passed')
 args = parser.parse_args()
 args.out.mkdir(parents=True, exist_ok=True)
 driver = str(pathlib.Path.home() / '.local/bin/cua-driver')
@@ -39,8 +40,11 @@ if any(w.get('app_name') in ('SecurityAgent', 'CoreServicesUIAgent', 'DeepL') fo
 if not pathlib.Path('build').exists():
     pathlib.Path('build').symlink_to('.imac-runner-hover-build', target_is_directory=True)
 assert pathlib.Path('build/text-cursor-build.exit').read_text().strip() == '0', 'Fresh build must succeed first'
+selectors = '-only-testing:UITests/TextPointerCursorLiveTests'
+if not args.pointer_only:
+    selectors += ' -only-testing:UITests/HoverHandlesLiveTests'
 command = ('source scripts/imac/lib.sh; xctest_run build/imac-uitest-dd/Build/Products "$1" '
-           '-only-testing:UITests/TextPointerCursorLiveTests -only-testing:UITests/HoverHandlesLiveTests '
+           f'{selectors} '
            '-test-timeouts-enabled YES -default-test-execution-time-allowance 180')
 result = subprocess.run(['zsh', '-c', command, '--', args.results])
 (args.out / 'test.exit').write_text(str(result.returncode))

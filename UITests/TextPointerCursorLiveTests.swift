@@ -58,6 +58,7 @@ final class TextPointerCursorLiveTests: XCTestCase {
             XCTAssertEqual(cursor.image.size, expected.image.size, name)
         }
         for (name, y) in [("h1", title.maxY + 42), ("paragraph", title.maxY + 90), ("empty", title.maxY + 130)] {
+            let previousSamples = sampler.samples
             sampler.region = CGRect(x: title.minX, y: y - 10, width: title.width, height: 20)
             for step in 0..<12 {
                 hover(CGPoint(x: title.minX + 12 + CGFloat(step) * 8, y: y))
@@ -68,8 +69,8 @@ final class TextPointerCursorLiveTests: XCTestCase {
                 RunLoop.current.run(until: Date().addingTimeInterval(0.05))
                 try check("\(name)-still-\(sample)", beam)
             }
-            print("CURSOR-SAMPLES \(name) total=\(sampler.samples) wrong=\(sampler.wrong)")
-            XCTAssertGreaterThan(sampler.samples, 0, "Фоновый сбор курсора не работал")
+            print("CURSOR-SAMPLES \(name) row=\(sampler.samples - previousSamples) total=\(sampler.samples) wrong=\(sampler.wrong)")
+            XCTAssertGreaterThan(sampler.samples - previousSamples, 0, "Фоновый сбор курсора не работал")
             XCTAssertEqual(sampler.wrong, 0, "Указатель менялся во время движения/остановки")
             sampler.region = nil
             let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -89,6 +90,9 @@ final class TextPointerCursorLiveTests: XCTestCase {
             XCTAssertTrue(element.exists)
             let frame = element.frame
             hover(CGPoint(x: frame.midX, y: frame.midY))
+            let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            shot.name = "text-cursor-\(identifier)"; shot.lifetime = .keepAlways; add(shot)
+            print("CURSOR-CONTROL \(identifier) frame=\(frame)")
             try check(identifier, arrow)
         }
     }
