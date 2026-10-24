@@ -36,7 +36,7 @@ import Testing
 
     @Test func standardRegistryLeavesLaterStagesNotImplemented() async {
         let executor = CommandExecutor(host: host, log: log)
-        #expect(await executor.run(ControlRequest(command: "favorites.list")).error?.code == .notImplemented)
+        #expect(await executor.run(ControlRequest(command: "sync.status")).error?.code == .notImplemented)
         let status = await executor.run(ControlRequest(command: "app.status"))
         #expect(status.ok)
         #expect(status.data?["protocol"] == 1)
