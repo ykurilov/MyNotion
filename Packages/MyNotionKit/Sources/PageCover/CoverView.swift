@@ -217,8 +217,10 @@ public final class CoverView: NSView {
     public override func updateTrackingAreas() {
         super.updateTrackingAreas()
         trackingAreas.forEach(removeTrackingArea)
-        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect, .cursorUpdate], owner: self))
     }
+
+    public override func cursorUpdate(with event: NSEvent) { (repositioning == nil ? NSCursor.arrow : NSCursor.openHand).set() }
 
     public override func mouseEntered(with event: NSEvent) { isHovered = true }
     public override func mouseExited(with event: NSEvent) { isHovered = false }
@@ -388,8 +390,10 @@ final class CoverButton: NSView {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         trackingAreas.forEach(removeTrackingArea)
-        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect, .cursorUpdate], owner: self))
     }
+
+    override func cursorUpdate(with event: NSEvent) { NSCursor.arrow.set() }
 
     override func mouseEntered(with event: NSEvent) { isPointerInside = true }
     override func mouseExited(with event: NSEvent) { isPointerInside = false }

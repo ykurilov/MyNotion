@@ -339,7 +339,7 @@ extension PageTextView {
         var hit = hitTest(convert(point, to: superview))
         while let child = hit, child !== self {
             // Родитель тоже получает mouseMoved: не ждём отдельного cursorUpdate кнопки.
-            if child is BlockHandleButton { NSCursor.arrow.set(); return }
+            if child is BlockHandleButton || child is PageIconView || child is PageHeaderButton { NSCursor.arrow.set(); return }
             // Встроенные элементы управления выбирают собственный курсор.
             if child is NSControl, child !== emptyParagraphHint { return }
             hit = child.superview
