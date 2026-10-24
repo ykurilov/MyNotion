@@ -124,10 +124,18 @@ final class RichProbePage {
               let location = storage.location(storage.documentRange.location, offsetBy: location(ofBlock: anchor.block)) else { return }
         let y = layoutManager.textViewportLayoutController.relocateViewport(to: location)
         textView.layoutSubtreeIfNeeded()
-        let top = blockTopLaidOut(anchor.block) ?? (y + textView.textContainerOrigin.y)
+        var top = blockTopLaidOut(anchor.block) ?? (y + textView.textContainerOrigin.y)
         let clip = scrollView.contentView
+        // Как `restoreScrollPlace` приложения: блок в первых экранах — всё выше него точной раскладкой, а не оценкой.
+        if top - textView.textContainerOrigin.y < clip.bounds.height * 2,
+           let end = storage.location(location, offsetBy: (textView.string as NSString).paragraphRange(for: NSRange(location: self.location(ofBlock: anchor.block), length: 0)).length) {
+            layoutManager.ensureLayout(for: NSTextRange(location: storage.documentRange.location, end: end) ?? storage.documentRange)
+            top = blockTopLaidOut(anchor.block) ?? top
+        }
         clip.scroll(to: NSPoint(x: 0, y: max(0, top + anchor.offset)))
         scrollView.reflectScrolledClipView(clip)
+        textView.layoutSubtreeIfNeeded()
+        layoutManager.textViewportLayoutController.layoutViewport()
         window.displayIfNeeded()
     }
 
