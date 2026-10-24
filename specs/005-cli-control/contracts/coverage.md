@@ -24,6 +24,8 @@
 | `setFormula` | `db prop update --formula` |
 | `addFiles`, `removeFile` | `attachment add <база> <строка> <свойство>`, `db cell set` |
 | `setFilter`, `addFilter`, `setSorts`, `sort(by:)`, `moveSort`, `removeSort`, `setVisible`, `moveColumn`, `setColumnWidth`, `setWrap`, `setCalculation`, `setGroup`, `group(by:)`, скрытие/свёртка/порядок групп, `setOpenRowsIn`, `setLoadLimit` | `db view update` (`--filter --sort --group --visible --hidden --order --width --wrap --calc --open-in --load-limit`, `--group-hide/--group-collapse/--group-order`) |
+| Скрыть свойство (FR-419) — скрытие в виде, как в окне | `db view update --hidden` |
+| Открыть строку базы как страницу (FR-419) — строка и есть страница | `page get/read <строка>`, `open <строка>` |
 | `addView`, `renameView`, `duplicateView`, `deleteView`, `moveView` | `db view add/rename/duplicate/delete/move` |
 | Шаблоны строк 004 (US6) | `db template …` |
 | Выгрузка базы | `db export` |

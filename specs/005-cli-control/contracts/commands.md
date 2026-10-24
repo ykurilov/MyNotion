@@ -12,7 +12,6 @@
 | `app status` | — | R: версия, протокол, путь базы, окна, идёт ли импорт |
 | `commands` | `--json` | R (без приложения) |
 | `batch` | `--file <json>` или stdin: `[{"command":"page.create","args":{…}}, …]`; `"$N.путь"` — значение из ответа шага N | W |
-| `sync status` / `sync now` | — | R / W |
 
 ## Страницы — `page` (этап 2, US1)
 
@@ -99,10 +98,11 @@
 | `tab new` / `select` / `close` / `reopen` | `[--window N] [--tab N]` | W |
 | `nav back` / `nav forward` | `[--window N]` | W |
 
-## Импорт и выгрузка (этап 7, US6)
+## Импорт, выгрузка, синхронизация (этап 7, US6)
 
 | Команда | Аргументы и флаги | Тип |
 |---------|-------------------|-----|
 | `import notion` | `<архив .zip или папка> [--parent <стр>]`; ход — строками `progress`, итог — отчёт импорта | W |
 | `export page` | `<стр> --to <папка> [--no-children]` | R |
 | `export all` | `--to <папка>` | R |
+| `sync status` / `sync now` | — | R / W |
