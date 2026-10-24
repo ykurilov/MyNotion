@@ -82,7 +82,7 @@ final class VisualReferenceTests: XCTestCase {
     private func resize(_ window: XCUIElement, to size: CGSize) throws {
         let frame = window.frame
         let topLeft = window.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: 1, dy: 1))
-        topLeft.press(forDuration: 0.2, thenDragTo: topLeft.withOffset(CGVector(dx: -frame.minX, dy: 40 - frame.minY)))
+        topLeft.click(forDuration: 0.2, thenDragTo: topLeft.withOffset(CGVector(dx: -frame.minX, dy: 40 - frame.minY)))
         // Окно помнит размер прошлого запуска, а перетаскивание не всегда доходит до места: тянуть, пока не совпадёт.
         // Большое окно уменьшается за левый верхний угол: правый нижний у края экрана, там всплывает Dock и забирает мышь.
         for _ in 0..<4 {
@@ -93,14 +93,14 @@ final class VisualReferenceTests: XCTestCase {
             let shrink = CGVector(dx: min(dx, 0), dy: min(dy, 0)), grow = CGVector(dx: max(dx, 0), dy: max(dy, 0))
             if shrink.dx != 0 || shrink.dy != 0 {
                 let corner = window.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: 1, dy: 1))
-                corner.press(forDuration: 0.2, thenDragTo: corner.withOffset(CGVector(dx: -shrink.dx, dy: -shrink.dy)))
+                corner.click(forDuration: 0.2, thenDragTo: corner.withOffset(CGVector(dx: -shrink.dx, dy: -shrink.dy)))
             } else if grow.dx != 0 {
                 // Правый край посередине: угол бывает у нижнего края экрана.
                 let edge = window.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: moved.width - 1, dy: moved.height / 2))
-                edge.press(forDuration: 0.2, thenDragTo: edge.withOffset(CGVector(dx: grow.dx, dy: 0)))
+                edge.click(forDuration: 0.2, thenDragTo: edge.withOffset(CGVector(dx: grow.dx, dy: 0)))
             } else {
                 let edge = window.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: moved.width / 2, dy: moved.height - 1))
-                edge.press(forDuration: 0.2, thenDragTo: edge.withOffset(CGVector(dx: 0, dy: grow.dy)))
+                edge.click(forDuration: 0.2, thenDragTo: edge.withOffset(CGVector(dx: 0, dy: grow.dy)))
             }
         }
         XCTAssertEqual(window.frame.width, size.width, accuracy: Self.tolerance, "Ширина окна")
