@@ -27,8 +27,9 @@ struct ExportFileNames {
     }
 
     /// Имена соседей по порядку. Одинаковые (без учёта регистра: диск Mac его не различает) получают ` (2)`, ` (3)`.
-    static func uniqueNames(forTitles titles: [String]) -> [String] {
-        var used: Set<String> = []
+    /// `reserved` — имена, уже занятые в папке (у строк базы — «Шаблоны»).
+    static func uniqueNames(forTitles titles: [String], reserved: Set<String> = []) -> [String] {
+        var used = Set(reserved.map(key))
         return titles.map { title in
             let base = baseName(forTitle: title)
             var candidate = base

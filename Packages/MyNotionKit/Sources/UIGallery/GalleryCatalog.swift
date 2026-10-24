@@ -95,6 +95,43 @@ public enum GalleryScene: Hashable, Sendable {
     case templates(GalleryTemplates)
     /// Обратные ссылки (US5): строка «↗ 3 обратные ссылки» под названием и открытый список источников.
     case backlinks(GalleryBacklinks)
+    /// Базы (004): пустая новая база и таблица эталона; истории 004 добавляют свои состояния.
+    case databases(GalleryDatabases)
+}
+
+/// Базы данных (004, contracts/database-ui.md).
+public enum GalleryDatabases: Hashable, Sendable, CaseIterable {
+    /// Новая база: вид «Таблица», одна колонка «Название», строк нет.
+    case empty
+    /// Таблица эталона баз: «Задачи», все типы свойств, плашки вариантов.
+    case sampleTable
+    // US1: таблица в работе.
+    case inlineEmpty, inlineOverview, rowHover, cellSelection, cellEditing, columnMenu, typePicker, editProperty, propertiesWindow,
+         deleteConfirm, rowMenu, rowPage, sidePeek, centerPeek
+    /// US5: редактор формулы — пустой, с итогом, с ошибкой, с кругом; ячейки формул всех типов итога.
+    case formulaEditorEmpty
+    case formulaEditorResult
+    case formulaEditorError
+    case formulaEditorCycle
+    case formulaCells
+    /// US4: панель новой связи и настроенной двусторонней, окна «Связана с» и «Лимит», панель сводки и «Вычислить»,
+    /// таблица «Проекты» со сводками и ответной связью.
+    case relationNewSettings
+    case relationSettings
+    case relationTargetChooser
+    case relationLimitChooser
+    case rollupSettings
+    case rollupNumberSettings
+    case rollupCalculateMenu
+    case relationProjectsTable
+    case relationPicker
+    /// US3: вид — строка вида с синими значками и плашками, окна фильтра, сортировки, видимости, группировки, раскладки,
+    /// настройки вида, меню вкладки, поиск, таблица с группами и итогами, перенос текста, меню «Посчитать».
+    case viewBarActive, viewFilterSimple, viewFilterAdvanced, viewFilterDate, viewSorts, viewVisibility, viewGrouping, viewGroupedTable,
+         viewWrapText, viewLayout, viewSettings, viewTabMenu, viewSearch, viewCalculateMenu
+    /// US2: окна выбора, статуса, даты, файлов, меню варианта, настройки выбора, статуса и числа, плашки и полоса с кольцом.
+    case typeSelectPicker, typeMultiSelectPicker, typeStatusPicker, typeOptionMenu, typeDatePicker, typeDateFormats, typeFilesPopup,
+         typeSelectSettings, typeStatusSettings, typeNumberSettings, typeChipsAndMeters
 }
 
 public enum GalleryMarkdownExport: String, Hashable, Sendable, CaseIterable {
@@ -263,6 +300,91 @@ public enum GalleryCatalog {
     /// Все состояния по порядку съёмки.
     public static let states: [GalleryState] = pageStates + blockStates + kindSampleStates + inlineAtomStates + editingStates + sidebarStates
         + trashStates + importStates + exportStates + syncStates + tabsStates + copiesStates + versionHistoryStates + templatesStates + backlinksStates
+        + databaseStates
+
+    /// Базы (004): этап 0 — пустая база и таблица эталона; истории добавляют свои строки в конец списка.
+    static let databaseStates: [GalleryState] = [
+        GalleryState("database-empty", .databases(.empty), "Новая база: вид «Таблица», колонка «Название», строк нет", section: "Базы"),
+        GalleryState("database-sample-table", .databases(.sampleTable), "Таблица эталона «Задачи»: все типы, плашки, флажки, даты", section: "Базы"),
+        GalleryState("database-inline-empty", .databases(.inlineEmpty), "Встроенная база в странице: серое «Новая база», колонка «Название»", section: "Базы"),
+        GalleryState("database-inline-overview", .databases(.inlineOverview), "«Обзор»: встроенная база по пределу 50 и «Загрузить ещё»", section: "Базы"),
+        GalleryState("database-row-hover", .databases(.rowHover), "Наведение строки: «+», «⠿», флажок слева, «ОТКРЫТЬ» у названия", section: "Базы"),
+        GalleryState("database-cell-selection", .databases(.cellSelection), "Выделение ячеек прямоугольником (⇧-стрелки, протяжка)", section: "Базы"),
+        GalleryState("database-cell-editing", .databases(.cellEditing), "Правка ячейки названия на месте", section: "Базы"),
+        GalleryState("database-column-menu", .databases(.columnMenu), "Меню колонки: имя, «Изменить свойство», «Сменить тип», вставить, дублировать, удалить", section: "Базы"),
+        GalleryState("database-type-picker", .databases(.typePicker), "«+» в шапке: «Название свойства…» и типы в две колонки", section: "Базы"),
+        GalleryState("database-edit-property", .databases(.editProperty), "Панель «Изменить свойство» справа", section: "Базы"),
+        GalleryState("database-properties-window", .databases(.propertiesWindow), "Окно «Свойства» базы с «Удалёнными свойствами»", section: "Базы"),
+        GalleryState("database-delete-confirm", .databases(.deleteConfirm), "Подтверждение удаления свойства", section: "Базы"),
+        GalleryState("database-row-menu", .databases(.rowMenu), "Меню строки (правый щелчок)", section: "Базы"),
+        GalleryState("database-row-page", .databases(.rowPage), "Строка на всю страницу: свойства под названием, «+ Добавить свойство»", section: "Базы"),
+        GalleryState("database-side-peek", .databases(.sidePeek), "Строка сбоку: таблица слева рабочая", section: "Базы"),
+        GalleryState("database-center-peek", .databases(.centerPeek), "Строка по центру поверх затемнения", section: "Базы"),
+        // US5, сверка — `notion-formula-editor*.png`.
+        GalleryState("formula-editor-empty", .databases(.formulaEditorEmpty), "Редактор формулы пустой: «Ваша формула», «Нет итога», список свойств и функций",
+                     section: "Базы"),
+        GalleryState("formula-editor-result", .databases(.formulaEditorResult), "Редактор с формулой: плашка свойства, итог первой строки, «Тип: текст»",
+                     section: "Базы"),
+        GalleryState("formula-editor-error", .databases(.formulaEditorError), "Редактор с ошибкой типов: текст по-русски, место подчёркнуто, «Готово» неактивно",
+                     section: "Базы"),
+        GalleryState("formula-editor-cycle", .databases(.formulaEditorCycle), "Редактор с кругом «Итог → Сумма → Итог», «Готово» неактивно", section: "Базы"),
+        GalleryState("formula-cells", .databases(.formulaCells), "Ячейки формул всех типов итога: число, текст, флажок, дата, список, страницы",
+                     section: "Базы"),
+        // US4, сверка — `notion-relation-*.png`, `notion-rollup-*.png`.
+        GalleryState("relation-new-settings", .databases(.relationNewSettings), "Новая связь: «Связана с — Выбрать», «Лимит», «Ответное свойство» выключено",
+                     section: "Базы"),
+        GalleryState("relation-settings", .databases(.relationSettings), "Связь «Проект»: «Связана с — Проекты» серым, лимит, ответное свойство «Задачи»",
+                     section: "Базы"),
+        GalleryState("relation-target-chooser", .databases(.relationTargetChooser), "Окно «Связать с базой»: «Эта база» и базы по названию", section: "Базы"),
+        GalleryState("relation-limit-chooser", .databases(.relationLimitChooser), "Окно лимита: «1 страница» и «Без лимита» с галочкой", section: "Базы"),
+        GalleryState("rollup-settings", .databases(.rollupSettings), "Сводка «Сумма часов»: «Связь — Задачи», «Свойство — Часы», «Вычислить — Сумма»",
+                     section: "Базы"),
+        GalleryState("rollup-number-settings", .databases(.rollupNumberSettings), "Числовая сводка: формат, знаки после запятой, полоса, цвет и делитель",
+                     section: "Базы"),
+        GalleryState("rollup-calculate-menu", .databases(.rollupCalculateMenu), "Меню «Вычислить»: как есть, уникальные, количество, проценты, числа",
+                     section: "Базы"),
+        GalleryState("relation-picker", .databases(.relationPicker), "Окно ячейки связи: поиск, «1 выбрано» с «−», «Выбрать ещё», «В «Проекты»»",
+                     section: "Базы"),
+        GalleryState("relation-projects-table", .databases(.relationProjectsTable), "«Проекты»: ответная связь «Задачи» плашками, сводки числом", section: "Базы"),
+        // US3, сверка — `notion-filter-*.png`, `notion-sort-*.png`, `notion-group-*.png`, `notion-view-*.png`, `notion-calculate-*.png`.
+        GalleryState("view-bar-active", .databases(.viewBarActive), "Вид «Задачи — работа»: синие фильтр и сортировка, плашки, группы по статусу",
+                     section: "Базы"),
+        GalleryState("view-filter-simple", .databases(.viewFilterSimple), "Окно плашки фильтра: «Статус не равно», флажки вариантов", section: "Базы"),
+        GalleryState("view-filter-advanced", .databases(.viewFilterAdvanced), "Расширенный фильтр: «Где», «И/Или», вложенная группа в рамке",
+                     section: "Базы"),
+        GalleryState("view-filter-date", .databases(.viewFilterDate), "Фильтр по дате: «Относительно сегодня», «Эта неделя»", section: "Базы"),
+        GalleryState("view-sorts", .databases(.viewSorts), "Окно сортировки: два уровня с ручками, «+ Добавить сортировку»", section: "Базы"),
+        GalleryState("view-visibility", .databases(.viewVisibility), "Видимость свойств: показанные и скрытые, глаз и ручка", section: "Базы"),
+        GalleryState("view-grouping", .databases(.viewGrouping), "Группировка: «Группировать по», порядок, «Скрывать пустые», список групп",
+                     section: "Базы"),
+        GalleryState("view-grouped-table", .databases(.viewGroupedTable), "Таблица с группами: заголовки, свёрнутая группа, итоги под группами",
+                     section: "Базы"),
+        GalleryState("view-wrap-text", .databases(.viewWrapText), "Перенос текста в колонке «Описание»: высота строки по тексту", section: "Базы"),
+        GalleryState("view-layout", .databases(.viewLayout), "Раскладка: «Таблица», перенос всего текста, «Открывать строки», «Предел загрузки»",
+                     section: "Базы"),
+        GalleryState("view-settings", .databases(.viewSettings), "Настройки вида справа: имя, раскладка, видимость, фильтр, сортировка, группировка",
+                     section: "Базы"),
+        GalleryState("view-tab-menu", .databases(.viewTabMenu), "Меню вкладки вида: переименовать, изменить, дублировать, удалить", section: "Базы"),
+        GalleryState("view-search", .databases(.viewSearch), "Поиск в базе «отчёт»: поле в строке вида, найденное подсвечено", section: "Базы"),
+        GalleryState("view-calculate-menu", .databases(.viewCalculateMenu), "Строка итогов и меню «Посчитать ›»", section: "Базы"),
+        // US2, сверка — `notion-select-*.png`, `notion-status-cell-popup.png`, `notion-edit-property-*.png`, `notion-date-format-options.png`.
+        GalleryState("type-select-picker", .databases(.typeSelectPicker), "Окно выбора: «Найти вариант…», «Выберите вариант или создайте его», ручки",
+                     section: "Базы"),
+        GalleryState("type-multi-select-picker", .databases(.typeMultiSelectPicker), "Множественный выбор: выбранные плашки с «×», поиск и «Создать»",
+                     section: "Базы"),
+        GalleryState("type-status-picker", .databases(.typeStatusPicker), "Окно статуса: группы «К выполнению», «В работе», «Завершено»", section: "Базы"),
+        GalleryState("type-option-menu", .databases(.typeOptionMenu), "Меню «⋯» варианта: имя, «Удалить», 10 цветов с галочкой", section: "Базы"),
+        GalleryState("type-date-picker", .databases(.typeDatePicker), "Окно даты: начало и конец, календарь с понедельника, время, «Напомнить»",
+                     section: "Базы"),
+        GalleryState("type-date-formats", .databases(.typeDateFormats), "Окно даты с подменю «Формат даты»", section: "Базы"),
+        GalleryState("type-files-popup", .databases(.typeFilesPopup), "Окно файлов: файлы и ссылка в ячейке, «Загрузить» / «Ссылка»", section: "Базы"),
+        GalleryState("type-select-settings", .databases(.typeSelectSettings), "Изменить свойство выбора: «Сортировка», варианты с ручками", section: "Базы"),
+        GalleryState("type-status-settings", .databases(.typeStatusSettings), "Изменить свойство статуса: три группы с «+»", section: "Базы"),
+        GalleryState("type-number-settings", .databases(.typeNumberSettings), "Изменить свойство числа: формат, знаки, «Показывать как» — полоса",
+                     section: "Базы"),
+        GalleryState("type-chips-meters", .databases(.typeChipsAndMeters), "Плашки 10 цветов, статус с точкой, полоса и кольцо числа, даты с концом",
+                     section: "Базы"),
+    ]
 
     /// Обратные ссылки (US5, contracts/pages-ui.md, «Обратные ссылки»): строка под названием и список источников.
     static let backlinksStates: [GalleryState] = [
@@ -368,6 +490,7 @@ public enum GalleryCatalog {
         case .tableCell: "ячейка таблицы"
         case .columnList: "колонки"
         case .column: "колонка"
+        case .database: "встроенная база"
         }
     }
 

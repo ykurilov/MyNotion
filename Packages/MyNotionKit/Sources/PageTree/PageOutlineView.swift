@@ -79,6 +79,13 @@ final class PageOutlineView: NSOutlineView {
         return NSRect(x: leading, y: frame.minY, width: max(0, bounds.width - leading), height: frame.height)
     }
 
+    /// Строка нажимается целиком — рука, как в Notion. Над названием и иконкой hitTest таблицы отдаёт саму таблицу,
+    /// и cursorUpdate приходит сюда, а не строке; без этого стрелку ставит NSHostingView окна (живая трасса,
+    /// scripts/imac/real-cursor-check.zsh). Пустое место под строками — как у окна.
+    override func cursorUpdate(with event: NSEvent) {
+        if row(at: convert(event.locationInWindow, from: nil)) >= 0 { NSCursor.pointingHand.set() } else { super.cursorUpdate(with: event) }
+    }
+
     /// Меню по правой кнопке — то же, что у «⋯», от точки щелчка (как у Notion).
     override func menu(for event: NSEvent) -> NSMenu? {
         let row = row(at: convert(event.locationInWindow, from: nil))
@@ -155,12 +162,16 @@ final class PageTreeRowView: NSTableRowView {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         for area in trackingAreas { removeTrackingArea(area) }
-        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect, .cursorUpdate],
                                        owner: self))
         if let window {
             isHovered = bounds.contains(convert(window.mouseLocationOutsideOfEventStream, from: nil))
         }
     }
+
+    // Строка нажимается целиком — рука, как в Notion. Поле переименования ставит свой I-beam поверх.
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+    override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
 
     override func mouseEntered(with event: NSEvent) { isHovered = true }
     override func mouseExited(with event: NSEvent) { isHovered = false }
@@ -337,7 +348,10 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
 
-    func show(_ page: Page, title: String, hasChildren: Bool, isExpanded: Bool) {
+    /// Значок без эмодзи — таблица (у базы), а не лист.
+    private(set) var showsDatabaseGlyph = false
+
+    func show(_ page: Page, title: String, hasChildren: Bool, isExpanded: Bool, isDatabase: Bool = false) {
         if !isRenaming {
             self.title = title
             titleLabel.stringValue = title
@@ -346,6 +360,11 @@ final class PageTreeCellView: NSTableCellView, NSTextFieldDelegate {
         self.isExpanded = isExpanded
         iconLabel.stringValue = page.icon ?? ""
         documentIcon.isHidden = page.icon != nil
+        if isDatabase != showsDatabaseGlyph {
+            showsDatabaseGlyph = isDatabase
+            documentIcon.image = isDatabase ? DatabaseGlyph.image(size: Metrics.Sidebar.rowIconSize)
+                : DocumentGlyph.image(size: Metrics.Sidebar.rowIconSize)
+        }
         setAccessibilityLabel(title)
         updateHoverState()
         updateTitleColor()

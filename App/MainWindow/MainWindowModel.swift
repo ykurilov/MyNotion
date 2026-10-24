@@ -1,4 +1,6 @@
 import AppKit
+import DatabaseGrid
+import Databases
 import Foundation
 import Navigation
 import NotesCore
@@ -16,6 +18,8 @@ import VisualStyle
 final class MainWindowModel {
     @ObservationIgnored let library: PagesLibrary
     @ObservationIgnored let treeOperations: PageTreeOperations
+    /// Операции баз (004): создание из «/», правки схемы и значений — свои шаги ⌘Z в отмене окна.
+    @ObservationIgnored let databaseOperations: DatabaseOperations
     /// Окно «Переместить в…» (US4, `MainWindowModel+Copies`).
     @ObservationIgnored let movePicker = PagePickerController()
     /// Окно на экране: по нему библиотека знает, в каком окне работают сейчас.
@@ -31,6 +35,11 @@ final class MainWindowModel {
     /// Боковая панель спрятана шторкой (⌘⌥S).
     private(set) var isSidebarCollapsed = false
     private(set) var openDocument: PageDocument?
+    /// Строка базы в просмотре сбоку или по центру (`MainWindowModel+Rows`); `nil` — просмотра нет.
+    var rowPeek: RowPeek?
+    /// «+ Добавить свойство» на странице строки: окно типов под кнопкой (строка, кнопка).
+    /// Окно «+ Добавить свойство» страницы строки, пока оно открыто.
+    @ObservationIgnored var rowPropertyMenus: PropertyMenuPresenter?
     /// Куда поставить курсор в только что открытой странице.
     var initialFocus: PageTextView.InitialFocus = .body
     private(set) var loadError: String?
@@ -75,6 +84,7 @@ final class MainWindowModel {
         self.library = library
         self.restoresTabs = restoresTabs
         treeOperations = PageTreeOperations(store: library.store)
+        databaseOperations = DatabaseOperations(store: library.store)
         let windowState = try? library.store.windowState(WindowState.mainWindowId)
         collapsedPageIds = windowState?.collapsedPageIds ?? []
         collapsedSections = windowState?.collapsedSidebarSections ?? []
@@ -84,6 +94,10 @@ final class MainWindowModel {
         treeOperations.onIconChange = { [weak library] pageId, _ in library?.iconDidChange(pageId) }
         treeOperations.onAppearanceChange = { [weak library] pageId in library?.appearanceDidChange(pageId) }
         treeOperations.onUndoFailure = { [weak self] error in
+            self?.loadError = "Не удалось отменить: \(SaveStatus.reason(for: error))"
+        }
+        databaseOperations.onChange = { [weak self] touched in self?.databaseDidChange(touched) }
+        databaseOperations.onUndoFailure = { [weak self] error in
             self?.loadError = "Не удалось отменить: \(SaveStatus.reason(for: error))"
         }
         search = PageSearchController(store: library.store, tree: { [weak library] in library?.tree ?? PageTreeSnapshot(allPages: []) },
@@ -133,6 +147,7 @@ final class MainWindowModel {
         if let editObserver { NotificationCenter.default.removeObserver(editObserver) }
         editObserver = nil
         visits.pageOpened(Optional<UUID>.none)
+        closeRowPeek()
         if let openDocument { openDocuments.release(openDocument.pageId) }
         openDocument = nil
         library.unregister(self)
@@ -145,14 +160,15 @@ final class MainWindowModel {
     /// Название открытой страницы прямо во время набора — для дерева.
     var liveTitleOfOpenPage: String? { openDocument?.page.title }
 
-    /// Названия предков страницы с иконками от корня — для пути в верхней полосе.
-    func ancestorTitles(of pageId: UUID) -> [String] {
-        tree.ancestors(of: pageId).map(\.pathTitle)
+    /// Предки страницы с иконками от корня — для пути в верхней полосе.
+    func breadcrumbAncestors(of pageId: UUID) -> [BreadcrumbAncestor] {
+        rowBreadcrumbAncestors(of: pageId) ?? tree.ancestors(of: pageId).map(BreadcrumbAncestor.init(page:))
     }
 
     /// Отмена окна: общая для редактора и дерева.
     func attachUndoManager(_ undoManager: UndoManager?) {
         treeOperations.undoManager = undoManager
+        databaseOperations.undoManager = undoManager
     }
 
     // MARK: Действия
@@ -227,6 +243,12 @@ final class MainWindowModel {
             performTreeOperation { try treeOperations.turnIntoSubpage(blockId, in: pageId) }
         case .moveBlocks(let blockIds, let anchor):
             showMoveBlocksPicker(blockIds, from: pageId, anchor: anchor)
+        case .createDatabase(let placement, let isInline):
+            // Полностраничная открывается, как подстраница; встроенная остаётся блоком на этой странице (вид — US1).
+            if let created = performTreeOperation({ try databaseOperations.createDatabase(in: pageId, isInline: isInline, linkAt: placement) }),
+               !isInline {
+                navigate(to: created.databaseId, focus: .title)
+            }
         }
     }
 
@@ -329,7 +351,8 @@ final class MainWindowModel {
     /// Если открытая страница ушла в корзину или стёрта — открыть другую.
     /// Страница активной вкладки ушла в корзину или стёрта — вкладка показывает заглушку или «Недавние» (US3).
     func remoteChangesApplied() {
-        if let openPageId, tree.page(openPageId) != nil { return }
+        if let rowPeek, !isLiveRow(rowPeek.document.pageId) { closeRowPeek() }
+        if let openPageId, tree.page(openPageId) != nil || isLiveRow(openPageId) { return }
         if openPageId != nil { closeOpenDocument() }
         // Пустой Mac получил первые страницы — открыть первую, как при запуске.
         if tabs.activePageId == nil, tabs.items.count == 1, tabs.activeTab.back.isEmpty, let first = tree.children(of: nil).first {
@@ -370,7 +393,7 @@ final class MainWindowModel {
             defer { scrollBeforeReload = nil }
             return openEditor(releasedPageId, focus: reopenFocus ?? .body, scroll: scrollBeforeReload, remember: false)
         }
-        if let openPageId, tree.page(openPageId) == nil { closeOpenDocument() }
+        if let openPageId, tree.page(openPageId) == nil, !isLiveRow(openPageId) { closeOpenDocument() }
         showActiveTab(focus: .body)
     }
 

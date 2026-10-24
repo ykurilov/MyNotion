@@ -81,8 +81,9 @@ struct NotionImporterTests {
         let ideas = try child("Идеи", of: mynotion.id)
         #expect(ideas.icon == "💡")
         let tasks = try child("Задачи", of: projects.id)
-        #expect(tree.children(of: tasks.id).map(\.title) == ["Купить молоко"])
-        #expect(report.pageCount == 6)
+        // Таблица — база (004): строки — её страницы; строке без файла — новая страница.
+        #expect(try store.pageOutline().filter { $0.parentId == tasks.id }.map(\.title).sorted() == ["Купить молоко", "Починить кран"])
+        #expect(report.pageCount == 7)
     }
 
     @Test("Порядок подстраниц — как ссылки на них в родителе, а ссылки становятся блоками pageLink")
@@ -93,8 +94,9 @@ struct NotionImporterTests {
         let mynotion = try child("MyNotion", of: projects.id)
         let tasks = try child("Задачи", of: projects.id)
         let diary = try child("Дневник", of: report.rootPageId)
-        // MyNotion и Задачи — подстраницы, Дневник — ссылка на страницу из другой ветки.
-        #expect(links.map(\.linkedPageId) == [mynotion.id, tasks.id, diary.id])
+        // MyNotion — подстраница, Дневник — ссылка на страницу из другой ветки; Задачи — встроенная база на месте ссылки.
+        #expect(links.map(\.linkedPageId) == [mynotion.id, diary.id])
+        #expect(try blocks(of: projects).first { $0.kind == .database }?.linkedPageId == tasks.id)
     }
 
     @Test("Ссылка на страницу, которой нет в выгрузке, — простой текст с названием")
@@ -123,7 +125,7 @@ struct NotionImporterTests {
         let projects = try blocks(of: child("Проекты", of: report.rootPageId))
         #expect(projects.prefix(13).map(\.kind) == [.paragraph, .heading2, .heading3, .bulletItem, .bulletItem, .bulletItem,
                                                     .numberedItem, .numberedItem, .numberedItem, .checkbox, .checkbox,
-                                                    .pageLink, .pageLink])
+                                                    .pageLink, .database])
         #expect(projects.prefix(11).map(\.indent) == [0, 0, 0, 0, 1, 2, 0, 0, 1, 0, 0])
         #expect(projects[10].isChecked)
         #expect(projects[0].text.string.hasSuffix("подчёркнутый и ссылка.\nВторая строка того же абзаца."))
@@ -131,19 +133,16 @@ struct NotionImporterTests {
                                                             .link(URL(string: "https://example.com/путь?a=1")!)])
     }
 
-    @Test("CSV-таблица — страница с абзацами «Колонка: значение» по строкам (берётся полная _all.csv)")
+    @Test("CSV-таблица — база (004): берётся полная _all.csv, строки — страницы, строки свойств отрезаны от тела")
     func csvTable() throws {
         let report = try runImport()
-        let tasks = try child("Задачи", of: child("Проекты", of: report.rootPageId).id)
-        let row = try child("Купить молоко", of: tasks.id)
-        let content = try blocks(of: tasks)
-        #expect(content.map(\.text.string).prefix(2) == [
-            "Название: Купить молоко\nСтатус: Готово\nЗаметки: Обычное, с запятой\nСрок: 18 октября 2026",
-            "Название: Починить кран\nСтатус: В работе\nЗаметки: Две строки\nзаметки",
-        ])
-        // Страницы строк лежат внутри таблицы и доступны по ссылкам в её конце.
-        #expect(content.last?.linkedPageId == row.id)
-        #expect(try texts(of: row) == ["Статус: Готово\nСрок: 18 октября 2026", "Две бутылки."])
+        let tasks = try #require(try store.pageOutline().first { $0.title == "Задачи" })
+        #expect(try store.write { tx throws in try tx.database(tasks.id) } != nil)
+        #expect(try store.write { tx throws in try tx.properties(ofDatabase: tasks.id) }.map(\.name) == ["Название", "Статус", "Заметки", "Срок"])
+        let rows = try store.pageOutline().filter { $0.parentId == tasks.id }.sorted { $0.sortKey < $1.sortKey }
+        #expect(rows.map(\.title) == ["Купить молоко", "Починить кран"])
+        #expect(try texts(of: rows[0]) == ["Две бутылки."])
+        #expect(report.databases.map(\.title) == ["Задачи"])
     }
 
     @Test("Картинки и вложения — «[файл: имя]», сами файлы не копируются")
@@ -187,8 +186,13 @@ struct NotionImporterTests {
     @Test("Отчёт: число страниц и блоков, «страница — что упрощено»; журнал импорта — finished")
     func report() throws {
         let report = try runImport()
-        #expect(report.pageCount == 6)
-        let stored = try store.pageOutline().filter { tree.isPage($0.id, insideBranchOf: report.rootPageId) && $0.id != report.rootPageId }
+        #expect(report.pageCount == 7)
+        // Страница-база своих блоков не пишет (пустой абзац у неё — правило ядра); строки базы в дереве не видны.
+        let databases = Set(try store.write { tx throws in try tx.allDatabaseRecords() }.databases.map(\.pageId))
+        let stored = try store.pageOutline().filter {
+            ($0.parentId.map(databases.contains) == true || tree.isPage($0.id, insideBranchOf: report.rootPageId))
+                && $0.id != report.rootPageId && !databases.contains($0.id)
+        }
         let blockCount = try stored.reduce(0) { $0 + (try store.pageContent($1.id)?.blocks.count ?? 0) }
         #expect(report.blockCount == blockCount)
         let projects = try #require(report.simplified.first { $0.pageTitle == "Проекты" })
@@ -197,16 +201,17 @@ struct NotionImporterTests {
         #expect(projects.items == [
             "картинки и файлы — вместо них их имена", "встроенные видео и сайты — вместо них их адреса",
         ])
-        #expect(report.simplified.map(\.pageTitle).sorted() == ["Задачи", "Идеи", "Проекты"])
-        #expect(report.simplified.first { $0.pageTitle == "Задачи" }?.items == ["таблицы — по строке на абзац"])
+        // Таблица — база (004), а не упрощение.
+        #expect(report.simplified.map(\.pageTitle).sorted() == ["Идеи", "Проекты"])
         #expect(NotionSimplification.quote.title(count: 12) == "цитаты (12)")
         // Чего в Markdown Notion нет, отчёт называет всегда, даже если упрощать было нечего (research R14).
-        #expect(report.notices == ["Цвета и колонки Notion в Markdown не выгружает — они не перенесены", "Обложки страниц Notion в выгрузку не попадают"])
+        #expect(report.notices == ["Цвета и колонки Notion в Markdown не выгружает — они не перенесены", "Обложки страниц Notion в выгрузку не попадают"]
+                + NotionDatabaseReader.notionNotices)
 
         let run = try #require(try importer().runs().first)
         #expect(run.status == .finished)
         #expect(run.rootPageId == report.rootPageId)
-        #expect(run.importedPages == 6)
+        #expect(run.importedPages == 7)
         #expect(run.simplifiedItems == report.simplified)
         #expect(run.startedAt == importDate)
         #expect(run.finishedAt != nil)
@@ -224,7 +229,7 @@ struct NotionImporterTests {
         #expect(!FileManager.default.fileExists(atPath: fromZip.contentRoot.appendingPathComponent("ExportBlock-0b6f2c1e-4d7a-4f3e-9a51-6c2d8e9f0a13-Part-1.zip").path))
 
         let report = try importer().importExport(fromZip)
-        #expect(report.pageCount == 6)
+        #expect(report.pageCount == 7)
         let folder = fromZip.contentRoot
         fromZip.discard()
         #expect(!FileManager.default.fileExists(atPath: folder.path), "Временная папка распаковки не убрана")
@@ -322,7 +327,8 @@ struct NotionImporterTests {
         _ = try importer().importExport(prepared) { step in steps.withLock { $0.append(step) } }
         let all = steps.withLock { $0 }
         #expect(all.first?.phase == .reading)
-        #expect(all.last == NotionImportProgress(phase: .writing, done: 6, total: 6))
+        // Строке таблицы без своего файла — новая страница: записано на одну больше, чем прочитано.
+        #expect(all.last == NotionImportProgress(phase: .writing, done: 7, total: 7))
         #expect(all.contains { $0.phase == .reading && $0.done == $0.total && $0.total == 6 })
     }
 

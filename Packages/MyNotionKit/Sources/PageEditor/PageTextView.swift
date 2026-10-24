@@ -879,7 +879,7 @@ public class PageTextView: NSTextView {
 
     /// После раскладки видимой области — виды блоков на свои абзацы, возвращённое место прокрутки — на своё.
     public override func layout() {
-        super.layout()
+        layoutKeepingScrollAnchor { super.layout() }
         blockViews.update()
         keepScrollAnchor()
     }
@@ -918,6 +918,7 @@ public class PageTextView: NSTextView {
     var showsBlockHandles: Bool { true }
 
     func layoutColumn() {
+        let previousTextTop = textContainerOrigin.y
         let (left, columnWidth) = column
         if let container = textContainer, container.size.width != columnWidth {
             container.size = NSSize(width: columnWidth, height: container.size.height)
@@ -935,6 +936,8 @@ public class PageTextView: NSTextView {
             textContainerInset = inset
         }
         invalidateTextContainerOrigin()
+        // Шапка выросла уже после возврата места (строка обратных ссылок, обложка): блок якоря — обратно на своё место.
+        if textContainerOrigin.y != previousTextTop { keepScrollAnchor() }
         updateEmptyParagraphHint()
         if formatBar.isShown { updateFormatBar() }
         updateSelectionLook()

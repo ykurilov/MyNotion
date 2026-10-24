@@ -67,10 +67,15 @@ final class EditorFixture {
     }
 
     /// Та же страница из базы заново: в новом документе и новом окне (например, после правки записей в обход редактора).
-    init(reopening other: EditorFixture) throws {
+    convenience init(reopening other: EditorFixture) throws {
+        try self.init(opening: other.pageId, from: other)
+    }
+
+    /// Другая страница той же базы (например, созданная генератором) — в новом документе и новом окне.
+    init(opening pageId: UUID, from other: EditorFixture) throws {
         folder = other.folder
         store = other.store
-        pageId = other.pageId
+        self.pageId = pageId
         document = try PageDocument(content: #require(try store.pageContent(pageId)))
         textView = PageTextView(document: document, initialFocus: .body)
         undoManager.groupsByEvent = false

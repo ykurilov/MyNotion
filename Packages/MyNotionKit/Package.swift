@@ -28,6 +28,12 @@ let package = Package(
         .library(name: "Navigation", targets: ["Navigation"]),
         .library(name: "PagePicker", targets: ["PagePicker"]),
         .library(name: "PageCover", targets: ["PageCover"]),
+        .library(name: "Formulas", targets: ["Formulas"]),
+        .library(name: "Databases", targets: ["Databases"]),
+        .library(name: "DatabaseGrid", targets: ["DatabaseGrid"]),
+        .library(name: "DatabaseViewBar", targets: ["DatabaseViewBar"]),
+        .library(name: "DatabaseRowPage", targets: ["DatabaseRowPage"]),
+        .library(name: "NotionSchemaFetch", targets: ["NotionSchemaFetch"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.11.1"),
@@ -42,9 +48,9 @@ let package = Package(
         // Окно выбора эмодзи (FR-034): список и названия — из Unicode и CLDR (scripts/emoji/build-emoji-data.py).
         .target(name: "EmojiPicker", dependencies: ["VisualStyle"], resources: [.copy("Resources/emoji.tsv")]),
         .target(name: "PageSearch", dependencies: ["NotesCore", "VisualStyle", .product(name: "GRDB", package: "GRDB.swift")]),
-        .target(name: "MarkdownExport", dependencies: ["NotesCore", "LinkPreview"]),
+        .target(name: "MarkdownExport", dependencies: ["NotesCore", "LinkPreview", "Databases", .product(name: "GRDB", package: "GRDB.swift")]),
         // Импорт из Notion (US6): записи и журнал импортов (`import_run`) пишет прямо через GRDB, как поиск свой индекс.
-        .target(name: "NotionImport", dependencies: ["NotesCore", "CodeHighlighting", "LinkPreview", .product(name: "GRDB", package: "GRDB.swift")]),
+        .target(name: "NotionImport", dependencies: ["NotesCore", "CodeHighlighting", "LinkPreview", "Databases", "MarkdownExport", .product(name: "GRDB", package: "GRDB.swift")]),
         .target(name: "Sync", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
         // Состояния галереи для блоков 002 — из описателей типов редактора (`BlockKinds.gallerySamples`).
         .target(name: "UIGallery", dependencies: ["NotesCore", "PageEditor"]),
@@ -74,6 +80,18 @@ let package = Package(
         .target(name: "PagePicker", dependencies: ["NotesCore", "PageSearch", "VisualStyle"]),
         // Обложка: вид, галерея, окно «Сменить обложку», «Переместить» (research R1).
         .target(name: "PageCover", dependencies: ["NotesCore", "Attachments", "VisualStyle"]),
+        // 004 (plan.md, Project Structure). Язык формул: разбор, типы, вычисление — без зависимостей (research R6).
+        .target(name: "Formulas"),
+        // Базы: модели значений 18 типов, операции с отменой, запрос вида, пересчёт, индексы ячеек — без AppKit (R2–R9).
+        .target(name: "Databases", dependencies: ["NotesCore", "Formulas", .product(name: "GRDB", package: "GRDB.swift")]),
+        // Сетка таблицы: видимые строки слоями, ячейки по типам, меню колонки и окна настроек (research R4, R5).
+        .target(name: "DatabaseGrid", dependencies: ["NotesCore", "Databases", "Formulas", "VisualStyle", "Attachments"]),
+        // Строка видов: фильтр, сортировка, поиск, «•••» вида, «Создать ▾».
+        .target(name: "DatabaseViewBar", dependencies: ["Databases", "DatabaseGrid", "VisualStyle"]),
+        // Страница строки: свойства под названием, просмотр сбоку и по центру (research R12).
+        .target(name: "DatabaseRowPage", dependencies: ["Databases", "DatabaseGrid", "PageEditor", .product(name: "GRDB", package: "GRDB.swift")]),
+        // Схема баз из Notion по ключу (Q3, research R19): только чтение.
+        .target(name: "NotionSchemaFetch", dependencies: ["Formulas"]),
 
         .testTarget(name: "VisualStyleTests", dependencies: ["VisualStyle"]),
         .testTarget(name: "NotesCoreTests", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
@@ -81,10 +99,10 @@ let package = Package(
         .testTarget(name: "PageEditorTests", dependencies: ["PageEditor", "NotesCore", "EmojiPicker"]),
         .testTarget(name: "EmojiPickerTests", dependencies: ["EmojiPicker", "NotesCore"]),
         .testTarget(name: "PageSearchTests", dependencies: ["PageSearch", "NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
-        .testTarget(name: "MarkdownExportTests", dependencies: ["MarkdownExport", "NotesCore"]),
-        .testTarget(name: "NotionImportTests", dependencies: ["NotionImport", "NotesCore", "MarkdownExport", "PageEditor", .product(name: "GRDB", package: "GRDB.swift")],
+        .testTarget(name: "MarkdownExportTests", dependencies: ["MarkdownExport", "NotesCore", "Databases"]),
+        .testTarget(name: "NotionImportTests", dependencies: ["NotionImport", "NotesCore", "MarkdownExport", "PageEditor", "Databases", .product(name: "GRDB", package: "GRDB.swift")],
                     resources: [.copy("Fixtures")]),
-        .testTarget(name: "SyncTests", dependencies: ["Sync", "NotesCore", "Reminders", "Attachments", .product(name: "GRDB", package: "GRDB.swift")]),
+        .testTarget(name: "SyncTests", dependencies: ["Sync", "NotesCore", "Databases", "Reminders", "Attachments", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "UIGalleryTests", dependencies: ["UIGallery", "NotesCore", "PageEditor"]),
         .testTarget(name: "ServiceLaunchTests", dependencies: ["ServiceLaunch"]),
         .testTarget(name: "CodeHighlightingTests", dependencies: ["CodeHighlighting"]),
@@ -98,6 +116,12 @@ let package = Package(
         .testTarget(name: "NavigationTests", dependencies: ["Navigation", "NotesCore"]),
         .testTarget(name: "PagePickerTests", dependencies: ["PagePicker", "NotesCore"]),
         .testTarget(name: "PageCoverTests", dependencies: ["PageCover", "NotesCore", "Attachments", "VisualStyle"]),
+        .testTarget(name: "FormulasTests", dependencies: ["Formulas"]),
+        .testTarget(name: "DatabasesTests", dependencies: ["Databases", "NotesCore", "Formulas", "Reminders", "Attachments", .product(name: "GRDB", package: "GRDB.swift")]),
+        .testTarget(name: "DatabaseGridTests", dependencies: ["DatabaseGrid", "DatabaseViewBar", "DatabaseRowPage", "Databases", "NotesCore", "Formulas"]),
+        .testTarget(name: "DatabaseViewBarTests", dependencies: ["DatabaseViewBar", "DatabaseGrid", "Databases", "NotesCore"]),
+        .testTarget(name: "DatabaseRowPageTests", dependencies: ["DatabaseRowPage", "DatabaseGrid", "Databases", "NotesCore"]),
+        .testTarget(name: "NotionSchemaFetchTests", dependencies: ["NotionSchemaFetch", "Formulas"]),
     ],
     swiftLanguageModes: [.v6]
 )

@@ -17,6 +17,8 @@ settings:
     CODE_SIGN_IDENTITY: "-"
     CODE_SIGN_STYLE: Manual
     ENABLE_USER_SCRIPT_SANDBOXING: YES
+    # xcodegen до 2.46 ставил это сам; без него у тестовых целей пустое имя модуля.
+    PRODUCT_NAME: $(TARGET_NAME)
 packages:
   MyNotionKit:
     path: Packages/MyNotionKit
@@ -71,6 +73,19 @@ targets:
         product: PagePicker
       - package: MyNotionKit
         product: PageCover
+      # 004: базы данных.
+      - package: MyNotionKit
+        product: Formulas
+      - package: MyNotionKit
+        product: Databases
+      - package: MyNotionKit
+        product: DatabaseGrid
+      - package: MyNotionKit
+        product: DatabaseViewBar
+      - package: MyNotionKit
+        product: DatabaseRowPage
+      - package: MyNotionKit
+        product: NotionSchemaFetch
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion
@@ -96,6 +111,8 @@ targets:
         buildPhase: resources
     dependencies:
       - target: MyNotion
+      - package: MyNotionKit
+        product: NotesCore
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion.uitests
@@ -126,6 +143,15 @@ targets:
       # US6: замер истории версий и набора во время записи версий.
       - package: MyNotionKit
         product: PageVersions
+      # 004, этап 0: пробы сетки, запроса вида, формул, связей и встроенной базы (research R20).
+      - package: MyNotionKit
+        product: Databases
+      - package: MyNotionKit
+        product: DatabaseGrid
+      - package: MyNotionKit
+        product: DatabaseViewBar
+      - package: MyNotionKit
+        product: Formulas
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion.performancetests

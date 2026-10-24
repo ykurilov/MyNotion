@@ -29,7 +29,7 @@ xcodebuild build -scheme MyNotion -destination 'platform=macOS,arch=arm64'
 
 | Модуль | Что делает |
 |--------|------------|
-| `NotesCore` | модель страниц и блоков, база SQLite (схема v8), запись правок, копия ветки, перенос блоков, шаблоны, эталонные базы для замеров |
+| `NotesCore` | модель страниц, блоков и баз, база SQLite (схема v9), запись правок, копия ветки, перенос блоков, шаблоны, эталонные базы для замеров |
 | `PageEditor` | редактор страницы; каждый тип блока — свой описатель в `BlockKinds/` (меню «/», вид, клавиши, образцы галереи, часть «богатой» страницы) |
 | `PageTree`, `PageSearch` | дерево страниц в боковой панели, поиск по всем страницам |
 | `VisualStyle` | цвета, шрифты и размеры под Notion, светлая и тёмная тема |
@@ -48,6 +48,10 @@ xcodebuild build -scheme MyNotion -destination 'platform=macOS,arch=arm64'
 | `Backlinks` | индекс обратных ссылок `page_link`, строка «↗ N обратных ссылок» и её список |
 | `PageVersions` | история версий: снимки, прореживание, разница, восстановление с ⌘Z |
 | `UIGallery`, `ServiceLaunch` | галерея снимков интерфейса и служебные режимы запуска без фокуса |
+| `Databases` | базы 004: модели значений 18 типов, запрос вида, индексатор ячеек, операции с отменой, фоновый пересчёт формул |
+| `Formulas` | язык формул: разбор, вычисление, функции по разделам |
+| `DatabaseGrid`, `DatabaseViewBar`, `DatabaseRowPage` | сетка таблицы, строка вида, страница строки; реестры пунктов меню и окон |
+| `NotionSchemaFetch` | схема баз из Notion по ключу (Q3) |
 
 ### Вкладки и меню «История»
 
@@ -66,18 +70,19 @@ xcodebuild build -scheme MyNotion -destination 'platform=macOS,arch=arm64'
 ## Тесты
 
 ```sh
-# Модули (Swift Testing) — быстро, без Xcode-проекта
-cd Packages/MyNotionKit && swift test
+# Всё — на iMac через imac-run (см. «Проверки на iMac»): основной Mac только правит код.
+# Модули (Swift Testing)
+cd Packages/MyNotionKit && imac-run --no-fallback --wait 1800 --no-setup -- swift test --jobs 4
 
-# Сценарии XCUITest — только в виртуальном Mac (см. ниже): сборка здесь, прогон там
-scripts/vm/run-in-vm.sh uitest [-only-testing:UITests/<Класс>]
+# Сценарии XCUITest — сборка и прогон на iMac, журнал и снимки возвращаются сюда
+scripts/imac/run-on-imac.sh uitest [-only-testing:UITests/<Класс>]
 
 # Замеры бюджета (quickstart.md 002) — сборка Release, схема MyNotionPerformance.
 # PerformanceTests запускает приложение через систему, как Dock; PerformanceUITests — замеры через XCUITest.
-scripts/vm/run-in-vm.sh uitest --release [-only-testing:PerformanceTests/<Класс>]
+scripts/imac/run-on-imac.sh uitest --release [-only-testing:PerformanceTests/<Класс>]
 
 # Сервер
-cd server && pnpm test
+cd server && imac-run --setup 'pnpm install --frozen-lockfile' -- pnpm test
 ```
 
 ## Флаги запуска
@@ -105,7 +110,7 @@ cd server && pnpm test
 | `--sync-connect-token-file <путь>` | подключить как первый Mac токеном из файла (файл стирается) |
 | `--sync-write-join-code <путь>` | после подключения записать код для второго Mac в файл |
 | `--sync-log <путь>` | вместе с флагами выше: писать ход синхронизации в файл |
-| `--sync-join-code-file <путь>` | подключить кодом из файла (ждёт, пока файл появится); вместе — `scripts/vm/sync-live-check.sh` |
+| `--sync-join-code-file <путь>` | подключить кодом из файла (ждёт, пока файл появится); вместе — `scripts/imac/sync-live-check.sh` |
 | `--export-markdown <папка>` | выгрузить все записи в Markdown в `<папка>/MyNotion-выгрузка-<дата>/` без окна выбора папки, напечатать путь и выйти (код 0 — готово, 1 — ошибка, частичной папки не остаётся) |
 | `--import-notion <путь>` | импортировать выгрузку Notion (ZIP «Export → Markdown & CSV» или распакованную папку) в ветку «Импорт из Notion — <дата>» без окна выбора, напечатать отчёт и выйти (код 0 — готово, 1 — ошибка, ветка откачена, 2 — эта выгрузка уже импортирована, повтор не начат) |
 
@@ -124,17 +129,37 @@ pnpm build && pnpm start   # http://localhost:3000/health → {"status":"ok"}
 Настройки — переменными окружения: `PORT` (3000), `DATA_DIR` (`./data`: база, резервные копии, файлы в `files/`),
 `BACKUP_KEEP` (14 копий), `FILES_LIMIT_GB` (50 ГБ на файлы). Развёртывание — `server/Dockerfile` и `docker-compose.yml`.
 
-## Запуск только в виртуальном Mac
+## Проверки на iMac
 
-На основном Mac приложение не запускается ни в каком виде — это мешает Юрию работать. Сборка на основном Mac разрешена, запуск — только внутри виртуального Mac (Cua/Lume, машина `cua-base-3416f98dedcf` на SSD):
+На основном Mac приложение не запускается ни в каком виде и ничего не собирается — только правка кода и git. Сборки, тесты, галерея и живые проверки — на iMac Юрия через `imac-run` (skill `imac`): очередь сама делит iMac между агентами, всё с окнами берёт место «экран» и на основной Mac не переносится никогда.
 
 ```sh
-scripts/vm/run-in-vm.sh gallery [--only <слово>] [--out <папка>]   # галерея состояний, снимки копируются сюда
-scripts/vm/run-in-vm.sh run <флаги приложения>                       # любой служебный режим
-scripts/vm/run-in-vm.sh uitest [--release] [-only-testing:…]          # UI-тесты и замеры Xcode внутри
-scripts/vm/run-in-vm.sh lock -- <команда>                            # своё действие с машиной под общим замком
-scripts/vm/run-in-vm.sh ssh <команда>                                # команда внутри
-scripts/vm/run-in-vm.sh status
+scripts/imac/run-on-imac.sh gallery [--release] [--only <слово>] [--out <папка>]   # галерея, снимки — сюда
+scripts/imac/run-on-imac.sh run [--release] <флаги приложения>                      # любой служебный режим
+scripts/imac/run-on-imac.sh uitest [--release] [-only-testing:…] [--out <папка>]     # UI-тесты и замеры Xcode
+scripts/imac/run-on-imac.sh lock -- <команда>    # своя серия шагов в копии проекта на iMac, «экран» занят
+scripts/imac/run-on-imac.sh ssh <команда>        # быстрая команда на iMac в копии проекта, без очереди
+scripts/imac/run-on-imac.sh status               # очередь, macOS, Xcode, режим автоматизации
+scripts/imac/sync-live-check.sh [--out <папка>]  # два Mac вживую (US5)
+scripts/imac/sync-memory-check.sh                # память в покое с синхронизацией (T095)
 ```
 
-Экран виртуального Mac — 1512×982 точек с ретиной (`lume set … --display 3024x1964`), Dock прячется. Тогда окно галереи 1440×900 влезает целиком, а снимки, как на ноутбуке, вдвое крупнее (@2x). Сам гость после перезапуска ставит 1024×768, поэтому `gallery` перед съёмкой включает нужный режим программой `scripts/vm/displaymode.swift`.
+Сборка идёт на iMac не больше чем в 4 потока, папки сборки — `build/imac-*` в копии проекта (кэш между прогонами). Место «экран» ждём до 30 минут (`MYNOTION_IMAC_WAIT`). Экран iMac уже ретина, окно 1440×900 влезает, режим экрана не меняется.
+
+### Что включить на iMac один раз
+
+Нужен пароль Юрия (`sudo`): через «Общий экран» (`open vnc://iMac-Yury.local`).
+
+1. macOS 26+ и Xcode 26+; `sudo xcode-select -s /Applications/Xcode.app`, `sudo xcodebuild -license accept`, `xcodebuild -runFirstLaunch`.
+2. xcodegen в `~/.local/bin` (без Homebrew): скачать `xcodegen.zip` со страницы выпусков github.com/yonaskolb/XcodeGen и распаковать `bin/xcodegen` и `share/xcodegen` в `~/.local`.
+3. Режим разработчика: `sudo DevToolsSecurity -enable`.
+4. UI-тесты без окна пароля: `sudo automationmodetool enable-automationmode-without-authentication`.
+5. Первый `uitest` — смотреть экран: если macOS спросит, разрешить «UITests-Runner» / Xcode управлять компьютером («Универсальный доступ»), разрешить.
+
+Пузырёк раскладки под курсором (у iMac несколько раскладок) XCUITest принимает за чужой диалог — `uitest` и `sync-live-check` выключают его сами (`TSMLanguageIndicatorEnabled`, без sudo).
+
+Проверка: `scripts/imac/run-on-imac.sh status`. Чего не хватает, сценарии говорят сами — понятным сообщением до сборки. Если UI-тесты из SSH всё равно не идут, запасной прогон через Терминал iMac: `MYNOTION_UITEST_VIA_TERMINAL=1` перед командой (`lock -- 'MYNOTION_UITEST_VIA_TERMINAL=1 zsh scripts/imac/on-imac.sh uitest …'`).
+
+### Запасной путь: виртуальный Mac
+
+Только если iMac недоступен: `scripts/vm/run-in-vm.sh` с теми же режимами (gallery, run, uitest, lock, ssh, status), `scripts/vm/sync-live-check.sh`, `scripts/vm/sync-memory-check.sh`. Виртуальный Mac на 8 ГБ перегружает основной Mac, поэтому после проверки он выключается сам (`MYNOTION_VM_KEEP=1` — оставить на серию, потом `lume stop cua-base-3416f98dedcf`). Его экран — 1512×982 точек с ретиной, `gallery` включает режим программой `scripts/vm/displaymode.swift`.

@@ -1,5 +1,7 @@
 import AppKit
 import Attachments
+import DatabaseGrid
+import Databases
 import Foundation
 import NotesCore
 import Observation
@@ -59,18 +61,28 @@ final class PagesLibrary {
         try? attachments.abandonInterruptedCopies()
         openDocuments = OpenDocuments(store: store)
         MediaBlocks.install(AppMediaServices(attachments: attachments, openDocuments: openDocuments))
+        // 004: таблица встроенной базы и страницы-базы (US1).
+        DatabaseBlockViewFactory.install(library: self)
         reloadTree()
         sync = SyncController(store: store, openDocuments: openDocuments, attachments: attachments, startsEngine: startsSync)
         sync.onRemoteChange = { [weak self] _ in self?.remoteChangesApplied() }
         versions = AppPageVersions(store: store, deviceName: sync.deviceName, timing: versionTiming)
         firstWindow = MainWindowModel(library: self, opening: nil, restoresTabs: true)
         reminders.openBlock = { [weak self] pageId, blockId in self?.openBlock(blockId, inPage: pageId) }
+        // Первое «Напомнить» в окне даты ячейки — разрешение macOS, как у дат в тексте.
+        DateReminderPermission.request = { [reminders] in Task { _ = await reminders.requestPermission() } }
     }
 
     /// Щелчок по уведомлению: страница в окне, где работают, курсор — у блока с датой; свёрнутые предки раскрываются.
     func openBlock(_ blockId: UUID, inPage pageId: UUID) {
-        guard tree.page(pageId) != nil else { return }
         let window = activeWindow ?? firstWindow
+        // Напоминание ячейки даты (US2): строки базы в дереве нет — строка открывается на всю страницу.
+        if tree.page(pageId) == nil {
+            guard (try? store.write({ try $0.page(pageId) })) != nil else { return }
+            window?.openRow(pageId, mode: .fullPage)
+            window?.window?.makeKeyAndOrderFront(nil)
+            return
+        }
         window?.select(pageId, revealing: blockId)
         window?.window?.makeKeyAndOrderFront(nil)
     }
@@ -127,8 +139,10 @@ final class PagesLibrary {
     var hasFailedSaves: Bool { openDocuments.hasFailedSaves }
 
     func reloadTree() {
-        let all = (try? store.pageOutline()) ?? []
-        tree = PageTreeSnapshot(allPages: all)
+        // Строки баз дерево не читает (их тысячи): только страницы, базы и корзина (research R1).
+        let outline = (try? store.treeOutline()) ?? (pages: [], databases: [:])
+        let all = outline.pages
+        tree = PageTreeSnapshot(allPages: all, databases: outline.databases)
         trashEntries = NotesStore.trashEntries(in: all)
         trashedPagesById = Dictionary(all.lazy.filter { self.tree.page($0.id) == nil }.map { ($0.id, $0) }) { first, _ in first }
         trashedPageIds = Set(trashedPagesById.keys)
@@ -169,6 +183,8 @@ final class PagesLibrary {
     /// Правки с другого Mac легли в базу; открытые страницы их уже приняли (research R5).
     private func remoteChangesApplied() {
         reloadTree()
+        // Ячейки, свойства, виды с другого Mac: открытые таблицы перечитывают себя.
+        DatabaseOperations.announce(nil)
         for window in windowModels { window.remoteChangesApplied() }
     }
 }

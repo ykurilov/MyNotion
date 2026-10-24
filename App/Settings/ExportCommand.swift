@@ -62,7 +62,22 @@ final class MarkdownExportController {
         export(into: folder)
     }
 
-    func export(into folder: URL) {
+    /// «Выгрузить базу…» в меню «•••» страницы-базы: только эта база — в папке «<База>-выгрузка-…».
+    func chooseFolderAndExportDatabase(_ databaseId: UUID, title: String) {
+        guard !isRunning else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.prompt = "Выгрузить сюда"
+        panel.message = "Выберите папку: в ней появится папка «\(title)-выгрузка-…» — таблица CSV, страницы строк и описание базы"
+        panel.directoryURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+        guard panel.runModal() == .OK, let folder = panel.url else { return }
+        export(into: folder, databaseId: databaseId)
+    }
+
+    /// `databaseId` — выгрузить одну базу; `nil` — все записи.
+    func export(into folder: URL, databaseId: UUID? = nil) {
         guard !isRunning else { return }
         guard saveOpenPages() else {
             state = .failed("Правки открытой страницы не записались на диск, поэтому выгрузка не начата. Попробуйте ещё раз.")
@@ -74,11 +89,13 @@ final class MarkdownExportController {
         task = Task { [weak self] in
             let outcome = await Task.detached(priority: .userInitiated) { () -> Result<MarkdownExportResult, any Error> in
                 Result {
-                    try exporter.export(into: folder) { step in
+                    let progress: @Sendable (MarkdownExportProgress) -> Void = { step in
                         // Не на каждую страницу: окну хватает десяти обновлений в секунду.
                         guard step.pagesDone % 10 == 0 || step.pagesDone == step.pagesTotal else { return }
                         Task { @MainActor in self?.report(step) }
                     }
+                    if let databaseId { return try exporter.exportDatabase(databaseId, into: folder, progress: progress) }
+                    return try exporter.export(into: folder, progress: progress)
                 }
             }.value
             self?.finish(outcome)

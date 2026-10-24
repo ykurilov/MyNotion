@@ -1,0 +1,6 @@
+﻿Name,Статус,Теги,Срок,Готово,Часы,Доля,Сайт,Почта,Телефон,ID,Проект,Итог,Created time,Last edited time,Заметки,Ответственный
+Купить молоко,Готово,"Дом, Срочно","October 20, 2026",Yes,1.5,50%,https://example.com,ya@example.com,+7 (900) 123-45-67,1,"Альфа (https://app.notion.com/p/c0000000000000000000000000000001?pvs=21)",Привет,"October 18, 2026 9:00 AM","October 19, 2026 6:30 PM","Обычное, с запятой",Юрий Курилов
+Купить молоко,В работе,Дом,"October 21, 2026 3:15 PM",No,2,25%,https://example.org/a?b=1,mi@example.com,8 900 765 43 21,2,"Альфа (https://app.notion.com/p/c0000000000000000000000000000001?pvs=21), Бета (https://app.notion.com/p/c0000000000000000000000000000002?pvs=21)",Пока,"October 18, 2026 9:05 AM","October 18, 2026 9:05 AM","Две строки
+заметки",
+Позвонить в банк,Готово,Срочно,"October 22, 2026 → October 24, 2026",No,,100%,https://mynotion.app,bank@example.com,+1 555 010 9999,3,"Бета (https://app.notion.com/p/c0000000000000000000000000000002?pvs=21)",,"October 18, 2026 9:10 AM","October 20, 2026 11:00 AM",,Мишка
+,В работе,,,No,3,0%,https://kurilov.cloud,x@example.com,+7 999 000-11-22,4,,,"October 18, 2026 9:20 AM","October 18, 2026 9:20 AM",,

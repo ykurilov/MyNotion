@@ -69,7 +69,7 @@ final class TablesAndColumnsTests: XCTestCase {
         point(columnLeft + 40, rightY).hover()
         let handle = app.blockDragHandle
         XCTAssertTrue(handle.waitForExistence(timeout: 5), "Нет ручки «⋮⋮» у блока «Правый»")
-        handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.3, thenDragTo: point(columnLeft + 720 - 12, leftY))
+        handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click(forDuration: 0.3, thenDragTo: point(columnLeft + 720 - 12, leftY))
         let columns = app.textViews.matching(identifier: "flow-body")
         XCTAssertTrue(waitUntil { columns.count == 2 }, "Колонки не собрались")
 

@@ -67,6 +67,11 @@ enum TabsBenchmark {
             }
             report.summarize()
             if let data = try? JSONEncoder().encode(report) { try? data.write(to: url, options: .atomic) }
+            // Разбор памяти (`scripts/imac/mem-probe.zsh`): процесс ещё 4 минуты живёт, пока с него снимают кучу.
+            if let hold = ProcessInfo.processInfo.environment["MYNOTION_BENCH_HOLD"] {
+                FileManager.default.createFile(atPath: hold, contents: Data("\(ProcessInfo.processInfo.processIdentifier)".utf8))
+                try? await Task.sleep(for: .seconds(240))
+            }
             NSApp.terminate(nil)
         }
     }
@@ -95,6 +100,7 @@ enum TabsBenchmark {
             try await Task.sleep(for: .milliseconds(10))
         }
         try await Task.sleep(for: .seconds(2))
+        try requireVisibleWindow()
         report.memoryOneTabMB = footprintMB()
         report.heapOneTabMB = heapInUseMB()
 
@@ -117,6 +123,7 @@ enum TabsBenchmark {
             try await Task.sleep(for: .milliseconds(10))
         }
         try await Task.sleep(for: .seconds(2))
+        try requireVisibleWindow()
         report.memoryTwentyTabsMB = footprintMB()
         report.heapTwentyTabsMB = heapInUseMB()
 
@@ -166,9 +173,18 @@ enum TabsBenchmark {
             }
         }
         readyTimeout?.cancel()
+        // Разбор памяти (`mem-probe.zsh bg-event`): пустое событие после перехода — как щелчок человека. Без событий
+        // (запуск `open -g`) главный поток не выходит из ожидания события, его пул автоосвобождения не очищается,
+        // и закрытые страницы живут до первого события: куча 98 → 189 МБ вместо 39 → 42.
+        if ProcessInfo.processInfo.environment["MYNOTION_BENCH_POST_EVENT"] != nil,
+           let event = NSEvent.otherEvent(with: .applicationDefined, location: .zero, modifierFlags: [], timestamp: 0,
+                                          windowNumber: 0, context: nil, subtype: 0, data1: 0, data2: 0) {
+            NSApp.postEvent(event, atStart: false)
+        }
         NSApp.windows.forEach { $0.displayIfNeeded() }
         let elapsed = ContinuousClock.now - start
         guard ready else { throw BenchmarkFailure(description: "Страница вкладки не открылась за 10 с") }
+        try requireVisibleWindow()
         return Double(elapsed.components.seconds) * 1_000 + Double(elapsed.components.attoseconds) / 1e15
     }
 
@@ -180,6 +196,16 @@ enum TabsBenchmark {
         scrollView.contentView.scroll(to: NSPoint(x: 0, y: y))
         scrollView.reflectScrolledClipView(scrollView.contentView)
         window.displayIfNeeded()
+    }
+
+    /// Окно не видно (экран погашен или заблокирован) — AppKit не рисует, и закрытые редакторы живут до кадра, которого
+    /// нет: куча вырастает на 30–90 МБ, а время — без рисования. Такой замер не о приложении (T085): проверка после
+    /// каждого перехода и перед снимком кучи.
+    private static func requireVisibleWindow() throws {
+        guard let window = NSApp.windows.first(where: { $0.firstResponder is PageTextView }),
+              window.occlusionState.contains(.visible) else {
+            throw BenchmarkFailure(description: "Окно не видно (экран погашен или заблокирован): куча и времена недействительны")
+        }
     }
 
     private static func heapInUseMB() -> Double {

@@ -27,6 +27,7 @@ extension PageTextView {
     /// Поставить вид обложки над шапкой (`nil` — убрать); текст и шапка сдвигаются вниз на `height`, иконка заходит
     /// на обложку.
     public func setCover(_ view: NSView?, height: CGFloat) {
+        let previousTextTop = textContainerOrigin.y
         if coverSlot.view !== view {
             coverSlot.view?.removeFromSuperview()
             if let view { addSubview(view, positioned: .below, relativeTo: header) }
@@ -35,11 +36,18 @@ extension PageTextView {
         coverSlot.height = view == nil ? 0 : height
         header.hasCover = view != nil
         layoutColumn()
+        // invalidateTextContainerOrigin обновляет геометрию, но TextKit 2 сохраняет виды
+        // нарисованных фрагментов. После сдвига обложкой им нужен новый проход раскладки.
+        if textContainerOrigin.y != previousTextTop {
+            needsLayout = true
+            needsDisplay = true
+        }
     }
 
-    /// Вид в месте «под названием» шапки (US5: строка обратных ссылок); `nil` — место пустое и высоты не занимает.
-    public func setUnderTitle(_ view: NSView?, height: CGFloat) {
-        header.setUnderTitle(view, height: height)
+    /// Вид в месте «под названием» шапки (US5: строка обратных ссылок; 004: свойства строки, `order` −1 — над ними);
+    /// `nil` — вида с этим `order` нет, пустое место высоты не занимает.
+    public func setUnderTitle(_ view: NSView?, height: CGFloat, order: Int = 0) {
+        header.setUnderTitle(view, height: height, order: order)
         layoutColumn()
     }
 

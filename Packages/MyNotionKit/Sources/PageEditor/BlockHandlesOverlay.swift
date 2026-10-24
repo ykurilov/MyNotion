@@ -8,7 +8,7 @@ import VisualStyle
 @MainActor
 final class BlockHandlesOverlay: NSView {
     private unowned let textView: PageTextView
-    private let addHandle = BlockHandleButton(kind: .add)
+    let addHandle = BlockHandleButton(kind: .add)
     let dragHandle = BlockHandleButton(kind: .drag)
     let dropIndicator = BlockDropLine()
     let dragGhost = BlockDragGhost()
@@ -213,7 +213,8 @@ final class BlockDragGhost: NSView {
 
 /// Одна ручка: «+» или шесть точек «⋮⋮» цвета handleIcon, при наведении — фон hoverBackground.
 @MainActor
-final class BlockHandleButton: NSView {
+final class BlockHandleButton: NSView, PointerOwner {
+    var pointer: NSCursor { .pointingHand }
     enum Kind { case add, drag }
 
     let kind: Kind
@@ -241,8 +242,13 @@ final class BlockHandleButton: NSView {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         trackingAreas.forEach(removeTrackingArea)
-        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect, .cursorUpdate], owner: self))
     }
+
+    // AppKit восстанавливает cursor rects после перемещения/перераскладки ручек.
+    // Одного cursorUpdate недостаточно: системный прямоугольник родителя — I-beam.
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+    override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
 
     override func mouseEntered(with event: NSEvent) { isHovered = true }
     override func mouseExited(with event: NSEvent) { isHovered = false }
@@ -311,18 +317,78 @@ final class BlockHandleButton: NSView {
 extension PageTextView {
     // MARK: Ручки блока
 
+    public override func resetCursorRects() {
+        // У NSTextView есть собственный системный выбор I-beam, независимый от mouseMoved.
+        // Наша текстовая колонка начинается ниже cover/header и правее gutter ручек.
+        let rect = textPointerRect.intersection(visibleRect)
+        if !rect.isEmpty { addCursorRect(rect, cursor: .iBeam) }
+    }
+
     public override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        for area in trackingAreas where area.owner === self && area.userInfo?["blockHandles"] != nil {
+        for area in trackingAreas where area.owner === self &&
+            (area.userInfo?["blockHandles"] != nil || area.userInfo?["textPointer"] != nil) {
             removeTrackingArea(area)
         }
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
                                        owner: self, userInfo: ["blockHandles": true]))
+        // Отдельная область: .inVisibleRect у ручек включает также шапку и обложку.
+        // Здесь cursorUpdate NSTextView нужен только тексту и пустой части колонки.
+        let cursorRect = textPointerRect.intersection(visibleRect)
+        if !cursorRect.isEmpty {
+            addTrackingArea(NSTrackingArea(rect: cursorRect, options: [.cursorUpdate, .activeInKeyWindow],
+                                           owner: self, userInfo: ["textPointer": true]))
+        }
     }
 
     public override func mouseMoved(with event: NSEvent) {
-        super.mouseMoved(with: event)
         updateBlockHandles(atWindowPoint: event.locationInWindow)
+        // Один указатель на событие. NSTextView.mouseMoved всегда ставит I-beam, рука ставилась следом —
+        // над ⋮⋮, + и иконкой указатель мигал на каждом сдвиге мыши (живая трасса, scripts/imac/real-cursor-check.zsh).
+        if let pointer = descendantPointer(atWindowPoint: event.locationInWindow) { return pointer.set() }
+        // CoverView уже выбрала свой курсор: I-beam NSTextView его бы затёр.
+        let overCover = coverSlot.view?.frame.contains(convert(event.locationInWindow, from: nil)) == true
+        if !overCover { super.mouseMoved(with: event) }
+        updatePointer(atWindowPoint: event.locationInWindow)
+    }
+
+    public override func cursorUpdate(with event: NSEvent) {
+        // NSTextView регистрирует I-beam и над обложкой. Её собственный cursorUpdate
+        // уже выбрал I-beam/openHand; родитель не должен менять этот выбор.
+        if let cover = coverSlot.view, cover.frame.contains(convert(event.locationInWindow, from: nil)) { return }
+        // Ручки в gutter тоже принадлежат этому helper: поздний parent update
+        // не должен затирать pointing hand, выбранную в mouseMoved дочерней кнопки.
+        if updatePointer(atWindowPoint: event.locationInWindow) { return }
+        if !textPointerRect.contains(convert(event.locationInWindow, from: nil)) {
+            super.cursorUpdate(with: event)
+        }
+    }
+
+    /// Одинаковое правило для обоих порядков доставки mouseMoved/cursorUpdate.
+    @discardableResult
+    private func updatePointer(atWindowPoint windowPoint: NSPoint) -> Bool {
+        let point = convert(windowPoint, from: nil)
+        let target = hitTest(convert(point, to: superview))
+        var hit = target
+        while let child = hit, child !== self {
+            // Родитель тоже получает mouseMoved: не ждём отдельного cursorUpdate кнопки.
+            if let owner = child as? PointerOwner { owner.pointer.set(); return true }
+            // Встроенные элементы управления выбирают собственный курсор.
+            if child is NSControl, child !== emptyParagraphHint { return false }
+            hit = child.superview
+        }
+        // Курсоры вложенных редакторов, разделителей и resize-ручек принадлежат их видам.
+        guard target == nil || target === self || target === emptyParagraphHint ||
+                target?.isDescendant(of: emptyParagraphHint) == true,
+              textPointerRect.contains(point) else { return false }
+        NSCursor.iBeam.set()
+        return true
+    }
+
+    private var textPointerRect: NSRect {
+        let origin = textContainerOrigin
+        return NSRect(x: origin.x, y: origin.y, width: textContainer?.size.width ?? 0,
+                      height: max(0, bounds.maxY - origin.y))
     }
 
     /// Ручки у блока под мышью. Над колонками ручки — у блока колонки под мышью, а не у всего блока колонок.

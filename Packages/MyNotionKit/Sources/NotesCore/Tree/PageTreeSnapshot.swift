@@ -3,21 +3,41 @@ import GRDB
 
 /// Дерево страниц на момент чтения, без корзины и без текста блоков.
 /// Страница, чей родитель исчез, показывается в корне (data-model.md, «TrashEntry»).
+/// Базы (004, research R1): дети страницы-базы (строки) и встроенные базы в дереве панели не видны, но находятся по id.
 public struct PageTreeSnapshot: Sendable {
     private let pagesById: [UUID: Page]
     private let childrenByParent: [UUID?: [Page]]
+    /// Страницы-базы: `true` — встроенная.
+    private let databases: [UUID: Bool]
 
-    public init(allPages: [Page]) {
+    public init(allPages: [Page], databases: [UUID: Bool] = [:]) {
         let byId = Dictionary(uniqueKeysWithValues: allPages.map { ($0.id, $0) })
         let visible = allPages.filter { !Self.isInTrash($0, pagesById: byId) }
         let visibleIds = Set(visible.map(\.id))
         pagesById = Dictionary(uniqueKeysWithValues: visible.map { ($0.id, $0) })
-        childrenByParent = Dictionary(grouping: visible) { page in
+        self.databases = databases
+        // В дереве: не встроенные базы, не строки баз и не то, что внутри строк.
+        func isHidden(_ page: Page) -> Bool {
+            if databases[page.id] == true { return true }
+            var parent = page.parentId
+            var steps = 0
+            while let id = parent, steps <= byId.count {
+                if databases[id] != nil { return true }
+                parent = byId[id]?.parentId
+                steps += 1
+            }
+            return false
+        }
+        let shown = databases.isEmpty ? visible : visible.filter { !isHidden($0) }
+        childrenByParent = Dictionary(grouping: shown) { page in
             page.parentId.flatMap { visibleIds.contains($0) ? $0 : nil }
         }.mapValues { $0.sorted(by: Self.siblingOrder) }
     }
 
-    /// Подстраницы по порядку; `nil` — корень.
+    /// Страница — база (полностраничная или встроенная).
+    public func isDatabase(_ pageId: UUID) -> Bool { databases[pageId] != nil }
+
+    /// Подстраницы по порядку в дереве панели; `nil` — корень.
     public func children(of parentId: UUID?) -> [Page] {
         childrenByParent[parentId] ?? []
     }
@@ -42,7 +62,7 @@ public struct PageTreeSnapshot: Sendable {
             children(of: page.id).forEach(appendBranch)
         }
         children(of: nil).forEach(appendBranch)
-        return PageTreeSnapshot(allPages: kept)
+        return PageTreeSnapshot(allPages: kept, databases: databases)
     }
 
     /// Родитель в дереве: `nil` у корня и у страницы, чей родитель исчез.
@@ -105,8 +125,42 @@ public struct PageTombstone: Sendable, Hashable {
 extension NotesStore {
     /// Дерево без корзины.
     public func pageTree() throws -> PageTreeSnapshot {
-        PageTreeSnapshot(allPages: try pageOutline())
+        let outline = try treeOutline()
+        return PageTreeSnapshot(allPages: outline.pages, databases: outline.databases)
     }
+
+    /// Страницы для дерева панели (research R1): без строк баз и того, что внутри строк (их тысячи — дерево их не
+    /// показывает и не читает), но с корзиной целиком; и какие страницы — базы (`true` — встроенная).
+    public func treeOutline() throws -> (pages: [Page], databases: [UUID: Bool]) {
+        try database.dbWriter.read { db in
+            let pages = try Row.fetchAll(db, sql: Self.treeOutlineSQL).map(Page.init(row:))
+            var databases: [UUID: Bool] = [:]
+            for row in try Row.fetchAll(db, sql: "SELECT pageId, isInline FROM db_database") {
+                if let id = RowDecoding.optionalUUID(row, "pageId") { databases[id] = row["isInline"] }
+            }
+            return (pages, databases)
+        }
+    }
+
+    /// Обход от корней по индексу `page_by_parent`, не спускаясь в базы: строк баз десятки тысяч, и полный проход
+    /// по `page` на холодном диске стоил первому запуску 1,3 с (T030). Корни — страницы без родителя и сироты
+    /// (родитель исчез): различных родителей перебирает «прыжок по индексу», не читая строки баз. Корзина — по
+    /// частичному индексу `page_trashed`, с удалёнными строками баз.
+    static let treeOutlineSQL = """
+        WITH RECURSIVE
+            parents(id) AS (
+                SELECT min(parentId) FROM page WHERE parentId IS NOT NULL
+                UNION ALL SELECT (SELECT min(parentId) FROM page WHERE parentId > parents.id) FROM parents WHERE parents.id IS NOT NULL),
+            shown(id) AS (
+                SELECT id FROM page WHERE parentId IS NULL
+                UNION SELECT page.id FROM parents JOIN page ON page.parentId = parents.id
+                    WHERE NOT EXISTS (SELECT 1 FROM page AS parent WHERE parent.id = parents.id)
+                UNION SELECT page.id FROM shown JOIN page ON page.parentId = shown.id
+                    WHERE shown.id NOT IN (SELECT pageId FROM db_database))
+        SELECT * FROM page WHERE id IN shown
+        UNION SELECT * FROM page WHERE trashedAt IS NOT NULL
+        ORDER BY sortKey, id
+        """
 
     /// Записи корзины: страницы в корзине, чей родитель не в корзине; последние удалённые — сверху.
     public func trashEntries() throws -> [Page] {

@@ -26,8 +26,8 @@ public final class PageHeaderView: NSView, NSTextFieldDelegate {
     }
     /// Место «кнопки»: по порядку слева направо; первой — «Добавить иконку».
     private(set) var buttons: [PageHeaderButton] = []
-    /// Место «под названием» и его высота.
-    private(set) var underTitle: (view: NSView, height: CGFloat)?
+    /// Место «под названием»: виды сверху вниз по `order` и их высоты (у строки базы — свойства и обратные ссылки).
+    private(set) var underTitle: [(order: Int, view: NSView, height: CGFloat)] = []
     /// Над шапкой обложка: иконка заходит на неё серединой, без иконки название ближе к обложке (как у Notion).
     var hasCover = false {
         didSet { if hasCover != oldValue { needsLayout = true } }
@@ -90,17 +90,22 @@ public final class PageHeaderView: NSView, NSTextFieldDelegate {
         updateButtons()
     }
 
-    /// Вид в месте «под названием» (US5: строка обратных ссылок); `nil` — место пустое.
-    func setUnderTitle(_ view: NSView?, height: CGFloat) {
-        if underTitle?.view !== view { underTitle?.view.removeFromSuperview() }
+    /// Вид в месте «под названием» (US5: строка обратных ссылок; 004: свойства строки базы, `order` −1 — выше);
+    /// `nil` — вида с этим `order` нет.
+    func setUnderTitle(_ view: NSView?, height: CGFloat, order: Int = 0) {
+        if let index = underTitle.firstIndex(where: { $0.order == order }) {
+            if underTitle[index].view !== view { underTitle[index].view.removeFromSuperview() }
+            underTitle.remove(at: index)
+        }
         if let view {
             if view.superview !== self { addSubview(view) }
-            underTitle = (view, height)
-        } else {
-            underTitle = nil
+            underTitle.append((order, view, height))
+            underTitle.sort { $0.order < $1.order }
         }
         needsLayout = true
     }
+
+    private var underTitleHeight: CGFloat { underTitle.reduce(0) { $0 + $1.height } }
 
     private func updateButtons() {
         for button in buttons { button.isHidden = !button.isAvailable || !isHovered }
@@ -124,7 +129,7 @@ public final class PageHeaderView: NSView, NSTextFieldDelegate {
     }
 
     func height(forWidth width: CGFloat) -> CGFloat {
-        titleTop + titleHeight(forWidth: width) + (underTitle?.height ?? 0) + Metrics.Page.titleToFirstBlockSpacing
+        titleTop + titleHeight(forWidth: width) + underTitleHeight + Metrics.Page.titleToFirstBlockSpacing
     }
 
     public override func layout() {
@@ -139,9 +144,12 @@ public final class PageHeaderView: NSView, NSTextFieldDelegate {
             x += button.fittingWidth + metrics.spacing
         }
         // Подложка строки выступает левее названия на её поле — текст стоит под началом названия (как у кнопок выше).
-        let underTitleInset = underTitle?.view is BacklinksRow ? Metrics.BacklinksRow.horizontalPadding - Metrics.Page.emptyHintCaretGap : 0
-        underTitle?.view.frame = NSRect(x: -underTitleInset, y: titleField.frame.maxY, width: bounds.width + underTitleInset,
-                                        height: underTitle?.height ?? 0)
+        var y = titleField.frame.maxY
+        for item in underTitle {
+            let inset = item.view is BacklinksRow ? Metrics.BacklinksRow.horizontalPadding - Metrics.Page.emptyHintCaretGap : 0
+            item.view.frame = NSRect(x: -inset, y: y, width: bounds.width + inset, height: item.height)
+            y += item.height
+        }
     }
 
     public override func updateTrackingAreas() {
@@ -173,7 +181,8 @@ public final class PageHeaderView: NSView, NSTextFieldDelegate {
 
 /// Иконка страницы в квадрате `Metrics.Page.iconSize`: под мышью — подложка, щелчок открывает окно выбора.
 @MainActor
-final class PageIconView: NSView {
+final class PageIconView: NSView, PointerOwner {
+    var pointer: NSCursor { .pointingHand }
     private let label = NSTextField(labelWithString: "")
     var onPress: (() -> Void)?
 
@@ -231,8 +240,11 @@ final class PageIconView: NSView {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         trackingAreas.forEach(removeTrackingArea)
-        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect, .cursorUpdate], owner: self))
     }
+
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+    override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
 
     override func mouseEntered(with event: NSEvent) { isHovered = true }
     override func mouseExited(with event: NSEvent) { isHovered = false }
@@ -252,7 +264,8 @@ final class PageIconView: NSView {
 /// Серая кнопка шапки со значком и надписью, как «Add icon» у Notion; под мышью — подложка.
 /// Видна при наведении на шапку, если доступна (`isAvailable`: у страницы с обложкой «Добавить обложку» не нужна).
 @MainActor
-public final class PageHeaderButton: NSView {
+public final class PageHeaderButton: NSView, PointerOwner {
+    public var pointer: NSCursor { .pointingHand }
     private let symbolName: String
     public let title: String
     public var onPress: (() -> Void)?
@@ -297,8 +310,11 @@ public final class PageHeaderButton: NSView {
     public override func updateTrackingAreas() {
         super.updateTrackingAreas()
         trackingAreas.forEach(removeTrackingArea)
-        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect, .cursorUpdate], owner: self))
     }
+
+    public override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+    public override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
 
     public override func mouseEntered(with event: NSEvent) { isPointerInside = true }
     public override func mouseExited(with event: NSEvent) { isPointerInside = false }

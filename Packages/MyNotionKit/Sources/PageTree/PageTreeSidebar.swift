@@ -167,6 +167,7 @@ private struct SectionHeader: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
+        .pointerStyle(.link)
         .accessibilityLabel(title)
         .accessibilityHint(isCollapsed ? "Развернуть раздел" : "Свернуть раздел")
     }
@@ -210,6 +211,7 @@ struct SidebarRowButtonStyle: ButtonStyle {
         let configuration: Configuration
         let cornerRadius: CGFloat
         @State private var isHovered = false
+        @Environment(\.isEnabled) private var isEnabled
 
         var body: some View {
             configuration.label
@@ -218,6 +220,8 @@ struct SidebarRowButtonStyle: ButtonStyle {
                         .fill(isHovered || configuration.isPressed ? Color(nsColor: Palette.hoverBackground) : .clear)
                 )
                 .onHover { isHovered = $0 }
+                // Нажимаемое — рука, как в Notion; выключенная кнопка («‹ ›», когда идти некуда) — нет.
+                .pointerStyle(isEnabled ? .link : nil)
         }
     }
 }

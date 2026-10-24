@@ -7,8 +7,8 @@ import VisualStyle
 /// (contracts/visual-style.md, «Страница»). На каждый документ — свой редактор (`.id` внутри).
 public struct PageEditorView: View {
     let document: PageDocument
-    /// Названия страниц-предков с иконками, от корня; у корневой страницы — пусто.
-    let ancestorTitles: [String]
+    /// Страницы-предки с иконками, от корня; у корневой страницы — пусто. Нажатие открывает страницу.
+    let ancestors: [BreadcrumbAncestor]
     let initialFocus: PageTextView.InitialFocus
     /// Названия и иконки страниц для блоков-подстраниц.
     let linkedPages: [UUID: LinkedPage]
@@ -30,6 +30,8 @@ public struct PageEditorView: View {
     let pageMenuItems: [PageMenuItem]
     /// Место слева от «•••» (US2: «☆»).
     let topBarAccessory: AnyView?
+    /// Слева в верхней полосе вместо пути (004: просмотр строки — «»» и «⤢»).
+    let topBarLeading: AnyView?
     /// Добавки шапки (US1: обложка); создаются один раз на редактор.
     let headerAddons: [PageHeaderAddonFactory]
     /// Вкладки (US3): окно читает место прокрутки открытой страницы, когда уходит с неё.
@@ -39,7 +41,7 @@ public struct PageEditorView: View {
     /// Шаблоны для строк на пустой странице (US7).
     let templates: TemplateSettings
 
-    public init(document: PageDocument, ancestorTitles: [String] = [], initialFocus: PageTextView.InitialFocus,
+    public init(document: PageDocument, ancestors: [BreadcrumbAncestor] = [], initialFocus: PageTextView.InitialFocus,
                 linkedPages: [UUID: LinkedPage] = [:], onOpenPage: @escaping @MainActor (UUID) -> Void = { _ in },
                 onSubpageRequest: @escaping @MainActor (SubpageRequest) -> Void = { _ in },
                 onSetIcon: @escaping @MainActor (String?) -> Void = { _ in },
@@ -48,9 +50,9 @@ public struct PageEditorView: View {
                 onReady: @escaping @MainActor () -> Void = {}, mentions: MentionSettings = MentionSettings(),
                 pageMenuItems: [PageMenuItem] = [], topBarAccessory: AnyView? = nil, headerAddons: [PageHeaderAddonFactory] = [],
                 scrollPlace: PageScrollPlace? = nil, restoringScroll: TabScroll? = nil,
-                templates: TemplateSettings = TemplateSettings()) {
+                templates: TemplateSettings = TemplateSettings(), topBarLeading: AnyView? = nil) {
         self.document = document
-        self.ancestorTitles = ancestorTitles
+        self.ancestors = ancestors
         self.initialFocus = initialFocus
         self.linkedPages = linkedPages
         self.onOpenPage = onOpenPage
@@ -67,6 +69,7 @@ public struct PageEditorView: View {
         self.scrollPlace = scrollPlace
         self.restoringScroll = restoringScroll
         self.templates = templates
+        self.topBarLeading = topBarLeading
     }
 
     public var body: some View {
@@ -92,15 +95,10 @@ public struct PageEditorView: View {
     /// Путь «Родитель / Страница» шрифтом 14, «/» тусклый; длинный — без середины и с обрезанным по слову названием.
     private var topBar: some View {
         HStack(spacing: Metrics.Page.topBarButtonSpacing) {
-            GeometryReader { proxy in
-                let width = proxy.size.width - Metrics.Page.topBarHorizontalPadding - Metrics.Page.topBarTrailingInset
-                Text(BreadcrumbText.styled(BreadcrumbText.fitting(ancestorTitles + [document.page.pathTitle], width: width,
-                                                                  measure: BreadcrumbText.measure)))
-                    .lineLimit(1)
-                    .accessibilityIdentifier("page-breadcrumb")
-                    .padding(.leading, Metrics.Page.topBarHorizontalPadding)
-                    .padding(.trailing, Metrics.Page.topBarTrailingInset)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            if let topBarLeading {
+                topBarLeading.frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                breadcrumb
             }
             if let topBarAccessory { topBarAccessory }
             if !pageMenuItems.isEmpty {
@@ -112,6 +110,16 @@ public struct PageEditorView: View {
             }
         }
         .frame(height: Metrics.Page.topBarHeight)
+    }
+
+    private var breadcrumb: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width - Metrics.Page.topBarHorizontalPadding - Metrics.Page.topBarTrailingInset
+            BreadcrumbBar(ancestors: ancestors, current: document.page.pathTitle, width: width, onOpenPage: onOpenPage)
+                .padding(.leading, Metrics.Page.topBarHorizontalPadding)
+                .padding(.trailing, Metrics.Page.topBarTrailingInset)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        }
     }
 
     /// Прокрученный текст уходит под верхнюю полосу плавно, а не обрезанной строкой.

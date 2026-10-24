@@ -155,6 +155,36 @@ struct PageFlowsTests {
         autosave.stop()
         #expect(try #require(try store.pageContent(pageId)).blocks.map(\.id) == [intro, outro])
     }
+
+    /// Открытие страницы (T085, профиль переключения вкладок): блоки приходят из базы уже по порядку, и документ
+    /// не сортирует их заново — только проверяет порядок. Общий `sortKey` (бывает после слияния правок) — худший
+    /// случай: порядок решают id, и открытие 20 000 блоков с сортировкой стоило 0,35 с, с проверкой — 0,09 с
+    /// (iMac, отладочная сборка).
+    @Test("20 000 блоков из базы по порядку — поток страницы без пересортировки")
+    func storedOrderIsNotResorted() throws {
+        var content = try #require(try store.pageContent(pageId))
+        let key = FractionalSortKey.between(nil, nil)
+        content.blocks = (0..<20_000).map { (number: Int) -> Block in
+            Block(pageId: pageId, text: InlineText("Абзац \(number)"), sortKey: key)
+        }.sorted { $0.id.uuidString < $1.id.uuidString }
+        let clock = ContinuousClock()
+        var document: PageDocument?
+        let elapsed = clock.measure { document = PageDocument(content: content) }
+        #expect(elapsed < .milliseconds(200), "открытие 20 000 блоков: \(elapsed)")
+        #expect(document?.blocks.map(\.id) == content.blocks.map(\.id))
+    }
+
+    @Test("Блоки пришли не по порядку — поток всё равно по sortKey")
+    func unorderedBlocksAreSorted() throws {
+        var content = try #require(try store.pageContent(pageId))
+        var key: FractionalSortKey?
+        let blocks = (0..<50).map { (number: Int) -> Block in
+            key = .between(key, nil)
+            return Block(pageId: pageId, text: InlineText("Абзац \(number)"), sortKey: key!)
+        }
+        content.blocks = blocks.reversed()
+        #expect(PageDocument(content: content).blocks.map(\.id) == blocks.map(\.id))
+    }
 }
 
 extension NotesTransaction {

@@ -14,6 +14,8 @@ struct LaunchOptions {
     var generatesRichSample = false
     /// `--generate-003-sample`: добавить в открытую базу дополнения 003 (quickstart.md, «Эталон»; каждая история — свою часть).
     var generates003Sample = false
+    /// `--generate-004-sample`: добавить в открытую базу эталон баз 004 (quickstart.md, «Эталон», дополнения 004).
+    var generates004Sample = false
     /// `--launch-report <путь>`: записать время запуска и память в покое.
     var launchReportURL: URL?
     /// `--window-snapshot <путь>`: когда страница готова, снять окно в PNG и выйти (снимок не требует экрана).
@@ -37,6 +39,16 @@ struct LaunchOptions {
     var hoveredSidebarRow: Int?
     /// `--appearance light|dark`: тема окна вместо системной.
     var appearanceName: NSAppearance.Name?
+    /// `--formula-editor-demo`: малый эталон баз и открытый редактор формулы у «Задач» (UI-сценарий US5).
+    var opensFormulaEditorDemo = false
+    /// `--relations-demo`: базы «Проекты» (2 строки) и «Задачи» (3 строки с часами) без связей, открыты «Задачи»
+    /// (UI-сценарий US4).
+    var opensRelationsDemo = false
+    /// `--relations-demo-linked`: то же, и сразу связь «Проект» ↔ «Задачи» (Позвонить, Купить → Дом; Сдать отчёт → Работа)
+    /// и сводка «Часов» у «Проектов» (живая проверка двух Mac, US4).
+    var linksRelationsDemo = false
+    /// `--relations-demo-open <название>`: после демо открыть эту базу вместо «Задач».
+    var relationsDemoDatabase: String?
     /// `--ui-gallery <папка>`: на временной базе снять все состояния интерфейса в PNG и выйти.
     var uiGalleryURL: URL?
     /// `--ui-gallery-only <часть имени>`: снять только состояния, в имени которых есть эта строка.
@@ -77,6 +89,11 @@ struct LaunchOptions {
             case "--generate-visual-sample": generatesVisualSample = true
             case "--generate-rich-sample": generatesRichSample = true
             case "--generate-003-sample": generates003Sample = true
+            case "--generate-004-sample": generates004Sample = true
+            case "--formula-editor-demo": opensFormulaEditorDemo = true
+            case "--relations-demo": opensRelationsDemo = true
+            case "--relations-demo-linked": (opensRelationsDemo, linksRelationsDemo) = (true, true)
+            case "--relations-demo-open": relationsDemoDatabase = remaining.popFirst()
             case "--generate-versions-sample": generatesVersionsSample = true
             case "--versions-quick": versionTiming = PageVersionRecorder.Timing(minimumInterval: 2, quietPeriod: 1)
             case "--launch-report": launchReportURL = remaining.popFirst().map(Self.fileURL)

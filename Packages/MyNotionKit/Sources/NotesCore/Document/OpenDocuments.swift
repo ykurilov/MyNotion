@@ -25,7 +25,9 @@ public final class OpenDocuments {
             entries[pageId] = entry
             return entry.autosave.document
         }
-        guard let content = try store.pageContent(pageId) else { throw NotesStoreError.pageNotFound(pageId) }
+        guard let stored = try store.pageContent(pageId) else { throw NotesStoreError.pageNotFound(pageId) }
+        // Страница-база — таблица на всю страницу (004, US1).
+        let content = try DatabasePageContent.presenting(stored, in: store.database)
         let document = PageDocument(content: content, conflicts: try store.unresolvedConflicts(ofPage: pageId))
         entries[pageId] = Entry(autosave: AutosaveCoordinator(document: document, store: store, scheduler: scheduler), openCount: 1)
         return document
@@ -74,7 +76,8 @@ public final class OpenDocuments {
         var result: [UUID: PageDocument.ExternalChange] = [:]
         for pageId in pageIds {
             guard let document = document(for: pageId),
-                  let content = try? store.pageContent(pageId),
+                  let stored = try? store.pageContent(pageId),
+                  let content = try? DatabasePageContent.presenting(stored, in: store.database),
                   let conflicts = try? store.unresolvedConflicts(ofPage: pageId) else { continue }
             result[pageId] = document.applyExternalChanges(content, conflicts: conflicts)
         }

@@ -80,7 +80,7 @@ final class TabsNavigationTests: XCTestCase {
         XCTAssertTrue(waitForBreadcrumb(app, "Альфа"))
 
         // Перетаскивание: «Гамма» — в конец.
-        tab(app, "Гамма").press(forDuration: 0.3, thenDragTo: tab(app, "Альфа"))
+        tab(app, "Гамма").click(forDuration: 0.3, thenDragTo: tab(app, "Альфа"))
         XCTAssertTrue(waitForTabs(app, ["Дельта", "Альфа", "Гамма"], active: "Альфа"))
 
         // ⌘W закрывает активную, ⇧⌘T возвращает её на место.

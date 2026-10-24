@@ -48,7 +48,7 @@ public final class PageDocument {
         savedBlocks = Dictionary(uniqueKeysWithValues: content.blocks.map { ($0.id, $0) })
         byId = savedBlocks
         removedContainers = content.removedContainers
-        rebuildFlows()
+        rebuildFlows(walking: content.blocks)
     }
 
     public var hasUnsavedChanges: Bool {
@@ -580,10 +580,17 @@ public final class PageDocument {
     /// Разложить блоки по потокам. Сирота — блок, чьего контейнера в документе нет: она встаёт в поток страницы
     /// сразу за своим `columnList` или `table` (их находит цепочка контейнеров, в том числе удалённых),
     /// а без них — в конце страницы.
-    private func rebuildFlows() {
+    /// `walking` — блоки в порядке из базы (открытие страницы): они уже по `sortKey`, и сортировка сводится к проверке.
+    private func rebuildFlows(walking stored: [Block]? = nil) {
         // Сортируются номера блоков, а не сами блоки: перестановка больших структур стоила половины чтения
         // страницы при открытии (профиль переключения вкладок, 003).
         func ordered(_ items: [Block]) -> [Block] {
+            func precedes(_ lhs: Block, _ rhs: Block) -> Bool {
+                if lhs.sortKey < rhs.sortKey { return true }
+                if rhs.sortKey < lhs.sortKey { return false }
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
+            if zip(items, items.dropFirst()).allSatisfy({ precedes($0, $1) }) { return items }
             let keys = items.map(\.sortKey)
             return items.indices.sorted { lhs, rhs in
                 if keys[lhs] < keys[rhs] { return true }
@@ -594,13 +601,14 @@ public final class PageDocument {
         var pageFlow: [Block] = []
         var flows: [UUID: [Block]] = [:]
         var orphans: [Block] = []
-        for block in byId.values {
+        func distribute(_ block: Block) {
             if let containerId = block.containerId {
                 if byId[containerId] != nil { flows[containerId, default: []].append(block) } else { orphans.append(block) }
             } else {
                 pageFlow.append(block)
             }
         }
+        if let stored { stored.forEach(distribute) } else { byId.values.forEach(distribute) }
         pageFlow = ordered(pageFlow)
         flowOrder = flows.mapValues { ordered($0).map(\.id) }
 
@@ -692,14 +700,14 @@ public struct BlockDraft: Sendable, Hashable {
 
     func apply(to block: inout Block, isNew: Bool) {
         // Ссылка без страницы — просто абзац: иначе блок нельзя записать.
-        let kind = kind == .pageLink && linkedPageId == nil ? .paragraph : kind
+        let kind = kind.linksPage && linkedPageId == nil ? .paragraph : kind
         block.kind = kind
         block.text = text.normalized()
         // Заголовок вкладывается только внутрь переключателя, выноски, цитаты: это решает редактор по соседям
         // (`BlockMoveController`), а лишнее после слияния урезается при показе (`BlockNesting`).
         block.indent = min(max(indent, Block.indentRange.lowerBound), Block.indentRange.upperBound)
         block.isChecked = kind == .checkbox && isChecked
-        block.linkedPageId = kind == .pageLink ? linkedPageId : nil
+        block.linkedPageId = kind.linksPage ? linkedPageId : nil
         if let color { block.color = color } else if isNew { block.color = .defaults(for: kind) }
         if let props { block.props = props } else if isNew { block.props = .defaults(for: kind) }
     }

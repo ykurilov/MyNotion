@@ -110,6 +110,9 @@ public enum BlockKind: String, Sendable, Hashable, CaseIterable, Codable {
     case tableCell
     case columnList
     case column
+    // 004
+    /// Встроенная база: `linkedPageId` — страница-база (data-model.md, «Page и Block»).
+    case database
 
     public var isHeading: Bool { self == .heading1 || self == .heading2 || self == .heading3 }
 
@@ -136,10 +139,13 @@ public enum BlockKind: String, Sendable, Hashable, CaseIterable, Codable {
     /// где строка кода — свой абзац (research R5, решение после пробы R16).
     public var rendersAsAttachment: Bool {
         switch self {
-        case .divider, .code, .equation, .tableOfContents, .image, .file, .video, .bookmark, .table, .columnList: true
+        case .divider, .code, .equation, .tableOfContents, .image, .file, .video, .bookmark, .table, .columnList, .database: true
         default: false
         }
     }
+
+    /// Блок показывает страницу `linkedPageId`: подстраницу или встроенную базу.
+    public var linksPage: Bool { self == .pageLink || self == .database }
 }
 
 public struct BlockFieldClocks: Sendable, Hashable, Codable {

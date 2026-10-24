@@ -5,7 +5,7 @@ import GRDB
 // метки часов — строками HybridTimestamp, наборы меток и оформление — JSON.
 
 extension UUID {
-    var databaseText: String { uuidString.lowercased() }
+    package var databaseText: String { uuidString.lowercased() }
 }
 
 enum RowDecoding {
@@ -181,7 +181,7 @@ extension BlockFieldClocks {
 }
 
 extension Page {
-    init(row: Row) throws {
+    package init(row: Row) throws {
         self.init(
             id: try RowDecoding.uuid(row, "id"),
             title: row["title"],

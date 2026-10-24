@@ -95,6 +95,7 @@ extension PageMenuSlot {
         case .duplicate: "square.on.square"
         case .moveTo: "arrow.turn.up.right"
         case .versionHistory: "clock.arrow.circlepath"
+        case .exportDatabase: "square.and.arrow.up"
         case .appearance: "textformat"
         case .template: "doc.on.doc"
         case .trash: "trash"
@@ -112,7 +113,7 @@ struct PageMenuButton: NSViewRepresentable {
     private static let image = NSImage(systemSymbolName: "ellipsis", accessibilityDescription: "Настройки и действия страницы")!
 
     func makeNSView(context: Context) -> NSButton {
-        let button = NSButton(frame: .zero)
+        let button = HandButton(frame: .zero)
         button.image = Self.image
         button.imagePosition = .imageOnly
         button.target = context.coordinator
@@ -126,6 +127,18 @@ struct PageMenuButton: NSViewRepresentable {
 
     func updateNSView(_ button: NSButton, context: Context) {
         context.coordinator.parent = self
+    }
+
+    /// «•••» нажимается — рука, как у кнопок шапки страницы. Без своего cursorUpdate стрелку ставит NSHostingView.
+    final class HandButton: NSButton {
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            for area in trackingAreas where area.owner === self && area.userInfo?["pointer"] != nil { removeTrackingArea(area) }
+            addTrackingArea(NSTrackingArea(rect: .zero, options: [.cursorUpdate, .activeInKeyWindow, .inVisibleRect],
+                                           owner: self, userInfo: ["pointer": true]))
+        }
+        override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+        override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }

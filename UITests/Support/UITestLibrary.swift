@@ -28,14 +28,14 @@ struct UITestLibrary {
     static let startWindowFrame = "156 76 1200 800 0 0 1512 952 "
 
     @MainActor
-    func launchApp(appearance: String? = nil) -> XCUIApplication {
+    func launchApp(appearance: String? = nil, arguments extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         // «-MyNotion.recentColors ""» перекрывает сохранённые «Последние цвета» пустым значением: у каждого запуска свои, чистые.
         // Окно — с одного места и размера, как у нового запуска: иначе тест начинает в окне, которое оставил прошлый запуск
         // (галерея в окне 900×700 — и колонке страницы не хватает ширины).
         app.launchArguments = ["--database", databaseURL.path, "-MyNotion.recentColors", "",
                                "-NSWindow Frame pages-AppWindow-1", Self.startWindowFrame]
-            + (appearance.map { ["--appearance", $0] } ?? [])
+            + (appearance.map { ["--appearance", $0] } ?? []) + extra
         app.launch()
         return app
     }

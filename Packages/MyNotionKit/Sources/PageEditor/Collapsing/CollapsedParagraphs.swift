@@ -120,9 +120,11 @@ final class CollapsedParagraphs {
         // Одна правка хранилища на все абзацы: открытие страницы с вложенными блоками — без правки на каждый.
         textStorage.beginEditing()
         defer { textStorage.endEditing() }
-        for id in touched {
-            guard let index = textView.document.index(ofBlock: id) else { continue }
+        // По порядку блоков: начало абзаца ищется от прошлого, а не с начала текста (T085, переключение вкладок).
+        let indices = touched.compactMap { textView.document.index(ofBlock: $0) }.sorted()
+        for index in indices {
             let block = textView.document.blocks[index]
+            let id = block.id
             let range = textView.mapper.characterRange(ofBlocksAt: index..<index + 1)
             guard range.length > 0 else { continue }
             let adjustment = wanted[id] ?? Adjustment()

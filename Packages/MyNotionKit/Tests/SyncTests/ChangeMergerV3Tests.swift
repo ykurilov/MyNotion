@@ -112,7 +112,7 @@ struct ChangeMergerV3Tests {
             $0.isTemplate = true
         }
         let snapshot = try SyncSnapshot.make(seq: 7, from: a.store)
-        #expect(snapshot.formatVersion == 3)
+        #expect(snapshot.formatVersion >= 3)
         let fresh = try SyncTestMac(name: "Mac C", wallMillis: 50_000)
         _ = try fresh.store.write { tx in try ChangeMerger(localDeviceName: "Mac C").apply(snapshot, in: tx) }
         let copied = try #require(try fresh.page(page))

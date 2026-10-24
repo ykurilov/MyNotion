@@ -232,6 +232,7 @@ private struct CloseTabButton: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
+        .pointerStyle(.link)
         .help("Закрыть вкладку")
         .accessibilityLabel("Закрыть вкладку")
         .accessibilityIdentifier("tab-close")
@@ -263,9 +264,13 @@ private struct TabMouseArea: NSViewRepresentable {
         override func updateTrackingAreas() {
             super.updateTrackingAreas()
             trackingAreas.forEach(removeTrackingArea)
-            addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
+            addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect, .cursorUpdate],
                                            owner: self))
         }
+
+        // Вкладка нажимается — рука, как в Notion. Без своего cursorUpdate стрелку ставит NSHostingView.
+        override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+        override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
 
         override func mouseEntered(with event: NSEvent) { handlers?.onHover(true) }
         override func mouseExited(with event: NSEvent) { handlers?.onHover(false) }
