@@ -55,6 +55,11 @@ final class TextPointerCursorLiveTests: XCTestCase {
         // После успешной калибровки проверяем все области даже при ошибке одного control.
         // Ошибки остаются failures, но один gutter не скрывает результат cover/icon.
         continueAfterFailure = true
+        let hand = NSCursor.pointingHand
+        XCTAssertGreaterThan(hand.image.size.width, 0, "Pointing-hand reference image unavailable")
+        XCTAssertNotEqual(hand.hotSpot, beam.hotSpot)
+        let handShot = XCTAttachment(image: hand.image)
+        handShot.name = "cursor-reference-pointing-hand"; handShot.lifetime = .keepAlways; add(handShot)
         let sampler = TextCursorSampler(beam: beam)
         let timer = Timer(timeInterval: 0.01, repeats: true) { _ in MainActor.assumeIsolated { sampler.sample() } }
         RunLoop.main.add(timer, forMode: .common)
@@ -64,6 +69,19 @@ final class TextPointerCursorLiveTests: XCTestCase {
             print("SYSTEM-CURSOR \(name): hotspot=\(cursor.hotSpot) size=\(cursor.image.size) expected=\(expected.hotSpot)/\(expected.image.size)")
             XCTAssertEqual(cursor.hotSpot, expected.hotSpot, name)
             XCTAssertEqual(cursor.image.size, expected.image.size, name)
+        }
+        func checkControl(_ name: String, _ expected: NSCursor) throws {
+            let started = Date()
+            while Date().timeIntervalSince(started) < 1 {
+                if let cursor = NSCursor.currentSystem, cursor.hotSpot == expected.hotSpot,
+                   cursor.image.size == expected.image.size { break }
+                RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+            }
+            print("CURSOR-CONTROL-SETTLE \(name) elapsed=\(Date().timeIntervalSince(started)) timestamp=\(Date().timeIntervalSince1970)")
+            for sample in 0..<5 {
+                try check("\(name)-stable-\(sample)", expected)
+                RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+            }
         }
         for (name, y) in [("h1", title.maxY + 42), ("paragraph", title.maxY + 90), ("empty", title.maxY + 130)] {
             let previousSamples = sampler.samples
@@ -87,10 +105,10 @@ final class TextPointerCursorLiveTests: XCTestCase {
                 XCTAssertTrue(app.blockDragHandle.waitForExistence(timeout: 3))
                 let handle = app.blockDragHandle.frame
                 hover(CGPoint(x: handle.midX, y: handle.midY))
-                try check("\(name)-handle", arrow)
+                try checkControl("\(name)-handle", hand)
                 let add = app.descendants(matching: .any)["block-handle-add"].frame
                 hover(CGPoint(x: add.midX, y: add.midY))
-                try check("\(name)-add", arrow)
+                try checkControl("\(name)-add", hand)
             }
         }
         for identifier in ["page-cover", "page-icon"] {
@@ -101,7 +119,16 @@ final class TextPointerCursorLiveTests: XCTestCase {
             let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
             shot.name = "text-cursor-\(identifier)"; shot.lifetime = .keepAlways; add(shot)
             print("CURSOR-CONTROL \(identifier) frame=\(frame)")
-            try check(identifier, arrow)
+            try checkControl(identifier, identifier == "page-cover" ? beam : hand)
+            if identifier == "page-cover" {
+                for buttonId in ["change-page-cover", "reposition-page-cover"] {
+                    let button = app.descendants(matching: .any)[buttonId]
+                    XCTAssertTrue(button.waitForExistence(timeout: 3))
+                    let f = button.frame
+                    hover(CGPoint(x: f.midX, y: f.midY))
+                    try checkControl(buttonId, hand)
+                }
+            }
         }
     }
 }
