@@ -27,6 +27,7 @@ final class TextPointerCursorLiveTests: XCTestCase {
         }()
         let app = library.launchApp(appearance: "light")
         app.activate()
+        XCTAssertEqual(app.state, .runningForeground, "Окно приложения не впереди")
         addTeardownBlock { @MainActor in app.terminate() }
         XCTAssertTrue(app.pageTitle.waitForExistence(timeout: 10))
         app.pageTitle.click()
@@ -78,7 +79,17 @@ final class TextPointerCursorLiveTests: XCTestCase {
                 let handle = app.blockDragHandle.frame
                 hover(CGPoint(x: handle.midX, y: handle.midY))
                 try check("\(name)-handle", arrow)
+                let add = app.descendants(matching: .any)["block-handle-add"].frame
+                hover(CGPoint(x: add.midX, y: add.midY))
+                try check("\(name)-add", arrow)
             }
+        }
+        for identifier in ["page-cover", "page-icon"] {
+            let element = app.descendants(matching: .any)[identifier]
+            XCTAssertTrue(element.exists)
+            let frame = element.frame
+            hover(CGPoint(x: frame.midX, y: frame.midY))
+            try check(identifier, arrow)
         }
     }
 }

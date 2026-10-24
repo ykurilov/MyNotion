@@ -13,6 +13,7 @@ final class HoverHandlesLiveTests: XCTestCase {
         let library = try EditorScenarioFixture.library(for: self)
         let app = library.launchApp(appearance: "light")
         app.activate()
+        XCTAssertEqual(app.state, .runningForeground, "Окно приложения не впереди")
         addTeardownBlock { @MainActor in app.terminate() }
         XCTAssertTrue(app.pageTitle.waitForExistence(timeout: 10))
         app.pageTitle.click() // Каретка вне body; автокоррекции и набора перед hover нет.
