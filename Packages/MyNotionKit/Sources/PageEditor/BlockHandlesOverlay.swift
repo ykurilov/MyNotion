@@ -336,13 +336,15 @@ extension PageTextView {
         // mouseMoved и cursorUpdate приходят раздельно. После обновления chrome
         // не оставляем в текстовой колонке курсор, унаследованный от другой области.
         let point = convert(event.locationInWindow, from: nil)
-        guard textPointerRect.contains(point) else { return }
         var hit = hitTest(convert(point, to: superview))
         while let child = hit, child !== self {
+            // Родитель тоже получает mouseMoved: не ждём отдельного cursorUpdate кнопки.
+            if child is BlockHandleButton { NSCursor.arrow.set(); return }
             // Встроенные элементы управления выбирают собственный курсор.
             if child is NSControl, child !== emptyParagraphHint { return }
             hit = child.superview
         }
+        guard textPointerRect.contains(point) else { return }
         NSCursor.iBeam.set()
     }
 
