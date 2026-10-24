@@ -221,6 +221,7 @@ private struct BacklinkListRowView: View {
         .buttonStyle(.plain)
         .focusEffectDisabled()
         .onHover { isHovered = $0 }
+        .pointerStyle(.link)
         .accessibilityIdentifier("backlink-item")
         .accessibilityLabel(row.title)
     }

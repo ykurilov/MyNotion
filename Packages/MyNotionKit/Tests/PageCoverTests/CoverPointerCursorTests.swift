@@ -34,5 +34,12 @@ struct CoverPointerCursorTests {
         #expect(NSCursor.current == NSCursor.openHand)
         view.saveButton.cursorUpdate(with: event)
         #expect(NSCursor.current == NSCursor.pointingHand, "Кнопка обложки не должна наследовать open hand или I-beam")
+        // Перерисовка присылает cursorUpdate самой обложке и над кнопкой: рука кнопки не сменяется open hand.
+        view.layoutSubtreeIfNeeded()
+        let overButton = try #require(NSEvent.enterExitEvent(with: .cursorUpdate,
+            location: view.saveButton.convert(NSPoint(x: view.saveButton.bounds.midX, y: view.saveButton.bounds.midY), to: nil),
+            modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil, eventNumber: 3, trackingNumber: 0, userData: nil))
+        view.cursorUpdate(with: overButton)
+        #expect(NSCursor.current == NSCursor.pointingHand, "cursorUpdate обложки затёр руку её кнопки")
     }
 }

@@ -21,6 +21,7 @@ struct FavoriteStarButton: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
+        .pointerStyle(.link)
         .help(label)
         .accessibilityLabel(label)
         .accessibilityIdentifier("page-favorite-star")

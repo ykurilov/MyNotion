@@ -119,6 +119,7 @@ struct RecentPagesView: View {
                 ForEach(rows) { row in
                     RecentPageListRow(row: row, showsTime: true)
                         .onTapGesture { open(PageOpenRequest.fromClick(row.pageId, revealing: row.blockId)) }
+                        .pointerStyle(.link)
                 }
             }
             .frame(maxWidth: 900, alignment: .leading)
