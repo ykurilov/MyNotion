@@ -57,4 +57,26 @@ struct TextPointerCursorTests {
         #expect(NSCursor.current == NSCursor.arrow, "Ручка унаследовала I-beam от текста после mouseMoved")
     }
 
+
+    @Test("Иконка и кнопка шапки не наследуют I-beam", arguments: [true, false])
+    func headerChromeRestoresArrow(icon: Bool) throws {
+        let fixture = try EditorFixture([.paragraph("Текст")], icon: "🥰")
+        let header = fixture.textView.header
+        let control: NSView
+        if icon {
+            control = try #require(header.subviews.compactMap { $0 as? PageIconView }.first)
+        } else {
+            let button = PageHeaderButton(symbolName: "photo", title: "Обложка", identifier: "test-cover")
+            header.addSubview(button)
+            button.frame = NSRect(x: 0, y: 0, width: 100, height: 28)
+            control = button
+        }
+        let update = try #require(NSEvent.enterExitEvent(with: .cursorUpdate, location: .zero,
+            modifierFlags: [], timestamp: 0, windowNumber: fixture.window.windowNumber,
+            context: nil, eventNumber: 1, trackingNumber: 0, userData: nil))
+        NSCursor.iBeam.set()
+        control.cursorUpdate(with: update)
+        #expect(NSCursor.current == NSCursor.arrow, "Шапка унаследовала I-beam")
+    }
+
 }
