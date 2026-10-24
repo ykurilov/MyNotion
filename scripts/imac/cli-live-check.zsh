@@ -188,6 +188,82 @@ check "снимок окна «Спринт»" "[[ -s $out/db-sprint-window.png 
 APP=$APP zsh ${0:A:h}/cli-live-window.zsh | tee -a $summary
 (( ${pipestatus[1]} )) && failed=1
 
+# Этап 5 (US4): шаги 9–10 сценария A и примеры references/library.md на своей базе. Агент — e2e.
+libdir=/tmp/mynotion-cli-lib; rm -rf $libdir; mkdir -p $libdir
+ml() { $mynotion "$@" --socket $libdir/control.sock --no-launch --agent e2e }
+open -g -n $APP --args --database $libdir/MyNotion.sqlite
+for t in {1..300}; do [[ -S $libdir/control.sock ]] && break; sleep 0.2; done
+ml page create --title Проекты > /dev/null 2>&1
+ml page create --parent Проекты --title "Встреча 24.10" --markdown $out/meeting.md > $out/lib-create.json 2>&1
+lib_id=$(json_field $out/lib-create.json data.page.id)
+# Эталон — страница до правки агента: ссылка «План проекта» ведёт в другую базу и здесь читается текстом.
+ml page read $lib_id > $out/lib-read-before.json 2>&1
+json_field $out/lib-read-before.json data.markdown > $out/lib-read-before.md
+print -r -- "испорчено агентом" | ml page write $lib_id --markdown - > $out/lib-write.json 2>&1
+ml history list $lib_id > $out/lib-history.json 2>&1
+check "шаг 9: history list — версия agent: e2e" "ok_json $out/lib-history.json && grep -q '\"agent\":\"e2e\"' $out/lib-history.json"
+version_id=$(python3 -c 'import json,sys; print(next(v["id"] for v in json.load(open(sys.argv[1]))["data"]["items"] if v["agent"] == "e2e"))' $out/lib-history.json)
+ml history show $lib_id $version_id > $out/lib-show.json 2>&1
+ml history restore $lib_id $version_id > $out/lib-restore.json 2>&1
+ml page read $lib_id > $out/lib-read.json 2>&1
+json_field $out/lib-read.json data.markdown > $out/lib-read.md
+check "шаг 9: history restore — страница как до правки агента" \
+  "ok_json $out/lib-restore.json && python3 -c 'import sys; a, b = (open(f).read().strip() for f in sys.argv[1:]); sys.exit(a != b)' $out/lib-read-before.md $out/lib-read.md"
+ml batch --file =(print -r -- "[{\"command\":\"history.restore\",\"args\":{\"page\":\"$lib_id\",\"version\":\"$version_id\"}}]") > $out/lib-batch.json 2>&1
+check "history restore в пакете → not_batchable" "grep -q '\"code\":\"not_batchable\"' $out/lib-batch.json"
+ml search Встреча > $out/lib-search.json 2>&1
+found_path() { python3 -c 'import json,sys; sys.exit(not any(i["id"] == sys.argv[2] and i["path"] == ["Проекты", "Встреча 24.10"] for i in json.load(open(sys.argv[1]))["data"]["items"]))' $1 $2 }
+check "шаг 10: search «Встреча» — страница с путём «Проекты / Встреча 24.10»" "found_path $out/lib-search.json $lib_id"
+ml favorites add $lib_id > $out/lib-fav.json 2>&1
+ml favorites list > $out/lib-fav-list.json 2>&1
+ml recents > $out/lib-recents.json 2>&1
+check "шаг 10: favorites add/list, recents" \
+  "grep -q '\"isFavorite\":true' $out/lib-fav.json && grep -q \"$lib_id\" $out/lib-fav-list.json && ok_json $out/lib-recents.json"
+# Остальные примеры library.md по порядку.
+ml page create --title "Шаблон встречи" --markdown =(print -r -- "## Повестка") > /dev/null 2>&1
+ml favorites move $lib_id --index 0 > $out/lib-fav-move.json 2>&1
+ml search "план запуска" --limit 5 > $out/lib-search2.json 2>&1
+ml template mark "Шаблон встречи" > $out/lib-tmark.json 2>&1
+ml template list > $out/lib-tlist.json 2>&1
+ml page create --parent Проекты --title "Встреча 31.10" --template "Шаблон встречи" > $out/lib-from-template.json 2>&1
+ml template unmark "Шаблон встречи" > $out/lib-tunmark.json 2>&1
+ml history show $lib_id $version_id --format json > $out/lib-show-json.json 2>&1
+check "примеры: избранное, поиск, шаблоны, history show" \
+  "ok_json $out/lib-fav-move.json && ok_json $out/lib-search2.json && grep -q '\"isTemplate\":true' $out/lib-tmark.json \
+   && grep -q 'Шаблон встречи' $out/lib-tlist.json && ok_json $out/lib-from-template.json && ok_json $out/lib-tunmark.json \
+   && ok_json $out/lib-show.json && grep -q '\"blocks\":' $out/lib-show-json.json"
+cp Packages/MyNotionKit/Tests/NotionImportTests/Fixtures/notion-export/synthetic/Проекты*/отчёт.pdf $libdir/отчёт.pdf
+cp Packages/MyNotionKit/Tests/NotionImportTests/Fixtures/notion-export/synthetic/Проекты*/MyNotion*/Идеи*/schema.png $libdir/схема.png
+head -c 4096 /dev/urandom > $libdir/ролик.mp4
+ml attachment add $lib_id --file $libdir/отчёт.pdf > $out/lib-att-pdf.json 2>&1
+ml attachment add $lib_id --file $libdir/схема.png > $out/lib-att-png.json 2>&1
+ml attachment add $lib_id --file $libdir/ролик.mp4 > $out/lib-att-mp4.json 2>&1
+ml attachment add $lib_id --file $libdir/схема.png --as file > $out/lib-att-as.json 2>&1
+ml attachment add $lib_id --file $libdir/нет.pdf > $out/lib-att-missing.json 2>&1
+check "attachment add: файл, картинка, видео, --as, нет файла" \
+  "grep -q '\"kind\":\"file\"' $out/lib-att-pdf.json && grep -q '\"kind\":\"image\"' $out/lib-att-png.json \
+   && grep -q '\"kind\":\"video\"' $out/lib-att-mp4.json && grep -q '\"kind\":\"file\"' $out/lib-att-as.json \
+   && grep -q '\"code\":\"file_not_found\"' $out/lib-att-missing.json"
+ml db create --parent Проекты --title Задачи > /dev/null 2>&1
+ml db prop add Проекты/Задачи --name Файлы --type files > /dev/null 2>&1
+ml db row add Проекты/Задачи --values '{"Название":"Отчёт"}' > /dev/null 2>&1
+ml attachment add Проекты/Задачи Отчёт Файлы --file $libdir/отчёт.pdf > $out/lib-att-cell.json 2>&1
+check "attachment add в ячейку «Файлы»" "ok_json $out/lib-att-cell.json && grep -q '\"Файлы\":\\[{\"attachmentId\"' $out/lib-att-cell.json"
+ml attachment list $lib_id > $out/lib-att-list.json 2>&1
+png_id=$(json_field $out/lib-att-png.json data.attachment.id)
+mkdir -p $libdir/выгрузка
+ml attachment get $png_id --to $libdir/выгрузка > $out/lib-att-get.json 2>&1
+ml attachment get $png_id --to $libdir/копия.png > $out/lib-att-get2.json 2>&1
+check "attachment list и get: байты совпадают" \
+  "grep -q \"$png_id\" $out/lib-att-list.json && cmp -s $libdir/схема.png $libdir/выгрузка/схема.png && cmp -s $libdir/схема.png $libdir/копия.png"
+ml favorites remove $lib_id > $out/lib-fav-remove.json 2>&1
+check "favorites remove" "grep -q '\"isFavorite\":false' $out/lib-fav-remove.json"
+ml favorites add $lib_id > /dev/null 2>&1
+pid=$(pgrep -nf "$APP/Contents/MacOS/MyNotion")
+kill $pid; while kill -0 $pid 2>/dev/null; do sleep 0.2; done
+open -W -g -n $APP --args --database $libdir/MyNotion.sqlite --window-snapshot $out/lib-window.png
+check "снимок окна: избранное и вложения" "[[ -s $out/lib-window.png ]]"
+
 # Этап 7 (импорт, выгрузка, синхронизация): отдельный сценарий на той же сборке.
 APP=$APP zsh ${0:A:h}/cli-live-transfer.zsh | tee -a $summary
 (( ${pipestatus[1]} )) && failed=1

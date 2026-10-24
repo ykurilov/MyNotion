@@ -34,9 +34,8 @@ import Testing
         #expect(response.error?.message.contains("этап 2") == true)
     }
 
-    @Test func standardRegistryLeavesLaterStagesNotImplemented() async {
+    @Test func standardRegistryAnswersAppStatus() async {
         let executor = CommandExecutor(host: host, log: log)
-        #expect(await executor.run(ControlRequest(command: "favorites.list")).error?.code == .notImplemented)
         let status = await executor.run(ControlRequest(command: "app.status"))
         #expect(status.ok)
         #expect(status.data?["protocol"] == 1)
