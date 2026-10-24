@@ -153,15 +153,15 @@ description: "Задачи: управление MyNotion из командно�
 
 ### Тесты (до кода)
 
-- [ ] T053 [P] [US4] `PK/Tests/ControlCommandsTests/LibraryCommandsTests.swift`: `search` — та же выдача и порядок, что `PageSearch.results` (путь, отрывок, строки баз); `favorites add/remove/move/list`; `recents` как `recentPages`; `template mark/unmark/list`
-- [ ] T054 [P] [US4] `PK/Tests/ControlCommandsTests/HistoryCommandsTests.swift`: `history list` с полем `agent`; `show` Markdown и JSON; `restore` — страница как в версии, перед этим снята версия «до восстановления»; `restore` в пакете → `not_batchable`
-- [ ] T055 [P] [US4] `PK/Tests/ControlCommandsTests/AttachmentCommandsTests.swift`: `attachment add` PDF → блок-файл, PNG → картинка, MP4 → видео, `--as`; в ячейку «Файлы»; нет файла → `file_not_found`; `list`; `get --to` — байты совпадают
+- [x] T053 [P] [US4] `PK/Tests/ControlCommandsTests/LibraryCommandsTests.swift`: `search` — та же выдача и порядок, что `PageSearch.results` (путь, отрывок, строки баз); `favorites add/remove/move/list`; `recents` как `recentPages`; `template mark/unmark/list`
+- [x] T054 [P] [US4] `PK/Tests/ControlCommandsTests/HistoryCommandsTests.swift`: `history list` с полем `agent`; `show` Markdown и JSON; `restore` — страница как в версии, перед этим снята версия «до восстановления»; `restore` в пакете → `not_batchable`
+- [x] T055 [P] [US4] `PK/Tests/ControlCommandsTests/AttachmentCommandsTests.swift`: `attachment add` PDF → блок-файл, PNG → картинка, MP4 → видео, `--as`; в ячейку «Файлы»; нет файла → `file_not_found`; `list`; `get --to` — байты совпадают
 
 ### Код
 
-- [ ] T056 [US4] `PK/Sources/ControlCommands/Handlers/LibraryHandlers.swift`: `PageSearch`, избранное и шаблоны через `PageTreeOperations`, `recentPages`, `PageVersionStore` и `VersionRestorer`, `PageMarkdownReader` для `history show`, `AttachmentStore.importFile/fileURL`, `DatabaseOperations.addFiles` (T053–T055)
-- [ ] T057 [US4] `Tools/mynotion-skill/references/library.md`: найти по слову, избранное, создать из шаблона, вернуть версию «до правки агента», приложить файл; примеры выполнены на iMac
-- [ ] T058 [US4] Затронутые тесты зелёные; живая проверка шагов 9–10 сценария A; замер запуска и памяти в покое против прошлого этапа (quickstart, «Замеры», конституция II); коммит
+- [x] T056 [US4] `PK/Sources/ControlCommands/Handlers/LibraryHandlers.swift`: `PageSearch`, избранное и шаблоны через `PageTreeOperations`, `recentPages`, `PageVersionStore` и `VersionRestorer`, `PageMarkdownReader` для `history show`, `AttachmentStore.importFile/fileURL`, `DatabaseOperations.addFiles` (T053–T055)
+- [x] T057 [US4] `Tools/mynotion-skill/references/library.md`: найти по слову, избранное, создать из шаблона, вернуть версию «до правки агента», приложить файл; примеры выполнены на iMac
+- [x] T058 [US4] Затронутые тесты зелёные; живая проверка шагов 9–10 сценария A; замер запуска и памяти в покое против прошлого этапа (quickstart, «Замеры», конституция II); коммит
 
 ---
 
