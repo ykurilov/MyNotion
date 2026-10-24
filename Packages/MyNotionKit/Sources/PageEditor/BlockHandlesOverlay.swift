@@ -340,30 +340,33 @@ extension PageTextView {
         // NSTextView регистрирует I-beam и над обложкой. Её собственный cursorUpdate
         // уже выбрал arrow/openHand; родитель не должен менять этот выбор.
         if let cover = coverSlot.view, cover.frame.contains(convert(event.locationInWindow, from: nil)) { return }
-        if textPointerRect.contains(convert(event.locationInWindow, from: nil)) {
-            updatePointer(atWindowPoint: event.locationInWindow)
-        } else {
+        // Ручки в gutter тоже принадлежат этому helper: поздний parent update
+        // не должен затирать arrow, выбранную в mouseMoved дочерней кнопки.
+        if updatePointer(atWindowPoint: event.locationInWindow) { return }
+        if !textPointerRect.contains(convert(event.locationInWindow, from: nil)) {
             super.cursorUpdate(with: event)
         }
     }
 
     /// Одинаковое правило для обоих порядков доставки mouseMoved/cursorUpdate.
-    private func updatePointer(atWindowPoint windowPoint: NSPoint) {
+    @discardableResult
+    private func updatePointer(atWindowPoint windowPoint: NSPoint) -> Bool {
         let point = convert(windowPoint, from: nil)
         let target = hitTest(convert(point, to: superview))
         var hit = target
         while let child = hit, child !== self {
             // Родитель тоже получает mouseMoved: не ждём отдельного cursorUpdate кнопки.
-            if child is BlockHandleButton || child is PageIconView || child is PageHeaderButton { NSCursor.arrow.set(); return }
+            if child is BlockHandleButton || child is PageIconView || child is PageHeaderButton { NSCursor.arrow.set(); return true }
             // Встроенные элементы управления выбирают собственный курсор.
-            if child is NSControl, child !== emptyParagraphHint { return }
+            if child is NSControl, child !== emptyParagraphHint { return false }
             hit = child.superview
         }
         // Курсоры вложенных редакторов, разделителей и resize-ручек принадлежат их видам.
         guard target == nil || target === self || target === emptyParagraphHint ||
                 target?.isDescendant(of: emptyParagraphHint) == true,
-              textPointerRect.contains(point) else { return }
+              textPointerRect.contains(point) else { return false }
         NSCursor.iBeam.set()
+        return true
     }
 
     private var textPointerRect: NSRect {
