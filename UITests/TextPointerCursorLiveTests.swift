@@ -36,6 +36,11 @@ final class TextPointerCursorLiveTests: XCTestCase {
         let origin = window.coordinate(withNormalizedOffset: .zero)
         func hover(_ point: CGPoint) {
             origin.withOffset(CGVector(dx: point.x - window.frame.minX, dy: point.y - window.frame.minY)).hover()
+            let actual = NSEvent.mouseLocation
+            let screenTop = NSScreen.screens.first?.frame.maxY ?? 0
+            print("CURSOR-POSITION target=\(point) actual=\(actual.x),\(screenTop - actual.y)")
+            XCTAssertEqual(actual.x, point.x, accuracy: 2, "Мышь не достигла целевой точки")
+            XCTAssertEqual(screenTop - actual.y, point.y, accuracy: 2, "Мышь не достигла целевой точки")
         }
         hover(CGPoint(x: title.minX + 30, y: title.midY))
         let beam = try XCTUnwrap(NSCursor.currentSystem)
