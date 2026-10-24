@@ -227,6 +227,19 @@ func runBreadcrumbs(window: CGRect) -> Bool {
     write("breadcrumbs: ancestors=\(ancestors) more=\(more) current=\(String(describing: current))")
     guard !ancestors.isEmpty, !more.isEmpty else { write("FAIL: в пути нет нажимаемых предков или «…» (AX)"); return false }
     glide(to: CGPoint(x: window.midX, y: window.minY + 4), speed: 600)
+    // Где у каждой крошки кончается рука: проход шагом 1 пт от -8 до +8 пт за краями рамки AX.
+    for (index, crumb) in (ancestors + more).enumerated() {
+        let y = crumb.midY
+        glide(to: CGPoint(x: crumb.minX - 8, y: y), speed: 400); rest(0.1, jitter: false)
+        var spans: [String] = [], last = ""
+        for step in 0...Int(crumb.width + 16) {
+            let x = crumb.minX - 8 + Double(step)
+            post(CGPoint(x: x, y: y)); usleep(40_000)
+            let name = currentCursorName()
+            if name != last { spans.append("\(name)@\(Int(x - crumb.minX))"); last = name }
+        }
+        write("scan крошка \(index) (ширина \(Int(crumb.width))): смены указателя от левого края рамки: " + spans.joined(separator: " "))
+    }
     for (index, crumb) in (ancestors + more).enumerated() {
         let inner = crumb.insetBy(dx: 3, dy: 3)
         let points = [CGPoint(x: crumb.midX, y: crumb.midY), CGPoint(x: inner.minX, y: crumb.midY), CGPoint(x: inner.maxX, y: crumb.midY)]

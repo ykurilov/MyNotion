@@ -17,7 +17,12 @@ struct BreadcrumbBar: View {
         let parts = BreadcrumbPath.parts(ancestors: ancestors, current: current, width: width, measure: BreadcrumbText.measure)
         HStack(spacing: 0) {
             ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
-                if index > 0 { Text(BreadcrumbText.styled(BreadcrumbText.separator)).fixedSize().padding(.horizontal, -Self.hoverInset) }
+                if index > 0 {
+                    // «/» заходит на поля кнопок и лежит над предыдущей: без отключения нажатий её правые 4 пт — стрелка.
+                    Text(BreadcrumbText.styled(BreadcrumbText.separator)).fixedSize()
+                        .padding(.horizontal, -Self.hoverInset)
+                        .allowsHitTesting(false)
+                }
                 switch part {
                 case .page(let ancestor):
                     BreadcrumbButton(title: ancestor.title, identifier: "breadcrumb-ancestor") { onOpenPage(ancestor.pageId) }
