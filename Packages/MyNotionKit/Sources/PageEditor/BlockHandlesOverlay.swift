@@ -241,8 +241,10 @@ final class BlockHandleButton: NSView {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         trackingAreas.forEach(removeTrackingArea)
-        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect, .cursorUpdate], owner: self))
     }
+
+    override func cursorUpdate(with event: NSEvent) { NSCursor.arrow.set() }
 
     override func mouseEntered(with event: NSEvent) { isHovered = true }
     override func mouseExited(with event: NSEvent) { isHovered = false }
@@ -313,16 +315,41 @@ extension PageTextView {
 
     public override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        for area in trackingAreas where area.owner === self && area.userInfo?["blockHandles"] != nil {
+        for area in trackingAreas where area.owner === self &&
+            (area.userInfo?["blockHandles"] != nil || area.userInfo?["textPointer"] != nil) {
             removeTrackingArea(area)
         }
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
                                        owner: self, userInfo: ["blockHandles": true]))
+        // Отдельная область: .inVisibleRect у ручек включает также шапку и обложку.
+        // Здесь cursorUpdate NSTextView нужен только тексту и пустой части колонки.
+        let cursorRect = textPointerRect.intersection(visibleRect)
+        if !cursorRect.isEmpty {
+            addTrackingArea(NSTrackingArea(rect: cursorRect, options: [.cursorUpdate, .activeInKeyWindow],
+                                           owner: self, userInfo: ["textPointer": true]))
+        }
     }
 
     public override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
         updateBlockHandles(atWindowPoint: event.locationInWindow)
+        // mouseMoved и cursorUpdate приходят раздельно. После обновления chrome
+        // не оставляем в текстовой колонке курсор, унаследованный от другой области.
+        let point = convert(event.locationInWindow, from: nil)
+        guard textPointerRect.contains(point) else { return }
+        var hit = hitTest(convert(point, to: superview))
+        while let child = hit, child !== self {
+            // Встроенные элементы управления выбирают собственный курсор.
+            if child is NSControl, child !== emptyParagraphHint { return }
+            hit = child.superview
+        }
+        NSCursor.iBeam.set()
+    }
+
+    private var textPointerRect: NSRect {
+        let origin = textContainerOrigin
+        return NSRect(x: origin.x, y: origin.y, width: textContainer?.size.width ?? 0,
+                      height: max(0, bounds.maxY - origin.y))
     }
 
     /// Ручки у блока под мышью. Над колонками ручки — у блока колонки под мышью, а не у всего блока колонок.
