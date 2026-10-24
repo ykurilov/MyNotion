@@ -120,6 +120,7 @@ struct NewTabSearchView: View {
         RecentPageListRow(row: row, isSelected: rows.firstIndex(of: row) == selectedIndex)
             .id(row.id)
             .onTapGesture { open(row.pageId) }
+            .pointerStyle(.link)
     }
 
     private func move(_ step: Int) -> KeyPress.Result {

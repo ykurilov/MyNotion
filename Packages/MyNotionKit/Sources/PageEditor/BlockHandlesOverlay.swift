@@ -8,7 +8,7 @@ import VisualStyle
 @MainActor
 final class BlockHandlesOverlay: NSView {
     private unowned let textView: PageTextView
-    private let addHandle = BlockHandleButton(kind: .add)
+    let addHandle = BlockHandleButton(kind: .add)
     let dragHandle = BlockHandleButton(kind: .drag)
     let dropIndicator = BlockDropLine()
     let dragGhost = BlockDragGhost()
@@ -213,7 +213,8 @@ final class BlockDragGhost: NSView {
 
 /// Одна ручка: «+» или шесть точек «⋮⋮» цвета handleIcon, при наведении — фон hoverBackground.
 @MainActor
-final class BlockHandleButton: NSView {
+final class BlockHandleButton: NSView, PointerOwner {
+    var pointer: NSCursor { .pointingHand }
     enum Kind { case add, drag }
 
     let kind: Kind
@@ -341,11 +342,13 @@ extension PageTextView {
     }
 
     public override func mouseMoved(with event: NSEvent) {
-        // CoverView и её кнопки уже выбрали свой курсор. NSTextView.mouseMoved
-        // иначе затирает pointing/open hand собственным I-beam (проверено живой трассой).
+        updateBlockHandles(atWindowPoint: event.locationInWindow)
+        // Один указатель на событие. NSTextView.mouseMoved всегда ставит I-beam, рука ставилась следом —
+        // над ⋮⋮, + и иконкой указатель мигал на каждом сдвиге мыши (живая трасса, scripts/imac/real-cursor-check.zsh).
+        if let pointer = descendantPointer(atWindowPoint: event.locationInWindow) { return pointer.set() }
+        // CoverView уже выбрала свой курсор: I-beam NSTextView его бы затёр.
         let overCover = coverSlot.view?.frame.contains(convert(event.locationInWindow, from: nil)) == true
         if !overCover { super.mouseMoved(with: event) }
-        updateBlockHandles(atWindowPoint: event.locationInWindow)
         updatePointer(atWindowPoint: event.locationInWindow)
     }
 
@@ -369,7 +372,7 @@ extension PageTextView {
         var hit = target
         while let child = hit, child !== self {
             // Родитель тоже получает mouseMoved: не ждём отдельного cursorUpdate кнопки.
-            if child is BlockHandleButton || child is PageIconView || child is PageHeaderButton { NSCursor.pointingHand.set(); return true }
+            if let owner = child as? PointerOwner { owner.pointer.set(); return true }
             // Встроенные элементы управления выбирают собственный курсор.
             if child is NSControl, child !== emptyParagraphHint { return false }
             hit = child.superview

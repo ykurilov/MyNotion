@@ -181,7 +181,8 @@ public final class PageHeaderView: NSView, NSTextFieldDelegate {
 
 /// Иконка страницы в квадрате `Metrics.Page.iconSize`: под мышью — подложка, щелчок открывает окно выбора.
 @MainActor
-final class PageIconView: NSView {
+final class PageIconView: NSView, PointerOwner {
+    var pointer: NSCursor { .pointingHand }
     private let label = NSTextField(labelWithString: "")
     var onPress: (() -> Void)?
 
@@ -263,7 +264,8 @@ final class PageIconView: NSView {
 /// Серая кнопка шапки со значком и надписью, как «Add icon» у Notion; под мышью — подложка.
 /// Видна при наведении на шапку, если доступна (`isAvailable`: у страницы с обложкой «Добавить обложку» не нужна).
 @MainActor
-public final class PageHeaderButton: NSView {
+public final class PageHeaderButton: NSView, PointerOwner {
+    public var pointer: NSCursor { .pointingHand }
     private let symbolName: String
     public let title: String
     public var onPress: (() -> Void)?

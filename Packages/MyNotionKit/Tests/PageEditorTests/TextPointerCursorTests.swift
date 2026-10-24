@@ -63,6 +63,31 @@ struct TextPointerCursorTests {
     }
 
 
+    @Test("mouseMoved над ⋮⋮, + и иконкой ни разу не ставит I-beam: указатель не мигает", arguments: [0, 1, 2])
+    func clickableNeverFlashesIBeam(target: Int) throws {
+        let fixture = try EditorFixture([.heading(1, "Заголовок")], icon: "🥰")
+        let view = fixture.textView
+        view.layoutSubtreeIfNeeded()
+        let manager = try #require(view.textLayoutManager)
+        manager.ensureLayout(for: manager.documentRange)
+        let line = try #require(view.markerLine(ofBlockAt: 0))
+        view.updateBlockHandles(atWindowPoint: view.convert(
+            NSPoint(x: view.textContainerOrigin.x + 20,
+                    y: view.textContainerOrigin.y + line.top + line.height / 2), to: nil))
+        let control: NSView = switch target {
+        case 0: view.blockHandles.dragHandle
+        case 1: view.blockHandles.addHandle
+        default: try #require(view.header.subviews.compactMap { $0 as? PageIconView }.first)
+        }
+        let location = control.convert(NSPoint(x: control.bounds.midX, y: control.bounds.midY), to: nil)
+        let moved = try #require(NSEvent.mouseEvent(with: .mouseMoved, location: location,
+            modifierFlags: [], timestamp: 0, windowNumber: fixture.window.windowNumber,
+            context: nil, eventNumber: 1, clickCount: 0, pressure: 0))
+        // Живая трасса: NSTextView.mouseMoved ставил I-beam, следом наш код — руку; на экране это мигание.
+        let set = CursorSetRecorder.record { view.mouseMoved(with: moved) }
+        #expect(set == [NSCursor.pointingHand], "За одно событие поставлено \(set.count) указателей, нужен один: рука")
+    }
+
     @Test("Иконка и кнопка шапки выбирают pointing hand", arguments: [true, false])
     func headerChromeRestoresPointingHand(icon: Bool) throws {
         let fixture = try EditorFixture([.paragraph("Текст")], icon: "🥰")
@@ -129,4 +154,27 @@ struct TextPointerCursorTests {
         #expect(NSCursor.current == NSCursor.resizeLeftRight, "cursorUpdate родителя подменил курсор вложенного вида")
     }
 
+}
+
+/// Все NSCursor.set() за время блока: подменяет set() на запись и возвращает подлинный обратно.
+@MainActor
+enum CursorSetRecorder {
+    nonisolated(unsafe) static var cursors: [NSCursor] = []
+
+    static func record(_ body: () -> Void) -> [NSCursor] {
+        let original = class_getInstanceMethod(NSCursor.self, #selector(NSCursor.set))!
+        let recording = class_getInstanceMethod(NSCursor.self, #selector(NSCursor.recordedSet))!
+        cursors = []
+        method_exchangeImplementations(original, recording)
+        body()
+        method_exchangeImplementations(original, recording)
+        return cursors
+    }
+}
+
+extension NSCursor {
+    @objc fileprivate func recordedSet() {
+        CursorSetRecorder.cursors.append(self)
+        recordedSet()
+    }
 }

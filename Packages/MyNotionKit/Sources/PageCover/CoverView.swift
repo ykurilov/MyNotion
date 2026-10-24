@@ -220,7 +220,10 @@ public final class CoverView: NSView {
         addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect, .cursorUpdate], owner: self))
     }
 
-    public override func cursorUpdate(with event: NSEvent) { (repositioning == nil ? NSCursor.iBeam : NSCursor.openHand).set() }
+    // Перерисовка (наведение на кнопку) снова присылает cursorUpdate обложке: над кнопкой — её рука, а не I-beam.
+    public override func cursorUpdate(with event: NSEvent) {
+        (descendantPointer(atWindowPoint: event.locationInWindow) ?? (repositioning == nil ? NSCursor.iBeam : NSCursor.openHand)).set()
+    }
 
     public override func mouseEntered(with event: NSEvent) { isHovered = true }
     public override func mouseExited(with event: NSEvent) { isHovered = false }
@@ -353,7 +356,8 @@ final class CoverButtonGroup: NSView {
 
 /// Кнопка группы на обложке: серая надпись 12, под мышью — подложка.
 @MainActor
-final class CoverButton: NSView {
+final class CoverButton: NSView, PointerOwner {
+    var pointer: NSCursor { .pointingHand }
     let title: String
     var onPress: (() -> Void)?
     private var isPointerInside = false { didSet { needsDisplay = true } }
