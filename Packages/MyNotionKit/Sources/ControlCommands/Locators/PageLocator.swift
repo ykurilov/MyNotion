@@ -32,17 +32,19 @@ public struct PageLocator {
             return try byId(id, pointer: pointer, includeTrashed: includeTrashed)
         }
 
-        let index = PageIndex(try read { try store.pageOutline() })
         if Self.isIdPrefix(pointer) {
+            let index = PageIndex(try read { try store.pageOutline() })
             let prefix = pointer.lowercased()
             let matches = index.pages.filter { $0.id.uuidString.lowercased().hasPrefix(prefix) }
             if !matches.isEmpty { return try pick(matches, pointer: pointer, index: index, includeTrashed: includeTrashed) }
         }
 
         let path = PagePath(pointer)
-        guard !path.segments.isEmpty else {
+        guard let last = path.segments.last else {
             throw ControlError(.invalidValue, "Пустой указатель страницы", hint: "id, путь «Проекты/Встреча» или current")
         }
+        // Только страницы с последним названием пути и их предки: полное дерево большой базы читается долго.
+        let index = try read { try PageQueries.titled(last, in: store) }
         let matches = index.pages.filter { index.matches($0, path) }
         return try pick(matches, pointer: pointer, index: index, includeTrashed: includeTrashed)
     }

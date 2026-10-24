@@ -3,7 +3,8 @@
 #   1. установка `scripts/install-cli.sh` в папки сборки (HOME подменён: домашняя папка iMac не меняется);
 #   2. приложение закрыто → `mynotion app status` поднимает его в фоне: фокус не уходит, ответ ≤ 4 с;
 #   3. `mynotion page tree` → `not_implemented` (код выхода 4); права сокета 0600;
-#   4. память и процессор в покое с открытым сокетом против сборки 004 (CLI_BASE — папка исходников 004 на iMac).
+#   4. память и процессор в покое с открытым сокетом против сборки 004 (CLI_BASE — папка исходников 004 на iMac);
+#   5. базы (этап 4): `db rows` на «Задачах» 10 000 эталона 004 ≤ 150 мс; шаг 7 сценария A и снимок окна с той же базой.
 # Итоги — в build/cli-live/summary.txt.
 set -uo pipefail
 zmodload zsh/datetime  # EPOCHREALTIME
@@ -88,6 +89,62 @@ if [[ -n ${CLI_BASE:-} && -d $CLI_BASE ]]; then
     -jobs $JOBS build -quiet) > $out/base-build.log 2>&1 || { tail -20 $out/base-build.log; fail "Сборка 004 не прошла"; }
   measure $CLI_BASE/build/cli-base-dd/Build/Products/Release/MyNotion.app 004
 fi
+
+# Этап 4 (базы): замер `db rows` первой страницы на «Задачах» 10 000 строк (эталон 004) и шаг 7 сценария A со снимком
+# окна. База — в коротком пути: сокет рядом с ней.
+dbdir=/tmp/mynotion-cli-db; rm -rf $dbdir; mkdir -p $dbdir
+mn() { $mynotion "$@" --socket $dbdir/control.sock --no-launch --agent cli-live-check }
+ok_json() { grep -q '"ok":true' $1 }
+open -g -n $APP --args --database $dbdir/MyNotion.sqlite --generate-004-sample
+for t in {1..600}; do [[ -S $dbdir/control.sock ]] && break; sleep 0.2; done
+mn app status > $out/db-app-status.json 2>&1
+check "приложение с эталоном 004 отвечает" "ok_json $out/db-app-status.json"
+wait_for_quiet_indexer >> $summary
+
+mn db rows Задачи --limit 50 > $out/db-rows-tasks.json 2>&1
+check "db rows Задачи: 50 строк из 10 000" \
+  "ok_json $out/db-rows-tasks.json && grep -q '\"total\":10000' $out/db-rows-tasks.json"
+times=()
+for i in {1..20}; do
+  started=$EPOCHREALTIME
+  mn db rows Задачи --limit 50 > /dev/null 2>&1
+  times+=($(( (EPOCHREALTIME - started) * 1000 )))
+done
+sorted=(${(on)times})
+note "db rows Задачи --limit 50, 20 вызовов (с запуском клиента): медиана $(printf '%.0f' $sorted[10]) мс, p95 $(printf '%.0f' $sorted[19]) мс"
+check "db rows первой страницы ≤ 150 мс (медиана)" "(( sorted[10] <= 150 ))"
+
+# Шаг 7: база страницей под «Обзором», статус, дата, 50 строк пачкой, вид с фильтром, сортировкой и группой.
+mn db create --parent Обзор --title Спринт > $out/db-create.json 2>&1
+mn db prop add Обзор/Спринт --name Статус --type status > $out/db-prop-status.json 2>&1
+mn db prop add Обзор/Спринт --name Срок --type date > $out/db-prop-date.json 2>&1
+mn db prop add Обзор/Спринт --name Часы --type number > $out/db-prop-hours.json 2>&1
+statuses=(Не\ начато В\ работе Готово)
+{
+  print -n '['
+  for i in {1..50}; do
+    (( i > 1 )) && print -n ','
+    printf '{"Название":"Задача %02d","Статус":"%s","Срок":"2026-11-%02d","Часы":%d}' \
+      $i "$statuses[$(( i % 3 + 1 ))]" $(( (i * 7) % 28 + 1 )) $(( i % 5 ))
+  done
+  print ']'
+} > $out/rows.json
+mn db row add Обзор/Спринт --rows $out/rows.json > $out/db-row-add.json 2>&1
+mn db view update Обзор/Спринт Таблица --filter '{"property":"Часы","operator":"greaterThan","value":0}' \
+  --sort '[{"property":"Срок","direction":"ascending"}]' --group '{"property":"Статус"}' > $out/db-view-update.json 2>&1
+mn db rows Обзор/Спринт --view Таблица --limit 1000 > $out/db-rows-sprint.json 2>&1
+check "шаг 7: создание, свойства, 50 строк, вид — ok" \
+  "ok_json $out/db-create.json && ok_json $out/db-prop-status.json && ok_json $out/db-prop-date.json && ok_json $out/db-prop-hours.json \
+   && ok_json $out/db-row-add.json && grep -q '\"count\":50' $out/db-row-add.json && ok_json $out/db-view-update.json"
+check "шаг 7: db rows — 40 строк (Часы > 0) в группах статуса" \
+  "ok_json $out/db-rows-sprint.json && grep -q '\"total\":40' $out/db-rows-sprint.json"
+mn --human db rows Обзор/Спринт --view Таблица --limit 1000 > $out/db-rows-sprint.txt 2>&1
+pid=$(pgrep -nf "$APP/Contents/MacOS/MyNotion")
+kill $pid; while kill -0 $pid 2>/dev/null; do sleep 0.2; done
+# Окно с той же базой: открыта «Спринт», снимок после отрисовки (порядок и группы сверяются с db-rows-sprint.txt).
+open -W -g -n $APP --args --database $dbdir/MyNotion.sqlite --relations-demo --relations-demo-open Спринт \
+  --window-snapshot $out/db-sprint-window.png
+check "снимок окна «Спринт»" "[[ -s $out/db-sprint-window.png ]]"
 
 (( failed )) && note "ИТОГ: есть провалы" || note "ИТОГ: всё прошло"
 exit $failed
