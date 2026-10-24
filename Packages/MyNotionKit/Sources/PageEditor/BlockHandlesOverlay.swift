@@ -246,8 +246,8 @@ final class BlockHandleButton: NSView {
 
     // AppKit восстанавливает cursor rects после перемещения/перераскладки ручек.
     // Одного cursorUpdate недостаточно: системный прямоугольник родителя — I-beam.
-    override func resetCursorRects() { addCursorRect(bounds, cursor: .arrow) }
-    override func cursorUpdate(with event: NSEvent) { NSCursor.arrow.set() }
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+    override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
 
     override func mouseEntered(with event: NSEvent) { isHovered = true }
     override func mouseExited(with event: NSEvent) { isHovered = false }
@@ -341,17 +341,20 @@ extension PageTextView {
     }
 
     public override func mouseMoved(with event: NSEvent) {
-        super.mouseMoved(with: event)
+        // CoverView и её кнопки уже выбрали свой курсор. NSTextView.mouseMoved
+        // иначе затирает pointing/open hand собственным I-beam (проверено живой трассой).
+        let overCover = coverSlot.view?.frame.contains(convert(event.locationInWindow, from: nil)) == true
+        if !overCover { super.mouseMoved(with: event) }
         updateBlockHandles(atWindowPoint: event.locationInWindow)
         updatePointer(atWindowPoint: event.locationInWindow)
     }
 
     public override func cursorUpdate(with event: NSEvent) {
         // NSTextView регистрирует I-beam и над обложкой. Её собственный cursorUpdate
-        // уже выбрал arrow/openHand; родитель не должен менять этот выбор.
+        // уже выбрал I-beam/openHand; родитель не должен менять этот выбор.
         if let cover = coverSlot.view, cover.frame.contains(convert(event.locationInWindow, from: nil)) { return }
         // Ручки в gutter тоже принадлежат этому helper: поздний parent update
-        // не должен затирать arrow, выбранную в mouseMoved дочерней кнопки.
+        // не должен затирать pointing hand, выбранную в mouseMoved дочерней кнопки.
         if updatePointer(atWindowPoint: event.locationInWindow) { return }
         if !textPointerRect.contains(convert(event.locationInWindow, from: nil)) {
             super.cursorUpdate(with: event)
@@ -366,7 +369,7 @@ extension PageTextView {
         var hit = target
         while let child = hit, child !== self {
             // Родитель тоже получает mouseMoved: не ждём отдельного cursorUpdate кнопки.
-            if child is BlockHandleButton || child is PageIconView || child is PageHeaderButton { NSCursor.arrow.set(); return true }
+            if child is BlockHandleButton || child is PageIconView || child is PageHeaderButton { NSCursor.pointingHand.set(); return true }
             // Встроенные элементы управления выбирают собственный курсор.
             if child is NSControl, child !== emptyParagraphHint { return false }
             hit = child.superview

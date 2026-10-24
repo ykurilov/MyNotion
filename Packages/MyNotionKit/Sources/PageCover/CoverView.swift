@@ -220,7 +220,7 @@ public final class CoverView: NSView {
         addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect, .cursorUpdate], owner: self))
     }
 
-    public override func cursorUpdate(with event: NSEvent) { (repositioning == nil ? NSCursor.arrow : NSCursor.openHand).set() }
+    public override func cursorUpdate(with event: NSEvent) { (repositioning == nil ? NSCursor.iBeam : NSCursor.openHand).set() }
 
     public override func mouseEntered(with event: NSEvent) { isHovered = true }
     public override func mouseExited(with event: NSEvent) { isHovered = false }
@@ -264,7 +264,7 @@ public final class CoverView: NSView {
     }
 
     public override func resetCursorRects() {
-        addCursorRect(bounds, cursor: repositioning == nil ? .arrow : .openHand)
+        addCursorRect(bounds, cursor: repositioning == nil ? .iBeam : .openHand)
     }
 
     public override func mouseDown(with event: NSEvent) {
@@ -283,6 +283,7 @@ public final class CoverView: NSView {
         guard repositioning != nil else { return super.mouseUp(with: event) }
         repositioning?.endDrag()
         NSCursor.pop()
+        NSCursor.openHand.set()
     }
 
     /// Вне режима «Переместить» щелчок по обложке ничего не делает, но и текст под ней не получает.
@@ -393,8 +394,8 @@ final class CoverButton: NSView {
         addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect, .cursorUpdate], owner: self))
     }
 
-    override func resetCursorRects() { addCursorRect(bounds, cursor: .arrow) }
-    override func cursorUpdate(with event: NSEvent) { NSCursor.arrow.set() }
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+    override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
 
     override func mouseEntered(with event: NSEvent) { isPointerInside = true }
     override func mouseExited(with event: NSEvent) { isPointerInside = false }
