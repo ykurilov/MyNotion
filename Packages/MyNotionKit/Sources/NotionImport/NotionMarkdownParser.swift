@@ -76,13 +76,40 @@ public struct ParsedNotionPage: Sendable, Hashable {
     public var simplifications: [NotionSimplification: Int]
     /// Языки кода, которых MyNotion не знает (код стал «Простым текстом»), — для отчёта.
     public var unknownCodeLanguages: [String] = []
+    /// Только в `.plainMarkdown`: что перенесено простым текстом, со строкой Markdown (FR-414).
+    public var warnings: [ParsedMarkdownWarning] = []
+}
+
+/// Строка Markdown, перенесённая не так, как написана: HTML-блок, сноска, картинка по ссылке.
+public struct ParsedMarkdownWarning: Sendable, Hashable {
+    /// Номер строки, с единицы.
+    public var line: Int
+    public var message: String
+
+    public init(line: Int, message: String) {
+        self.line = line
+        self.message = message
+    }
 }
 
 /// Разбор подмножества Markdown, которое пишет Notion (и наша выгрузка), в блоки MyNotion по таблице
 /// contracts/files-import-export.md (research R11). Своё, а не общий разбор Markdown: строк немного, а итог
 /// всё равно переводить в наши блоки. Оформление в строке разбирает `NotionInlineParser`.
 public struct NotionMarkdownParser: Sendable {
-    public init() {}
+    public struct Options: OptionSet, Sendable {
+        public let rawValue: Int
+        public init(rawValue: Int) { self.rawValue = rawValue }
+
+        /// Markdown агента, а не файл выгрузки (005, research R7): первая `# ` — заголовок, а не название страницы;
+        /// HTML-блоки и сноски — текстом абзаца с предупреждением; картинка по `http(s)` — закладка с адресом.
+        public static let plainMarkdown = Options(rawValue: 1 << 0)
+    }
+
+    public let options: Options
+
+    public init(options: Options = []) {
+        self.options = options
+    }
 
     public func parse(_ markdown: String) -> ParsedNotionPage {
         var lines = markdown.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
@@ -93,7 +120,8 @@ public struct NotionMarkdownParser: Sendable {
         while index < lines.count, Self.isBlank(lines[index]) { index += 1 }
         var title: String?
         var icon: String?
-        if index < lines.count, let heading = Self.heading(lines[index]), heading.level == 1 {
+        let isPlain = options.contains(.plainMarkdown)
+        if !isPlain, index < lines.count, let heading = Self.heading(lines[index]), heading.level == 1 {
             (icon, title) = Self.splitIcon(NotionInlineParser.parse(heading.text).text.string)
             index += 1
         }
@@ -103,9 +131,10 @@ public struct NotionMarkdownParser: Sendable {
             index += 1
         }
         var builder = PageBuilder()
+        builder.isPlain = isPlain
         builder.consume(lines[index...])
         return ParsedNotionPage(title: title, icon: icon, cover: cover, blocks: builder.blocks, simplifications: builder.simplifications,
-                                unknownCodeLanguages: builder.unknownCodeLanguages)
+                                unknownCodeLanguages: builder.unknownCodeLanguages, warnings: builder.warnings)
     }
 
     /// Блоки куска Markdown без строки названия — то, что внутри переключателя, выноски, цитаты.
@@ -153,6 +182,9 @@ struct PageBuilder {
     private(set) var blocks: [ParsedBlock] = []
     private(set) var simplifications: [NotionSimplification: Int] = [:]
     private(set) var unknownCodeLanguages: [String] = []
+    /// Markdown агента (`.plainMarkdown`): неподдержанное — текстом с предупреждением.
+    var isPlain = false
+    private(set) var warnings: [ParsedMarkdownWarning] = []
 
     /// Абзац или пункт списка, строки которого ещё собираются.
     private struct OpenBlock {
@@ -188,6 +220,14 @@ struct PageBuilder {
                 pendingColor = comment
                 continue
             }
+            // `index` уже за строкой: номер строки с единицы — тот же `index`.
+            if isPlain, let plain = Self.plainLine(trimmed) {
+                closeOpenBlock()
+                listColumns = []
+                emit(plain.block)
+                warnings.append(ParsedMarkdownWarning(line: index, message: plain.warning))
+                continue
+            }
             if let reading = NotionBlockReaders.all.lazy.compactMap({ $0.read(lines, at: index - 1) }).first {
                 closeOpenBlock()
                 listColumns = []
@@ -206,6 +246,9 @@ struct PageBuilder {
                     blankLines = 0
                 case .summary(let text):
                     emit(paragraph(from: [text]))
+                case .embed where isPlain:
+                    emit(ParsedBlock(kind: .paragraph, text: InlineText(trimmed)))
+                    warnings.append(ParsedMarkdownWarning(line: index, message: "HTML перенесён простым текстом"))
                 case .embed(let text):
                     if !text.isEmpty { emit(ParsedBlock(kind: .paragraph, text: InlineText(text))) }
                     count(.embed)
@@ -241,6 +284,8 @@ struct PageBuilder {
             }
             if let item = Self.listItem(line) {
                 closeOpenBlock()
+                // Markdown агента: пункт с отступом без пункта над ним — вложенность из отступа (по два пробела), как пишет чтение.
+                if isPlain, listColumns.isEmpty, item.start >= 2 { listColumns = Array(stride(from: 2, through: item.start, by: 2)) }
                 while let column = listColumns.last, item.start < column { listColumns.removeLast() }
                 let indent = min(listColumns.count, Block.indentRange.upperBound)
                 listColumns.append(item.contentColumn)
@@ -365,6 +410,18 @@ struct PageBuilder {
             text = text.dropFirst(3).drop { $0 == " " || $0 == "\t" }
         }
         return ListItem(kind: kind, isChecked: isChecked, start: start, contentColumn: start + markerLength + 1, text: String(text))
+    }
+
+    /// Строки Markdown агента, которых нет в выгрузке: определение сноски — абзацем как есть; картинка по `http(s)`
+    /// одна на строке — закладкой с адресом (у блока-картинки без копии файла нечего показать).
+    private static func plainLine(_ trimmed: String) -> (block: ParsedBlock, warning: String)? {
+        if trimmed.range(of: #"^\[\^[^\]]+\]:"#, options: .regularExpression) != nil {
+            return (ParsedBlock(kind: .paragraph, text: InlineText(trimmed)), "сноска перенесена простым текстом")
+        }
+        guard let match = trimmed.firstMatch(of: #/^!\[(?<alt>[^\]]*)\]\((?<url>https?://[^\s)]+)\)$/#.ignoresCase()),
+              let url = URL(string: String(match.url)) else { return nil }
+        return (ParsedBlock(kind: .paragraph, text: InlineText(String(match.alt)), standaloneURL: url),
+                "картинка по ссылке стала закладкой: файла картинки в MyNotion нет")
     }
 
     static func isThematicBreak(_ trimmed: String) -> Bool {

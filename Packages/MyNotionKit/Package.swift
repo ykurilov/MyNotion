@@ -143,8 +143,10 @@ let package = Package(
         .testTarget(name: "ControlServerTests", dependencies: ["ControlServer", "ControlProtocol"]),
         .testTarget(name: "ControlClientTests", dependencies: ["ControlClient", "ControlServer", "ControlProtocol"]),
         .testTarget(name: "ControlCommandsTests", dependencies: ["ControlCommands", "ControlProtocol", "NotesCore", "Databases", "PageVersions",
-                                                                 "MarkdownExport", "NotionImport", "Attachments", .product(name: "GRDB", package: "GRDB.swift")]),
-        .testTarget(name: "PageMarkdownTests", dependencies: ["PageMarkdown", "NotesCore", "MarkdownExport", "NotionImport", "Attachments"]),
+                                                                 "MarkdownExport", "NotionImport", "Attachments", "Sync", "PageSearch", "Backlinks",
+                                                                 .product(name: "GRDB", package: "GRDB.swift")]),
+        .testTarget(name: "PageMarkdownTests", dependencies: ["PageMarkdown", "NotesCore", "MarkdownExport", "NotionImport", "Attachments", "PageEditor"],
+                    resources: [.copy("Fixtures")]),
     ],
     swiftLanguageModes: [.v6]
 )

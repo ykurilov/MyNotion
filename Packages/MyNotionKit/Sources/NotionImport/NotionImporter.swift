@@ -422,64 +422,25 @@ public struct NotionImporter: Sendable {
 
     /// Блоки страницы для базы: ссылки на найденные страницы — pageLink, на ненайденные — абзац с названием;
     /// подстраницы без ссылки в тексте получают ссылку в конце (подстраница и ссылка на неё — пара, data-model.md).
-    private static func blocks(for index: Int, in plan: NotionExportPlan, databases: [Int: PlannedDatabase], ids: [UUID]) -> [Block] {
+    static func blocks(for index: Int, in plan: NotionExportPlan, databases: [Int: PlannedDatabase], ids: [UUID]) -> [Block] {
         let page = plan.pages[index]
         let pageId = ids[index]
         // У страницы-базы своих блоков нет: её содержимое — строки (data-model.md).
         if databases[index] != nil { return [] }
-        var result: [Block] = []
-        var sortKey: FractionalSortKey?
         var linkedChildren: Set<Int> = []
-        func append(_ kind: BlockKind, _ text: InlineText = .empty, indent: Int = 0, checked: Bool = false, link: UUID? = nil) {
+        var result = ParsedBlockConverter.blocks(from: page.blocks, pageId: pageId, linkTarget: { block in
+            guard let target = NotionExportReader.linkedPage(block, from: index, in: plan) else { return nil }
+            if page.children.contains(target) { linkedChildren.insert(target) }
+            // Встроенная база — блок `database` на месте ссылки на её CSV.
+            let isInline = databases[target]?.schema.isInline == true && plan.pages[target].parent == index
+            return isInline ? .database(ids[target]) : .page(ids[target])
+        }, mentionTarget: { path in
+            plan.page(atPath: path, from: index).map { ids[$0] }
+        })
+        var sortKey = result.last { $0.containerId == nil }?.sortKey
+        func append(_ kind: BlockKind, link: UUID? = nil) {
             sortKey = .between(sortKey, nil)
-            // Заголовок бывает вложен в переключатель, выноску, цитату (research R1).
-            result.append(Block(pageId: pageId, kind: kind, text: text, indent: indent,
-                                isChecked: kind == .checkbox && checked, linkedPageId: link, sortKey: sortKey!))
-        }
-        /// Блок 002 с цветом, свойствами и потоками внутри (колонки, таблица).
-        func appendRich(_ parsed: ParsedBlock) {
-            sortKey = .between(sortKey, nil)
-            let block = Block(id: parsed.id ?? .timeOrdered(), pageId: pageId, kind: parsed.kind, text: parsed.text, indent: parsed.indent,
-                              isChecked: parsed.kind == .checkbox && parsed.isChecked, sortKey: sortKey!,
-                              color: parsed.color, props: parsed.props)
-            result.append(block)
-            func appendContained(_ children: [ParsedBlock], in containerId: UUID) {
-                var key: FractionalSortKey?
-                for child in children {
-                    key = .between(key, nil)
-                    // Упоминания в ячейках таблицы и блоках колонок — на страницы выгрузки, как в потоке страницы.
-                    let text = child.mentions.isEmpty ? child.text : resolvingMentions(in: child.text, mentions: child.mentions) { path in
-                        plan.page(atPath: path, from: index).map { ids[$0] }
-                    }
-                    let inner = Block(id: child.id ?? .timeOrdered(), pageId: pageId, kind: child.kind, text: text, indent: child.indent,
-                                      isChecked: child.kind == .checkbox && child.isChecked, sortKey: key!, containerId: containerId,
-                                      color: child.color, props: child.props)
-                    result.append(inner)
-                    appendContained(child.contained, in: inner.id)
-                }
-            }
-            appendContained(parsed.contained, in: block.id)
-        }
-        for var block in page.blocks {
-            if !block.mentions.isEmpty {
-                block.text = resolvingMentions(in: block.text, mentions: block.mentions) { path in
-                    plan.page(atPath: path, from: index).map { ids[$0] }
-                }
-            }
-            if let target = NotionExportReader.linkedPage(block, from: index, in: plan) {
-                if page.children.contains(target) { linkedChildren.insert(target) }
-                // Встроенная база — блок `database` на месте ссылки на её CSV.
-                let isInline = databases[target]?.schema.isInline == true && plan.pages[target].parent == index
-                append(isInline ? .database : .pageLink, link: ids[target])
-            } else if block.kind == .pageLink {
-                append(.paragraph, block.text)
-            } else if let url = block.standaloneURL, block.kind == .paragraph, ["http", "https"].contains(url.scheme?.lowercased()) {
-                appendRich(Self.linkCard(for: url, text: block.text, indent: block.indent))
-            } else if !block.color.isNone || !block.props.isEmpty || !block.contained.isEmpty {
-                appendRich(block)
-            } else {
-                append(block.kind, block.text, indent: block.indent, checked: block.isChecked)
-            }
+            result.append(Block(pageId: pageId, kind: kind, linkedPageId: link, sortKey: sortKey!))
         }
         for child in page.children where !linkedChildren.contains(child) {
             append(.pageLink, link: ids[child])
