@@ -202,7 +202,7 @@ description: "Задачи: управление MyNotion из командно�
 
 ## Phase 9: Polish & Cross-Cutting — этап 8 «Итог»
 
-- [ ] T066 `PK/Tests/ControlCommandsTests/CoverageTableTests.swift` (SC-408): каждый публичный метод `PageTreeOperations`, `DatabaseOperations`, `WindowTabs` назван в `contracts/coverage.md` или в его списке «не входит»; каждая команда каталога имеет обработчик (нет `not_implemented`, кроме `db template …` при отсутствии 004 US6 — с причиной)
+- [x] T066 `PK/Tests/ControlCommandsTests/CoverageTableTests.swift` (SC-408): каждый публичный метод `PageTreeOperations`, `DatabaseOperations`, `WindowTabs` назван в `contracts/coverage.md` или в его списке «не входит»; каждая команда каталога имеет обработчик (нет `not_implemented`, кроме `db template …` при отсутствии 004 US6 — с причиной)
 - [ ] T067 `scripts/imac/cli-e2e.zsh`: сквозной сценарий A (quickstart.md) целиком на Release-сборке, временная база и сокет, `jq -e` на каждом шаге, снимки CuaDriver в `~/work/shots/005/`
 - [ ] T068 Главный агент зовёт ревьюера кода (весь дифф 005 против 004-основы): безопасность сокета (права, uid, длина запроса), путь записи (нет SQL мимо операций), откат пакета, утечки сессий; находки — исполнителю; после правок — затронутые тесты
 - [ ] T069 Полный прогон один раз на iMac: `swift test --jobs 4` всех модулей, UI-тесты `scripts/imac/run-on-imac.sh uitest`, сценарий A (T067); красные — чинить и повторить затронутые
