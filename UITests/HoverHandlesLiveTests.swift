@@ -43,7 +43,7 @@ final class HoverHandlesLiveTests: XCTestCase {
                 let point = CGPoint(x: x + CGFloat(step) * 10, y: y + CGFloat(step % 3 - 1) * 3)
                 origin.withOffset(CGVector(dx: point.x - window.frame.minX, dy: point.y - window.frame.minY)).hover()
                 let current = window.screenshot()
-                let diff = HoverFlickerProbeTests.changedPixels(baseline, current, rect: region, window: window.frame)
+                let diff = HoverScreenshotComparison.changedPixels(baseline, current, rect: region, window: window.frame)
                 print("NATIVE-SLOW \(name) step=\(step) pixels=\(diff) handle=\(app.blockDragHandle.frame)")
                 XCTAssertEqual(diff, 0, "Наведение изменило текст \(name), шаг \(step)")
                 XCTAssertEqual(app.blockDragHandle.frame.minY, handle.minY, accuracy: 1)
@@ -57,7 +57,7 @@ final class HoverHandlesLiveTests: XCTestCase {
             }
             origin.withOffset(CGVector(dx: x - window.frame.minX, dy: y - window.frame.minY)).doubleClick()
             let selected = window.screenshot()
-            let control = HoverFlickerProbeTests.changedPixels(baseline, selected, rect: region, window: window.frame)
+            let control = HoverScreenshotComparison.changedPixels(baseline, selected, rect: region, window: window.frame)
             print("NATIVE-CONTROL \(name) pixels=\(control)")
             XCTAssertGreaterThan(control, 0, "Сравниваемая область не увидела выделение слова")
             app.pageTitle.click()
