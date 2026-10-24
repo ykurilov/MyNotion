@@ -35,7 +35,7 @@ public enum WindowJSON {
     public static func encode(_ window: WindowInfo) -> ControlJSON {
         [
             "index": .number(Double(window.index)), "front": .bool(window.isFront), "canGoBack": .bool(window.canGoBack),
-            "canGoForward": .bool(window.canGoForward), "busy": .bool(window.isBusy),
+            "canGoForward": .bool(window.canGoForward), "canReopenTab": .bool(window.canReopenTab), "busy": .bool(window.isBusy),
             "tabs": .array(window.tabs.map { tab in
                 ["index": .number(Double(tab.index)), "pageId": ControlJSON(tab.pageId), "title": .string(tab.title),
                  "selected": .bool(tab.isSelected)]

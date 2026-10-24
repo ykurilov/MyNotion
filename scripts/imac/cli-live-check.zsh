@@ -5,7 +5,8 @@
 #   3. `mynotion page tree` → `not_implemented` (код выхода 4); права сокета 0600;
 #   4. память и процессор в покое с открытым сокетом против сборки 004 (CLI_BASE — папка исходников 004 на iMac);
 #   5. базы (этап 4): `db rows` на «Задачах» 10 000 эталона 004 ≤ 150 мс; шаг 7 сценария A и снимок окна с той же базой.
-# Итоги — в build/cli-live/summary.txt.
+#   6. окно (этап 6): `cli-live-window.zsh` — open, вкладки, назад/вперёд, фокус без `--activate`, снимок шага 4 сценария A.
+# Итоги — в build/cli-live/summary.txt (окно — ещё и в build/cli-live-window/).
 set -uo pipefail
 zmodload zsh/datetime  # EPOCHREALTIME
 source ${0:A:h}/lib.sh
@@ -145,6 +146,10 @@ kill $pid; while kill -0 $pid 2>/dev/null; do sleep 0.2; done
 open -W -g -n $APP --args --database $dbdir/MyNotion.sqlite --relations-demo --relations-demo-open Спринт \
   --window-snapshot $out/db-sprint-window.png
 check "снимок окна «Спринт»" "[[ -s $out/db-sprint-window.png ]]"
+
+# Этап 6 (окно): отдельный сценарий на той же сборке.
+APP=$APP zsh ${0:A:h}/cli-live-window.zsh | tee -a $summary
+(( ${pipestatus[1]} )) && failed=1
 
 (( failed )) && note "ИТОГ: есть провалы" || note "ИТОГ: всё прошло"
 exit $failed
