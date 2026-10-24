@@ -316,6 +316,13 @@ final class BlockHandleButton: NSView {
 extension PageTextView {
     // MARK: Ручки блока
 
+    public override func resetCursorRects() {
+        // У NSTextView есть собственный системный выбор I-beam, независимый от mouseMoved.
+        // Наша текстовая колонка начинается ниже cover/header и правее gutter ручек.
+        let rect = textPointerRect.intersection(visibleRect)
+        if !rect.isEmpty { addCursorRect(rect, cursor: .iBeam) }
+    }
+
     public override func updateTrackingAreas() {
         super.updateTrackingAreas()
         for area in trackingAreas where area.owner === self &&
