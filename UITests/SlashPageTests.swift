@@ -27,7 +27,7 @@ final class SlashPageTests: XCTestCase {
 
         // Открыта новая подстраница, курсор в названии.
         let breadcrumb = app.staticTexts["page-breadcrumb"]
-        XCTAssertTrue(waitUntil { app.buttons["breadcrumb-ancestor"].label == "Проекты" && breadcrumb.exists },
+        XCTAssertTrue(waitUntil { app.buttons["breadcrumb-ancestor"].label == "Проекты" && (breadcrumb.value as? String ?? breadcrumb.label) == "План" },
                       "Подстраница не открылась: \(breadcrumb.label)")
         app.typeText("План")
         XCTAssertTrue(row(app, "План").waitForExistence(timeout: 5), "В дереве нет «План»")

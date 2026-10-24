@@ -202,6 +202,39 @@ func activate() {
     write("front=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "?") pid=\(app.processIdentifier)")
 }
 
+/// Снимок полосы пути: окно MyNotion по номеру окна, рука на крошке видна в подсветке.
+func saveTopBarShot(window: CGRect, name: String) {
+    let rect = CGRect(x: window.minX, y: window.minY, width: window.width, height: 80)
+    guard let image = CGWindowListCreateImage(rect, .optionOnScreenOnly, kCGNullWindowID, [.bestResolution]) else {
+        write("shot: не удалось снять \(name)"); return
+    }
+    let url = URL(fileURLWithPath: logPath).deletingLastPathComponent().appendingPathComponent("\(name).png")
+    let rep = NSBitmapImageRep(cgImage: image)
+    try? rep.representation(using: .png, properties: [:])?.write(to: url)
+    write("shot: \(url.path)")
+}
+
+/// Крошки пути над страницей: каждый предок и «…» — рука в середине и у краёв, как у кнопок панели.
+func runBreadcrumbs(window: CGRect) -> Bool {
+    let hand = everywhere(["HAND"])
+    let ancestors = find("breadcrumb-ancestor").compactMap(frame).filter { $0.width > 0 }.sorted { $0.minX < $1.minX }
+    let more = find("breadcrumb-more").compactMap(frame).filter { $0.width > 0 }
+    let current = visibleFrame("page-breadcrumb")
+    write("breadcrumbs: ancestors=\(ancestors) more=\(more) current=\(String(describing: current))")
+    guard !ancestors.isEmpty, !more.isEmpty else { write("FAIL: в пути нет нажимаемых предков или «…» (AX)"); return false }
+    glide(to: CGPoint(x: window.midX, y: window.minY + 4), speed: 600)
+    for (index, crumb) in (ancestors + more).enumerated() {
+        let inner = crumb.insetBy(dx: 3, dy: 3)
+        let points = [CGPoint(x: crumb.midX, y: crumb.midY), CGPoint(x: inner.minX, y: crumb.midY), CGPoint(x: inner.maxX, y: crumb.midY)]
+        for (n, point) in points.enumerated() {
+            glide(to: point, speed: 250)
+            segment("breadcrumb-\(index)-\(n)", hand) { rest(0.8) }
+            if index == 0, n == 0 { saveTopBarShot(window: window, name: "breadcrumbs-hover") }
+        }
+    }
+    return true
+}
+
 func runPage() -> Bool {
     let hand = everywhere(["HAND"])
     guard let window = (attribute(axApp, kAXWindowsAttribute) as [AXUIElement]?)?.first, let windowFrame = frame(of: window),
@@ -210,7 +243,7 @@ func runPage() -> Bool {
     else { write("FAIL: не нашёл окно, обложку, иконку, название или строки H1/абзаца (AX)"); return false }
     write("window=\(windowFrame) cover=\(cover) icon=\(icon) title=\(title) h1=\(h1) paragraph=\(paragraph)")
     let column = CGRect(x: title.minX, y: cover.maxY, width: title.width, height: paragraph.maxY + 40 - cover.maxY)
-    var ok = true
+    var ok = runBreadcrumbs(window: windowFrame)
 
     // Вход в окно сверху, как рукой; кнопки обложки видны при наведении на неё.
     glide(to: CGPoint(x: windowFrame.midX, y: windowFrame.minY + 4), speed: 600)

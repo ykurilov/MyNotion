@@ -8,6 +8,7 @@
 # both — page и window. inactive — page и затем окно MyNotion позади другого приложения.
 # PROBE_MAX_X / PROBE_MAX_Y (экранные точки) — window проходит только часть окна.
 #
+# Над страницей путь из 4 предков: проба водит мышь по каждой крошке и по «…», ожидается HAND, плюс снимок build/real-cursor/breadcrumbs-hover.png.
 # 1. Release-сборка, как у Юрия. 2. База с образцом: обложка gradients_3, иконка 📘, название, H1, абзац.
 # 3. Приложение запускается обычным `open`, окно впереди. 4. real-cursor-probe ведёт мышь событиями
 # CGEvent .mouseMoved и каждые 5 мс читает системный указатель. Журнал и итог — build/real-cursor/<режим>.log.
@@ -43,6 +44,15 @@ for _ in {1..100}; do
   sleep 0.2
 done
 sleep 1; quit_ours; sleep 1
+# Образец лежит глубоко (4 предка с длинными названиями): путь сворачивается «Дом / … / Отчёты / образец»,
+# в полосе есть и нажимаемые предки, и «…».
+parent=
+for title in "Дом, в котором живут все заметки семьи" "Проекты на ближайший год и дальше" "Работа над приложением заметок" "Отчёты о скорости и памяти приложения"; do
+  id=$(uuidgen)
+  sqlite3 $DB "INSERT INTO page (id, title, icon, parentId, sortKey, createdAt, updatedAt, fieldClocks) SELECT '$id', '$title', NULL, $( [[ -n $parent ]] && print "'$parent'" || print NULL ), 'a$(printf %02d ${#id})$RANDOM', createdAt, updatedAt, fieldClocks FROM page WHERE title='MyNotion — образец'"
+  parent=$id
+done
+sqlite3 $DB "UPDATE page SET parentId='$parent' WHERE title='MyNotion — образец'"
 sqlite3 $DB "UPDATE page SET cover='{\"source\":{\"gallery\":\"gradients_3\"},\"offset\":0.5}' WHERE title='MyNotion — образец'"
 [[ $(sqlite3 $DB "SELECT icon IS NOT NULL AND cover IS NOT NULL FROM page WHERE title='MyNotion — образец'") == 1 ]] \
   || fail "Образец без иконки или обложки"
