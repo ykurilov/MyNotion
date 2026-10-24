@@ -337,6 +337,9 @@ extension PageTextView {
     }
 
     public override func cursorUpdate(with event: NSEvent) {
+        // NSTextView регистрирует I-beam и над обложкой. Её собственный cursorUpdate
+        // уже выбрал arrow/openHand; родитель не должен менять этот выбор.
+        if let cover = coverSlot.view, cover.frame.contains(convert(event.locationInWindow, from: nil)) { return }
         if textPointerRect.contains(convert(event.locationInWindow, from: nil)) {
             updatePointer(atWindowPoint: event.locationInWindow)
         } else {
