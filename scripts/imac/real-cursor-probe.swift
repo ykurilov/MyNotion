@@ -203,6 +203,56 @@ func activate() {
     write("front=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "?") pid=\(app.processIdentifier)")
 }
 
+/// Снимок всего экрана через CuaDriver (screencapture по SSH видит только обои); пишет PNG рядом с журналом.
+/// CuaDriver пишет файлы только в домашнюю папку, поэтому снимок сначала там, потом копия.
+func saveScreenShot(name: String) {
+    let shots = NSHomeDirectory() + "/work/shots"
+    try? FileManager.default.createDirectory(atPath: shots, withIntermediateDirectories: true)
+    let temp = "\(shots)/\(name).png", target = URL(fileURLWithPath: logPath).deletingLastPathComponent().appendingPathComponent("\(name).png")
+    let task = Process()
+    task.executableURL = URL(fileURLWithPath: NSHomeDirectory() + "/.local/bin/cua-driver")
+    task.arguments = ["call", "get_desktop_state", "{\"screenshot_out_file\":\"\(temp)\"}"]
+    task.standardOutput = FileHandle.nullDevice
+    try? task.run(); task.waitUntilExit()
+    try? FileManager.default.removeItem(at: target)
+    try? FileManager.default.copyItem(atPath: temp, toPath: target.path)
+    write("shot: \(target.path) exists=\(FileManager.default.fileExists(atPath: target.path))")
+}
+
+/// Крошки пути над страницей: каждый предок и «…» — рука в середине и у краёв, как у кнопок панели.
+func runBreadcrumbs(window: CGRect) -> Bool {
+    let hand = everywhere(["HAND"])
+    let ancestors = find("breadcrumb-ancestor").compactMap(frame).filter { $0.width > 0 }.sorted { $0.minX < $1.minX }
+    let more = find("breadcrumb-more").compactMap(frame).filter { $0.width > 0 }
+    let current = visibleFrame("page-breadcrumb")
+    write("breadcrumbs: ancestors=\(ancestors) more=\(more) current=\(String(describing: current))")
+    guard !ancestors.isEmpty, !more.isEmpty else { write("FAIL: в пути нет нажимаемых предков или «…» (AX)"); return false }
+    glide(to: CGPoint(x: window.midX, y: window.minY + 4), speed: 600)
+    // Где у каждой крошки кончается рука: проход шагом 1 пт от -8 до +8 пт за краями рамки AX.
+    for (index, crumb) in (ancestors + more).enumerated() {
+        let y = crumb.midY
+        glide(to: CGPoint(x: crumb.minX - 8, y: y), speed: 400); rest(0.1, jitter: false)
+        var spans: [String] = [], last = ""
+        for step in 0...Int(crumb.width + 16) {
+            let x = crumb.minX - 8 + Double(step)
+            post(CGPoint(x: x, y: y)); usleep(40_000)
+            let name = currentCursorName()
+            if name != last { spans.append("\(name)@\(Int(x - crumb.minX))"); last = name }
+        }
+        write("scan крошка \(index) (ширина \(Int(crumb.width))): смены указателя от левого края рамки: " + spans.joined(separator: " "))
+    }
+    for (index, crumb) in (ancestors + more).enumerated() {
+        let inner = crumb.insetBy(dx: 3, dy: 3)
+        let points = [CGPoint(x: crumb.midX, y: crumb.midY), CGPoint(x: inner.minX, y: crumb.midY), CGPoint(x: inner.maxX, y: crumb.midY)]
+        for (n, point) in points.enumerated() {
+            glide(to: point, speed: 250)
+            segment("breadcrumb-\(index)-\(n)", hand) { rest(0.8) }
+            if index == 0, n == 0 { saveScreenShot(name: "breadcrumbs-hover") }
+        }
+    }
+    return true
+}
+
 func runPage() -> Bool {
     let hand = everywhere(["HAND"])
     guard let window = (attribute(axApp, kAXWindowsAttribute) as [AXUIElement]?)?.first, let windowFrame = frame(of: window),
@@ -211,7 +261,7 @@ func runPage() -> Bool {
     else { write("FAIL: не нашёл окно, обложку, иконку, название или строки H1/абзаца (AX)"); return false }
     write("window=\(windowFrame) cover=\(cover) icon=\(icon) title=\(title) h1=\(h1) paragraph=\(paragraph)")
     let column = CGRect(x: title.minX, y: cover.maxY, width: title.width, height: paragraph.maxY + 40 - cover.maxY)
-    var ok = true
+    var ok = runBreadcrumbs(window: windowFrame)
 
     // Вход в окно сверху, как рукой; кнопки обложки видны при наведении на неё.
     glide(to: CGPoint(x: windowFrame.midX, y: windowFrame.minY + 4), speed: 600)
