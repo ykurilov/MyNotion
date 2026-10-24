@@ -3,10 +3,11 @@
 // молча выбрасывает события. Мышь ведётся плавно, шагом 8 мс, с остановками и дрожанием на месте;
 // системный указатель (NSCursor.currentSystem) читается каждые 5 мс в этом же процессе.
 //
-//   real-cursor-probe <pid приложения> <журнал> [page|inactive|window]
+//   real-cursor-probe <pid приложения> <журнал> [page|inactive|window|foreign]
 //
 // page     — страница: обложка, иконка, название, H1, абзац, ручки ⋮⋮ и +; итог PASS/FAIL по ожиданиям.
 // inactive — то же, затем те же полосы, когда впереди другое приложение (окно MyNotion видно, но не активно).
+// foreign  — эталон: чужое приложение (Chrome со страницей текста и ссылки), активное и позади другого.
 // window   — обход всего окна по сетке: для каждого места — элемент под мышью (AX) и указатель; итог — список,
 //            FAIL — если у нажимаемого (включённые кнопки, строки и названия в дереве) больше всего стрелки.
 import AppKit
@@ -14,7 +15,7 @@ import ApplicationServices
 
 setvbuf(stdout, nil, _IOLBF, 0)
 let args = CommandLine.arguments
-guard args.count >= 3, let pid = pid_t(args[1]) else { print("usage: real-cursor-probe <pid> <log> [page|inactive|window]"); exit(2) }
+guard args.count >= 3, let pid = pid_t(args[1]) else { print("usage: real-cursor-probe <pid> <log> [page|inactive|window|foreign]"); exit(2) }
 let logPath = args[2], mode = args.count > 3 ? args[3] : "page"
 _ = NSApplication.shared
 
@@ -285,20 +286,7 @@ func runPage() -> Bool {
     segment("h1-long-rest-text-focused", everywhere(["IBEAM"])) { rest(3) }
     guard mode == "inactive" else { return ok }
 
-    // Окно MyNotion видно, но впереди другое приложение (так Юрий работает рядом с Paseo):
-    // впереди становится сам probe с окошком 1×1 в углу экрана — оно ничего не заслоняет.
-    DispatchQueue.main.sync {
-        NSApplication.shared.setActivationPolicy(.regular)
-        NSApp.finishLaunching()
-        let corner = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1, height: 1), styleMask: .borderless, backing: .buffered, defer: false)
-        corner.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-    }
-    for _ in 0..<30 where NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier { usleep(100_000) }
-    let front = NSWorkspace.shared.frontmostApplication
-    write("inactive: front=\(front?.bundleIdentifier ?? front?.localizedName ?? "?")")
-    if front?.processIdentifier == app.processIdentifier { write("FAIL: MyNotion осталась впереди, неактивное окно не проверено"); return false }
-    if let cover = foreignTopWindow(at: CGPoint(x: h1.midX, y: h1.midY), mainFrame: windowFrame) { write("FAIL: H1 заслонено: \(cover)"); return false }
+    guard bringProbeToFront(checking: [CGPoint(x: h1.midX, y: h1.midY)], windowFrame: windowFrame) else { return false }
     for (index, (name, y)) in levels.dropFirst().enumerated() {
         let from = index % 2 == 0 ? column.minX + 4 : column.maxX - 4, to = index % 2 == 0 ? column.maxX - 4 : column.minX + 4
         glide(to: CGPoint(x: from, y: y), speed: 500)
@@ -310,6 +298,50 @@ func runPage() -> Bool {
     glide(to: CGPoint(x: h1.minX + 80, y: h1.midY))
     segment("inactive-h1-long-rest", everywhere(["IBEAM"])) { rest(3) }
     return ok
+}
+
+/// Окно приложения видно, но впереди другое приложение (так Юрий работает рядом с Paseo):
+/// впереди становится сам probe с окошком 1×1 в углу экрана — оно ничего не заслоняет.
+func bringProbeToFront(checking points: [CGPoint], windowFrame: CGRect) -> Bool {
+    DispatchQueue.main.sync {
+        NSApplication.shared.setActivationPolicy(.regular)
+        NSApp.finishLaunching()
+        let corner = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1, height: 1), styleMask: .borderless, backing: .buffered, defer: false)
+        corner.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+    for _ in 0..<30 where NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier { usleep(100_000) }
+    let front = NSWorkspace.shared.frontmostApplication
+    write("inactive: front=\(front?.bundleIdentifier ?? front?.localizedName ?? "?")")
+    if front?.processIdentifier == app.processIdentifier { write("FAIL: приложение осталось впереди, неактивное окно не проверено"); return false }
+    for point in points {
+        if let cover = foreignTopWindow(at: point, mainFrame: windowFrame) { write("FAIL: (\(Int(point.x)),\(Int(point.y))) заслонено: \(cover)"); return false }
+    }
+    return true
+}
+
+/// Эталон: чужое приложение (Chrome со страницей из background-cursor-reference.zsh — сверху сплошной текст,
+/// снизу ссылка во всю ширину). Ставит ли оно I-beam и руку, когда впереди другое приложение.
+func runForeign() -> Bool {
+    guard let window = (attribute(axApp, kAXWindowsAttribute) as [AXUIElement]?)?.first, let windowFrame = frame(of: window)
+    else { write("FAIL: нет окна"); return false }
+    write("window=\(windowFrame)")
+    let text = CGPoint(x: windowFrame.midX, y: windowFrame.minY + windowFrame.height * 0.4)
+    let link = CGPoint(x: windowFrame.midX, y: windowFrame.minY + windowFrame.height * 0.85)
+    glide(to: text, speed: 600); segment("active-text", everywhere(["IBEAM"])) { rest(1.5) }
+    glide(to: link); segment("active-link", everywhere(["HAND"])) { rest(1.5) }
+    guard bringProbeToFront(checking: [text, link], windowFrame: windowFrame) else { return false }
+    glide(to: text); segment("inactive-text", everywhere(["IBEAM"])) { rest(2) }
+    glide(to: link); segment("inactive-link", everywhere(["HAND"])) { rest(2) }
+    glide(to: text); segment("inactive-text-back", everywhere(["IBEAM"])) { rest(2) }
+    // Окно с неизвестной раскладкой (Notion): сетка позади другого приложения — ставит ли оно хоть где-то не стрелку.
+    let grid = windowFrame.insetBy(dx: 40, dy: 60)
+    segment("inactive-grid", everywhere(["IBEAM", "HAND"])) {
+        for y in stride(from: grid.minY, through: grid.maxY, by: grid.height / 6) {
+            for x in stride(from: grid.minX, through: grid.maxX, by: grid.width / 8) { glide(to: CGPoint(x: x, y: y), speed: 1200); rest(0.25) }
+        }
+    }
+    return true
 }
 
 /// Обход окна по сетке: в каждой точке — остановка с дрожанием, элемент под мышью (AX) и все указатели за стоянку.
@@ -379,7 +411,7 @@ RunLoop.main.add(sampler, forMode: .common)
 
 Thread.detachNewThread {
     activate()
-    let ok = mode == "window" ? runWindow() : runPage()
+    let ok = mode == "window" ? runWindow() : mode == "foreign" ? runForeign() : runPage()
     DispatchQueue.main.async {
         sampler.invalidate()
         let samples = recorder.snapshot()
