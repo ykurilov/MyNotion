@@ -77,6 +77,9 @@ final class TestHost: ControlHost {
     var now: Date { clock.now }
     private(set) var treeChanges: [Set<UUID>] = []
     private(set) var directWrites: [Set<UUID>] = []
+    /// Иконка и обложка идут лёгким путём окна: страница не перечитывается, курсор Юрия остаётся на месте.
+    private(set) var iconChanges: [UUID] = []
+    private(set) var appearanceChanges: [UUID] = []
 
     init() throws {
         folder = try TemporaryFolder()
@@ -89,6 +92,8 @@ final class TestHost: ControlHost {
     }
 
     func treeDidChange(_ pageIds: Set<UUID>) { treeChanges.append(pageIds) }
+    func iconDidChange(_ pageId: UUID) { iconChanges.append(pageId) }
+    func appearanceDidChange(_ pageId: UUID) { appearanceChanges.append(pageId) }
     func refreshAfterDirectWrite(pages: Set<UUID>) { directWrites.append(pages) }
 
     /// Страница с абзацами.

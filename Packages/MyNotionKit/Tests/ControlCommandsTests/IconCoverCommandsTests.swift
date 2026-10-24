@@ -78,7 +78,8 @@ import Testing
 
     @Test func iconIsOneUndoStepAndTellsTheWindow() async throws {
         await run("page.icon", ["emoji": "🚀"])
-        #expect(host.treeChanges.contains { $0.contains(page.id) })
+        #expect(host.iconChanges == [page.id])
+        #expect(host.treeChanges.isEmpty, "страница не перечитывается: иначе курсор Юрия сбрасывается")
         executor.lastUndoManager?.undo()
         #expect(try current().icon == nil)
         executor.lastUndoManager?.redo()
@@ -179,7 +180,8 @@ import Testing
 
     @Test func coverIsOneUndoStepAndTellsTheWindow() async throws {
         await run("page.cover", ["gallery": "solid_red", "offset": 0.1])
-        #expect(host.treeChanges.contains { $0.contains(page.id) })
+        #expect(host.appearanceChanges == [page.id])
+        #expect(host.treeChanges.isEmpty, "страница не перечитывается: иначе курсор Юрия сбрасывается")
         executor.lastUndoManager?.undo()
         #expect(try current().cover == nil)
         executor.lastUndoManager?.redo()

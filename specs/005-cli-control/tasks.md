@@ -109,16 +109,16 @@ description: "Задачи: управление MyNotion из командно�
 
 ### Тесты (до кода)
 
-- [ ] T037 [P] [US2] Перенести тесты правил отступа и переноса из `PK/Tests/PageEditorTests/` в `PK/Tests/NotesCoreTests/BlockStructureTests.swift` без изменения проверок; должны упасть, пока функций нет в NotesCore
-- [ ] T038 [P] [US2] `PK/Tests/ControlCommandsTests/BlockCommandsTests.swift`: `block kinds`; `insert` каждого вида из contracts/block-json.md в каждую позицию (`--first/--last/--after/--inside`); `update` текста (Markdown строки и `rich`), свойств вида, смена вида; `move` с вложенными; `indent`/`outdent` по правилам окна (заголовок, предел 8); `check`/`uncheck`; `expand`/`collapse`; `delete`; `move-to-page`; неизвестный вид → `invalid_argument` со списком; `tableRow` на вход → `invalid_argument`
-- [ ] T039 [P] [US2] `PK/Tests/ControlCommandsTests/IconCoverCommandsTests.swift`: `page icon` эмодзи и `--remove`; `page cover --gallery` (неизвестное имя → список), `--file` (вложение), `--offset`, `--remove`, `--list`
+- [x] T037 [P] [US2] Перенести тесты правил отступа и переноса из `PK/Tests/PageEditorTests/` в `PK/Tests/NotesCoreTests/BlockStructureTests.swift` без изменения проверок; должны упасть, пока функций нет в NotesCore
+- [x] T038 [P] [US2] `PK/Tests/ControlCommandsTests/BlockCommandsTests.swift`: `block kinds`; `insert` каждого вида из contracts/block-json.md в каждую позицию (`--first/--last/--after/--inside`); `update` текста (Markdown строки и `rich`), свойств вида, смена вида; `move` с вложенными; `indent`/`outdent` по правилам окна (заголовок, предел 8); `check`/`uncheck`; `expand`/`collapse`; `delete`; `move-to-page`; неизвестный вид → `invalid_argument` со списком; `tableRow` на вход → `invalid_argument`
+- [x] T039 [P] [US2] `PK/Tests/ControlCommandsTests/IconCoverCommandsTests.swift`: `page icon` эмодзи и `--remove`; `page cover --gallery` (неизвестное имя → список), `--file` (вложение), `--offset`, `--remove`, `--list`
 
 ### Код
 
-- [ ] T040 [US2] Перенести `indenting`, `moving`, `movedGroup`, `subtreeEnd`, `headingIndent` в `PK/Sources/NotesCore/Document/BlockStructure.swift` (публичные); `PK/Sources/PageEditor/BlockMoveController.swift` вызывает их (T037)
-- [ ] T041 [US2] `PK/Sources/ControlCommands/Handlers/BlockHandlers.swift`: правки через `OpenDocuments` → `PageDocument.apply/replaceBlocks/setText`, правила из `BlockStructure`, перенос на страницу — `PageTreeOperations.moveBlocks`, иконка и обложка — `setIcon`, `setCover`, `setCoverOffset` (T038, T039)
-- [ ] T042 [US2] `Tools/mynotion-skill/references/blocks.md`: прочитать блоки JSON-ом, вставить после, поправить текст, отметить задачи, перенести; иконка и обложка; примеры выполнены на iMac
-- [ ] T043 [US2] Затронутые тесты зелёные (`NotesCoreTests`, `PageEditorTests`, `ControlCommandsTests`); живая проверка шагов 5–6 сценария A со снимком окна (правка видна ≤ 1 с, курсор Юрия в другом блоке не сбит); замер запуска и памяти в покое против прошлого этапа (quickstart, «Замеры», конституция II); коммит
+- [x] T040 [US2] Перенести `indenting`, `moving`, `movedGroup`, `subtreeEnd`, `headingIndent` в `PK/Sources/NotesCore/Document/BlockStructure.swift` (публичные); `PK/Sources/PageEditor/BlockMoveController.swift` вызывает их (T037)
+- [x] T041 [US2] `PK/Sources/ControlCommands/Handlers/BlockHandlers.swift`: правки через `OpenDocuments` → `PageDocument.apply/replaceBlocks/setText`, правила из `BlockStructure`, перенос на страницу — `PageTreeOperations.moveBlocks`, иконка и обложка — `setIcon`, `setCover`, `setCoverOffset` (T038, T039)
+- [x] T042 [US2] `Tools/mynotion-skill/references/blocks.md`: прочитать блоки JSON-ом, вставить после, поправить текст, отметить задачи, перенести; иконка и обложка; примеры выполнены на iMac
+- [x] T043 [US2] Затронутые тесты зелёные (`NotesCoreTests`, `PageEditorTests`, `ControlCommandsTests`); живая проверка шагов 5–6 сценария A со снимком окна (правка видна ≤ 1 с, курсор Юрия в другом блоке не сбит); замер запуска и памяти в покое против прошлого этапа (quickstart, «Замеры», конституция II); коммит
 
 ---
 

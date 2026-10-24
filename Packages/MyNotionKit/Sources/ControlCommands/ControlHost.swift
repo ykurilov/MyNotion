@@ -21,6 +21,10 @@ public protocol ControlHost: AnyObject {
     var now: Date { get }
     /// Операция команды поменяла страницы дерева: панели и окна перечитывают их (как после правки в окне).
     func treeDidChange(_ pageIds: Set<UUID>)
+    /// Иконка страницы сменилась: дерево и окна с этой страницей берут новую иконку, страница не перечитывается (курсор на месте).
+    func iconDidChange(_ pageId: UUID)
+    /// Обложка страницы сменилась: окна подставляют записанное, страница не перечитывается (курсор на месте).
+    func appearanceDidChange(_ pageId: UUID)
     /// Запись прошла мимо открытых документов (Markdown целиком, импорт): шаг «после синхронизации» —
     /// `openDocuments.applyExternalChanges(toPages:)` и обновление окон.
     func refreshAfterDirectWrite(pages: Set<UUID>)
@@ -39,4 +43,10 @@ public struct AppInfo: Sendable, Hashable {
         self.databasePath = databasePath
         self.socketPath = socketPath
     }
+}
+
+extension ControlHost {
+    /// Хост без лёгкого пути (тесты): как любая правка дерева.
+    public func iconDidChange(_ pageId: UUID) { treeDidChange([pageId]) }
+    public func appearanceDidChange(_ pageId: UUID) { treeDidChange([pageId]) }
 }

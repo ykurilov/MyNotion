@@ -33,6 +33,14 @@ final class AppControlHost: ControlHost {
         library.treeDidChange(pageIds)
     }
 
+    func iconDidChange(_ pageId: UUID) {
+        library.iconDidChange(pageId)
+    }
+
+    func appearanceDidChange(_ pageId: UUID) {
+        library.appearanceDidChange(pageId)
+    }
+
     /// Как после правок с другого Mac: открытые страницы принимают записанное, дерево, таблицы и окна перечитываются.
     func refreshAfterDirectWrite(pages: Set<UUID>) {
         library.openDocuments.applyExternalChanges(toPages: pages.intersection(library.openDocuments.openPageIds))
