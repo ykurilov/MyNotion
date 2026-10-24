@@ -50,6 +50,8 @@ public final class GridContent {
     /// Строки первого экрана, прочитанные на главном потоке поштучно, пока их порция читается фоном.
     private var looseRows: [Int: GridRow] = [:]
     private var loading: Set<Int> = []
+    /// Строки, перечитанные (правка ячейки), пока их порция читалась фоном: в пришедшей порции они устарели.
+    private var reloadedWhileLoading: [Int: Set<Int>] = [:]
     private var generation = 0
     /// Сколько порций прочитано на главном потоке (прокрутка обогнала чтение заранее) — для проб.
     public private(set) var synchronousLoads = 0
@@ -57,6 +59,8 @@ public final class GridContent {
     public private(set) var rowsReadOnMainThread = 0
     /// Порция пришла с очереди чтения: перерисовать её строки.
     public var onRowsLoaded: ((Range<Int>) -> Void)?
+    /// Для тестов: вызывается на очереди чтения, когда порция уже прочитана, но ещё не отдана сетке.
+    var afterBackgroundRead: (@Sendable () async -> Void)?
     /// У прочитанных строк высота не обычная (перенос текста): раскладку сетки — заново.
     public var onHeightsChange: (() -> Void)?
     /// Есть колонки с переносом текста.
@@ -98,6 +102,7 @@ public final class GridContent {
         chunks = [:]
         looseRows = [:]
         loading = []
+        reloadedWhileLoading = [:]
         heights = [:]
         generation += 1
     }
@@ -142,13 +147,22 @@ public final class GridContent {
         for chunk in first...last where chunks[chunk] == nil && !loading.contains(chunk) {
             loading.insert(chunk)
             let ids = idsOf(chunk)
-            let catalog = catalog, columns = columns, store = store, generation = generation
+            let catalog = catalog, columns = columns, store = store, generation = generation, afterRead = afterBackgroundRead
             Task.detached(priority: .userInitiated) {
                 let rows = try? Self.makeRows(ids, catalog: catalog, columns: columns, store: store)
+                await afterRead?()
                 await MainActor.run {
                     guard generation == self.generation else { return }
                     self.loading.remove(chunk)
-                    if self.chunks[chunk] == nil, let rows {
+                    let reloaded = self.reloadedWhileLoading.removeValue(forKey: chunk) ?? []
+                    if self.chunks[chunk] == nil, var rows {
+                        for index in reloaded {
+                            let offset = index - chunk * Self.chunkSize
+                            guard offset < rows.count, let fresh = self.looseRows[index]
+                                    ?? (try? Self.makeRows([self.rowIds[index]], catalog: catalog, columns: columns, store: store).first)
+                            else { continue }
+                            rows[offset] = fresh
+                        }
                         self.chunks[chunk] = rows
                         self.dropLooseRows(of: chunk)
                         self.remember(heights: rows, from: chunk * Self.chunkSize)
@@ -170,6 +184,7 @@ public final class GridContent {
     /// Перечитать одну строку (правка ячейки).
     public func reloadRow(_ index: Int) {
         let chunk = index / Self.chunkSize
+        if loading.contains(chunk) { reloadedWhileLoading[chunk, default: []].insert(index) }
         if chunks[chunk] == nil, looseRows[index] != nil,
            let fresh = try? Self.makeRows([rowIds[index]], catalog: catalog, columns: columns, store: store).first {
             looseRows[index] = fresh
