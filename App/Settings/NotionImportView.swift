@@ -45,6 +45,8 @@ final class NotionImportController {
     @ObservationIgnored private let showBranch: @MainActor (UUID) -> Void
     @ObservationIgnored private var prepared: PreparedNotionExport?
     @ObservationIgnored private var task: Task<Void, Never>?
+    /// «Остановить» импорта командой `mynotion import notion` (005): сам импорт идёт в обработчике команды.
+    @ObservationIgnored private var stopCommandImport: (@MainActor () -> Void)?
 
     init(store: NotesStore, attachments: AttachmentStore? = nil, saveOpenPages: @escaping @MainActor () -> Bool,
          showBranch: @escaping @MainActor (UUID) -> Void) {
@@ -150,6 +152,28 @@ final class NotionImportController {
     func stop() {
         guard case .running = state else { return }
         task?.cancel()
+        stopCommandImport?()
+    }
+
+    // MARK: Импорт командой (005)
+
+    /// Импорт командой: та же карточка хода, меню «Импорт из Notion…» недоступно до конца.
+    func beginCommandImport(stop: @escaping @MainActor () -> Void) {
+        guard !isBusy else { return }
+        stopCommandImport = stop
+        state = .running(NotionImportProgress(phase: .reading, done: 0, total: 0))
+    }
+
+    func reportCommandImport(_ step: NotionImportProgress) {
+        guard stopCommandImport != nil else { return }
+        report(step)
+    }
+
+    /// Итог импорта командой получает агент: окно итога не открывается, страница Юрия остаётся на месте.
+    func endCommandImport() {
+        guard stopCommandImport != nil else { return }
+        stopCommandImport = nil
+        state = .idle
     }
 
     func dismiss() {

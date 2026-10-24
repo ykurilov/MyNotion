@@ -9,6 +9,7 @@
 #   6. окно (этап 6): `cli-live-window.zsh` — open, вкладки, назад/вперёд, фокус без `--activate`, снимок шага 4 сценария A.
 #   7. блоки и обложка (этап 3, шаги 5–6 сценария A): правка командой видна в окне ≤ 1 с, курсор в другом блоке на месте,
 #      снимки экрана build/cli-live/blocks-*.png. CLI_LIVE_ONLY=blocks — только этот шаг (после установки).
+#   8. импорт, выгрузка, синхронизация (этап 7): `cli-live-transfer.zsh` — шаг 12 сценария A, импорт фикстуры Notion.
 # Итоги — в build/cli-live/summary.txt (окно — ещё и в build/cli-live-window/).
 set -uo pipefail
 zmodload zsh/datetime  # EPOCHREALTIME
@@ -343,6 +344,9 @@ open -W -g -n $APP --args --database $libdir/MyNotion.sqlite --window-snapshot $
 check "снимок окна: избранное и вложения" "[[ -s $out/lib-window.png ]]"
 
 live_blocks
+# Этап 7 (импорт, выгрузка, синхронизация): отдельный сценарий на той же сборке.
+APP=$APP zsh ${0:A:h}/cli-live-transfer.zsh | tee -a $summary
+(( ${pipestatus[1]} )) && failed=1
 
 (( failed )) && note "ИТОГ: есть провалы" || note "ИТОГ: всё прошло"
 exit $failed

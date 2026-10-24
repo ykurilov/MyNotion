@@ -71,7 +71,17 @@ public struct MarkdownExporter: Sendable {
                           progress: progress)
     }
 
-    private func export(root: UUID?, into parentFolder: URL, baseName: String,
+    /// Одна страница (`mynotion export page`) — с подстраницами или без, в новой папке `<Страница>-выгрузка-<ГГГГ-ММ-ДД>`.
+    /// Файлы те же, что у этой ветки во всей выгрузке; ссылки на страницы вне неё — названиями, без пути.
+    public func exportPage(_ pageId: UUID, includingSubpages: Bool, into parentFolder: URL,
+                           progress: (@Sendable (MarkdownExportProgress) -> Void)? = nil) throws -> MarkdownExportResult {
+        let title: String
+        do { title = try store.page(pageId)?.title ?? "" } catch { throw MarkdownExportError.cannotRead(error.localizedDescription) }
+        return try export(root: pageId, includingSubpages: includingSubpages, into: parentFolder,
+                          baseName: ExportFileNames.baseName(forTitle: title) + "-выгрузка", progress: progress)
+    }
+
+    private func export(root: UUID?, includingSubpages: Bool = true, into parentFolder: URL, baseName: String,
                         progress: (@Sendable (MarkdownExportProgress) -> Void)?) throws -> MarkdownExportResult {
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: parentFolder.path, isDirectory: &isDirectory), isDirectory.boolValue else {
@@ -84,7 +94,9 @@ public struct MarkdownExporter: Sendable {
                 Set(try String.fetchAll(db, sql: "SELECT pageId FROM db_database").compactMap(UUID.init(uuidString:)))
             }
             // Одна база — только её ветка: читать всё дерево (десятки тысяч строк других баз) незачем.
-            var outlined = ExportPlan(pages: try root.map(store.branchOutline) ?? store.pageOutline(), databases: databases, root: root)
+            let pages = try root.map { includingSubpages ? try store.branchOutline($0) : try store.page($0).map { [$0] } ?? [] }
+                ?? store.pageOutline()
+            var outlined = ExportPlan(pages: pages, databases: databases, root: root)
             if root != nil {
                 let store = store
                 outlined.outsideTitle = { id in

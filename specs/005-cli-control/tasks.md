@@ -191,12 +191,12 @@ description: "Задачи: управление MyNotion из командно�
 
 ### Тесты (до кода)
 
-- [ ] T063 [P] [US6] `PK/Tests/ControlCommandsTests/TransferCommandsTests.swift`: `import notion` на фикстуре `NotionImportTests/Fixtures` — тот же результат и отчёт, что `NotionImporter.importExport`; ход строками `progress`; чтение во время импорта не ждёт; разрыв клиента — импорт доходит до конца; `export page` (с детьми и `--no-children`), `export all`, `db export` — те же файлы, что `MarkdownExporter`; `sync status` и `sync now` с подставной синхронизацией; выключенная синхронизация — `sync now` → понятная ошибка
+- [x] T063 [P] [US6] `PK/Tests/ControlCommandsTests/TransferCommandsTests.swift`: `import notion` на фикстуре `NotionImportTests/Fixtures` — тот же результат и отчёт, что `NotionImporter.importExport`; ход строками `progress`; чтение во время импорта не ждёт; разрыв клиента — импорт доходит до конца; `export page` (с детьми и `--no-children`), `export all`, `db export` — те же файлы, что `MarkdownExporter`; `sync status` и `sync now` с подставной синхронизацией; выключенная синхронизация — `sync now` → понятная ошибка
 
 ### Код
 
-- [ ] T064 [US6] `PK/Sources/ControlCommands/Handlers/TransferHandlers.swift` и `App/Control/AppTransferControl.swift` (контроллеры импорта и выгрузки приложения, `SyncController`) (T063)
-- [ ] T065 [US6] `Tools/mynotion-skill/references/transfer.md`; живая проверка шага 12 сценария A и импорта фикстуры на iMac; затронутые тесты зелёные; замер запуска и памяти в покое против прошлого этапа (quickstart, «Замеры», конституция II); коммит
+- [x] T064 [US6] `PK/Sources/ControlCommands/Handlers/TransferHandlers.swift` и `App/Control/AppTransferControl.swift` (контроллеры импорта и выгрузки приложения, `SyncController`) (T063)
+- [x] T065 [US6] `Tools/mynotion-skill/references/transfer.md`; живая проверка шага 12 сценария A и импорта фикстуры на iMac; затронутые тесты зелёные; замер запуска и памяти в покое против прошлого этапа (quickstart, «Замеры», конституция II); коммит
 
 ---
 

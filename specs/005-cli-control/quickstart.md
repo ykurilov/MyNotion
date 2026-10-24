@@ -117,3 +117,15 @@ scripts/imac/run-on-imac.sh lock -- zsh scripts/imac/cli-e2e.zsh
 | Процессор в покое | 0 % |
 
 Найдено проверкой: иконка и обложка командой перечитывали страницу целиком и сбрасывали курсор в начало. Теперь они идут тем же лёгким путём, что в окне (`ControlHost.iconDidChange` / `appearanceDidChange`).
+
+### Итоги этапа 7 — импорт, выгрузка, синхронизация (iMac, Release, 25.10.2026, `scripts/imac/cli-live-check.zsh` → `cli-live-transfer.zsh`)
+
+- Шаг 12: файлы `export page` совпадают с этой веткой в `export all` (`diff -r`). `--no-children` — один файл, `db export` — `Задачи.csv`. Папки `--to` нет — `file_not_found`, код 3.
+- Импорт фикстуры `synthetic-nested.zip` с `--parent Проекты`: ветка внутри «Проекты», ход строками `reading` и `writing` (`--human`). Повтор той же выгрузки — `previousImport` в ответе. Снимок окна `build/cli-live-transfer/import-window.png`: ветка в дереве, окна итога нет.
+- Синхронизация не включалась, сервер не трогался: `sync status` → `off`, `sync now` → `sync_disabled`, код 4. Живая синхронизация — тестами с подменой (`TransferCommandsTests`).
+
+| Что | Этап 7 | Этап 5 |
+|-----|--------|--------|
+| Запуск командой `page tree` | 1,40 с | 1,27 с |
+| Память в покое, пустая база, три запуска | 29 / 29 / 29 МБ | 30 / 30 / 30 МБ |
+| `db rows Задачи --limit 50`, медиана | 135 мс | 143 мс |
