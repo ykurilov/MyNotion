@@ -36,7 +36,7 @@ struct TextPointerCursorTests {
     }
 
     @Test("mouseMoved над ручкой не оставляет I-beam от текста")
-    func handleRestoresArrow() throws {
+    func handleRestoresPointingHand() throws {
         let fixture = try EditorFixture([.heading(1, "Заголовок")])
         let view = fixture.textView
         view.layoutSubtreeIfNeeded()
@@ -54,17 +54,17 @@ struct TextPointerCursorTests {
             modifierFlags: [], timestamp: 0, windowNumber: fixture.window.windowNumber,
             context: nil, eventNumber: 1, clickCount: 0, pressure: 0))
         view.mouseMoved(with: moved)
-        #expect(NSCursor.current == NSCursor.arrow, "Ручка унаследовала I-beam от текста после mouseMoved")
+        #expect(NSCursor.current == NSCursor.pointingHand, "Ручка унаследовала I-beam от текста после mouseMoved")
         let update = try #require(NSEvent.enterExitEvent(with: .cursorUpdate, location: location,
             modifierFlags: [], timestamp: 0, windowNumber: fixture.window.windowNumber,
             context: nil, eventNumber: 2, trackingNumber: 0, userData: nil))
         view.cursorUpdate(with: update)
-        #expect(NSCursor.current == NSCursor.arrow, "cursorUpdate родителя затёр стрелку ручки")
+        #expect(NSCursor.current == NSCursor.pointingHand, "cursorUpdate родителя затёр pointing hand ручки")
     }
 
 
-    @Test("Иконка и кнопка шапки не наследуют I-beam", arguments: [true, false])
-    func headerChromeRestoresArrow(icon: Bool) throws {
+    @Test("Иконка и кнопка шапки выбирают pointing hand", arguments: [true, false])
+    func headerChromeRestoresPointingHand(icon: Bool) throws {
         let fixture = try EditorFixture([.paragraph("Текст")], icon: "🥰")
         let header = fixture.textView.header
         let control: NSView
@@ -81,12 +81,12 @@ struct TextPointerCursorTests {
             context: nil, eventNumber: 1, trackingNumber: 0, userData: nil))
         NSCursor.iBeam.set()
         control.cursorUpdate(with: update)
-        #expect(NSCursor.current == NSCursor.arrow, "Шапка унаследовала I-beam")
+        #expect(NSCursor.current == NSCursor.pointingHand, "Шапка унаследовала I-beam")
     }
 
 
-    @Test("Родитель не подменяет курсор обложки на I-beam")
-    func coverCursorIsPreserved() throws {
+    @Test("Родитель сохраняет курсор обложки, её кнопки и перемещения", arguments: [0, 1, 2])
+    func coverCursorIsPreserved(mode: Int) throws {
         let fixture = try EditorFixture([.paragraph("Текст")], icon: "🥰")
         let view = fixture.textView
         let cover = NSView()
@@ -96,14 +96,15 @@ struct TextPointerCursorTests {
         let moved = try #require(NSEvent.mouseEvent(with: .mouseMoved, location: location,
             modifierFlags: [], timestamp: 0, windowNumber: fixture.window.windowNumber,
             context: nil, eventNumber: 1, clickCount: 0, pressure: 0))
-        NSCursor.arrow.set()
+        let cursor: NSCursor = mode == 0 ? .iBeam : mode == 1 ? .pointingHand : .openHand
+        cursor.set()
         view.mouseMoved(with: moved)
-        #expect(NSCursor.current == NSCursor.arrow, "mouseMoved родителя затёр курсор обложки")
+        #expect(NSCursor.current == cursor, "mouseMoved родителя затёр курсор обложки")
         let update = try #require(NSEvent.enterExitEvent(with: .cursorUpdate, location: location,
             modifierFlags: [], timestamp: 0, windowNumber: fixture.window.windowNumber,
             context: nil, eventNumber: 2, trackingNumber: 0, userData: nil))
         view.cursorUpdate(with: update)
-        #expect(NSCursor.current == NSCursor.arrow, "cursorUpdate родителя затёр курсор обложки")
+        #expect(NSCursor.current == cursor, "cursorUpdate родителя затёр курсор обложки")
     }
 
     @Test("Текстовый родитель не заменяет курсор разделителя колонок")

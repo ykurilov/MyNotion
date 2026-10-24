@@ -55,6 +55,11 @@ final class TextPointerCursorLiveTests: XCTestCase {
         // После успешной калибровки проверяем все области даже при ошибке одного control.
         // Ошибки остаются failures, но один gutter не скрывает результат cover/icon.
         continueAfterFailure = true
+        let hand = NSCursor.pointingHand
+        XCTAssertGreaterThan(hand.image.size.width, 0, "Pointing-hand reference image unavailable")
+        XCTAssertNotEqual(hand.hotSpot, beam.hotSpot)
+        let handShot = XCTAttachment(image: hand.image)
+        handShot.name = "cursor-reference-pointing-hand"; handShot.lifetime = .keepAlways; add(handShot)
         let sampler = TextCursorSampler(beam: beam)
         let timer = Timer(timeInterval: 0.01, repeats: true) { _ in MainActor.assumeIsolated { sampler.sample() } }
         RunLoop.main.add(timer, forMode: .common)
@@ -65,12 +70,46 @@ final class TextPointerCursorLiveTests: XCTestCase {
             XCTAssertEqual(cursor.hotSpot, expected.hotSpot, name)
             XCTAssertEqual(cursor.image.size, expected.image.size, name)
         }
+        func freshCursor() throws -> (CGPoint, CGSize) {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            process.arguments = ["-l", "JavaScript", "-e", "ObjC.import('AppKit'); var c=$.NSCursor.currentSystemCursor; JSON.stringify({x:c.hotSpot.x,y:c.hotSpot.y,w:c.image.size.width,h:c.image.size.height})"]
+            let output = Pipe(); process.standardOutput = output
+            try process.run()
+            let data = output.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            XCTAssertEqual(process.terminationStatus, 0)
+            let value = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Double])
+            return (CGPoint(x: try XCTUnwrap(value["x"]), y: try XCTUnwrap(value["y"])),
+                    CGSize(width: try XCTUnwrap(value["w"]), height: try XCTUnwrap(value["h"])))
+        }
+        func checkFresh(_ name: String, _ expected: NSCursor) throws {
+            let value = try freshCursor()
+            XCTAssertEqual(app.state, .runningForeground, "Чтение курсора сменило активное приложение")
+            print("FRESH-SYSTEM-CURSOR \(name) timestamp=\(Date().timeIntervalSince1970) actual=\(value) expected=\(expected.hotSpot)/\(expected.image.size) runner=\(String(describing: NSCursor.currentSystem?.hotSpot))")
+            XCTAssertEqual(value.0, expected.hotSpot, name)
+            XCTAssertEqual(value.1, expected.image.size, name)
+        }
+        func checkControl(_ name: String, _ expected: NSCursor) throws {
+            let started = Date()
+            while Date().timeIntervalSince(started) < 1 {
+                let value = try freshCursor()
+                if value.0 == expected.hotSpot && value.1 == expected.image.size { break }
+                RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+            }
+            print("CURSOR-CONTROL-SETTLE \(name) elapsed=\(Date().timeIntervalSince(started))")
+            for sample in 0..<3 {
+                try checkFresh("\(name)-stable-\(sample)", expected)
+                RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+            }
+        }
         for (name, y) in [("h1", title.maxY + 42), ("paragraph", title.maxY + 90), ("empty", title.maxY + 130)] {
             let previousSamples = sampler.samples
             sampler.region = CGRect(x: title.minX, y: y - 10, width: title.width, height: 20)
             for step in 0..<12 {
                 hover(CGPoint(x: title.minX + 12 + CGFloat(step) * 8, y: y))
                 try check("\(name)-move-\(step)", beam)
+                try checkFresh("\(name)-move-\(step)", beam)
             }
             // Пока мышь стоит, ловим возврат стрелки после обновления tracking/cursor rects.
             for sample in 0..<20 {
@@ -81,16 +120,17 @@ final class TextPointerCursorLiveTests: XCTestCase {
             XCTAssertGreaterThan(sampler.samples - previousSamples, 0, "Фоновый сбор курсора не работал")
             XCTAssertEqual(sampler.wrong, 0, "Указатель менялся во время движения/остановки")
             sampler.region = nil
+            try checkFresh("\(name)-stopped", beam)
             let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
             shot.name = "text-cursor-\(name)"; shot.lifetime = .keepAlways; add(shot)
             if name != "empty" {
                 XCTAssertTrue(app.blockDragHandle.waitForExistence(timeout: 3))
                 let handle = app.blockDragHandle.frame
                 hover(CGPoint(x: handle.midX, y: handle.midY))
-                try check("\(name)-handle", arrow)
+                try checkControl("\(name)-handle", hand)
                 let add = app.descendants(matching: .any)["block-handle-add"].frame
                 hover(CGPoint(x: add.midX, y: add.midY))
-                try check("\(name)-add", arrow)
+                try checkControl("\(name)-add", hand)
             }
         }
         for identifier in ["page-cover", "page-icon"] {
@@ -101,7 +141,16 @@ final class TextPointerCursorLiveTests: XCTestCase {
             let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
             shot.name = "text-cursor-\(identifier)"; shot.lifetime = .keepAlways; add(shot)
             print("CURSOR-CONTROL \(identifier) frame=\(frame)")
-            try check(identifier, arrow)
+            try checkControl(identifier, identifier == "page-cover" ? beam : hand)
+            if identifier == "page-cover" {
+                for buttonId in ["change-page-cover", "reposition-page-cover"] {
+                    let button = app.descendants(matching: .any)[buttonId]
+                    XCTAssertTrue(button.waitForExistence(timeout: 3))
+                    let f = button.frame
+                    hover(CGPoint(x: f.midX, y: f.midY))
+                    try checkControl(buttonId, hand)
+                }
+            }
         }
     }
 }
