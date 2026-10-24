@@ -3,9 +3,10 @@
 # Выполняется НА iMac внутри `imac-run --gui` (в копии проекта):
 #
 #   imac-run --gui --no-fallback --no-setup --wait 3000 --fetch build/real-cursor -- \
-#     'zsh scripts/imac/real-cursor-check.zsh [page|window|both] [--skip-build]'
+#     'zsh scripts/imac/real-cursor-check.zsh [page|inactive|window|both] [--skip-build]'
 #
-# MN_CURSOR_TRACE=1 — приложение пишет временную трассу курсора в build/real-cursor/app-trace.log (если она встроена).
+# both — page и window. inactive — page и затем окно MyNotion позади другого приложения.
+# PROBE_MAX_X / PROBE_MAX_Y (экранные точки) — window проходит только часть окна.
 #
 # 1. Release-сборка, как у Юрия. 2. База с образцом: обложка gradients_3, иконка 📘, название, H1, абзац.
 # 3. Приложение запускается обычным `open`, окно впереди. 4. real-cursor-probe ведёт мышь событиями
@@ -47,8 +48,7 @@ sqlite3 $DB "UPDATE page SET cover='{\"source\":{\"gallery\":\"gradients_3\"},\"
   || fail "Образец без иконки или обложки"
 
 # Обычный запуск, как из Dock; окно на одном месте и одного размера.
-trace=(); [[ -n ${MN_CURSOR_TRACE:-} ]] && trace=(--env MYNOTION_CURSOR_TRACE=$OUT/app-trace.log)
-open -n $trace $APP --args --database $DB --appearance light "-NSWindow Frame pages-AppWindow-1" "156 76 1200 800 0 0 1512 952 "
+open -n $APP --args --database $DB --appearance light "-NSWindow Frame pages-AppWindow-1" "156 76 1200 800 0 0 1512 952 "
 for _ in {1..50}; do pgrep -f "$APP/Contents/MacOS/MyNotion" >/dev/null && break; sleep 0.2; done
 sleep 3
 

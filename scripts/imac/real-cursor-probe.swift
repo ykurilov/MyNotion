@@ -3,16 +3,18 @@
 // молча выбрасывает события. Мышь ведётся плавно, шагом 8 мс, с остановками и дрожанием на месте;
 // системный указатель (NSCursor.currentSystem) читается каждые 5 мс в этом же процессе.
 //
-//   real-cursor-probe <pid приложения> <журнал> [page|window]
+//   real-cursor-probe <pid приложения> <журнал> [page|inactive|window]
 //
-// page   — страница: обложка, иконка, название, H1, абзац, ручки ⋮⋮ и +; итог PASS/FAIL по ожиданиям.
-// window — обход всего окна по сетке: для каждого места — элемент под мышью (AX) и указатель; итог — список.
+// page     — страница: обложка, иконка, название, H1, абзац, ручки ⋮⋮ и +; итог PASS/FAIL по ожиданиям.
+// inactive — то же, затем те же полосы, когда впереди другое приложение (окно MyNotion видно, но не активно).
+// window   — обход всего окна по сетке: для каждого места — элемент под мышью (AX) и указатель; итог — список,
+//            FAIL — если у нажимаемого (включённые кнопки, строки и названия в дереве) больше всего стрелки.
 import AppKit
 import ApplicationServices
 
 setvbuf(stdout, nil, _IOLBF, 0)
 let args = CommandLine.arguments
-guard args.count >= 3, let pid = pid_t(args[1]) else { print("usage: real-cursor-probe <pid> <log> [page|window]"); exit(2) }
+guard args.count >= 3, let pid = pid_t(args[1]) else { print("usage: real-cursor-probe <pid> <log> [page|inactive|window]"); exit(2) }
 let logPath = args[2], mode = args.count > 3 ? args[3] : "page"
 _ = NSApplication.shared
 
@@ -84,7 +86,10 @@ func describeElement(at point: CGPoint) -> String {
     let role: String = attribute(current, kAXRoleAttribute) ?? "?"
     let desc: String = attribute(current, kAXDescriptionAttribute) ?? attribute(current, kAXTitleAttribute) ?? ""
     for _ in 0..<6 {
-        if let id: String = attribute(current, kAXIdentifierAttribute), !id.isEmpty { return "\(role)#\(id)" + (desc.isEmpty ? "" : " «\(desc)»") }
+        if let id: String = attribute(current, kAXIdentifierAttribute), !id.isEmpty {
+            let disabled = (attribute(current, kAXEnabledAttribute) as Bool?) == false ? " [выкл]" : ""
+            return "\(role)#\(id)" + (desc.isEmpty ? "" : " «\(desc)»") + disabled
+        }
         guard let parent: AXUIElement = attribute(current, kAXParentAttribute) else { break }
         current = parent
     }
@@ -278,15 +283,22 @@ func runPage() -> Bool {
     sweep("h1-text-focused", h1.insetBy(dx: 0, dy: h1.height * 0.2))
     glide(to: CGPoint(x: h1.minX + 80, y: h1.midY))
     segment("h1-long-rest-text-focused", everywhere(["IBEAM"])) { rest(3) }
+    guard mode == "inactive" else { return ok }
 
     // Окно MyNotion видно, но впереди другое приложение (так Юрий работает рядом с Paseo):
-    // впереди становится сам probe — приложение без окон, поэтому ничего не заслоняет.
+    // впереди становится сам probe с окошком 1×1 в углу экрана — оно ничего не заслоняет.
     DispatchQueue.main.sync {
         NSApplication.shared.setActivationPolicy(.regular)
+        NSApp.finishLaunching()
+        let corner = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1, height: 1), styleMask: .borderless, backing: .buffered, defer: false)
+        corner.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
     for _ in 0..<30 where NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier { usleep(100_000) }
-    write("inactive: front=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "?")")
+    let front = NSWorkspace.shared.frontmostApplication
+    write("inactive: front=\(front?.bundleIdentifier ?? front?.localizedName ?? "?")")
+    if front?.processIdentifier == app.processIdentifier { write("FAIL: MyNotion осталась впереди, неактивное окно не проверено"); return false }
+    if let cover = foreignTopWindow(at: CGPoint(x: h1.midX, y: h1.midY), mainFrame: windowFrame) { write("FAIL: H1 заслонено: \(cover)"); return false }
     for (index, (name, y)) in levels.dropFirst().enumerated() {
         let from = index % 2 == 0 ? column.minX + 4 : column.maxX - 4, to = index % 2 == 0 ? column.maxX - 4 : column.minX + 4
         glide(to: CGPoint(x: from, y: y), speed: 500)
@@ -309,8 +321,12 @@ func runWindow() -> Bool {
     var places: [Place] = []
     let stepX = 36.0, stepY = 28.0
     var row = 0
-    for y in stride(from: windowFrame.minY + 5, to: windowFrame.maxY - 3, by: stepY) {
-        let xs = Array(stride(from: windowFrame.minX + 5, to: windowFrame.maxX - 3, by: stepX))
+    // PROBE_MAX_X / PROBE_MAX_Y (экранные точки) — пройти только часть окна, например боковую панель.
+    let environment = ProcessInfo.processInfo.environment
+    let maxX = environment["PROBE_MAX_X"].flatMap(Double.init) ?? windowFrame.maxX - 3
+    let maxY = environment["PROBE_MAX_Y"].flatMap(Double.init) ?? windowFrame.maxY - 3
+    for y in stride(from: windowFrame.minY + 5, to: maxY, by: stepY) {
+        let xs = Array(stride(from: windowFrame.minX + 5, to: maxX, by: stepX))
         for x in (row % 2 == 0 ? xs : xs.reversed()) {
             glide(to: CGPoint(x: x, y: y), speed: 1200)
             var element = describeElement(at: mouse)
@@ -344,7 +360,14 @@ func runWindow() -> Bool {
     for place in places where place.cursors.count > 1 || place.cursors.keys.contains("ARROW") {
         write("(\(Int(place.point.x)),\(Int(place.point.y))) \(place.element): " + place.cursors.map { "\($0.key)=\($0.value)" }.sorted().joined(separator: " "))
     }
-    return true
+    let clickable = ["AXButton", "AXCell", "AXStaticText#page-tree-title"]
+    let arrowOnClickable = places.filter { place in
+        place.cursors.max { $0.value < $1.value }?.key == "ARROW" && !place.element.hasSuffix("[выкл]")
+            && clickable.contains { place.element.hasPrefix($0) }
+    }
+    write("--- нажимаемое со стрелкой: \(arrowOnClickable.count) точк. ---")
+    for place in arrowOnClickable { write("BAD (\(Int(place.point.x)),\(Int(place.point.y))) \(place.element)") }
+    return arrowOnClickable.isEmpty
 }
 
 // Наблюдатель — на главном потоке, движение — на отдельном.
@@ -367,7 +390,7 @@ Thread.detachNewThread {
             last = sample.cursor
         }
         var pass = ok
-        if mode == "page" {
+        if mode != "window" {
             write("--- итог по участкам (отсчёт каждые 5 мс; 60 мс после входа и после смены ожидания не судятся: доставка события) ---")
             var order: [String] = [], counts: [String: [String: Int]] = [:], bad: [String: Int] = [:], examples: [String: String] = [:]
             var settledFrom = 0.0, previous: (segment: String, expected: Set<String>?)? = nil
