@@ -95,6 +95,11 @@ struct TextPointerCursorTests {
         NSCursor.resizeLeftRight.set()
         view.mouseMoved(with: event)
         #expect(NSCursor.current == NSCursor.resizeLeftRight)
+        let update = try #require(NSEvent.enterExitEvent(with: .cursorUpdate, location: location,
+            modifierFlags: [], timestamp: 0, windowNumber: fixture.window.windowNumber,
+            context: nil, eventNumber: 2, trackingNumber: 0, userData: nil))
+        view.cursorUpdate(with: update)
+        #expect(NSCursor.current == NSCursor.resizeLeftRight, "cursorUpdate родителя подменил курсор вложенного вида")
     }
 
 }
