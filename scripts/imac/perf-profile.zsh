@@ -2,6 +2,7 @@
 # На iMac внутри `imac-run --gui` (место «экран»): профиль превышений T085 — открытие вида, вкладки, запуск,
 # место прокрутки. Не приёмочный замер: цифры бюджета дают сами тесты бюджета без sample.
 #   perf-profile.zsh [open] [tabs] [launch] [fresh] [freshreg] [scroll] [scrollexp]   — без аргументов open tabs launch scroll
+# PERF_REFERENCE — другой файл эталона (по умолчанию эталон тестов бюджета).
 set -euo pipefail
 source ${0:A:h}/lib.sh
 require_toolchain
@@ -19,10 +20,36 @@ if (( ${parts[(I)open]} || ${parts[(I)tabs]} || ${parts[(I)launch]} || ${parts[(
   xcodebuild -scheme MyNotionPerformance -configuration Release -derivedDataPath $dd -jobs $JOBS build-for-testing -quiet > $out/build.log 2>&1
 fi
 app=$WORK/$dd/Build/Products/Release/MyNotion.app
-reference=$TMPDIR/MyNotion-reference-library-v5/MyNotion.sqlite
+reference=${PERF_REFERENCE:-$TMPDIR/MyNotion-reference-library-v5/MyNotion.sqlite}
 
 # PID процесса, чей исполняемый файл — ровно наш (у других агентов свои копии).
 own_pid() { pgrep -nf "^$1" || true; }
+
+# Эталон прошлой схемы (например, v9 до индекса v10) мигрировал бы в первом замеренном запуске. Поэтому до замеров
+# копию эталона открывает само приложение, журнал выгружается в основной файл, и, если миграций стало больше,
+# эталон заменяется этой копией — так же, как `ReferenceLibrary.migrate` в тестах бюджета.
+migrations() { sqlite3 $1 'SELECT count(*) FROM grdb_migrations' }
+prepare_reference() {
+  [[ -f $reference ]] || { print "нет эталона $reference: сначала тест бюджета Release" >&2; exit 1 }
+  sqlite3 $reference 'PRAGMA wal_checkpoint(TRUNCATE)' > /dev/null
+  local migrated=$out/reference/MyNotion.sqlite
+  mkdir -p ${migrated:h}
+  cp -c $reference $migrated
+  open -n -g $app --args --database $migrated --launch-report $out/reference/launch.json
+  for _ in {1..120}; do [[ -f $out/reference/launch.json ]] && break; sleep 0.5; done
+  pkill -f "^$app/Contents/MacOS/MyNotion" || true
+  for _ in {1..40}; do [[ -z $(own_pid $app/Contents/MacOS/MyNotion) ]] && break; sleep 0.25; done
+  sqlite3 $migrated 'PRAGMA wal_checkpoint(TRUNCATE)' > /dev/null
+  local before=$(migrations $reference) after=$(migrations $migrated)
+  [[ $before == <-> && $after == <-> ]] || { print "схема эталона не прочитана: $reference" >&2; exit 1 }
+  print "эталон: миграций $before → $after" | tee -a $out/stages.log
+  (( after >= before )) || { print "эталон новее приложения ($before > $after)" >&2; exit 1 }
+  if (( after > before )); then rm -f $reference-wal $reference-shm; cp $migrated $reference; fi
+  rm -rf ${migrated:h}
+}
+if (( ${parts[(I)tabs]} || ${parts[(I)launch]} || ${parts[(I)fresh]} || ${parts[(I)freshreg]} )); then
+  prepare_reference
+fi
 
 if (( ${parts[(I)open]} )); then
   print 'stage open' | tee -a $out/stages.log
