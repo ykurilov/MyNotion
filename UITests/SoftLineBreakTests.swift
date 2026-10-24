@@ -30,7 +30,7 @@ final class SoftLineBreakTests: XCTestCase {
         XCTAssertTrue(app.hoverFirstBlock(), "Ручки блока не появились при наведении")
         let handle = app.blockDragHandle
         let grip = handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        grip.press(forDuration: 0.3, thenDragTo: grip.withOffset(CGVector(dx: 0, dy: handle.frame.height * 6)))
+        grip.click(forDuration: 0.3, thenDragTo: grip.withOffset(CGVector(dx: 0, dy: handle.frame.height * 6)))
         XCTAssertEqual(app.pageBody.value as? String, "два\nтри\nраз\(lineBreak)полтора", "Блок с переносом переставился не целиком")
 
         app.quit()
