@@ -8,6 +8,9 @@ import Testing
 @testable import NotesCore
 @testable import PageVersions
 
+/// Импорт из меню переносит файлы в хранилище вложений (в приложении — то же расширение в MediaServices).
+extension AttachmentStore: NotionAttachmentImporting {}
+
 /// Подставные импорт в окне и синхронизация приложения: записывают, что им сообщили, и отвечают заданным состоянием.
 @MainActor
 final class RecordingTransferControl: TransferControl {
@@ -126,7 +129,8 @@ final class TransferTestHost: ControlHost {
         let reference = try TestHost()
         let prepared = try NotionExportUnpacker().prepare(Self.notionExport)
         defer { prepared.discard() }
-        let expected = try NotionImporter(store: reference.store).importExport(prepared)
+        // Как меню: с файлами вложений (картинки переносятся, а не упрощаются).
+        let expected = try NotionImporter(store: reference.store, attachments: reference.attachments).importExport(prepared)
 
         #expect(report["pageCount"]?.int == expected.pageCount)
         #expect(report["blockCount"]?.int == expected.blockCount)
