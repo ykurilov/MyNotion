@@ -47,7 +47,7 @@
 |--------|-----------|------|
 | Неверный вызов | 2 | `unknown_command`, `invalid_argument`, `missing_argument`, `invalid_value`, `invalid_markdown`, `invalid_formula`, `not_batchable`, `force_required` |
 | Не найдено | 3 | `page_not_found`, `block_not_found`, `database_not_found`, `property_not_found`, `option_not_found`, `view_not_found`, `row_not_found`, `version_not_found`, `attachment_not_found`, `file_not_found`, `window_not_found`, `tab_not_found`, `template_not_found` |
-| Конфликт | 4 | `ambiguous_page`, `page_in_trash`, `cannot_move` (в свою ветку), `wrong_page` (блок не этой страницы), `read_only_property`, `window_busy`, `batch_failed`, `not_implemented` |
+| Конфликт | 4 | `ambiguous_page`, `page_in_trash`, `cannot_move` (в свою ветку), `wrong_page` (блок не этой страницы), `read_only_property`, `window_busy`, `batch_failed`, `not_implemented`, `sync_disabled` (`sync now` при выключенной синхронизации) |
 | Приложение недоступно | 5 | `app_not_running` (при `--no-launch`), `app_not_ready`, `app_disconnected`, `timeout`, `version_mismatch` |
 | Внутренняя | 1 | `internal`, `write_failed` |
 

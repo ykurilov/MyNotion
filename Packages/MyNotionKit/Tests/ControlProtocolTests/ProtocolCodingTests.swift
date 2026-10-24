@@ -77,7 +77,7 @@ import Testing
                 "row_not_found", "version_not_found", "attachment_not_found", "file_not_found", "window_not_found", "tab_not_found",
                 "template_not_found"],
             4: ["ambiguous_page", "page_in_trash", "cannot_move", "wrong_page", "read_only_property", "window_busy", "batch_failed",
-                "not_implemented"],
+                "not_implemented", "sync_disabled"],
             5: ["app_not_running", "app_not_ready", "app_disconnected", "timeout", "version_mismatch"],
             1: ["internal", "write_failed"],
         ]

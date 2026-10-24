@@ -24,7 +24,7 @@ final class ControlBootstrap {
         guard current == nil else { return }
         let socketPath = ControlSocketPath.path(forDatabaseFolder: library.store.database.url.deletingLastPathComponent())
         let host = AppControlHost(library: library, socketPath: socketPath,
-                                  transferControl: importController.map(AppTransferControl.init(importController:)))
+                                  transferControl: importController.map { AppTransferControl(importController: $0, sync: library.sync) })
         let executor = CommandExecutor(host: host)
         let server = ControlSocketServer(path: socketPath) { request in
             // Сервер читает запросы на своей очереди; выполнение — на главном потоке (research R2).

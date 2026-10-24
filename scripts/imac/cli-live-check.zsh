@@ -7,6 +7,7 @@
 #   4. память и процессор в покое с открытым сокетом против прошлой сборки (CLI_BASE — папка её исходников на iMac, CLI_BASE_LABEL — подпись, по умолчанию 004).
 #   5. базы (этап 4): `db rows` на «Задачах» 10 000 эталона 004 ≤ 150 мс; шаг 7 сценария A и снимок окна с той же базой.
 #   6. окно (этап 6): `cli-live-window.zsh` — open, вкладки, назад/вперёд, фокус без `--activate`, снимок шага 4 сценария A.
+#   7. импорт, выгрузка, синхронизация (этап 7): `cli-live-transfer.zsh` — шаг 12 сценария A, импорт фикстуры Notion.
 # Итоги — в build/cli-live/summary.txt (окно — ещё и в build/cli-live-window/).
 set -uo pipefail
 zmodload zsh/datetime  # EPOCHREALTIME
@@ -185,6 +186,10 @@ check "снимок окна «Спринт»" "[[ -s $out/db-sprint-window.png 
 
 # Этап 6 (окно): отдельный сценарий на той же сборке.
 APP=$APP zsh ${0:A:h}/cli-live-window.zsh | tee -a $summary
+(( ${pipestatus[1]} )) && failed=1
+
+# Этап 7 (импорт, выгрузка, синхронизация): отдельный сценарий на той же сборке.
+APP=$APP zsh ${0:A:h}/cli-live-transfer.zsh | tee -a $summary
 (( ${pipestatus[1]} )) && failed=1
 
 (( failed )) && note "ИТОГ: есть провалы" || note "ИТОГ: всё прошло"

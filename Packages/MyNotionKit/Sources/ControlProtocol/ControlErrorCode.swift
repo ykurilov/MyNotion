@@ -49,6 +49,7 @@ public enum ControlErrorCode: String, Sendable, Hashable, Codable, CaseIterable 
     case windowBusy = "window_busy"
     case batchFailed = "batch_failed"
     case notImplemented = "not_implemented"
+    case syncDisabled = "sync_disabled"
     // Приложение недоступно
     case appNotRunning = "app_not_running"
     case appNotReady = "app_not_ready"
@@ -67,7 +68,8 @@ public enum ControlErrorCode: String, Sendable, Hashable, Codable, CaseIterable 
         case .pageNotFound, .blockNotFound, .databaseNotFound, .propertyNotFound, .optionNotFound, .viewNotFound, .rowNotFound,
              .versionNotFound, .attachmentNotFound, .fileNotFound, .windowNotFound, .tabNotFound, .templateNotFound:
             .notFound
-        case .ambiguousPage, .pageInTrash, .cannotMove, .wrongPage, .readOnlyProperty, .windowBusy, .batchFailed, .notImplemented:
+        case .ambiguousPage, .pageInTrash, .cannotMove, .wrongPage, .readOnlyProperty, .windowBusy, .batchFailed, .notImplemented,
+             .syncDisabled:
             .conflict
         case .appNotRunning, .appNotReady, .appDisconnected, .timeout, .versionMismatch:
             .unavailable

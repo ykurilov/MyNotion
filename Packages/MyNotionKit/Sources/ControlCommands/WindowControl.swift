@@ -74,13 +74,6 @@ extension WindowControl {
     public func forward(window: Int) throws -> WindowInfo { throw ControlError.notImplemented(stage: 6) }
 }
 
-/// Импорт, выгрузка и синхронизация приложения (этап 7): `App/Control/AppTransferControl.swift`.
-@MainActor
-public protocol TransferControl: AnyObject {
-    /// Идёт импорт (`app status`).
-    var isImporting: Bool { get }
-}
-
 extension ControlError {
     /// Команда каталога, чей обработчик появится на этапе `stage` 005.
     public static func notImplemented(stage: Int, command: String? = nil) -> ControlError {
