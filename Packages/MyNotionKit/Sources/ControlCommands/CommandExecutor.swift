@@ -10,10 +10,13 @@ public final class CommandExecutor {
     let registry: HandlerRegistry
     let log: any CommandLogging
     private let writeLock = WriteLock()
+    #if DEBUG
     /// Сессия последней записи — только для тестов: отмена держит операции сессии без сильной ссылки.
+    /// В сборке для людей её не держим: команда отпускает свою сессию сразу после ответа.
     private var lastContext: SessionContext?
     /// Отмена последней выполненной команды — только для тестов.
     public var lastUndoManager: UndoManager? { lastContext?.undoManager }
+    #endif
 
     public init(host: any ControlHost, registry: HandlerRegistry = .standard, log: any CommandLogging = CommandLog()) {
         self.host = host
@@ -21,10 +24,22 @@ public final class CommandExecutor {
         self.log = log
     }
 
-    /// Ответ одной строкой и ход — в `progress`.
-    public func run(_ request: ControlRequest, progress: @escaping (ControlProgress) -> Void = { _ in }) async -> ControlResponse {
+    /// Ответ одной строкой и ход — в `progress`. `receivedAt` — приём запроса из сокета: от него отсчитывается срок
+    /// клиента (`timeoutMs`); без него ждущего клиента нет и срока тоже. `isClientGone` — клиент уже отключился.
+    /// Команда, чей срок вышел или чей клиент ушёл, пока она ждала очереди, не выполняется.
+    public func run(_ request: ControlRequest, progress: @escaping (ControlProgress) -> Void = { _ in }, receivedAt: ContinuousClock.Instant? = nil,
+                    isClientGone: @escaping @Sendable () -> Bool = { false }) async -> ControlResponse {
         let started = ContinuousClock.now
-        let response = await execute(request, progress: progress)
+        let deadline = receivedAt.map { $0 + .milliseconds(request.timeoutMs) }
+        let response = await execute(request, progress: progress) {
+            if isClientGone() {
+                throw ControlError(.appDisconnected, "Команда не выполнена: клиент отключился, пока она ждала очереди")
+            }
+            if let deadline, ContinuousClock.now >= deadline {
+                throw ControlError(.timeout, "Срок \(request.timeoutMs) мс вышел, пока команда ждала очереди: она не выполнена",
+                                   hint: "Больше срок: --timeout <мс>", details: ["timeoutMs": .number(Double(request.timeoutMs))])
+            }
+        }
         let elapsed = ContinuousClock.now - started
         log.record(CommandLogEntry(command: request.command, agent: request.agent, target: CommandLogEntry.target(of: request.args),
                                    errorCode: response.error?.code,
@@ -33,17 +48,20 @@ public final class CommandExecutor {
     }
 
     /// Ответ строками для сокета: ход, затем итог.
-    public func stream(_ request: ControlRequest) -> AsyncStream<ControlResponseLine> {
+    public func stream(_ request: ControlRequest, receivedAt: ContinuousClock.Instant? = nil,
+                       isClientGone: @escaping @Sendable () -> Bool = { false }) -> AsyncStream<ControlResponseLine> {
         AsyncStream { continuation in
             Task { @MainActor in
-                let response = await self.run(request) { continuation.yield(.progress(id: request.id, $0)) }
+                let response = await self.run(request, progress: { continuation.yield(.progress(id: request.id, $0)) },
+                                              receivedAt: receivedAt, isClientGone: isClientGone)
                 continuation.yield(.result(response))
                 continuation.finish()
             }
         }
     }
 
-    private func execute(_ request: ControlRequest, progress: @escaping (ControlProgress) -> Void) async -> ControlResponse {
+    private func execute(_ request: ControlRequest, progress: @escaping (ControlProgress) -> Void,
+                         stillWanted: () throws -> Void) async -> ControlResponse {
         let context = SessionContext(host: host, progress: progress)
         do {
             let (spec, args, handler) = try prepare(request.command, request.args)
@@ -54,9 +72,13 @@ public final class CommandExecutor {
             if spec.access == .write {
                 await writeLock.acquire()
                 defer { writeLock.release() }
+                try stillWanted()
+                #if DEBUG
                 lastContext = context
+                #endif
                 result = try await Self.write(session, handler)
             } else {
+                try stillWanted()
                 result = try await handler(session)
             }
             return .success(request.id, result.data, warnings: context.warnings, text: result.text)
@@ -65,14 +87,26 @@ public final class CommandExecutor {
         }
     }
 
-    /// Запись одним шагом отмены; ошибка откатывает её целиком. Пакет сам делит отмену по шагам.
+    /// Запись одним шагом отмены; ошибка откатывает её целиком. Пакет сам делит отмену по шагам. Версии «до правки
+    /// агента», снятые по ходу, записываются после правки; не записалась версия — правка откатывается.
     static func write(_ session: CommandSession, _ handler: CommandHandler) async throws -> CommandResult {
-        guard session.spec.name != ServiceHandlers.batchCommand else { return try await handler(session) }
+        let isBatch = session.spec.name == ServiceHandlers.batchCommand
         do {
-            return try await session.context.grouped { try await handler(session) }
+            let result = isBatch ? try await handler(session) : try await session.context.grouped { try await handler(session) }
+            try await recordCheckpoints(of: session)
+            return result
         } catch {
             session.context.rollBack()
             throw error
+        }
+    }
+
+    private static func recordCheckpoints(of session: CommandSession) async throws {
+        let checkpoint = AgentEditCheckpoint(host: session.host)
+        let pending = session.context.pendingCheckpoints
+        session.context.pendingCheckpoints = []
+        for item in pending {
+            try await checkpoint.record(item)
         }
     }
 

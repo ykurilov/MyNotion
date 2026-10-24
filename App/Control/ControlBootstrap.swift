@@ -26,11 +26,14 @@ final class ControlBootstrap {
         let host = AppControlHost(library: library, socketPath: socketPath,
                                   transferControl: importController.map { AppTransferControl(importController: $0, sync: library.sync) })
         let executor = CommandExecutor(host: host)
-        let server = ControlSocketServer(path: socketPath) { request in
+        let server = ControlSocketServer(path: socketPath) { request, call in
             // Сервер читает запросы на своей очереди; выполнение — на главном потоке (research R2).
             let (stream, continuation) = AsyncStream<ControlResponseLine>.makeStream()
             Task { @MainActor in
-                for await line in executor.stream(request) { continuation.yield(line) }
+                // Срок клиента — от приёма запроса; ушедшему клиенту команда не выполняется.
+                for await line in executor.stream(request, receivedAt: call.receivedAt, isClientGone: { call.isClientGone }) {
+                    continuation.yield(line)
+                }
                 continuation.finish()
             }
             return stream

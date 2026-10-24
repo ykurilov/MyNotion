@@ -43,7 +43,7 @@
 | `block move` | `<блок> --after <блок>\|--first\|--last` (с вложенными) | W B |
 | `block indent` / `block outdent` | `<блок>` | W B |
 | `block check` / `block uncheck` | `<блок>` | W B |
-| `block expand` / `block collapse` | `<блок>` (раскрывающийся список, заголовок-раскрытие) | W B |
+| `block expand` / `block collapse` | `<блок>` (раскрывающийся список, заголовок-раскрытие); вид, а не текст: вне пакета и отмены | W |
 | `block delete` | `<блок>` | W B |
 | `block move-to-page` | `<блок> --page <стр>` (как «Переместить в…») | W B |
 | `page icon` | `<стр> --emoji 🚀\|--remove` | W B |
@@ -82,7 +82,7 @@
 | `favorites list` / `add` / `remove` / `move` | `[<стр>] [--index N]` | R / W B |
 | `recents` | `[--limit]` | R |
 | `template list` / `mark` / `unmark` | `[<стр>]` | R / W B |
-| `history list` | `<стр>`: id версии, время, Mac, сводка, `agent` | R |
+| `history list` | `<стр>`: id версии, время, Mac, сводка, `agent`; сперва сохраняет открытую правку версией, поэтому под замком записи | W |
 | `history show` | `<стр> <версия> [--format markdown\|json]` | R |
 | `history restore` | `<стр> <версия>` (с версией до восстановления) | W |
 | `attachment add` | `<стр> --file <путь> [--after <блок>] [--as image\|file\|video]` или `<база> <строка> <свойство> --file …` | W B |

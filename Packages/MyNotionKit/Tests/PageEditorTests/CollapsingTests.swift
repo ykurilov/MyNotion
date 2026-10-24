@@ -49,6 +49,24 @@ struct CollapsingTests {
         #expect(HiddenParagraphsTests.laidOutBlockIds(editor).count == 6)
     }
 
+    @Test("Свёрнутость, изменённая мимо редактора (команда mynotion), видна открытой странице")
+    func collapsingOutsideEditorIsShown() throws {
+        let editor = try Self.makeFixture()
+        let viewState = BlockViewStateStore(database: editor.store.database)
+        let toggleId = editor.document.blocks[Self.toggleIndex].id
+        try viewState.setCollapsed(true, blockId: toggleId)
+        BlockViewStateStore.postChangedOutsideEditor(pageId: UUID())
+        #expect(editor.textView.hiddenParagraphs.hiddenBlockIds.isEmpty, "чужая страница — не повод перечитывать")
+        BlockViewStateStore.postChangedOutsideEditor(pageId: editor.pageId)
+        #expect(editor.textView.hiddenParagraphs.hiddenBlockIds == Self.childIds(editor))
+        #expect(HiddenParagraphsTests.laidOutBlockIds(editor).isDisjoint(with: Self.childIds(editor)))
+
+        try viewState.setCollapsed(false, blockId: toggleId)
+        BlockViewStateStore.postChangedOutsideEditor(pageId: editor.pageId)
+        #expect(editor.textView.hiddenParagraphs.hiddenBlockIds.isEmpty)
+        #expect(HiddenParagraphsTests.laidOutBlockIds(editor).count == 6)
+    }
+
     @Test("Курсор, попавший внутрь скрытого, уходит к концу строки переключателя")
     func caretInsideHiddenMovesToToggleEnd() throws {
         let editor = try Self.makeFixture()

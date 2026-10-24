@@ -497,6 +497,25 @@ import Testing
         #expect(try viewState.collapsedBlockIds(ofPage: withToggle.id).isEmpty)
     }
 
+    @Test func collapseTellsOpenEditor() async throws {
+        let (withToggle, toggleIds) = try makePage("Открытый переключатель", [(.toggle, "список", 0), (.paragraph, "внутри", 1)])
+        let seen = EventLog()
+        let observer = NotificationCenter.default.addObserver(forName: BlockViewStateStore.didChangeOutsideEditor, object: nil, queue: nil) { note in
+            guard let pageId = note.userInfo?[BlockViewStateStore.pageIdKey] as? UUID, pageId == withToggle.id else { return }
+            MainActor.assumeIsolated { seen.events.append("changed") }
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        await run("block.collapse", ["block": id(toggleIds[0])])
+        await run("block.expand", ["block": id(toggleIds[0])])
+        #expect(seen.events == ["changed", "changed"])
+    }
+
+    @Test func collapsingIsNotUndoableBatchStep() {
+        // Свёрнутость — вид, а не текст: в пакете её не откатить вместе с остальными шагами.
+        #expect(CommandCatalog.spec(for: "block.collapse")?.batchable == false)
+        #expect(CommandCatalog.spec(for: "block.expand")?.batchable == false)
+    }
+
     @Test func expandNeedsToggle() async throws {
         expectError(await run("block.expand", ["block": id(ids[0])]), .invalidArgument)
         expectError(await run("block.collapse", ["block": id(ids[0])]), .invalidArgument)

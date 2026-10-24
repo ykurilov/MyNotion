@@ -62,10 +62,11 @@ public final class PageVersionStore: Sendable {
         return (try Self.info(row), try PageSnapshot(compressed: row["snapshot"]))
     }
 
-    /// Записать версию; отметка страницы снимается, если после `createdAt` правок не было.
+    /// Записать версию; отметка страницы снимается, если после `createdAt` правок не было. Снимок, снятый раньше
+    /// записи (`clearsDueMark: false`), отметку не трогает: правки после снимка ждут своей версии.
     @discardableResult
     public func save(_ snapshot: PageSnapshot, pageId: UUID, createdAt: Date, deviceName: String,
-                     summary: VersionSummary) throws -> PageVersionInfo {
+                     summary: VersionSummary, clearsDueMark: Bool = true) throws -> PageVersionInfo {
         let data = try snapshot.compressed()
         let info = PageVersionInfo(id: .timeOrdered(), pageId: pageId, createdAt: createdAt, deviceName: deviceName, summary: summary,
                                    byteCount: data.count)
@@ -78,6 +79,7 @@ public final class PageVersionStore: Sendable {
                 try db.execute(sql: "INSERT OR IGNORE INTO page_version_file (versionId, fileId) VALUES (?, ?)",
                                arguments: [info.id.versionKey, fileId.versionKey])
             }
+            guard clearsDueMark else { return }
             try db.execute(sql: "DELETE FROM page_version_due WHERE pageId = ? AND lastChangeAt <= ?", arguments: [pageId.versionKey, createdAt])
         }
         return info

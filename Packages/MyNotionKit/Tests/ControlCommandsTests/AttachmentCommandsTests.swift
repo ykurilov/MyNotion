@@ -1,6 +1,7 @@
 import ControlProtocol
 import Databases
 import Foundation
+import os
 import Testing
 @testable import ControlCommands
 @testable import NotesCore
@@ -124,5 +125,79 @@ import Testing
 
         let missing = await run("attachment.get", ["attachment": .string(UUID().uuidString), "to": "выгрузка"])
         #expect(missing.error?.code == .attachmentNotFound)
+    }
+
+    @Test func getDoesNotOverwriteStoredCopy() async throws {
+        try host.page("Материалы")
+        try file("схема.png", Self.png)
+        let added = try await ok("attachment.add", ["page": "Материалы", "file": "схема.png"])
+        let attachmentId = try #require(added["attachment"]?["id"]?.string.flatMap(UUID.init(uuidString:)))
+        let stored = try #require(host.attachments.fileURL(for: attachmentId))
+
+        // Сама копия и её папка: «сохранить поверх себя» стёрло бы файл вложения.
+        for target in [stored.path, stored.deletingLastPathComponent().path] {
+            let response = await run("attachment.get", ["attachment": .string(attachmentId.uuidString), "to": .string(target)])
+            #expect(response.error?.code == .invalidValue, "\(target)")
+        }
+        #expect(try Data(contentsOf: stored) == Self.png)
+    }
+
+    @Test func getReplacesExistingFileWhole() async throws {
+        try host.page("Материалы")
+        try file("схема.png", Self.png)
+        let added = try await ok("attachment.add", ["page": "Материалы", "file": "схема.png"])
+        let attachmentId = try #require(added["attachment"]?["id"]?.string)
+        let target = try file("старая.png", Data("прежнее содержимое".utf8))
+        try await ok("attachment.get", ["attachment": .string(attachmentId), "to": .string(target.path)])
+        #expect(try Data(contentsOf: target) == Self.png)
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: host.folder.url.path).filter { $0.hasPrefix(".") && $0.contains("старая") }
+        #expect(leftovers.isEmpty, "временный файл не остаётся")
+    }
+
+    @Test func importDoesNotHoldMainThread() async throws {
+        try host.page("Материалы")
+        // Файл — труба: импорт читает её, пока тест не допишет, а дописывает тест, только дождавшись главного потока.
+        // Займи импорт главный поток, запись пришла бы лишь через минуту ожидания — уже не «пока импорт читает».
+        let pipe = host.folder.url.appendingPathComponent("поток.bin")
+        try #require(mkfifo(pipe.path, 0o600) == 0)
+        let importOpened = OSAllocatedUnfairLock(initialState: false)
+        let mainReached = DispatchSemaphore(value: 0)
+        let released = OSAllocatedUnfairLock(initialState: false)
+        let finished = OSAllocatedUnfairLock(initialState: false)
+        Thread.detachNewThread {
+            guard let writer = FileHandle(forWritingAtPath: pipe.path) else { return } // открывается, когда импорт открыл трубу
+            importOpened.withLock { $0 = true }
+            _ = mainReached.wait(timeout: .now() + 60)
+            released.withLock { $0 = true }
+            try? writer.write(contentsOf: Data(repeating: 7, count: 1_048_576))
+            try? writer.close()
+        }
+        let add = Task {
+            let response = await run("attachment.add", ["page": "Материалы", "file": "поток.bin"])
+            finished.withLock { $0 = true }
+            return response
+        }
+        while !importOpened.withLock({ $0 }), !finished.withLock({ $0 }) {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        let freeWhileImporting = !released.withLock { $0 }
+        mainReached.signal()
+        let response = await add.value
+        try #require(response.ok, "\(response.error?.message ?? "")")
+        #expect(freeWhileImporting, "главный поток ждал, пока импорт дочитает файл")
+    }
+
+    @Test func failedBatchLeavesNoAttachment() async throws {
+        let page = try host.page("Материалы", texts: ["вступление"])
+        try file("схема.png", Self.png)
+        let response = await executor.run(ControlRequest(command: "batch", args: ["steps": [
+            ["command": "attachment.add", "args": ["page": "Материалы", "file": "схема.png"]],
+            ["command": "page.rename", "args": ["page": "Нет такой страницы", "title": "Б"]],
+        ]], cwd: host.folder.url.path))
+        #expect(response.error?.code == .batchFailed)
+        #expect(try blocks(page.id).map(\.kind) == [.paragraph])
+        #expect(try host.attachments.allRecords().isEmpty, "копия от отменённого шага не остаётся")
+        let copies = (try? FileManager.default.contentsOfDirectory(atPath: host.attachments.folder.path)) ?? []
+        #expect(copies.isEmpty)
     }
 }

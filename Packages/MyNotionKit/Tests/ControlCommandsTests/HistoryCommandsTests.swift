@@ -53,6 +53,27 @@ import Testing
         #expect(latest.snapshot.blocks.map(\.text.string) == ["испорчено агентом"])
     }
 
+    @Test func listWaitsForRunningWrite() async throws {
+        try host.page("Отчёт", texts: ["было"])
+        let events = EventLog()
+        let slowRename: CommandHandler = { _ in
+            events.events.append("write start")
+            try await Task.sleep(for: .milliseconds(300))
+            events.events.append("write end")
+            return CommandResult()
+        }
+        let executor = CommandExecutor(host: host, registry: HandlerRegistry(HandlerRegistry.standard.handlers.merging(["page.rename": slowRename]) { _, new in new }),
+                                       log: RecordingLog())
+        async let write = executor.run(ControlRequest(command: "page.rename", args: ["page": "Отчёт", "title": "Б"]))
+        try await Task.sleep(for: .milliseconds(30))
+        // Список сохраняет открытую правку версией — это запись: посреди чужой записи ей не место.
+        let list = await executor.run(ControlRequest(command: "history.list", args: ["page": "Отчёт"]))
+        events.events.append("list")
+        #expect(list.ok)
+        _ = await write
+        #expect(events.events == ["write start", "write end", "list"])
+    }
+
     @Test func showVersionAsMarkdownAndJSON() async throws {
         try await editedByAgent()
         let versionId = try agentVersionId(try await ok("history.list", ["page": "Отчёт"]))

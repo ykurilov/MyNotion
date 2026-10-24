@@ -69,6 +69,17 @@ import Testing
         #expect(throws: LineBuffer.Failure.frameTooLarge) { try buffer.append(Data("a".utf8)) }
     }
 
+    /// Строку по байту — как медленный клиент: каждый кусок не перебирает заново всё накопленное.
+    @Test func lineBufferDoesNotRescanPending() throws {
+        var buffer = LineBuffer()
+        let byte = Data("a".utf8)
+        let started = ContinuousClock.now
+        for _ in 0..<65_536 { _ = try buffer.append(byte) }
+        let lines = try buffer.append(Data("\n".utf8))
+        #expect(lines.first?.count == 65_536)
+        #expect(ContinuousClock.now - started < .seconds(1))
+    }
+
     @Test func everyErrorCodeHasGroupAndExitCode() {
         let table: [Int32: [String]] = [
             2: ["unknown_command", "invalid_argument", "missing_argument", "invalid_value", "invalid_markdown", "invalid_formula",
@@ -87,7 +98,8 @@ import Testing
                 #expect(ControlErrorCode(rawValue: raw)?.exitCode == exit, "\(raw)")
             }
         }
-        #expect(Set(ControlWarningCode.allCases.map(\.rawValue)) == ["markdown_unsupported", "option_created", "value_converted", "truncated"])
+        #expect(Set(ControlWarningCode.allCases.map(\.rawValue)) == ["markdown_unsupported", "option_created", "value_converted", "truncated",
+                                                                         "not_moved"])
     }
 
     @Test func jsonValuesRoundTrip() throws {

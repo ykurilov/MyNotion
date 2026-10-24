@@ -14,12 +14,12 @@ enum AttachmentHandlers {
 
     static let add: CommandHandler = { session in
         let source = try session.existingFile("file")
-        if session.args["row"] != nil || session.args["property"] != nil { return try addToCell(session, source) }
+        if session.args["row"] != nil || session.args["property"] != nil { return try await addToCell(session, source) }
         let page = try session.page()
         let outline = try PageOutline(store: session.host.store)
         try outline.requireEditable(page)
         let stored = try session.optionalBlock("after", inPage: page.id)
-        let ref = try session.importAttachment(source)
+        let ref = try await session.importAttachment(source)
         let draft = mediaBlock(for: ref, file: source, kind: session.string("as").flatMap(BlockKind.init(rawValue:)), pageId: page.id)
         var inserted = draft
         try await session.editContent(of: page.id, checkpoint: true) { document in
@@ -43,7 +43,7 @@ enum AttachmentHandlers {
     }
 
     /// В ячейку «Файлы»: `<база> <строка> <свойство>`.
-    @MainActor static func addToCell(_ session: CommandSession, _ source: URL) throws -> CommandResult {
+    @MainActor static func addToCell(_ session: CommandSession, _ source: URL) async throws -> CommandResult {
         let database = try session.database("page")
         let refs = session.databaseRefs
         guard let rowText = session.string("row") else { throw CommandCatalog.missing(named: "row", in: session.spec) }
@@ -54,7 +54,7 @@ enum AttachmentHandlers {
             throw ControlError(.invalidValue, "«\(property.name)» — не свойство «Файлы»", hint: "Свойства: mynotion db schema \(database.page.id.controlText)",
                                details: ["property": .string(property.name), "kind": .string("\(property.kind)")])
         }
-        let ref = try session.importAttachment(source)
+        let ref = try await session.importAttachment(source)
         try session.databases.addFiles([.file(ref)], rowId: row.id, propertyId: property.id)
         var result = try session.rowResult(row.id, of: database.page.id, "✓ «\(ref.name)» в «\(property.name)» у «\(row.displayTitle)»")
         var data = result.data.object ?? [:]
@@ -75,7 +75,8 @@ enum AttachmentHandlers {
         return CommandResult(try session.paged(items), text: "\(items.count) вложений «\(page.title)»")
     }
 
-    /// Копия файла: в папку под своим именем или по пути файла.
+    /// Копия файла: в папку под своим именем или по пути файла. В папку копий приложения — нельзя: «сохранить поверх
+    /// себя» стёрло бы файл вложения. Прежний файл по пути заменяется целиком, только когда копия уже готова.
     static let get: CommandHandler = { session in
         let ref = try session.attachment()
         guard let file = session.host.attachments.fileURL(for: ref.id) else {
@@ -91,10 +92,22 @@ enum AttachmentHandlers {
             throw ControlError(.fileNotFound, "Нет папки «\(destination.deletingLastPathComponent().path)»", hint: "Создайте её: mkdir -p <папка>",
                                details: ["argument": "to", "path": .string(destination.path)])
         }
+        let folder = destination.deletingLastPathComponent().resolvingSymlinksInPath()
+        let copies = session.host.attachments.folder.resolvingSymlinksInPath()
+        guard !(folder.path + "/").hasPrefix(copies.path + "/") else {
+            throw ControlError(.invalidValue, "«\(destination.path)» — в папке копий MyNotion: так можно затереть само вложение",
+                               hint: "Другой путь в --to, например ~/Desktop", details: ["argument": "to", "path": .string(destination.path)])
+        }
+        let staging = folder.appendingPathComponent(".\(destination.lastPathComponent).mynotion-\(UUID().uuidString)")
         do {
-            if FileManager.default.fileExists(atPath: destination.path) { try FileManager.default.removeItem(at: destination) }
-            try FileManager.default.copyItem(at: file, to: destination)
+            try FileManager.default.copyItem(at: file, to: staging)
+            if FileManager.default.fileExists(atPath: destination.path) {
+                _ = try FileManager.default.replaceItemAt(destination, withItemAt: staging)
+            } else {
+                try FileManager.default.moveItem(at: staging, to: destination)
+            }
         } catch {
+            try? FileManager.default.removeItem(at: staging)
             throw ControlError(.writeFailed, "Не записать «\(destination.path)»: \(error.localizedDescription)", hint: "Другой путь в --to")
         }
         return CommandResult(["path": .string(destination.path), "attachment": session.attachmentJSON(ref)], text: "✓ \(destination.path)")
@@ -127,10 +140,14 @@ enum AttachmentHandlers {
 }
 
 extension CommandSession {
-    /// Копия файла в папке приложения; ссылка на неё появится в блоке или ячейке.
-    func importAttachment(_ source: URL) throws(ControlError) -> AttachmentRef {
+    /// Копия файла в папке приложения; ссылка на неё появится в блоке или ячейке. Копирование и подсчёт суммы — не на
+    /// главном потоке: окна не замирают на файле в 100 МБ. Откат команды стирает копию, если на неё никто не ссылается.
+    func importAttachment(_ source: URL) async throws(ControlError) -> AttachmentRef {
+        let attachments = host.attachments
         do {
-            return try host.attachments.importFile(at: source)
+            let ref = try await Task.detached(priority: .userInitiated) { try attachments.importFile(at: source) }.value
+            context.importedAttachments.append(ref.id)
+            return ref
         } catch AttachmentError.tooLarge(_) {
             throw ControlError(.invalidValue, "«\(source.lastPathComponent)» больше 100 МБ: MyNotion такие не хранит", hint: "Файл поменьше",
                                details: ["argument": "file", "path": .string(source.path)])

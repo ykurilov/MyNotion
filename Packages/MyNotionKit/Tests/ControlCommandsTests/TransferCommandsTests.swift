@@ -163,6 +163,25 @@ final class TransferTestHost: ControlHost {
         #expect(response.data?["page"]?["parentId"]?.string == archive.id.controlText)
     }
 
+    @Test("import notion --parent: страницу удалили, пока шёл импорт — импорт успешен, предупреждение not_moved и id ветки")
+    func importWhoseParentVanished() async throws {
+        let archive = try host.base.page("Архив")
+        let folder = Self.notionExport.deletingLastPathComponent()
+        var erased = false
+        let response = await run("import.notion", ["source": "synthetic", "parent": "Архив"], cwd: folder.path) { _ in
+            guard !erased else { return }
+            erased = true
+            let tree = PageTreeOperations(store: host.store)
+            try? tree.moveToTrash(archive.id)
+            try? tree.deleteForever(archive.id)
+        }
+        #expect(erased)
+        #expect(response.ok, "\(String(describing: response.error))")
+        #expect(response.warnings.map(\.code) == [.notMoved])
+        let rootId = try #require(response.data?["report"]?["rootPageId"]?.string.flatMap(UUID.init(uuidString:)))
+        #expect(tree.page(rootId) != nil, "ветка импорта на месте")
+    }
+
     @Test("import notion: ход строками progress — чтение, затем запись")
     func importReportsProgress() async throws {
         var steps: [ControlProgress] = []

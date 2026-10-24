@@ -87,6 +87,8 @@ public enum ControlWarningCode: String, Sendable, Hashable, Codable, CaseIterabl
     case optionCreated = "option_created"
     case valueConverted = "value_converted"
     case truncated = "truncated"
+    /// Импорт прошёл, но в указанную страницу ветку перенести не удалось.
+    case notMoved = "not_moved"
 }
 
 /// Ошибка команды: сообщение по-русски одним предложением, подсказка — что сделать, в `details` — что нужно агенту дальше.
