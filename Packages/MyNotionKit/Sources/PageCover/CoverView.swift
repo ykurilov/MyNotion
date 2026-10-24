@@ -264,7 +264,7 @@ public final class CoverView: NSView {
     }
 
     public override func resetCursorRects() {
-        if repositioning != nil { addCursorRect(bounds, cursor: .openHand) }
+        addCursorRect(bounds, cursor: repositioning == nil ? .arrow : .openHand)
     }
 
     public override func mouseDown(with event: NSEvent) {
@@ -393,6 +393,7 @@ final class CoverButton: NSView {
         addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect, .cursorUpdate], owner: self))
     }
 
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .arrow) }
     override func cursorUpdate(with event: NSEvent) { NSCursor.arrow.set() }
 
     override func mouseEntered(with event: NSEvent) { isPointerInside = true }

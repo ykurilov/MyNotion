@@ -244,6 +244,9 @@ final class BlockHandleButton: NSView {
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect, .cursorUpdate], owner: self))
     }
 
+    // AppKit восстанавливает cursor rects после перемещения/перераскладки ручек.
+    // Одного cursorUpdate недостаточно: системный прямоугольник родителя — I-beam.
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .arrow) }
     override func cursorUpdate(with event: NSEvent) { NSCursor.arrow.set() }
 
     override func mouseEntered(with event: NSEvent) { isHovered = true }

@@ -242,6 +242,7 @@ final class PageIconView: NSView {
         addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect, .cursorUpdate], owner: self))
     }
 
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .arrow) }
     override func cursorUpdate(with event: NSEvent) { NSCursor.arrow.set() }
 
     override func mouseEntered(with event: NSEvent) { isHovered = true }
@@ -310,6 +311,7 @@ public final class PageHeaderButton: NSView {
         addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect, .cursorUpdate], owner: self))
     }
 
+    public override func resetCursorRects() { addCursorRect(bounds, cursor: .arrow) }
     public override func cursorUpdate(with event: NSEvent) { NSCursor.arrow.set() }
 
     public override func mouseEntered(with event: NSEvent) { isPointerInside = true }
