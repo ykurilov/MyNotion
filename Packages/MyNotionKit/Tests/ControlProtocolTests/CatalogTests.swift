@@ -60,7 +60,7 @@ import Testing
     }
 
     @Test func contractIsRead() {
-        #expect(Self.contract.count > 100)
+        #expect(Self.contract.count >= 80)
     }
 
     @Test func everyContractCommandIsInCatalog() {

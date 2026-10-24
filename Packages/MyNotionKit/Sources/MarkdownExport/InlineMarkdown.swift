@@ -4,14 +4,14 @@ import NotesCore
 /// Текст блока с оформлением в строке — в Markdown. Перенос строки остаётся символом `\n`: блок превращает его
 /// в «два пробела и отступ». Смещения оформления — в единицах UTF-16, как в `InlineText`.
 enum InlineMarkdown {
-    /// `resolveLink` — файл страницы для упоминаний (`MentionDateMarkdown`).
-    static func render(_ text: InlineText, resolveLink: (UUID) -> PageLinkTarget? = { _ in nil }) -> String {
+    /// `resolveLink` — файл страницы для упоминаний (`MentionDateMarkdown`); `dateIds` — id дат в `<time data-id>` (команды 005).
+    static func render(_ text: InlineText, resolveLink: (UUID) -> PageLinkTarget? = { _ in nil }, dateIds: Bool = false) -> String {
         let units = Array(text.string.utf16)
         guard !units.isEmpty else { return "" }
         // Наложение и выход за край текста разбирают сами отрезки: полная нормализация на каждый блок только тормозит.
         let segments = segments(of: text, unitCount: units.count)
         return withoutActuallyEscaping(resolveLink) { resolveLink in
-            var plan = Plan(units: units, atomMarkdown: { MentionDateMarkdown.markdown(for: $0, resolveLink: resolveLink) })
+            var plan = Plan(units: units, atomMarkdown: { MentionDateMarkdown.markdown(for: $0, resolveLink: resolveLink, dateIds: dateIds) })
             for (index, segment) in segments.enumerated() { plan.add(segment, at: index, in: segments) }
             return plan.rendered()
         }

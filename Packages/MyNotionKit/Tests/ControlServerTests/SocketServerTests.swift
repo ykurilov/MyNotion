@@ -114,17 +114,20 @@ func echoServer(_ path: String, credentials: any PeerCredentials = KernelPeerCre
         try server.start()
         defer { server.stop() }
         let path = folder.socketPath
-        let answers = try await withThrowingTaskGroup(of: (Int, ControlResponseLine?).self) { group in
+        // Клиенты читают блокирующе — на потоках GCD: в общем пуле задач они заняли бы все потоки, и ответам
+        // сервера (они идут задачами) стало бы негде выполняться.
+        let answers = await withCheckedContinuation { (continuation: CheckedContinuation<[Int: ControlResponseLine], Never>) in
+            let group = DispatchGroup()
+            let lock = NSLock()
+            nonisolated(unsafe) var result: [Int: ControlResponseLine] = [:]
             for index in 0..<20 {
-                group.addTask {
-                    let lines = try RawClient.exchange(ControlRequest(id: "r\(index)", command: "page.get", args: ["n": .number(Double(index))]),
-                                                       path: path)
-                    return (index, lines.last)
+                DispatchQueue.global().async(group: group) {
+                    let request = ControlRequest(id: "r\(index)", command: "page.get", args: ["n": .number(Double(index))])
+                    guard let line = try? RawClient.exchange(request, path: path).last else { return }
+                    lock.withLock { result[index] = line }
                 }
             }
-            var result: [Int: ControlResponseLine] = [:]
-            for try await (index, line) in group { result[index] = line }
-            return result
+            group.notify(queue: .global()) { continuation.resume(returning: lock.withLock { result }) }
         }
         #expect(answers.count == 20)
         for (index, line) in answers {

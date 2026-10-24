@@ -140,6 +140,20 @@ public final class PageVersionRecorder: Sendable {
         }
     }
 
+    /// Снимок «до правки агента» (005): вид страницы сейчас, с именем агента в сводке — на очереди записывателя.
+    /// `nil` — страницы нет.
+    @discardableResult
+    public func recordAgentCheckpoint(_ pageId: UUID, agent: String) async throws -> PageVersionInfo? {
+        try await withCheckedThrowingContinuation { continuation in
+            queue.async {
+                continuation.resume(with: Result {
+                    let deviceName = try self.versions.dueMark(ofPage: pageId)?.deviceName
+                    return try self.record(pageId, deviceName: deviceName, agent: agent)
+                })
+            }
+        }
+    }
+
     // MARK: Очередь записывателя
 
     private func scheduleCheck(after delay: TimeInterval) {
@@ -186,7 +200,7 @@ public final class PageVersionRecorder: Sendable {
 
     /// Снимок страницы из базы; сводка — разница с прошлой версией. Страницы нет — отметка снимается.
     @discardableResult
-    private func record(_ pageId: UUID, deviceName: String?) throws -> PageVersionInfo? {
+    private func record(_ pageId: UUID, deviceName: String?, agent: String? = nil) throws -> PageVersionInfo? {
         let createdAt = now()
         guard let content = try store.pageContent(pageId) else {
             try versions.clearDue(pageId: pageId, upTo: .distantFuture)
@@ -195,8 +209,9 @@ public final class PageVersionRecorder: Sendable {
         let snapshot = PageSnapshot(page: content.page, blocks: content.blocks)
         let previous = try versions.latest(ofPage: pageId)
         let author = deviceName ?? state.withLock { $0.localDeviceName }
-        let info = try versions.save(snapshot, pageId: pageId, createdAt: createdAt, deviceName: author,
-                                     summary: VersionDiff.summary(from: previous?.snapshot, to: snapshot))
+        var summary = VersionDiff.summary(from: previous?.snapshot, to: snapshot)
+        summary.agent = agent
+        let info = try versions.save(snapshot, pageId: pageId, createdAt: createdAt, deviceName: author, summary: summary)
         onRecorded?(info)
         return info
     }

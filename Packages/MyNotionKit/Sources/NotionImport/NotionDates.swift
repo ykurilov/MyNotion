@@ -95,7 +95,9 @@ enum NotionDates {
             if zone == nil, let offset = offsetSeconds(String(rest.dropFirst(6))) { zone = TimeZone(secondsFromGMT: offset) }
         }
         let reminder = attribute("data-remind").flatMap { try? Date($0, strategy: .iso8601) }.map(DateMention.Reminder.init(fireAt:))
-        return DateMention(start: start, includesTime: includesTime, timeZone: (zone ?? .current).identifier, reminder: reminder)
+        // `data-id` пишут ответы команд 005: дата с тем же id — то же напоминание.
+        let id = attribute("data-id").flatMap(UUID.init(uuidString:)) ?? .timeOrdered()
+        return DateMention(id: id, start: start, includesTime: includesTime, timeZone: (zone ?? .current).identifier, reminder: reminder)
     }
 
     /// `+08:00` → 28 800.

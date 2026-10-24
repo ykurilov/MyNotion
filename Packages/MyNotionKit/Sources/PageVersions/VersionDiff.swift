@@ -13,9 +13,11 @@ public struct VersionSummary: Sendable, Hashable, Codable {
     public var blocksAdded = 0
     public var blocksRemoved = 0
     public var blocksChanged = 0
+    /// Снимок «до правки агента» (005, research R5): имя агента, который сейчас начнёт править страницу.
+    public var agent: String?
 
     public init(isFirst: Bool = false, titleChanged: Bool = false, iconChanged: Bool = false, coverChanged: Bool = false,
-                layoutChanged: Bool = false, blocksAdded: Int = 0, blocksRemoved: Int = 0, blocksChanged: Int = 0) {
+                layoutChanged: Bool = false, blocksAdded: Int = 0, blocksRemoved: Int = 0, blocksChanged: Int = 0, agent: String? = nil) {
         self.isFirst = isFirst
         self.titleChanged = titleChanged
         self.iconChanged = iconChanged
@@ -24,10 +26,17 @@ public struct VersionSummary: Sendable, Hashable, Codable {
         self.blocksAdded = blocksAdded
         self.blocksRemoved = blocksRemoved
         self.blocksChanged = blocksChanged
+        self.agent = agent
     }
 
     /// Строки списка изменений («изменено название», «добавлено 3 блока»).
     public var lines: [String] {
+        guard let agent else { return changeLines }
+        let changes = changeLines.filter { $0 != "без изменений" }
+        return ["до правки агента (\(agent))"] + changes
+    }
+
+    private var changeLines: [String] {
         if isFirst { return ["первая версия"] }
         var lines: [String] = []
         if titleChanged { lines.append("изменено название") }
@@ -49,7 +58,7 @@ public struct VersionSummary: Sendable, Hashable, Codable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case isFirst, titleChanged, iconChanged, coverChanged, layoutChanged, blocksAdded, blocksRemoved, blocksChanged
+        case isFirst, titleChanged, iconChanged, coverChanged, layoutChanged, blocksAdded, blocksRemoved, blocksChanged, agent
     }
 
     /// Неизвестные и пропущенные ключи — по умолчанию: сводку могла записать другая версия приложения.
@@ -63,6 +72,7 @@ public struct VersionSummary: Sendable, Hashable, Codable {
         blocksAdded = try container.decodeIfPresent(Int.self, forKey: .blocksAdded) ?? 0
         blocksRemoved = try container.decodeIfPresent(Int.self, forKey: .blocksRemoved) ?? 0
         blocksChanged = try container.decodeIfPresent(Int.self, forKey: .blocksChanged) ?? 0
+        agent = try container.decodeIfPresent(String.self, forKey: .agent)
     }
 }
 

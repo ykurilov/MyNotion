@@ -241,7 +241,7 @@ final class ServerBox: @unchecked Sendable {
         out = ""
         #expect(MyNotionCLI.run(["commands", "--json"], launcher: launcher, out: { out += $0 }, err: { err += $0 }) == 0)
         let catalog = try ControlJSON(parsing: out)
-        #expect(catalog["commands"]?.array?.count == CommandCatalog.all.count)
+        #expect(catalog["data"]?["commands"]?.array?.count == CommandCatalog.all.count)
 
         out = ""
         #expect(MyNotionCLI.run(["page", "craete"], launcher: launcher, out: { out += $0 }, err: { err += $0 }) == 2)

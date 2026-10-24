@@ -105,9 +105,12 @@ public final class PageVersionStore: Sendable {
     public func allVersionStamps() throws -> [UUID: [VersionStamp]] {
         try database.read { db in
             var result: [UUID: [VersionStamp]] = [:]
-            for row in try Row.fetchAll(db, sql: "SELECT id, pageId, createdAt, isBeforeRestore FROM page_version") {
+            for row in try Row.fetchAll(db, sql: """
+                SELECT id, pageId, createdAt, isBeforeRestore, json_extract(summary, '$.agent') IS NOT NULL AS isAgentCheckpoint FROM page_version
+                """) {
                 guard let id = UUID(uuidString: row["id"]), let pageId = UUID(uuidString: row["pageId"]) else { continue }
-                result[pageId, default: []].append(VersionStamp(id: id, createdAt: row["createdAt"], isBeforeRestore: row["isBeforeRestore"]))
+                result[pageId, default: []].append(VersionStamp(id: id, createdAt: row["createdAt"], isBeforeRestore: row["isBeforeRestore"],
+                                                                 isAgentCheckpoint: row["isAgentCheckpoint"]))
             }
             return result
         }
@@ -177,16 +180,18 @@ public final class PageVersionStore: Sendable {
     }
 }
 
-/// id, время версии и пометка «до восстановления» — всё, что нужно прореживанию.
+/// id, время версии и пометки «до восстановления» и «до правки агента» — всё, что нужно прореживанию.
 public struct VersionStamp: Sendable, Hashable {
     public let id: UUID
     public let createdAt: Date
     public let isBeforeRestore: Bool
+    public let isAgentCheckpoint: Bool
 
-    public init(id: UUID, createdAt: Date, isBeforeRestore: Bool = false) {
+    public init(id: UUID, createdAt: Date, isBeforeRestore: Bool = false, isAgentCheckpoint: Bool = false) {
         self.id = id
         self.createdAt = createdAt
         self.isBeforeRestore = isBeforeRestore
+        self.isAgentCheckpoint = isAgentCheckpoint
     }
 }
 
