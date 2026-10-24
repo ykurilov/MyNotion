@@ -17,7 +17,7 @@ struct BreadcrumbBar: View {
         let parts = BreadcrumbPath.parts(ancestors: ancestors, current: current, width: width, measure: BreadcrumbText.measure)
         HStack(spacing: 0) {
             ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
-                if index > 0 { Text(BreadcrumbText.styled(BreadcrumbText.separator)).fixedSize() }
+                if index > 0 { Text(BreadcrumbText.styled(BreadcrumbText.separator)).fixedSize().padding(.horizontal, -Self.hoverInset) }
                 switch part {
                 case .page(let ancestor):
                     BreadcrumbButton(title: ancestor.title, identifier: "breadcrumb-ancestor") { onOpenPage(ancestor.pageId) }
@@ -27,13 +27,22 @@ struct BreadcrumbBar: View {
                     Text(BreadcrumbText.styled(title))
                         .lineLimit(1)
                         .accessibilityIdentifier("page-breadcrumb")
+                        // «/» перед текущей заходит на место поля подсветки соседней кнопки: возвращаем текст на место.
+                        .padding(.leading, index > 0 ? Self.hoverInset : 0)
                 }
             }
         }
         .fixedSize(horizontal: true, vertical: false)
+        // Первая часть-кнопка с полем подсветки: сам текст стоит там же, где стоял бы без неё.
+        .padding(.leading, startsWithButton(parts) ? -Self.hoverInset : 0)
     }
 
-    /// Подпись с подсветкой при наведении; поля подсветки вычтены из раскладки.
+    private func startsWithButton(_ parts: [BreadcrumbPath.Part]) -> Bool {
+        if case .current = parts.first { false } else { true }
+    }
+
+    /// Подпись с подсветкой при наведении. Поля подсветки входят в размер кнопки (нажимаемая область и рамка
+    /// для доступности совпадают); соседние «/» заходят на них, и путь стоит там же, где стоял текстом.
     fileprivate struct HoverLabel: View {
         let text: AttributedString
         let isHovered: Bool
@@ -46,7 +55,6 @@ struct BreadcrumbBar: View {
                 .background(RoundedRectangle(cornerRadius: Metrics.Window.toolbarButtonCornerRadius)
                     .fill(isHovered ? Color(nsColor: Palette.hoverBackground) : .clear))
                 .contentShape(Rectangle())
-                .padding(.horizontal, -BreadcrumbBar.hoverInset)
         }
     }
 }

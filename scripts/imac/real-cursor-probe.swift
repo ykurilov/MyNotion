@@ -202,16 +202,20 @@ func activate() {
     write("front=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "?") pid=\(app.processIdentifier)")
 }
 
-/// Снимок полосы пути: окно MyNotion по номеру окна, рука на крошке видна в подсветке.
-func saveTopBarShot(window: CGRect, name: String) {
-    let rect = CGRect(x: window.minX, y: window.minY, width: window.width, height: 80)
-    guard let image = CGWindowListCreateImage(rect, .optionOnScreenOnly, kCGNullWindowID, [.bestResolution]) else {
-        write("shot: не удалось снять \(name)"); return
-    }
-    let url = URL(fileURLWithPath: logPath).deletingLastPathComponent().appendingPathComponent("\(name).png")
-    let rep = NSBitmapImageRep(cgImage: image)
-    try? rep.representation(using: .png, properties: [:])?.write(to: url)
-    write("shot: \(url.path)")
+/// Снимок всего экрана через CuaDriver (screencapture по SSH видит только обои); пишет PNG рядом с журналом.
+/// CuaDriver пишет файлы только в домашнюю папку, поэтому снимок сначала там, потом копия.
+func saveScreenShot(name: String) {
+    let shots = NSHomeDirectory() + "/work/shots"
+    try? FileManager.default.createDirectory(atPath: shots, withIntermediateDirectories: true)
+    let temp = "\(shots)/\(name).png", target = URL(fileURLWithPath: logPath).deletingLastPathComponent().appendingPathComponent("\(name).png")
+    let task = Process()
+    task.executableURL = URL(fileURLWithPath: NSHomeDirectory() + "/.local/bin/cua-driver")
+    task.arguments = ["call", "get_desktop_state", "{\"screenshot_out_file\":\"\(temp)\"}"]
+    task.standardOutput = FileHandle.nullDevice
+    try? task.run(); task.waitUntilExit()
+    try? FileManager.default.removeItem(at: target)
+    try? FileManager.default.copyItem(atPath: temp, toPath: target.path)
+    write("shot: \(target.path) exists=\(FileManager.default.fileExists(atPath: target.path))")
 }
 
 /// Крошки пути над страницей: каждый предок и «…» — рука в середине и у краёв, как у кнопок панели.
@@ -229,7 +233,7 @@ func runBreadcrumbs(window: CGRect) -> Bool {
         for (n, point) in points.enumerated() {
             glide(to: point, speed: 250)
             segment("breadcrumb-\(index)-\(n)", hand) { rest(0.8) }
-            if index == 0, n == 0 { saveTopBarShot(window: window, name: "breadcrumbs-hover") }
+            if index == 0, n == 0 { saveScreenShot(name: "breadcrumbs-hover") }
         }
     }
     return true
