@@ -228,7 +228,7 @@ extension CommandSession {
 
     /// `markdown` или `blocks` страницы: открытая в окне — как видна там, с незаписанным вводом.
     func content(of pageId: UUID, outline: PageOutline) -> [String: ControlJSON] {
-        let blocks = host.openDocuments.document(for: pageId)?.blocks ?? (try? host.store.pageContent(pageId))?.blocks ?? []
+        let blocks = host.openDocuments.document(for: pageId)?.allBlocks ?? (try? host.store.pageContent(pageId))?.blocks ?? []
         if string("format") == "json" {
             let titles = outline.titles
             let byContainer = Dictionary(grouping: blocks, by: \.containerId).mapValues { $0.sorted { $0.sortKey < $1.sortKey } }

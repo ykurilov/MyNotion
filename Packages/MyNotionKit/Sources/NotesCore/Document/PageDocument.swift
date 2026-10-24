@@ -60,6 +60,13 @@ public final class PageDocument {
         byId[id]
     }
 
+    /// Все блоки страницы, всех потоков (с блоками колонок, таблиц и вложенными), по ключу порядка, как их отдаёт база.
+    public var allBlocks: [Block] {
+        byId.values.sorted { lhs, rhs in
+            lhs.sortKey == rhs.sortKey ? lhs.id.uuidString < rhs.id.uuidString : lhs.sortKey < rhs.sortKey
+        }
+    }
+
     /// Место блока в потоке страницы; у блоков колонок и таблиц — `nil`.
     public func index(ofBlock id: UUID) -> Int? {
         indexById[id]
