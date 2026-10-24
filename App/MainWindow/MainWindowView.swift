@@ -391,7 +391,7 @@ private struct PagesWindow: View {
             let pages = linkedPages
             PageEditorView(
                 document: document,
-                ancestorTitles: model.ancestorTitles(of: document.pageId),
+                ancestors: model.breadcrumbAncestors(of: document.pageId),
                 initialFocus: model.initialFocus,
                 linkedPages: pages,
                 onOpenPage: { model.open(PageOpenRequest.fromClick($0)) },

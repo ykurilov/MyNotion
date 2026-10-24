@@ -58,10 +58,10 @@ extension MainWindowModel {
     }
 
     /// Путь строки в верхней полосе: путь базы и сама база («Родитель / … / Задачи / Строка»).
-    func rowAncestorTitles(of pageId: UUID) -> [String]? {
+    func rowBreadcrumbAncestors(of pageId: UUID) -> [BreadcrumbAncestor]? {
         guard tree.page(pageId) == nil, let document = openDocuments.document(for: pageId), isDatabaseRow(document),
               let databaseId = document.page.parentId, let database = tree.page(databaseId) else { return nil }
-        return tree.ancestors(of: databaseId).map(\.pathTitle) + [database.pathTitle]
+        return (tree.ancestors(of: databaseId) + [database]).map(BreadcrumbAncestor.init(page:))
     }
 
     /// Правка баз этого окна: открытые строки (на всю страницу и в просмотре) принимают записанное на месте —

@@ -7,8 +7,8 @@ import VisualStyle
 /// (contracts/visual-style.md, «Страница»). На каждый документ — свой редактор (`.id` внутри).
 public struct PageEditorView: View {
     let document: PageDocument
-    /// Названия страниц-предков с иконками, от корня; у корневой страницы — пусто.
-    let ancestorTitles: [String]
+    /// Страницы-предки с иконками, от корня; у корневой страницы — пусто. Нажатие открывает страницу.
+    let ancestors: [BreadcrumbAncestor]
     let initialFocus: PageTextView.InitialFocus
     /// Названия и иконки страниц для блоков-подстраниц.
     let linkedPages: [UUID: LinkedPage]
@@ -41,7 +41,7 @@ public struct PageEditorView: View {
     /// Шаблоны для строк на пустой странице (US7).
     let templates: TemplateSettings
 
-    public init(document: PageDocument, ancestorTitles: [String] = [], initialFocus: PageTextView.InitialFocus,
+    public init(document: PageDocument, ancestors: [BreadcrumbAncestor] = [], initialFocus: PageTextView.InitialFocus,
                 linkedPages: [UUID: LinkedPage] = [:], onOpenPage: @escaping @MainActor (UUID) -> Void = { _ in },
                 onSubpageRequest: @escaping @MainActor (SubpageRequest) -> Void = { _ in },
                 onSetIcon: @escaping @MainActor (String?) -> Void = { _ in },
@@ -52,7 +52,7 @@ public struct PageEditorView: View {
                 scrollPlace: PageScrollPlace? = nil, restoringScroll: TabScroll? = nil,
                 templates: TemplateSettings = TemplateSettings(), topBarLeading: AnyView? = nil) {
         self.document = document
-        self.ancestorTitles = ancestorTitles
+        self.ancestors = ancestors
         self.initialFocus = initialFocus
         self.linkedPages = linkedPages
         self.onOpenPage = onOpenPage
@@ -115,10 +115,7 @@ public struct PageEditorView: View {
     private var breadcrumb: some View {
         GeometryReader { proxy in
             let width = proxy.size.width - Metrics.Page.topBarHorizontalPadding - Metrics.Page.topBarTrailingInset
-            Text(BreadcrumbText.styled(BreadcrumbText.fitting(ancestorTitles + [document.page.pathTitle], width: width,
-                                                              measure: BreadcrumbText.measure)))
-                .lineLimit(1)
-                .accessibilityIdentifier("page-breadcrumb")
+            BreadcrumbBar(ancestors: ancestors, current: document.page.pathTitle, width: width, onOpenPage: onOpenPage)
                 .padding(.leading, Metrics.Page.topBarHorizontalPadding)
                 .padding(.trailing, Metrics.Page.topBarTrailingInset)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
