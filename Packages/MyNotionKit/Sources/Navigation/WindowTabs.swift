@@ -75,6 +75,15 @@ public final class WindowTabs {
         activePageDidChange(from: left)
     }
 
+    /// Пустая вкладка в конце, сразу активная («Недавние»): `mynotion tab new`, «+» без выбора страницы.
+    public func openEmptyTab() {
+        let left = activePageId
+        rememberScroll()
+        items.append(Tab(pageId: nil))
+        activeIndex = items.count - 1
+        activePageDidChange(from: left)
+    }
+
     /// «Показать все» в разделе «Недавние»: «Недавние» в активной вкладке, «назад» возвращает страницу.
     public func showRecentPages() {
         let left = activePageId

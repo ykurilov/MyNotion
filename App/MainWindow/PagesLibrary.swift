@@ -49,6 +49,9 @@ final class PagesLibrary {
     @ObservationIgnored private var windows: [WeakWindow] = []
     /// «Файл → Новое окно»: ставит первое окно (открывать окна SwiftUI умеет только из вида).
     @ObservationIgnored var openNewWindow: (@MainActor () -> Void)?
+    /// Страница окна, которое сейчас открывает команда `open --new-window`: следующая новая модель берёт её, а не страницу
+    /// окна, где работают.
+    @ObservationIgnored var pageForNextNewWindow: UUID?
 
     private struct WeakWindow {
         weak var model: MainWindowModel?
@@ -94,7 +97,8 @@ final class PagesLibrary {
             isFirstWindowClaimed = true
             return firstWindow
         }
-        return MainWindowModel(library: self, opening: activeWindow?.openPageId)
+        defer { pageForNextNewWindow = nil }
+        return MainWindowModel(library: self, opening: pageForNextNewWindow ?? activeWindow?.openPageId)
     }
 
     func register(_ window: MainWindowModel) {

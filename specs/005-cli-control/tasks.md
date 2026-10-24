@@ -173,13 +173,13 @@ description: "Задачи: управление MyNotion из командно�
 
 ### Тесты (до кода)
 
-- [ ] T059 [P] [US5] `PK/Tests/ControlCommandsTests/WindowCommandsTests.swift` (подставной `WindowControl`): `window state`; `open` в текущей, новой вкладке, новом окне, с `--block`, с `--activate` и без; окон нет → новое окно; `tab new/select/close/reopen`; `nav back/forward`; лист открыт → `window_busy`; нет вкладки → `tab_not_found`; команды окна в пакете → `not_batchable`
+- [x] T059 [P] [US5] `PK/Tests/ControlCommandsTests/WindowCommandsTests.swift` (подставной `WindowControl`): `window state`; `open` в текущей, новой вкладке, новом окне, с `--block`, с `--activate` и без; окон нет → новое окно; `tab new/select/close/reopen`; `nav back/forward`; лист открыт → `window_busy`; нет вкладки → `tab_not_found`; команды окна в пакете → `not_batchable`
 
 ### Код
 
-- [ ] T060 [US5] `PK/Sources/ControlCommands/Handlers/WindowHandlers.swift` (T059)
-- [ ] T061 [US5] `App/Control/AppWindowControl.swift`: `MainWindowModel.open(PageOpenRequest)`, `openInNewTab`, `goBack`, `goForward`, `WindowTabs.close/reopenClosedTab`, новое окно через `openWindow(id: MainWindowView.sceneId)`; без `--activate` — `orderFront` без активации, с ним — `NSApp.activate`
-- [ ] T062 [US5] `Tools/mynotion-skill/references/window.md`; живая проверка шага 4 сценария A на iMac (снимок; `lsappinfo front` — терминал, без `--activate`); затронутые тесты зелёные; замер запуска и памяти в покое против прошлого этапа (quickstart, «Замеры», конституция II); коммит
+- [x] T060 [US5] `PK/Sources/ControlCommands/Handlers/WindowHandlers.swift` (T059)
+- [x] T061 [US5] `App/Control/AppWindowControl.swift`: `MainWindowModel.open(PageOpenRequest)`, `openInNewTab`, `goBack`, `goForward`, `WindowTabs.close/reopenClosedTab`, новое окно через `openWindow(id: MainWindowView.sceneId)`; без `--activate` — `orderFront` без активации, с ним — `NSApp.activate`
+- [x] T062 [US5] `Tools/mynotion-skill/references/window.md`; живая проверка шага 4 сценария A на iMac (снимок; `lsappinfo front` — терминал, без `--activate`); затронутые тесты зелёные; замер запуска и памяти в покое против прошлого этапа (quickstart, «Замеры», конституция II); коммит
 
 ---
 
