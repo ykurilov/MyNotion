@@ -1,9 +1,10 @@
 #!/bin/zsh
-# На iMac внутри `run-on-imac.sh lock --` (место «экран»): живая проверка команды `mynotion` на Release (005, T026).
+# На iMac внутри `run-on-imac.sh lock --` (место «экран»): живая проверка команды `mynotion` на Release (005, T026, T036).
 #   1. установка `scripts/install-cli.sh` в папки сборки (HOME подменён: домашняя папка iMac не меняется);
-#   2. приложение закрыто → `mynotion app status` поднимает его в фоне: фокус не уходит, ответ ≤ 4 с;
-#   3. `mynotion page tree` → `not_implemented` (код выхода 4); права сокета 0600;
-#   4. память и процессор в покое с открытым сокетом против сборки 004 (CLI_BASE — папка исходников 004 на iMac).
+#   2. приложение закрыто → `mynotion page tree --depth 1` поднимает его в фоне: фокус не уходит, ответ ≤ 4 с (сценарий A, шаг 1);
+#   3. страницы (шаги 2, 3, 11): `page create` с `meeting.md`, `page read` — тот же Markdown, корзина, `trash delete` без
+#      `--force` → `force_required`; снимок окна; права сокета 0600;
+#   4. память и процессор в покое с открытым сокетом против прошлой сборки (CLI_BASE — папка её исходников на iMac, CLI_BASE_LABEL — подпись, по умолчанию 004).
 # Итоги — в build/cli-live/summary.txt.
 set -uo pipefail
 zmodload zsh/datetime  # EPOCHREALTIME
@@ -38,18 +39,53 @@ socket=$support/control.sock
 front_name() { lsappinfo info -only name $(lsappinfo front) 2>/dev/null | head -1 }
 front_before=$(front_name)
 started=$EPOCHREALTIME
-$mynotion app status --agent cli-live-check > $out/app-status.json 2> $out/app-status.err
-status_rc=$?
+$mynotion page tree --depth 1 --agent cli-live-check > $out/page-tree.json 2> $out/page-tree.err
+tree_rc=$?
 elapsed=$(( EPOCHREALTIME - started ))
 front_after=$(front_name)
-note "app status из закрытого: $(printf '%.2f' $elapsed) с, код $status_rc"
-check "app status ответил ok" "grep -q '\"ok\":true' $out/app-status.json"
+note "page tree из закрытого: $(printf '%.2f' $elapsed) с, код $tree_rc"
+check "шаг 1: page tree ответил ok с деревом" "(( tree_rc == 0 )) && grep -q '\"items\":' $out/page-tree.json"
 check "запуск командой ≤ 4 с" "(( elapsed <= 4 ))"
 check "фокус не ушёл (передним осталось $front_before)" "[[ \"$front_before\" == \"$front_after\" ]]"
+$mynotion app status --agent cli-live-check > $out/app-status.json 2> $out/app-status.err
+check "app status ответил ok" "grep -q '\"ok\":true' $out/app-status.json"
 
-$mynotion page tree > $out/page-tree.json 2>&1
-tree_rc=$?
-check "page tree → not_implemented, код 4" "(( tree_rc == 4 )) && grep -q '\"code\":\"not_implemented\"' $out/page-tree.json"
+# Страницы (сценарий A, шаги 2, 3, 11). Поле ответа: json_field <файл> <путь через точку>.
+json_field() { python3 -c 'import json,sys; v=json.load(open(sys.argv[1])); [v := v[k] for k in sys.argv[2].split(".")]; print(v)' $1 $2 }
+export MYNOTION_AGENT=cli-live-check
+$mynotion page create --title Проекты > $out/projects.json
+plan_id=$($mynotion page create --title "План проекта" > $out/plan.json && json_field $out/plan.json data.page.id)
+# В фикстуре ссылка на страницу с условным id — здесь она ведёт на настоящую «План проекта».
+sed "s/00000000-0000-4000-8000-0000000000aa/$plan_id/" Packages/MyNotionKit/Tests/PageMarkdownTests/Fixtures/meeting.md > $out/meeting.md
+$mynotion page create --parent Проекты --title "Встреча 24.10" --markdown $out/meeting.md > $out/create.json 2>&1
+check "шаг 2: page create с meeting.md → ok, data.page.id" "grep -q '\"ok\":true' $out/create.json"
+meeting_id=$(json_field $out/create.json data.page.id)
+$mynotion page read $meeting_id > $out/read.json 2>&1
+json_field $out/read.json data.markdown > $out/read.md
+check "шаг 3: page read — тот же Markdown, что meeting.md" \
+  "python3 -c 'import sys; a, b = (open(f).read().strip() for f in sys.argv[1:]); sys.exit(a != b)' $out/meeting.md $out/read.md"
+diff $out/meeting.md $out/read.md > $out/read.diff
+$mynotion page tree Проекты > $out/projects-tree.json
+check "встреча в дереве под «Проекты»" "grep -q 'Встреча 24.10' $out/projects-tree.json"
+
+# Снимок окна: страница в дереве боковой панели.
+pid=$(pgrep -x MyNotion | head -1)
+window=$(~/.local/bin/cua-driver call list_windows "{\"pid\":$pid}" | python3 -c 'import json,sys; ws=json.load(sys.stdin)["windows"]; print(max(ws, key=lambda w: w["bounds"]["width"]*w["bounds"]["height"])["window_id"] if ws else "")')
+if [[ -n $window ]]; then
+  ~/.local/bin/cua-driver call get_window_state "{\"pid\":$pid,\"window_id\":$window,\"screenshot_out_file\":\"$out/window.png\"}" > $out/window.json 2>&1
+fi
+check "снимок окна снят" "[[ -s $out/window.png ]]"
+
+$mynotion page trash $meeting_id > $out/trash.json 2>&1
+check "шаг 11: page trash → inTrash" "grep -q '\"inTrash\":true' $out/trash.json"
+$mynotion page restore $meeting_id > $out/restore.json 2>&1
+check "шаг 11: page restore → ok" "grep -q '\"ok\":true' $out/restore.json && grep -q '\"inTrash\":false' $out/restore.json"
+$mynotion page trash $meeting_id > /dev/null 2>&1
+$mynotion trash delete $meeting_id > $out/delete.json 2>&1
+check "шаг 11: trash delete без --force → force_required" "grep -q '\"code\":\"force_required\"' $out/delete.json"
+$mynotion page restore $meeting_id > /dev/null 2>&1
+check "после отказа страница цела" "$mynotion page read $meeting_id > /dev/null 2>&1"
+unset MYNOTION_AGENT
 check "права сокета 0600" "[[ \$(stat -f %Lp \"$socket\") == 600 ]]"
 $mynotion --help > $out/help.txt 2>&1
 check "справка без приложения" "grep -q 'Группы:' $out/help.txt"
@@ -85,8 +121,8 @@ wait_for_quiet_indexer >> $summary
 measure $APP 005
 if [[ -n ${CLI_BASE:-} && -d $CLI_BASE ]]; then
   (cd $CLI_BASE && xcodegen generate -q && xcodebuild -scheme MyNotion -configuration Release -derivedDataPath build/cli-base-dd \
-    -jobs $JOBS build -quiet) > $out/base-build.log 2>&1 || { tail -20 $out/base-build.log; fail "Сборка 004 не прошла"; }
-  measure $CLI_BASE/build/cli-base-dd/Build/Products/Release/MyNotion.app 004
+    -jobs $JOBS build -quiet) > $out/base-build.log 2>&1 || { tail -20 $out/base-build.log; fail "Сборка ${CLI_BASE_LABEL:-004} не прошла"; }
+  measure $CLI_BASE/build/cli-base-dd/Build/Products/Release/MyNotion.app ${CLI_BASE_LABEL:-004}
 fi
 
 (( failed )) && note "ИТОГ: есть провалы" || note "ИТОГ: всё прошло"
