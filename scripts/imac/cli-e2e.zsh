@@ -192,14 +192,13 @@ run step09-read page read $page
 jqok "шаг 9: history restore → ok" $out/step09-restore.json '.ok == true'
 jq -r '.data.markdown' $out/step09-read.json > $out/restored.md
 # Строки-ссылки сравниваются отдельно: встроенная база «Задачи» (шаг 7) остаётся по замыслу 004 (подстраница живёт здесь),
-# а ссылка на чужую страницу «План проекта» при восстановлении версии не возвращается — известное расхождение, см. отчёт.
+# а ссылка на чужую живую страницу «План проекта» при восстановлении версии отбрасывается — правило 004 (`isLiveChild`).
 grep -v 'mynotion://page/' $out/meeting.md > $out/meeting-no-links.md
 grep -v 'mynotion://page/' $out/restored.md > $out/restored-no-links.md
 check "шаг 9: страница возвращена к шагу 2 (Markdown как meeting.md, кроме строк-ссылок)" \
   "python3 -I -c 'import sys; a, b = (open(f).read().strip() for f in sys.argv[1:]); sys.exit(a != b)' $out/meeting-no-links.md $out/restored-no-links.md"
-grep -q "mynotion://page/$plan_id" $out/restored.md \
-  && print "  ссылка на «План проекта» вернулась" \
-  || print "  РАСХОЖДЕНИЕ: ссылка на «План проекта» (чужая страница) не вернулась при history restore"
+check "шаг 9: ссылка на чужую живую страницу «План проекта» при восстановлении версии не возвращается (правило 004)" \
+  "! grep -q 'mynotion://page/$plan_id' $out/restored.md"
 
 # --- Шаг 10: поиск, избранное, недавние ------------------------------------------------------------------------------
 run step10-search search "Встреча"
