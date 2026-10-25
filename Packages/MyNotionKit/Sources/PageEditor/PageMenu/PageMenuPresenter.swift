@@ -10,8 +10,9 @@ public final class PageMenuPresenter {
     let view: PageMenuView
     private let card = PopupCard()
 
-    public init(items: [PageMenuItem], context: PageMenuContext) {
-        view = PageMenuView(rows: PageMenuLayout.rows(items, context: context), context: context)
+    /// `context` — страница на момент вызова: меню открыто, а переключатели «Вид страницы» уже меняют её.
+    public init(items: [PageMenuItem], context: @escaping @MainActor () -> PageMenuContext) {
+        view = PageMenuView(rows: PageMenuLayout.rows(items, context: context()), context: context)
         view.onChoose = { [weak self] in self?.card.close() }
         card.onClose = { [weak view] in view?.submenu.close() }
     }
@@ -38,7 +39,7 @@ final class PageMenuView: NSView {
     /// Подменю с переключателями («Вид страницы ›»).
     let submenu = PageMenuSubmenu()
 
-    init(rows: [PageMenuRow], context: PageMenuContext) {
+    init(rows: [PageMenuRow], context: @escaping @MainActor () -> PageMenuContext) {
         let submenu = self.submenu
         let entries: [ActionMenuEntry] = rows.map { row in
             switch row {
@@ -60,8 +61,9 @@ final class PageMenuView: NSView {
     override var isFlipped: Bool { true }
     override var fittingSize: NSSize { actions.fittingSize }
 
-    private static func entry(_ item: PageMenuItem, context: PageMenuContext, submenu: PageMenuSubmenu) -> ActionMenuEntry {
-        let title = item.title(context)
+    private static func entry(_ item: PageMenuItem, context: @escaping @MainActor () -> PageMenuContext,
+                              submenu: PageMenuSubmenu) -> ActionMenuEntry {
+        let title = item.title(context())
         let identifier = "page-menu-\(item.slot)"
         switch item.kind {
         case .search:
@@ -69,7 +71,7 @@ final class PageMenuView: NSView {
         case .footer:
             return .footer(title, identifier: "page-menu-footer")
         case .action(let perform, let shortcut):
-            return .action(ActionMenuAction(title: title, icon: item.slot.icon, hint: shortcut, identifier: identifier) { _ in perform(context) })
+            return .action(ActionMenuAction(title: title, icon: item.slot.icon, hint: shortcut, identifier: identifier) { _ in perform(context()) })
         case .toggles(let toggles):
             // Как у Notion: строка «Вид страницы ›» открывает сбоку подменю с переключателями; переключение меню не закрывает.
             return .action(ActionMenuAction(title: title, icon: item.slot.icon, opensSubmenu: true, identifier: identifier) { row in
@@ -152,7 +154,7 @@ struct PageMenuButton: NSViewRepresentable {
         init(parent: PageMenuButton) { self.parent = parent }
 
         @objc func open(_ sender: NSButton) {
-            let presenter = PageMenuPresenter(items: parent.items, context: parent.context())
+            let presenter = PageMenuPresenter(items: parent.items, context: parent.context)
             self.presenter = presenter
             presenter.show(below: sender)
         }

@@ -11,11 +11,13 @@ final class PageMenuSubmenu {
 
     var isShown: Bool { panel != nil }
 
-    func show(_ toggles: [PageMenuToggle], context: PageMenuContext, besides row: NSView?) {
+    /// Переключатели — по странице на момент показа, щелчок — по странице на момент щелчка: прежний щелчок
+    /// в этом же меню её уже поменял.
+    func show(_ toggles: [PageMenuToggle], context: @escaping @MainActor () -> PageMenuContext, besides row: NSView?) {
         guard panel == nil, let row, let window = row.window else { return }
         let rows = toggles.map { toggle in
-            let view = PageMenuToggleRowView(title: toggle.title, isOn: toggle.isOn(context))
-            view.onToggle = { toggle.toggle(context) }
+            let view = PageMenuToggleRowView(title: toggle.title, isOn: toggle.isOn(context()))
+            view.onToggle = { toggle.toggle(context()) }
             if let identifier = toggle.identifier { view.setAccessibilityIdentifier(identifier) }
             return view
         }

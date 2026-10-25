@@ -100,6 +100,75 @@ final class PageHeaderTests: XCTestCase {
         XCTAssertTrue(try savedAppearance(library, page: "Обложка").isFullWidth, "⌘Z не вернул широкую страницу")
     }
 
+    /// «Широкая страница» в одном открытом меню: каждый щелчок сразу меняет колонку — туда и обратно, много раз,
+    /// и вместе с «Мелким шрифтом»; ⌘Z и ⇧⌘Z переключения — тоже сразу.
+    @MainActor
+    func testFullWidthTogglesBothWaysInOpenMenu() throws {
+        let library = try UITestLibrary.make(for: self)
+        let app = library.launchApp()
+        app.createPage(titled: "Широкая")
+        app.typeText(String(repeating: "Нейропродавец находит клиентов и передаёт готовых купить. ", count: 8))
+        // Без боковой панели обычная колонка заметно уже широкой: поля 240 против 96.
+        let sidebar = app.buttons["sidebar-toggle"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+        sidebar.click()
+        XCTAssertTrue(waitForAbsence(app.outlines["page-tree"]), "Панель не свернулась")
+        let normal = settledTitleX(app)
+        let fullWidth = app.descendants(matching: .any)["page-appearance-full-width"]
+        let smallText = app.descendants(matching: .any)["page-appearance-small-text"]
+
+        openAppearance(app)
+        for (step, wide) in [true, false, true, false].enumerated() {
+            fullWidth.click()
+            XCTAssertTrue(waitForTitle(app, wide: wide, normal: normal),
+                          "Щелчок \(step + 1): колонка не стала \(wide ? "широкой" : "обычной"), название на \(app.pageTitle.frame.minX)")
+        }
+        smallText.click()
+        fullWidth.click()
+        XCTAssertTrue(waitForTitle(app, wide: true, normal: normal), "С мелким шрифтом не стала широкой")
+        fullWidth.click()
+        XCTAssertTrue(waitForTitle(app, wide: false, normal: normal), "С мелким шрифтом не стала обычной")
+        smallText.click()
+        fullWidth.click()
+        XCTAssertTrue(waitForTitle(app, wide: true, normal: normal))
+        app.typeKey(.escape, modifierFlags: [])
+        app.typeKey(.escape, modifierFlags: [])
+
+        app.pageBody.click()
+        app.typeKey("z", modifierFlags: .command)
+        XCTAssertTrue(waitForTitle(app, wide: false, normal: normal), "⌘Z не вернул обычную страницу")
+        app.typeKey("z", modifierFlags: [.command, .shift])
+        XCTAssertTrue(waitForTitle(app, wide: true, normal: normal), "⇧⌘Z не вернул широкую страницу")
+        app.quit()
+        let saved = try savedAppearance(library, page: "Широкая")
+        XCTAssertTrue(saved.isFullWidth && !saved.isSmallText, "В базе не тот вид: \(saved)")
+    }
+
+    /// Место названия, когда страница перестала двигаться: панель сворачивается с анимацией.
+    @MainActor
+    private func settledTitleX(_ app: XCUIApplication) -> CGFloat {
+        var last = app.pageTitle.frame.minX
+        for _ in 0..<20 {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+            let x = app.pageTitle.frame.minX
+            if x == last { return x }
+            last = x
+        }
+        return last
+    }
+
+    /// Название — у поля широкой страницы (левее обычного места на 144) или на обычном месте `normal`.
+    @MainActor
+    private func waitForTitle(_ app: XCUIApplication, wide: Bool, normal: CGFloat) -> Bool {
+        let deadline = Date().addingTimeInterval(3)
+        while Date() < deadline {
+            let shift = normal - app.pageTitle.frame.minX
+            if wide ? shift > 100 : abs(shift) < 1 { return true }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        return false
+    }
+
     static let galleryIds: Set<String> = ["solid_red", "solid_yellow", "solid_blue", "solid_beige", "gradients_8", "gradients_2",
                                           "gradients_11", "gradients_4", "gradients_10", "gradients_5", "gradients_3"]
 
