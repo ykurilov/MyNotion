@@ -3,10 +3,11 @@
 // молча выбрасывает события. Мышь ведётся плавно, шагом 8 мс, с остановками и дрожанием на месте;
 // системный указатель (NSCursor.currentSystem) читается каждые 5 мс в этом же процессе.
 //
-//   real-cursor-probe <pid приложения> <журнал> [page|inactive|window|foreign]
+//   real-cursor-probe <pid приложения> <журнал> [page|inactive|window|foreign|links]
 //
 // page     — страница: обложка, иконка, название, H1, абзац, ручки ⋮⋮ и +; итог PASS/FAIL по ожиданиям.
 // inactive — то же, затем те же полосы, когда впереди другое приложение (окно MyNotion видно, но не активно).
+// links    — ссылка в тексте и подстраницы внизу образца: рука; текст рядом — I-beam.
 // foreign  — эталон: чужое приложение (Chrome со страницей текста и ссылки), активное и позади другого.
 // window   — обход всего окна по сетке: для каждого места — элемент под мышью (AX) и указатель; итог — список,
 //            FAIL — если у нажимаемого (включённые кнопки, строки и названия в дереве) больше всего стрелки.
@@ -350,6 +351,61 @@ func runPage() -> Bool {
     return ok
 }
 
+/// Нажимаемое в тексте: ссылка в первом абзаце и подстраницы в конце образца — рука, как в Notion; текст рядом — I-beam.
+func runLinks() -> Bool {
+    let hand = everywhere(["HAND"]), beam = everywhere(["IBEAM"])
+    guard let window = (attribute(axApp, kAXWindowsAttribute) as [AXUIElement]?)?.first, let windowFrame = frame(of: window),
+          let link = textFrame("ссылка"), let before = textFrame("Обычный абзац")
+    else { write("FAIL: не нашёл окно или ссылку в первом абзаце (AX)"); return false }
+    write("window=\(windowFrame) link=\(link) before=\(before)")
+    glide(to: CGPoint(x: windowFrame.midX, y: windowFrame.minY + 4), speed: 600)
+    glide(to: CGPoint(x: before.midX, y: before.midY))
+    segment("text-before-link", beam) { rest(0.8) }
+    glide(to: CGPoint(x: link.midX, y: link.midY), speed: 200)
+    segment("link", hand) { rest(1.5) }
+    glide(to: CGPoint(x: before.midX, y: before.midY), speed: 200)
+    segment("text-after-link", beam) { rest(0.8) }
+
+    // Подстраницы — в самом низу образца: колесом мыши вниз, пока последний абзац не окажется в окне.
+    for _ in 0..<40 {
+        if let last = textFrame("Последний абзац страницы."), last.maxY < windowFrame.maxY - 150 { break }
+        CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: -10, wheel2: 0, wheel3: 0)?
+            .post(tap: .cghidEventTap)
+        usleep(80_000)
+    }
+    rest(0.8, jitter: false)
+    guard let last = textFrame("Последний абзац страницы."), let body = find("page-body").first,
+          let value: String = attribute(body, kAXValueAttribute), let found = value.range(of: "Последний абзац страницы.\n")
+    else { write("FAIL: не нашёл последний абзац (AX)"); return false }
+    // Строка первой подстраницы — знак сразу за переводом строки последнего абзаца.
+    var cfRange = CFRange(location: value.utf16.distance(from: value.utf16.startIndex, to: found.upperBound.samePosition(in: value.utf16)!), length: 1)
+    var bounds: CFTypeRef?, row = CGRect.zero
+    guard let param = AXValueCreate(.cfRange, &cfRange),
+          AXUIElementCopyParameterizedAttributeValue(body, kAXBoundsForRangeParameterizedAttribute as CFString, param, &bounds) == .success,
+          let axBounds = bounds else { write("FAIL: нет рамки строки подстраницы (AX)"); return false }
+    AXValueGetValue(axBounds as! AXValue, .cgRect, &row)
+    write("last=\(last) subpage-row=\(row)")
+    let y = row.midY, left = last.minX - 40
+    glide(to: CGPoint(x: left, y: y), speed: 400); rest(0.1, jitter: false)
+    var spans: [String] = [], previous = ""
+    for step in 0...260 {
+        let x = left + Double(step)
+        post(CGPoint(x: x, y: y)); usleep(30_000)
+        let name = currentCursorName()
+        if name != previous { spans.append("\(name)@\(Int(x - last.minX))"); previous = name }
+    }
+    write("scan подстраница: смены указателя от начала текста абзаца: " + spans.joined(separator: " "))
+    for (name, dx) in [("subpage-icon", 10.0), ("subpage-title", 60.0), ("subpage-title-end", 110.0)] {
+        glide(to: CGPoint(x: last.minX + dx, y: y), speed: 200)
+        segment(name, hand) { rest(1.2) }
+    }
+    glide(to: CGPoint(x: last.minX + 60, y: last.midY), speed: 200)
+    segment("text-above-subpage", beam) { rest(0.8) }
+    glide(to: CGPoint(x: last.minX + 60, y: y), speed: 200)
+    segment("subpage-from-text", hand) { rest(3) }
+    return true
+}
+
 /// Окно приложения видно, но впереди другое приложение (так Юрий работает рядом с Paseo):
 /// впереди становится сам probe с окошком 1×1 в углу экрана — оно ничего не заслоняет.
 func bringProbeToFront(checking points: [CGPoint], windowFrame: CGRect) -> Bool {
@@ -461,7 +517,7 @@ RunLoop.main.add(sampler, forMode: .common)
 
 Thread.detachNewThread {
     activate()
-    let ok = mode == "window" ? runWindow() : mode == "foreign" ? runForeign() : runPage()
+    let ok = mode == "window" ? runWindow() : mode == "foreign" ? runForeign() : mode == "links" ? runLinks() : runPage()
     DispatchQueue.main.async {
         sampler.invalidate()
         let samples = recorder.snapshot()
