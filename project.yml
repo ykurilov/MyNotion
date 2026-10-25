@@ -114,6 +114,12 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
         ENABLE_HARDENED_RUNTIME: NO
         ENABLE_APP_SANDBOX: NO
+      # Постоянная подпись: у каждой сборки одно и то же требование подписи, и Связка ключей и разрешения macOS
+      # не спрашивают заново после обновления. Сертификат — на основном Mac; на iMac — ad-hoc (scripts/imac/lib.sh).
+      configs:
+        Release:
+          CODE_SIGN_IDENTITY: "Developer ID Application"
+          DEVELOPMENT_TEAM: DC5QSJ54MB
   # 005: команда `mynotion` для агентов (research R14). Цель не «mynotion»: на диске без учёта регистра её служебная папка совпала бы с папкой MyNotion.
   mynotion-cli:
     type: tool
@@ -128,6 +134,11 @@ targets:
     settings:
       base:
         PRODUCT_NAME: mynotion
+        PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion.cli
+      configs:
+        Release:
+          CODE_SIGN_IDENTITY: "Developer ID Application"
+          DEVELOPMENT_TEAM: DC5QSJ54MB
   UITests:
     type: bundle.ui-testing
     platform: macOS

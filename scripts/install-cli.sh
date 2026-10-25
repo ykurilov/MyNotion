@@ -1,7 +1,7 @@
 #!/bin/zsh
 # Установка команды `mynotion` и скилла агентов (research R14).
 #
-#   scripts/install-cli.sh                       # Release с iMac → /Applications, ссылка, скилл
+#   scripts/install-cli.sh                       # Release с iMac → подпись Developer ID → /Applications, ссылка, скилл
 #   scripts/install-cli.sh --app <MyNotion.app>  # готовая сборка вместо сборки на iMac
 #   scripts/install-cli.sh --target <папка>      # куда положить приложение (на iMac: ~/Applications)
 #   scripts/install-cli.sh --skip-app            # приложение не трогать: ссылка и скилл (ссылка ждёт сборку 005)
@@ -34,7 +34,7 @@ if (( ! skip_app )); then
     # Сборка на iMac (skill imac): основной Mac только получает готовый пакет.
     stage=$(mktemp -d /tmp/mynotion-install.XXXXXX)
     imac-run --no-fallback --no-setup --wait 1800 --fetch build/install/MyNotion.app --out $stage -- \
-      'export PATH=$HOME/.local/bin:$PATH; xcodegen generate -q && xcodebuild -scheme MyNotion -configuration Release -derivedDataPath build/install-dd -jobs 4 build -quiet && rm -rf build/install && mkdir -p build/install && cp -R build/install-dd/Build/Products/Release/MyNotion.app build/install/'
+      'export PATH=$HOME/.local/bin:$PATH XCODE_XCCONFIG_FILE=$PWD/scripts/imac/adhoc-signing.xcconfig; xcodegen generate -q && xcodebuild -scheme MyNotion -configuration Release -derivedDataPath build/install-dd -jobs 4 build -quiet && rm -rf build/install && mkdir -p build/install && cp -R build/install-dd/Build/Products/Release/MyNotion.app build/install/'
     # openrsync кладёт итог под полным путём копии на iMac — ищем пакет, где бы он ни оказался.
     found=($stage/**/MyNotion.app(N/D))
     (( $#found )) || { print -u2 -- "Сборка с iMac не пришла (папка $stage)"; exit 1; }
@@ -44,6 +44,10 @@ if (( ! skip_app )); then
   mkdir -p $target
   rm -rf $installed.new
   cp -R $app $installed.new
+  # Постоянная подпись сертификатом этого Mac: сборка с iMac приходит ad-hoc.
+  # На Mac без сертификата (iMac) подпись остаётся ad-hoc.
+  signed=0; $REPO/scripts/sign-app.sh $installed.new || signed=$?
+  if (( signed == 3 )); then print -u2 -- "Внимание: подпись осталась ad-hoc"; elif (( signed )); then exit $signed; fi
   rm -rf $installed
   mv $installed.new $installed
   print -- "Приложение: $installed"
