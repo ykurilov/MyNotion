@@ -31,16 +31,21 @@ public enum PageHandlers {
 
     static let read: CommandHandler = { session in
         let page = try session.page()
+        // Без `--with-children` дерево целиком не читается: названия ссылок берутся по одному, страница — вместе с предками.
+        guard session.flag("withChildren") else {
+            guard let (_, json) = try PageQueries.response(for: page.id, in: session.host.store) else { throw NotesStoreError.pageNotFound(page.id) }
+            var data = session.content(of: page.id, titles: session.storedTitles)
+            data["page"] = json
+            return CommandResult(.object(data), text: page.title)
+        }
         let outline = try PageOutline(store: session.host.store)
         var data = session.content(of: page.id, outline: outline)
         data["page"] = outline.json(page)
-        if session.flag("withChildren") {
-            data["children"] = .array(outline.children(of: page.id).map { child in
-                var item = session.content(of: child.id, outline: outline)
-                item["page"] = outline.json(child)
-                return .object(item)
-            })
-        }
+        data["children"] = .array(outline.children(of: page.id).map { child in
+            var item = session.content(of: child.id, outline: outline)
+            item["page"] = outline.json(child)
+            return .object(item)
+        })
         return CommandResult(.object(data), text: page.title)
     }
 
@@ -200,9 +205,13 @@ public enum PageHandlers {
 extension CommandSession {
     /// Изменённая страница целиком (FR-431).
     func pageResult(_ pageId: UUID) throws -> CommandResult {
-        let outline = try PageOutline(store: host.store)
-        guard let page = outline.page(pageId) else { throw NotesStoreError.pageNotFound(pageId) }
-        return CommandResult(["page": outline.json(page)], text: page.title)
+        guard let (page, json) = try PageQueries.response(for: pageId, in: host.store) else { throw NotesStoreError.pageNotFound(pageId) }
+        return CommandResult(["page": json], text: page.title)
+    }
+
+    /// Названия и значки страниц по одной выборке на страницу: полное дерево большой базы читается сотни миллисекунд.
+    var storedTitles: MentionTitles {
+        { [store = host.store] id in (try? store.page(id)).flatMap { $0 }.map { ($0.title, $0.icon) } }
     }
 
     /// Страница из корзины: без `--include-trashed`.
@@ -228,18 +237,23 @@ extension CommandSession {
 
     /// `markdown` или `blocks` страницы: открытая в окне — как видна там, с незаписанным вводом.
     func content(of pageId: UUID, outline: PageOutline) -> [String: ControlJSON] {
+        let titles = outline.titles
+        return content(of: pageId, titles: { titles[$0] })
+    }
+
+    /// То же с названиями страниц по требованию (для ссылок и упоминаний).
+    func content(of pageId: UUID, titles: @escaping MentionTitles) -> [String: ControlJSON] {
         let blocks = host.openDocuments.document(for: pageId)?.allBlocks ?? (try? host.store.pageContent(pageId))?.blocks ?? []
         if string("format") == "json" {
-            let titles = outline.titles
             let byContainer = Dictionary(grouping: blocks, by: \.containerId).mapValues { $0.sorted { $0.sortKey < $1.sortKey } }
             func encode(_ block: Block) -> ControlJSON {
                 let children = byContainer[block.id]?.map(encode)
-                return BlockJSON.encode(block, titles: { titles[$0] }, children: children)
+                return BlockJSON.encode(block, titles: titles, children: children)
             }
             return ["blocks": .array((byContainer[nil] ?? []).map(encode))]
         }
         let attachments = host.attachments
-        let reader = PageMarkdownReader(pageTitle: { outline.titles[$0] }, attachmentPath: { ref in
+        let reader = PageMarkdownReader(pageTitle: titles, attachmentPath: { ref in
             // Файл ещё не скачан — путь будущей копии: по нему запись вернёт то же вложение.
             (attachments.fileURL(for: ref.id)
                 ?? attachments.folder.appendingPathComponent(ref.id.uuidString.lowercased()).appendingPathComponent(ref.name)).path

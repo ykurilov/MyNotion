@@ -59,10 +59,9 @@ extension CommandSession {
     }
 
     func editablePage(_ pageId: UUID) throws(ControlError) -> Page {
-        let (page, index) = try blockStoreRead { () -> (Page?, PageIndex) in
-            (try host.store.page(pageId), PageIndex(try host.store.pageOutline()))
-        }
-        guard let page else { throw ControlError.wrapping(NotesStoreError.pageNotFound(pageId)) }
+        // Страница и её предки: полное дерево большой базы читается сотни миллисекунд.
+        let index = try blockStoreRead { try PageQueries.chain(of: pageId, in: host.store) }
+        guard let page = index.byId[pageId] else { throw ControlError.wrapping(NotesStoreError.pageNotFound(pageId)) }
         guard !index.isInTrash(page) else {
             throw ControlError(.pageInTrash, "Страница «\(page.displayTitle)» в корзине",
                                hint: "Вернуть: mynotion page restore \(page.id.controlText)", details: ["id": .string(page.id.controlText)])
@@ -82,12 +81,10 @@ extension CommandSession {
 
     /// Страница в ответе: как в `page get`.
     func storedPageJSON(_ pageId: UUID) throws(ControlError) -> ControlJSON {
-        let (page, index) = try blockStoreRead { () -> (Page?, PageIndex) in
-            (try host.store.page(pageId), PageIndex(try host.store.pageOutline()))
-        }
-        guard let page else { throw ControlError.wrapping(NotesStoreError.pageNotFound(pageId)) }
+        let index = try blockStoreRead { try PageQueries.chain(of: pageId, in: host.store) }
+        guard let page = index.byId[pageId] else { throw ControlError.wrapping(NotesStoreError.pageNotFound(pageId)) }
         let path = (index.ancestors(of: page) + [page]).map(\.displayTitle)
-        let hasChildren = index.pages.contains { $0.parentId == page.id && $0.trashedAt == nil }
+        let hasChildren = try blockStoreRead { try PageQueries.hasLiveChildren(page.id, in: host.store) }
         return PageJSON.encode(page, kind: .page, path: path, hasChildren: hasChildren, inTrash: index.isInTrash(page))
     }
 }

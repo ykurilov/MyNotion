@@ -1,3 +1,4 @@
+import ControlProtocol
 import Foundation
 import GRDB
 import NotesCore
@@ -38,6 +39,37 @@ enum PageQueries {
             let filter = conditions.isEmpty ? "" : " AND (" + conditions.joined(separator: " OR ") + ")"
             return try Row.fetchAll(db, sql: "SELECT * FROM page WHERE parentId = ?\(filter) ORDER BY sortKey, id", arguments: arguments)
                 .map(Page.init(row:))
+        }
+    }
+
+    /// Страница в ответе команды (как `PageOutline.json`) без чтения всего дерева: страница, её предки, признак базы у неё
+    /// и у родителя, видимые дети. `nil` — страницы нет.
+    static func response(for pageId: UUID, in store: NotesStore) throws -> (page: Page, json: ControlJSON)? {
+        let index = try chain(of: pageId, in: store)
+        guard let page = index.byId[pageId] else { return nil }
+        let (isDatabase, parentIsDatabase, hasVisibleChildren) = try store.database.dbWriter.read { db -> (Bool, Bool, Bool) in
+            func isDatabase(_ id: UUID) throws -> Bool {
+                try Bool.fetchOne(db, sql: "SELECT EXISTS (SELECT 1 FROM db_database WHERE pageId = ?)", arguments: [id.databaseText]) ?? false
+            }
+            let own = try isDatabase(pageId)
+            let parent = try page.parentId.map(isDatabase) ?? false
+            // Видимые дети — как в дереве: не в корзине, а шаблоны строк базы не показываются.
+            let children = try Bool.fetchOne(db, sql: """
+                SELECT EXISTS (SELECT 1 FROM page WHERE parentId = ? AND trashedAt IS NULL AND (isTemplate = 0 OR ? = 0))
+                """, arguments: [pageId.databaseText, own]) ?? false
+            return (own, parent, children)
+        }
+        let inTrash = index.isInTrash(page)
+        let kind: PageKind = isDatabase ? .database : (parentIsDatabase ? .row : .page)
+        let path = (index.ancestors(of: page) + [page]).map(\.title)
+        return (page, PageJSON.encode(page, kind: kind, path: path, hasChildren: !inTrash && hasVisibleChildren, inTrash: inTrash))
+    }
+
+    /// Есть ли у страницы дети не в корзине.
+    static func hasLiveChildren(_ pageId: UUID, in store: NotesStore) throws -> Bool {
+        try store.database.dbWriter.read { db in
+            try Bool.fetchOne(db, sql: "SELECT EXISTS (SELECT 1 FROM page WHERE parentId = ? AND trashedAt IS NULL)",
+                              arguments: [pageId.databaseText]) ?? false
         }
     }
 
