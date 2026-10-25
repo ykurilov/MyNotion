@@ -59,6 +59,10 @@ public class PageTextView: NSTextView {
     public var onSubpageRequest: (@MainActor (SubpageRequest) -> Void)?
     /// ⌘-щелчок по ссылке: открыть адрес (по умолчанию — в браузере по умолчанию).
     public var openURL: @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) }
+    /// Разбор текста другой программы в блоки при ⌘V (Markdown ответа ИИ). Разбор Markdown живёт вне редактора:
+    /// приложение ставит его при запуске в `defaultPastedTextReader`; `nil` — вставка текстом, как раньше.
+    public static var defaultPastedTextReader: PastedTextReader?
+    public var pastedTextReader: PastedTextReader? = PageTextView.defaultPastedTextReader
     let layoutDelegate = BlockLayoutDelegate()
     /// Виды колонок и таблиц в тексте и их высоты (`Flows/`).
     let embeddedViews = EmbeddedBlockViews()
@@ -308,6 +312,11 @@ public class PageTextView: NSTextView {
 
     public override func pasteAsRichText(_ sender: Any?) {
         paste(from: .general)
+    }
+
+    /// «Вставить без форматирования» (⌥⇧⌘V): простой текст, без разбора Markdown и оформления.
+    public override func pasteAsPlainText(_ sender: Any?) {
+        paste(from: .general, asPlainText: true)
     }
 
     /// Копирование: в простом тексте для других программ перенос строки внутри блока — обычный перевод строки.

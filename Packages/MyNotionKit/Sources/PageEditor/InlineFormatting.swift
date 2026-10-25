@@ -273,11 +273,18 @@ extension PageTextView {
 
     // MARK: Вставка
 
-    /// Вставка: адрес поверх выделения — ссылка; текст другой программы — с поддерживаемым оформлением;
-    /// всё прочее — простым текстом.
-    public func paste(from pasteboard: NSPasteboard) {
+    /// Вставка: адрес поверх выделения — ссылка; Markdown и списки текста другой программы — блоками
+    /// (`pastedTextReader`); текст другой программы — с поддерживаемым оформлением; всё прочее — простым текстом.
+    /// `asPlainText` — «Вставить без форматирования»: только простой текст.
+    public func paste(from pasteboard: NSPasteboard, asPlainText: Bool = false) {
         commitEdits()
         let selection = selectedRange()
+        if asPlainText {
+            if let plain = pasteboard.string(forType: .string) {
+                insertPasted(NSAttributedString(string: InlineFormatting.normalizedNewlines(plain)), replacing: selection)
+            }
+            return
+        }
         if pasteInlineText(from: pasteboard, replacing: selection) { return }
         // Файлы из Finder и картинка из буфера — блоками (US5).
         if Self.pasteboardHasAttachments(pasteboard) {
@@ -287,6 +294,13 @@ extension PageTextView {
         let plain = pasteboard.string(forType: .string)
         if selection.length > 0, let plain, let url = InlineFormatting.pastedLinkURL(from: plain) {
             setLink(url)
+            return
+        }
+        // Markdown простого текста главнее HTML: кнопка «Копировать» чатов ИИ кладёт Markdown, а HTML без заголовков и списков.
+        if allowsBlockStructure, let plain, let reader = pastedTextReader,
+           let blocks = reader(InlineFormatting.normalizedNewlines(plain), document.pageId,
+                               pasteboard.availableType(from: InlineFormatting.richPasteboardTypes) != nil),
+           pasteBlocks(blocks, replacing: selection) {
             return
         }
         if let rich = Self.richText(from: pasteboard) {
