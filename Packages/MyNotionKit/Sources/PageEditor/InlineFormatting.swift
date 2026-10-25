@@ -238,6 +238,10 @@ extension PageTextView {
     @objc public func toggleStrikethroughStyle(_ sender: Any?) { perform(.toggleInline(.strikethrough)) }
     @objc public func toggleCodeStyle(_ sender: Any?) { perform(.toggleInline(.code)) }
     @objc public func toggleUnderlineStyle(_ sender: Any?) { perform(.toggleInline(.underline)) }
+    @objc public func turnIntoText(_ sender: Any?) { perform(.setKind(.paragraph)) }
+    @objc public func turnIntoHeading1(_ sender: Any?) { perform(.setKind(.heading1)) }
+    @objc public func turnIntoHeading2(_ sender: Any?) { perform(.setKind(.heading2)) }
+    @objc public func turnIntoHeading3(_ sender: Any?) { perform(.setKind(.heading3)) }
 
     /// «Формат → Ссылка»: окно с полем адреса поверх окна страницы; пустой адрес убирает ссылку.
     /// Окно страницы не на экране (модульные проверки) — окна адреса нет: не всплывать поверх чужих программ.

@@ -69,12 +69,11 @@ enum FlowDragCoordinator {
         }
     }
 
-    /// Блок и его вложенные в его потоке.
+    /// Блок и его вложенные в его потоке; у свёрнутого заголовка — с разделом.
     static func movedIds(of blockId: UUID, in root: PageTextView) -> [UUID] {
         guard let source = root.editorTree.first(where: { $0.document.index(ofBlock: blockId) != nil }),
               let index = source.document.index(ofBlock: blockId) else { return [blockId] }
-        let blocks = source.document.blocks
-        return blocks[index..<BlockMoveController.subtreeEnd(blocks, of: index)].map(\.id)
+        return source.document.blocks[index..<source.movedGroupEnd(ofBlockAt: index)].map(\.id)
     }
 }
 

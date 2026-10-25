@@ -34,8 +34,8 @@ public enum BlockMoveController {
         BlockStructure.movedGroup(blocks, selected: selected)
     }
 
-    static func moving(_ blocks: [Block], blockAt index: Int, toGap gap: Int) -> BlockStructure.Change? {
-        BlockStructure.moving(blocks, blockAt: index, toGap: gap)
+    static func moving(_ blocks: [Block], group: Range<Int>, toGap gap: Int) -> BlockStructure.Change? {
+        BlockStructure.moving(blocks, group: group, toGap: gap)
     }
 }
 
@@ -51,18 +51,21 @@ extension PageTextView {
 
     func moveSelectedBlocks(by delta: Int) {
         commitEdits()
-        guard let selected = selectedBlockRange(),
+        // Свёрнутый заголовок последним в выделении едет со своим разделом.
+        guard let selected = selectedBlockRange().map({ $0.lowerBound..<max($0.upperBound, movedGroupEnd(ofBlockAt: $0.upperBound - 1)) }),
               let change = BlockMoveController.moving(document.blocks, selected: selected, by: delta) else { return }
         let moved = Set(document.blocks[BlockMoveController.movedGroup(document.blocks, selected: selected)].map(\.id))
         changeBlocks(change.range, to: change.drafts, moved: moved, actionName: "Переставить блок")
     }
 
-    /// Перетащить блок за «⋮⋮» вместе с вложенными в зазор `gap` между блоками (0 — в начало страницы).
+    /// Перетащить блок за «⋮⋮» вместе с вложенными (свёрнутый заголовок — с разделом) в зазор `gap` между блоками
+    /// (0 — в начало страницы).
     public func moveBlock(_ id: UUID, toGap gap: Int) {
         commitEdits()
-        guard let index = document.index(ofBlock: id),
-              let change = BlockMoveController.moving(document.blocks, blockAt: index, toGap: gap) else { return }
-        let moved = Set(document.blocks[index..<BlockMoveController.subtreeEnd(document.blocks, of: index)].map(\.id))
+        guard let index = document.index(ofBlock: id) else { return }
+        let group = index..<movedGroupEnd(ofBlockAt: index)
+        guard let change = BlockMoveController.moving(document.blocks, group: group, toGap: gap) else { return }
+        let moved = Set(document.blocks[group].map(\.id))
         changeBlocks(change.range, to: change.drafts, moved: moved, actionName: "Переставить блок")
     }
 }

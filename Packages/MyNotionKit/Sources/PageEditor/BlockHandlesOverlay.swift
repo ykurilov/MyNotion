@@ -3,7 +3,8 @@ import NotesCore
 import VisualStyle
 
 /// Ручки блока под мышью (contracts/visual-style.md, «Ручки блока при наведении»): слой поверх текста слева
-/// от колонки. «+» добавляет блок ниже (с ⌥ — выше), «⋮⋮» тянут, чтобы переставить блок, щелчок открывает меню блока.
+/// от колонки. «+» добавляет блок ниже (с ⌥ — выше), у заголовка на его месте — стрелка ▸/▾: свернуть или развернуть раздел.
+/// «⋮⋮» тянут, чтобы переставить блок, щелчок открывает меню блока.
 /// Пока блок тянут, за мышью едет его полупрозрачная копия вместе с вложенными, место сброса — синяя линия; Esc отменяет.
 @MainActor
 final class BlockHandlesOverlay: NSView {
@@ -31,7 +32,10 @@ final class BlockHandlesOverlay: NSView {
         addHandle.frame = NSRect(origin: .zero, size: Metrics.BlockHandles.addButtonSize)
         dragHandle.frame = NSRect(origin: NSPoint(x: Metrics.BlockHandles.addButtonLeadingOffset - Metrics.BlockHandles.dragHandleLeadingOffset, y: 0),
                                   size: Metrics.BlockHandles.dragHandleSize)
-        addHandle.onPress = { [weak self] event in self?.addBlock(above: event.modifierFlags.contains(.option)) }
+        addHandle.onPress = { [weak self] event in
+            guard let self else { return }
+            if addHandle.foldState != nil { toggleFold() } else { addBlock(above: event.modifierFlags.contains(.option)) }
+        }
         dragHandle.onMouseDown = { [weak self] event in
             self?.dragStart = event.locationInWindow
             self?.isCancelled = false
@@ -61,6 +65,7 @@ final class BlockHandlesOverlay: NSView {
         if dragGhost.superview !== host { host.addSubview(dragGhost) }
         let block = textView.document.blocks[index]
         blockId = block.id
+        updateFoldHandle()
         let origin = textView.textContainerOrigin
         let columnLeft = origin.x
         let height = Metrics.BlockHandles.addButtonSize.height
@@ -79,7 +84,18 @@ final class BlockHandlesOverlay: NSView {
         blockId = nil
     }
 
-    // MARK: «+»
+    // MARK: «+» и стрелка заголовка
+
+    /// У заголовка вместо «+» — стрелка свёртывания в его нынешнем виде.
+    func updateFoldHandle() {
+        guard let blockId, let block = textView.document.block(blockId) else { return }
+        addHandle.foldState = block.kind.isHeading ? textView.collapsedBlockIds.contains(blockId) : nil
+    }
+
+    private func toggleFold() {
+        guard let blockId else { return }
+        textView.toggleCollapsed(ofBlock: blockId)
+    }
 
     private func addBlock(above: Bool) {
         guard let blockId, let index = textView.document.index(ofBlock: blockId) else { return }
@@ -139,7 +155,7 @@ final class BlockHandlesOverlay: NSView {
         // Esc приходит в окно текста, даже если до этого печатали в названии страницы.
         textView.window?.makeFirstResponder(textView)
         guard let blockId, let index = textView.document.index(ofBlock: blockId),
-              let snapshot = textView.snapshot(ofBlocks: index..<BlockMoveController.subtreeEnd(textView.document.blocks, of: index)) else { return }
+              let snapshot = textView.snapshot(ofBlocks: index..<textView.movedGroupEnd(ofBlockAt: index)) else { return }
         dragGhost.image = snapshot.image
         dragGhost.frame = chromeHost.convert(snapshot.frame, from: textView)
         ghostAnchor = (pointer, dragGhost.frame.origin)
@@ -218,6 +234,14 @@ final class BlockHandleButton: NSView, PointerOwner {
     enum Kind { case add, drag }
 
     let kind: Kind
+    /// Стрелка заголовка вместо «+»: `true` — раздел свёрнут (▸), `false` — раскрыт (▾); `nil` — обычный «+».
+    var foldState: Bool? {
+        didSet {
+            guard foldState != oldValue else { return }
+            updateAccessibility()
+            needsDisplay = true
+        }
+    }
     var onPress: ((NSEvent) -> Void)?
     var onMouseDown: ((NSEvent) -> Void)?
     var onMouseDragged: ((NSEvent) -> Void)?
@@ -229,8 +253,21 @@ final class BlockHandleButton: NSView, PointerOwner {
         super.init(frame: .zero)
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
-        setAccessibilityLabel(kind == .add ? "Добавить блок" : "Переставить блок")
-        setAccessibilityIdentifier(kind == .add ? "block-handle-add" : "block-handle-drag")
+        updateAccessibility()
+    }
+
+    private func updateAccessibility() {
+        switch (kind, foldState) {
+        case (.add, let collapsed?):
+            setAccessibilityLabel(collapsed ? "Развернуть" : "Свернуть")
+            setAccessibilityIdentifier("block-handle-fold")
+        case (.add, nil):
+            setAccessibilityLabel("Добавить блок")
+            setAccessibilityIdentifier("block-handle-add")
+        case (.drag, _):
+            setAccessibilityLabel("Переставить блок")
+            setAccessibilityIdentifier("block-handle-drag")
+        }
     }
 
     @available(*, unavailable)
@@ -292,6 +329,13 @@ final class BlockHandleButton: NSView, PointerOwner {
         let center = NSPoint(x: bounds.midX, y: bounds.midY)
         switch kind {
         case .add:
+            if let collapsed = foldState {
+                // Треугольник переключателя (`TogglePainter`): свёрнутый рисует и сам заголовок — стрелка видна без мыши,
+                // тем же цветом; развёрнутый — серый, как «⋮⋮» рядом.
+                (collapsed ? HeadingFoldPainter.arrowColor : Palette.handleIcon).setFill()
+                TogglePainter.triangle(center: center, pointingDown: !collapsed).fill()
+                return
+            }
             // Плюс 12×12 линией 1,5 (≈ по снимку).
             let plus = NSBezierPath()
             plus.move(to: NSPoint(x: center.x - 6, y: center.y))
@@ -378,6 +422,11 @@ extension PageTextView {
             // Встроенные элементы управления выбирают собственный курсор.
             if child is NSControl, child !== emptyParagraphHint { return false }
             hit = child.superview
+        }
+        // Подпись свёрнутого заголовка нарисована в тексте, но щёлкается, как кнопка.
+        if target === self, foldedLabel(at: point) != nil {
+            NSCursor.pointingHand.set()
+            return true
         }
         // Курсоры вложенных редакторов, разделителей и resize-ручек принадлежат их видам.
         guard target == nil || target === self || target === emptyParagraphHint ||

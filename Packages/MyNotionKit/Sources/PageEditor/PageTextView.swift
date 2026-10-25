@@ -387,7 +387,7 @@ public class PageTextView: NSTextView {
     }
 
     public override func insertNewline(_ sender: Any?) {
-        if !hasMarkedText(), handleNewlineInContainer() || handleNewlineInEmptyChild() || handleNewlineInEmptyItem() { return }
+        if !hasMarkedText(), handleNewlineInContainer() || handleNewlineInCollapsedHeading() || handleNewlineInEmptyChild() || handleNewlineInEmptyItem() { return }
         super.insertNewline(sender)
     }
 
@@ -544,6 +544,8 @@ public class PageTextView: NSTextView {
         if kind == .tableOfContents, range.count == 1 { return insertTableOfContents(at: range.lowerBound) }
         if BlockKind.withAttachments.contains(kind) { return beginAttachmentInsertion(kind, at: range.lowerBound) }
         let blocks = document.blocks
+        // Уже этого типа (⌥⌘2 по заголовку 2) — ничего не менять и не оставлять пустого шага отмены.
+        if range.allSatisfy({ blocks[$0].kind == kind }) { return }
         let drafts = range.map { index in
             let block = blocks[index]
             var draft = BlockDraft(block)

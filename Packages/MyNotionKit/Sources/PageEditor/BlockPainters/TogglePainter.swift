@@ -29,7 +29,11 @@ struct TogglePainter: BlockPainter {
     /// Треугольник по середине колонки маркера и заглавных букв строки.
     @MainActor
     static func triangle(in column: CGRect, baseline: CGFloat, pointingDown: Bool) -> NSBezierPath {
-        let center = CGPoint(x: column.midX, y: baseline - Typography.line(for: .listItem).font.capHeight / 2)
+        triangle(center: CGPoint(x: column.midX, y: baseline - Typography.line(for: .listItem).font.capHeight / 2), pointingDown: pointingDown)
+    }
+
+    /// Треугольник с серединой в точке: тот же у переключателя и у стрелки свёрнутого заголовка.
+    static func triangle(center: CGPoint, pointingDown: Bool) -> NSBezierPath {
         let width = Metrics.Toggle.triangleWidth
         let height = Metrics.Toggle.triangleHeight
         let path = NSBezierPath()

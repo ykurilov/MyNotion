@@ -20,6 +20,15 @@ struct FormatCommands: Commands {
             Button("Повторить последний цвет") { send(#selector(PageTextView.repeatLastColorStyle(_:))) }
                 .keyboardShortcut("h", modifiers: [.command, .shift])
             Divider()
+            Button("Текст") { send(#selector(PageTextView.turnIntoText(_:))) }
+                .keyboardShortcut("0", modifiers: [.command, .option])
+            Button("Заголовок 1") { send(#selector(PageTextView.turnIntoHeading1(_:))) }
+                .keyboardShortcut("1", modifiers: [.command, .option])
+            Button("Заголовок 2") { send(#selector(PageTextView.turnIntoHeading2(_:))) }
+                .keyboardShortcut("2", modifiers: [.command, .option])
+            Button("Заголовок 3") { send(#selector(PageTextView.turnIntoHeading3(_:))) }
+                .keyboardShortcut("3", modifiers: [.command, .option])
+            Divider()
             Button("Ссылка…") { send(#selector(PageTextView.editLink(_:))) }
         }
     }
