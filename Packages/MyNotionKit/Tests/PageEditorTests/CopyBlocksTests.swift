@@ -182,4 +182,61 @@ struct CopyBlocksTests {
         try #require(editor.kinds == [.paragraph, .pageLink, .paragraph, .paragraph], "\(editor.kinds) \(editor.texts)")
         #expect(editor.document.blocks[3].text.runs == [StyledRun(start: 0, length: 1, style: .mention(child))])
     }
+
+    @Test("Копия перенесённого раньше блока — новый блок: пометки «Переместить в» нет, восстановление версии её не тронет")
+    func pasteDropsMovedFromMark() throws {
+        var props = BlockProps()
+        props.movedFrom = UUID()
+        let editor = try EditorFixture([.paragraph("до"), EditorFixture.Spec(kind: .paragraph, text: "перенесён", props: props), .paragraph()])
+        editor.textView.selectBlocks(0..<2)
+        let board = Self.copy(editor)
+        editor.placeCaret(inBlock: 2)
+
+        editor.step { editor.textView.paste(from: board) }
+
+        try #require(editor.texts == ["до", "перенесён", "до", "перенесён"])
+        #expect(editor.document.blocks[3].props.movedFrom == nil)
+        #expect(try editor.savedBlocks().filter { $0.props.movedFrom != nil }.count == 1, "Пометка — только у самого перенесённого")
+    }
+
+    @Test("Таблица вставляется с содержимым ячеек: ячейки — на копиях своих столбцов")
+    func pasteTableKeepsCells() throws {
+        let source = try EditorFixture([.paragraph("до"), EditorFixture.Spec(kind: .table), .paragraph()])
+        let table = source.document.blocks[1]
+        try source.store.write { tx in
+            for block in TableGrid.contents(ofTable: table, cells: [[InlineText("а"), InlineText("б")], [InlineText("в"), InlineText("г")]]) {
+                try tx.insertBlock(block)
+            }
+        }
+        let editor = try EditorFixture(reopening: source)
+        editor.textView.selectBlocks(0..<2)
+        let board = Self.copy(editor)
+        editor.placeCaret(inBlock: 2)
+
+        editor.step { editor.textView.paste(from: board) }
+
+        let pasted = try #require(editor.document.blocks.last { $0.kind == .table && $0.id != table.id })
+        let grid = try #require(editor.document.tableGrid(pasted.id))
+        #expect((0..<grid.rowCount).map { row in (0..<grid.columnCount).map { grid.text(row: row, column: $0).string } } == [["а", "б"], ["в", "г"]])
+    }
+
+    @Test("Выполненная задача в пустую задачу: отметка, цвет и свойства — от копии")
+    func checkedTaskIntoEmptyTask() throws {
+        var props = BlockProps()
+        props.values["custom"] = .string("копия")
+        let editor = try EditorFixture([EditorFixture.Spec(kind: .checkbox, text: "сделано", checked: true, props: props,
+                                                           color: BlockColor(text: .red)),
+                                        .checkbox("")])
+        editor.textView.selectBlocks(0..<1)
+        let board = Self.copy(editor)
+        editor.placeCaret(inBlock: 1)
+
+        editor.step { editor.textView.paste(from: board) }
+
+        try #require(editor.texts == ["сделано", "сделано"])
+        let pasted = editor.document.blocks[1]
+        #expect(pasted.isChecked)
+        #expect(pasted.color == BlockColor(text: .red))
+        #expect(pasted.props.values["custom"] == .string("копия"))
+    }
 }

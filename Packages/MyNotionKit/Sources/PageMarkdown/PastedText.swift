@@ -41,7 +41,17 @@ public enum PastedText {
         // Пустые строки — только разделители абзацев: пустых абзацев вставка не добавляет.
         return builder.blocks(fromMarkdown: markdown, pageId: pageId).blocks.filter { block in
             !(block.kind == .paragraph && block.containerId == nil && block.text.string.isEmpty && block.props.isEmpty)
+        }.map(withWebLinksOnly)
+    }
+
+    /// Ссылки — только http, https и mailto, как у HTML (`PastedHTML`): `file:` и `javascript:` остаются текстом.
+    private static func withWebLinksOnly(_ block: Block) -> Block {
+        var block = block
+        block.text.runs.removeAll { run in
+            guard case .link(let url) = run.style else { return false }
+            return !["http", "https", "mailto"].contains(url.scheme?.lowercased() ?? "")
         }
+        return block
     }
 
     // MARK: Признаки

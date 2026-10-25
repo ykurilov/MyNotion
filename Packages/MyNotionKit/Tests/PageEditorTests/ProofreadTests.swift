@@ -123,6 +123,24 @@ struct ProofreadTests {
         #expect(!fixture.textView.proofreading.isShown)
     }
 
+    @Test("Фокус ушёл из текста или страницу убрали из окна (другая вкладка, другая страница) — окно закрывается")
+    func focusLossAndPageChangeClose() async throws {
+        let fixture = try await open([.paragraph("превет всем")])
+        fixture.select(inBlock: 0, "превет")
+        fixture.textView.proofreading.start(with: FakeProofreader(fix: typos))
+        await waitForAnswer(fixture)
+        #expect(fixture.textView.proofreading.isShown)
+        fixture.window.makeFirstResponder(nil)
+        #expect(!fixture.textView.proofreading.isShown)
+
+        fixture.window.makeFirstResponder(fixture.textView)
+        fixture.select(inBlock: 0, "превет")
+        fixture.textView.proofreading.start(with: FakeProofreader(fix: nil))
+        #expect(fixture.textView.proofreading.isShown)
+        fixture.textView.removeFromSuperview()
+        #expect(!fixture.textView.proofreading.isShown)
+    }
+
     @Test("Код и формула не уходят на проверку")
     func skipsCode() {
         #expect(!ProofreadController.isProofreadable(.code))

@@ -98,7 +98,8 @@ extension PageTextView {
     }
 
     /// Вставка блоков, скопированных в MyNotion: у всех блоков новые id (содержимое — в своих новых контейнерах),
-    /// страница — эта, у дат — новые id. `false` — своего типа нет или блоки здесь не встают.
+    /// страница — эта, у дат — новые id, ячейки — на копиях своих столбцов. Копия — новый блок: пометка «Переместить в»
+    /// снимается, как у `BlockCopier`. `false` — своего типа нет или блоки здесь не встают.
     func pasteCopiedBlocks(from pasteboard: NSPasteboard, replacing selection: NSRange) -> Bool {
         guard allowsBlockStructure, let data = pasteboard.data(forType: Self.blocksPasteboardType),
               let copied = try? JSONDecoder().decode([CopiedBlock].self, from: data), !copied.isEmpty else { return false }
@@ -108,9 +109,11 @@ extension PageTextView {
             copy.id = newIds[copy.id] ?? .timeOrdered()
             copy.containerId = copy.containerId.flatMap { newIds[$0] }
             copy.text = copy.text.withNewDateIds()
+            copy.props.movedFrom = nil
+            if let column = copy.props.columnId { copy.props.columnId = newIds[column] ?? column }
             return copy.block(pageId: document.pageId)
         }
-        return pasteBlocks(blocks, replacing: selection)
+        return pasteBlocks(blocks, replacing: selection, keepsLook: true)
     }
 }
 

@@ -78,21 +78,33 @@ public enum DeepSeekRequest {
         let choices: [Choice]
     }
 
-    /// Исправленный текст из ответа. Обрезанный ответ (`length`) и пустой — непонятный.
-    public static func correctedText(from data: Data) throws -> String {
+    /// Исправленный текст из ответа на `source`. Обрезанный ответ (`length`) и пустой — непонятный.
+    public static func correctedText(from data: Data, source: String) throws -> String {
         guard let response = try? JSONDecoder().decode(Response.self, from: data), let choice = response.choices.first,
               var content = choice.message.content, choice.finish_reason != "length" else {
             throw ProofreadingError.badResponse
         }
-        content = unwrappingCodeFence(content)
+        content = unwrappingCodeFence(content, source: source)
         guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw ProofreadingError.badResponse }
         return content
     }
 
-    /// Модель иногда оборачивает ответ в ``` — снимаем обёртку.
-    static func unwrappingCodeFence(_ text: String) -> String {
+    /// Модель иногда оборачивает ответ в ``` — снимаем обёртку. Свои ``` по краям присланного текста остаются:
+    /// снимается только лишняя обёртка поверх них.
+    static func unwrappingCodeFence(_ text: String, source: String) -> String {
+        let unwrapped = unwrappingCodeFence(text)
+        guard isFenced(source) else { return unwrapped }
+        return isFenced(unwrapped) ? unwrapped : text
+    }
+
+    private static func isFenced(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.hasPrefix("```"), trimmed.hasSuffix("```"), trimmed.count >= 6 else { return text }
+        return trimmed.hasPrefix("```") && trimmed.hasSuffix("```") && trimmed.count >= 6
+    }
+
+    static func unwrappingCodeFence(_ text: String) -> String {
+        guard isFenced(text) else { return text }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         var inner = trimmed.dropFirst(3).dropLast(3)
         if let newline = inner.firstIndex(of: "\n") { inner = inner[inner.index(after: newline)...] }
         return String(inner).trimmingCharacters(in: .newlines)

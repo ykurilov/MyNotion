@@ -8,8 +8,14 @@ import VisualStyle
 /// и вырезать, Enter — курсор в конец блока, Esc — снять. Обычное выделение текста режим снимает.
 /// Под режимом выделен текст блоков целиком — копирование и Tab работают как с выделенным текстом.
 extension PageTextView {
-    /// Выделенные блоки; `nil` — обычный курсор или выделение текста.
+    /// Выделенные блоки; `nil` — обычный курсор или выделение текста. Свёрнутый переключатель или заголовок —
+    /// вместе со спрятанным под ним: раздел действует как одно целое.
     var selectedBlocks: Range<Int>? {
+        visibleSelectedBlocks.map { $0.lowerBound..<endIncludingHidden(ofBlockAt: $0.upperBound - 1) }
+    }
+
+    /// Выделенные блоки, как их видно: от края до края, без спрятанного под последним.
+    private var visibleSelectedBlocks: Range<Int>? {
         guard let ends = blockSelectionEnds else { return nil }
         return min(ends.anchor, ends.head)..<max(ends.anchor, ends.head) + 1
     }
@@ -26,7 +32,7 @@ extension PageTextView {
         let last = document.blocks.count - 1
         guard last >= 0 else { return }
         let anchor = min(max(anchor, 0), last), head = min(max(head, 0), last)
-        let lower = min(anchor, head), upper = max(anchor, head)
+        let lower = min(anchor, head), upper = endIncludingHidden(ofBlockAt: max(anchor, head)) - 1
         let start = mapper.paragraphStart(ofBlockAt: lower)
         let end = mapper.paragraphStart(ofBlockAt: upper) + document.blocks[upper].pageTextLength
         isApplyingBlockSelection = true
@@ -52,10 +58,18 @@ extension PageTextView {
         let last = document.blocks.count - 1
         switch selector {
         case #selector(NSResponder.cancelOperation(_:)): leaveBlockSelection(caretAtEndOf: ends.head)
-        case #selector(NSResponder.moveUp(_:)): selectBlocks(anchor: max(range.lowerBound - 1, 0), head: max(range.lowerBound - 1, 0))
-        case #selector(NSResponder.moveDown(_:)): selectBlocks(anchor: min(range.upperBound, last), head: min(range.upperBound, last))
-        case #selector(NSResponder.moveUpAndModifySelection(_:)): selectBlocks(anchor: ends.anchor, head: ends.head - 1)
-        case #selector(NSResponder.moveDownAndModifySelection(_:)): selectBlocks(anchor: ends.anchor, head: ends.head + 1)
+        // Стрелки шагают по видимым блокам: спрятанное в свёрнутом переступается.
+        case #selector(NSResponder.moveUp(_:)):
+            let above = visibleBlock(before: range.lowerBound) ?? range.lowerBound
+            selectBlocks(anchor: above, head: above)
+        case #selector(NSResponder.moveDown(_:)):
+            let below = min(range.upperBound, last)
+            selectBlocks(anchor: below, head: below)
+        case #selector(NSResponder.moveUpAndModifySelection(_:)):
+            selectBlocks(anchor: ends.anchor, head: visibleBlock(before: ends.head) ?? ends.head)
+        case #selector(NSResponder.moveDownAndModifySelection(_:)):
+            let below = endIncludingHidden(ofBlockAt: ends.head)
+            selectBlocks(anchor: ends.anchor, head: below <= last ? below : ends.head)
         case #selector(NSResponder.deleteBackward(_:)), #selector(NSResponder.deleteForward(_:)),
              #selector(NSResponder.deleteWordBackward(_:)), #selector(NSResponder.deleteWordForward(_:)):
             removeBlocks(at: range)

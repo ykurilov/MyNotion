@@ -404,14 +404,25 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
         super.deleteBackward(sender)
     }
 
-    /// ⌦ в конце блока перед блоком без текста не склеивает их, а выделяет тот блок.
+    /// ⌦ в конце блока перед блоком без текста не склеивает их, а выделяет тот блок. В конце свёрнутого переключателя
+    /// или заголовка спрятанное не трогается: соседом считается первый видимый блок после него.
     public override func deleteForward(_ sender: Any?) {
         let selection = selectedRange()
         if !hasMarkedText(), selection.length == 0, let position = mapper.blockPosition(at: selection.location),
-           position.offset == document.blocks[position.index].pageTextLength,
-           position.index + 1 < document.blocks.count, document.blocks[position.index + 1].kind.rendersAsAttachment {
-            selectBlocks(position.index + 1..<position.index + 2)
-            return
+           position.offset == document.blocks[position.index].pageTextLength {
+            let next = endIncludingHidden(ofBlockAt: position.index)
+            if next < document.blocks.count, document.blocks[next].kind.rendersAsAttachment {
+                selectBlocks(next..<next + 1)
+                return
+            }
+            if next > position.index + 1 {
+                // Абзац после спрятанного склеивается с владельцем, как ⌫ в его начале; другие блоки ⌦ не тянет.
+                if next < document.blocks.count, document.blocks[next].kind == .paragraph {
+                    setSelectedRange(NSRange(location: mapper.paragraphStart(ofBlockAt: next), length: 0))
+                    if !handleBackspaceUnderCollapsedToggle() { setSelectedRange(selection) }
+                }
+                return
+            }
         }
         super.deleteForward(sender)
     }
@@ -566,20 +577,25 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
     }
 
     func setKind(_ kind: BlockKind, ofBlocksAt range: Range<Int>) {
-        if kind == .pageLink { return turnIntoSubpage(blockAt: range) }
-        if kind == .divider, range.count == 1 { return insertDivider(at: range.lowerBound) }
-        if kind == .code, range.count == 1, document.blocks[range.lowerBound].kind != .code { return insertCode(at: range.lowerBound) }
-        if kind == .equation, range.count == 1, document.blocks[range.lowerBound].kind != .equation {
+        // Свёрнутый блок со спрятанным под ним — один блок.
+        let single = endIncludingHidden(ofBlockAt: range.lowerBound) >= range.upperBound ? range.lowerBound..<range.lowerBound + 1 : range
+        if kind == .pageLink { return turnIntoSubpage(blockAt: single) }
+        if kind == .divider, single.count == 1 { return insertDivider(at: range.lowerBound) }
+        if kind == .code, single.count == 1, document.blocks[range.lowerBound].kind != .code { return insertCode(at: range.lowerBound) }
+        if kind == .equation, single.count == 1, document.blocks[range.lowerBound].kind != .equation {
             return insertEquation(at: range.lowerBound)
         }
-        if kind == .tableOfContents, range.count == 1 { return insertTableOfContents(at: range.lowerBound) }
+        if kind == .tableOfContents, single.count == 1 { return insertTableOfContents(at: range.lowerBound) }
         if BlockKind.withAttachments.contains(kind) { return beginAttachmentInsertion(kind, at: range.lowerBound) }
         let blocks = document.blocks
+        // Спрятанное в свёрнутом едет с выделением, но тип меняют только видимые блоки.
+        let shown = range.filter { !hiddenParagraphs.isHidden(blocks[$0].id) }
         // Уже этого типа (⌥⌘2 по заголовку 2) — ничего не менять и не оставлять пустого шага отмены.
-        if range.allSatisfy({ blocks[$0].kind == kind }) { return }
+        if shown.allSatisfy({ blocks[$0].kind == kind }) { return }
         let drafts = range.map { index in
             let block = blocks[index]
             var draft = BlockDraft(block)
+            guard shown.contains(index) else { return draft }
             draft.kind = kind
             if kind != .checkbox { draft.isChecked = false }
             if kind != block.kind { draft.adoptDefaults(of: kind, from: block) }
@@ -799,6 +815,7 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
             emptyHintBlockID = nil
             closePopups()
             formatBar.hide()
+            proofreading.cancel()
             updateSpellingMarks(isFocused: false)
             updateSelectionLook(isFocused: false)
         }
@@ -835,6 +852,7 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
             formatBar.hide()
             closePopups()
             iconPicker.close()
+            proofreading.cancel()
         }
         for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification] {
             if let window { NotificationCenter.default.removeObserver(self, name: name, object: window) }
@@ -1053,7 +1071,7 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
             layoutManager.ensureLayout(for: range)
         }
         var rects: [NSRect] = []
-        for index in blocks {
+        for index in blocks where !hiddenParagraphs.isHidden(document.blocks[index].id) {
             guard let location = storage.location(storage.documentRange.location, offsetBy: mapper.paragraphStart(ofBlockAt: index)),
                   let fragment = layoutManager.textLayoutFragment(for: location) else { continue }
             let fragmentStart = storage.offset(from: storage.documentRange.location, to: fragment.rangeInElement.location)

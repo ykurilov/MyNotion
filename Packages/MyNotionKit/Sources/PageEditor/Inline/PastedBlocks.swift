@@ -9,8 +9,9 @@ extension PageTextView {
     /// без `containerId`, содержимое таблиц и колонок — с id своего контейнера из этого же списка; страница — `pageId`.
     public typealias PastedTextReader = @MainActor (_ text: String, _ html: String?, _ pageId: UUID, _ hasRichText: Bool) -> [Block]?
 
-    /// `false` — ставить блоки здесь нельзя (курсор у блока без текста): вставка идёт текстом.
-    func pasteBlocks(_ pasted: [Block], replacing selection: NSRange) -> Bool {
+    /// `false` — ставить блоки здесь нельзя (курсор у блока без текста): вставка идёт текстом. `keepsLook` — блоки
+    /// скопированы в MyNotion: первый в пустое начало встаёт целиком, с отметкой, цветом и свойствами.
+    func pasteBlocks(_ pasted: [Block], replacing selection: NSRange, keepsLook: Bool = false) -> Bool {
         let flow = pasted.filter { $0.containerId == nil }
         guard !flow.isEmpty, let start = mapper.blockPosition(at: selection.location),
               let end = mapper.blockPosition(at: NSMaxRange(selection)) else { return false }
@@ -32,10 +33,17 @@ extension PageTextView {
             // Первый блок вставки — продолжение блока под курсором; в пустое начало встаёт со своим типом.
             var merged = BlockDraft(first)
             merged.text = head.appending(flow[0].text, separator: "")
-            if head.string.isEmpty, flow[0].kind != .paragraph, flow[0].kind != first.kind {
+            if head.string.isEmpty, keepsLook, flow[0].kind != .paragraph || first.kind == .paragraph {
                 merged.kind = flow[0].kind
                 merged.isChecked = flow[0].isChecked
-                merged.adoptDefaults(of: flow[0].kind, from: first)
+                merged.color = flow[0].color
+                merged.props = flow[0].props
+            } else if head.string.isEmpty, flow[0].kind != .paragraph {
+                merged.isChecked = flow[0].isChecked
+                if flow[0].kind != first.kind {
+                    merged.kind = flow[0].kind
+                    merged.adoptDefaults(of: flow[0].kind, from: first)
+                }
             }
             drafts[0] = merged
         } else if !head.string.isEmpty {

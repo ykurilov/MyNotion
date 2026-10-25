@@ -53,9 +53,18 @@ struct DeepSeekRequestTests {
     @Test("Ответ: текст первого варианта; обёртка ``` снимается")
     func parse() throws {
         let data = Data(#"{"choices":[{"index":0,"message":{"role":"assistant","content":"Привет, как дела?"},"finish_reason":"stop"}]}"#.utf8)
-        #expect(try DeepSeekRequest.correctedText(from: data) == "Привет, как дела?")
+        #expect(try DeepSeekRequest.correctedText(from: data, source: "Превет, как дила?") == "Привет, как дела?")
         let fenced = Data(#"{"choices":[{"message":{"content":"```\nПривет\n```"},"finish_reason":"stop"}]}"#.utf8)
-        #expect(try DeepSeekRequest.correctedText(from: fenced) == "Привет")
+        #expect(try DeepSeekRequest.correctedText(from: fenced, source: "Превет") == "Привет")
+    }
+
+    @Test("Свои ``` по краям присланного текста не снимаются; лишняя обёртка поверх них — снимается")
+    func userFencesStay() throws {
+        let source = "```\nпревет\n```"
+        let same = Data(#"{"choices":[{"message":{"content":"```\nпривет\n```"},"finish_reason":"stop"}]}"#.utf8)
+        #expect(try DeepSeekRequest.correctedText(from: same, source: source) == "```\nпривет\n```")
+        let wrapped = Data(#"{"choices":[{"message":{"content":"```\n```\nпривет\n```\n```"},"finish_reason":"stop"}]}"#.utf8)
+        #expect(try DeepSeekRequest.correctedText(from: wrapped, source: source) == "```\nпривет\n```")
     }
 
     @Test("Обрезанный, пустой и непонятный ответ — понятная ошибка", arguments: [
@@ -65,7 +74,7 @@ struct DeepSeekRequestTests {
         "<html>",
     ])
     func badResponse(text: String) {
-        #expect(throws: ProofreadingError.badResponse) { try DeepSeekRequest.correctedText(from: Data(text.utf8)) }
+        #expect(throws: ProofreadingError.badResponse) { try DeepSeekRequest.correctedText(from: Data(text.utf8), source: "Привет") }
     }
 
     @Test("Коды ответа → ошибки по-русски")
