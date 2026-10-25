@@ -12,6 +12,15 @@ public enum CoverGallery {
         let fill: Fill
         /// Ширина к высоте исходной картинки Notion: по ней видна та же часть при сдвиге, что у Notion.
         public let aspectRatio: CGFloat
+
+        /// Цвета `#rrggbb` по строкам сверху вниз, сеткой `side` × `side` — для страницы по ссылке.
+        public var webColors: (side: Int, colors: [String]) {
+            let hex = { (color: UInt32) in String(format: "#%06x", color & 0xFFFFFF) }
+            switch fill {
+            case .solid(let color): return (1, [hex(color)])
+            case .grid(let side, let colors): return (side, colors.map(hex))
+            }
+        }
     }
 
     enum Fill: Sendable, Hashable {

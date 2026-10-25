@@ -39,6 +39,7 @@ let package = Package(
         .library(name: "ControlClient", targets: ["ControlClient"]),
         .library(name: "ControlCommands", targets: ["ControlCommands"]),
         .library(name: "PageMarkdown", targets: ["PageMarkdown"]),
+        .library(name: "PageSharing", targets: ["PageSharing"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.11.1"),
@@ -109,6 +110,8 @@ let package = Package(
                                                         .product(name: "GRDB", package: "GRDB.swift")]),
         // Страница ↔ Markdown для агента (research R5).
         .target(name: "PageMarkdown", dependencies: ["NotesCore", "MarkdownExport", "NotionImport", "Attachments"]),
+        // 006. Ссылка на страницу только для чтения: снимок без закрытого, публикация после правок (contracts/share-api.md).
+        .target(name: "PageSharing", dependencies: ["NotesCore", "MarkdownExport", "PageCover", "Sync", .product(name: "GRDB", package: "GRDB.swift")]),
 
         .testTarget(name: "VisualStyleTests", dependencies: ["VisualStyle"]),
         .testTarget(name: "NotesCoreTests", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
@@ -147,6 +150,7 @@ let package = Package(
                                                                  .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "PageMarkdownTests", dependencies: ["PageMarkdown", "NotesCore", "MarkdownExport", "NotionImport", "Attachments", "PageEditor"],
                     resources: [.copy("Fixtures")]),
+        .testTarget(name: "PageSharingTests", dependencies: ["PageSharing", "NotesCore", "Databases", "Sync", .product(name: "GRDB", package: "GRDB.swift")]),
     ],
     swiftLanguageModes: [.v6]
 )

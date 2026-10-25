@@ -22,6 +22,7 @@ public struct SchemaMigrations: Sendable {
         Step(version: "v8", migrate: indexVersionFilesAndMoves),
         Step(version: "v9", migrate: addDatabases),
         Step(version: "v10", migrate: indexLiveRowsOfParent),
+        Step(version: "v11", migrate: addPageShares),
     ])
 
     /// Та же схема плюс ещё один шаг — для проверки миграций.
@@ -455,6 +456,21 @@ private func addDatabases(_ db: Database) throws {
 /// берётся из него же, не читая страниц. Только индекс: данные и синхронизируемая схема не меняются.
 private func indexLiveRowsOfParent(_ db: Database) throws {
     try db.execute(sql: "CREATE INDEX page_live_by_parent ON page(parentId, trashedAt, isTemplate, sortKey, id)")
+}
+
+/// Ссылки на страницы (006, contracts/share-api.md): копия состояния с сервера на этом Mac и digest последнего
+/// снимка. Не синхронизируется журналом — общее состояние у сервера.
+private func addPageShares(_ db: Database) throws {
+    try db.execute(sql: """
+        CREATE TABLE page_share (
+            pageId TEXT PRIMARY KEY NOT NULL,
+            token TEXT NOT NULL,
+            enabled BOOLEAN NOT NULL,
+            includeSubpages BOOLEAN NOT NULL,
+            publishedDigest TEXT,
+            updatedAt DATETIME NOT NULL
+        );
+        """)
 }
 
 private func addSidebarCollapsed(_ db: Database) throws {

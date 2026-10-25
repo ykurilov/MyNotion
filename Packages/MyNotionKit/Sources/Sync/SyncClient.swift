@@ -90,6 +90,8 @@ public enum SyncServerError: Error, Equatable, LocalizedError {
     case fileIncomplete
     /// Кончилось место для файлов, общих для ваших Mac — новые файлы пока ждут на этом Mac (`507 storage_full`).
     case storageFull
+    /// Доступ по ссылке выключен — снимок не нужен (`409 share_disabled`).
+    case shareDisabled
 
     public var errorDescription: String? {
         switch self {
@@ -102,6 +104,7 @@ public enum SyncServerError: Error, Equatable, LocalizedError {
         case .fileComplete: "Этот файл уже передан целиком"
         case .fileIncomplete: "Ждёт отправки с другого Mac"
         case .storageFull: "Кончилось место для файлов, общих для ваших Mac — новые файлы пока ждут на этом Mac"
+        case .shareDisabled: "Доступ по ссылке выключен"
         }
     }
 }
@@ -204,6 +207,10 @@ public struct HTTPSyncServer: SyncServer {
         HTTPSyncTransport(baseURL: url, token: deviceToken, session: Self.fileSession)
     }
 
+    public func shareTransport(deviceToken: String) -> any SyncShareTransport {
+        HTTPSyncTransport(baseURL: url, token: deviceToken, session: Self.fileSession)
+    }
+
     /// Части по 8 МБ: тайм-аут на запрос — как у сервера на чтение тела (120 с).
     public static let fileSession: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
@@ -299,7 +306,7 @@ struct HTTPSyncTransport: SyncTransport, SyncFileTransport {
 
     // MARK: Запрос
 
-    private struct Ignored: Decodable {
+    struct Ignored: Decodable {
         init(from decoder: any Decoder) throws {}
         init() {}
     }
@@ -327,7 +334,7 @@ struct HTTPSyncTransport: SyncTransport, SyncFileTransport {
         return try SyncJSON.decoder().decode(Answer.self, from: data)
     }
 
-    private func makeRequest(_ method: String, _ path: String, query: [String: String] = [:]) throws -> URLRequest {
+    func makeRequest(_ method: String, _ path: String, query: [String: String] = [:]) throws -> URLRequest {
         var components = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
         if !query.isEmpty { components.queryItems = query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) } }
         var request = URLRequest(url: components.url!)
@@ -336,7 +343,7 @@ struct HTTPSyncTransport: SyncTransport, SyncFileTransport {
         return request
     }
 
-    private static func error(status: Int, data: Data) -> SyncServerError {
+    static func error(status: Int, data: Data) -> SyncServerError {
         let body = try? JSONDecoder().decode(ErrorBody.self, from: data)
         let message = body?.message ?? "HTTP \(status)"
         switch (status, body?.error) {
@@ -347,6 +354,7 @@ struct HTTPSyncTransport: SyncTransport, SyncFileTransport {
         case (_, "file_complete"): return .fileComplete
         case (_, "file_incomplete"): return .fileIncomplete
         case (507, _), (_, "storage_full"): return .storageFull
+        case (_, "share_disabled"): return .shareDisabled
         case (404, _): return .notFound
         case (400, _): return .badRequest(message)
         default: return .server(message)
