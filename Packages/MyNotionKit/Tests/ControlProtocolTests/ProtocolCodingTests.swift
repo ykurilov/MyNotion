@@ -99,7 +99,7 @@ import Testing
             }
         }
         #expect(Set(ControlWarningCode.allCases.map(\.rawValue)) == ["markdown_unsupported", "option_created", "value_converted", "truncated",
-                                                                         "not_moved"])
+                                                                         "not_moved", "partial_rollback"])
     }
 
     @Test func jsonValuesRoundTrip() throws {

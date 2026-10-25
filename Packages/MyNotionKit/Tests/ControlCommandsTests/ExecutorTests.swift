@@ -163,6 +163,15 @@ import Testing
         #expect(await executor.run(ControlRequest(command: "page.tree", args: ["cursor": "мусор"])).error?.code == .invalidValue)
     }
 
+    @Test func cursorPastTheEndIsEmptyPart() async {
+        let executor = executor(["page.tree": { session in
+            CommandResult(try session.paged((0..<5).map { ControlJSON.number(Double($0)) }))
+        }])
+        let far = await executor.run(ControlRequest(command: "page.tree", args: ["cursor": .string(String(Int.max))]))
+        #expect(far.data?["items"]?.array?.isEmpty == true, "Огромный --cursor: \(far.error?.message ?? "")")
+        #expect(far.data?["nextCursor"] == .null)
+    }
+
     @Test func warningsAndProgressReachResponse() async {
         let executor = executor(["page.write": { session in
             session.report(ControlProgress(done: 1, total: 2, stage: "блоки"))

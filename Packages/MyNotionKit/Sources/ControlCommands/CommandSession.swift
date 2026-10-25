@@ -34,15 +34,18 @@ final class SessionContext {
     var pendingCheckpoints: [AgentEditCheckpoint.Pending] = []
     /// Копии файлов, вложенные командой: откат стирает те, на которые после него никто не ссылается.
     var importedAttachments: [UUID] = []
+    /// Последние правки агентов по страницам — общие для всех команд исполнителя.
+    let agentWrites: AgentWriteTimes
     let progress: (ControlProgress) -> Void
     private let store: NotesStore
     private let attachments: AttachmentStore
     /// Начало команды: страницы, созданные позже, — её собственные.
     private let started = Date()
 
-    init(host: any ControlHost, progress: @escaping (ControlProgress) -> Void) {
+    init(host: any ControlHost, agentWrites: AgentWriteTimes, progress: @escaping (ControlProgress) -> Void) {
         store = host.store
         attachments = host.attachments
+        self.agentWrites = agentWrites
         let undoManager = UndoManager()
         // Шаги отмены задаёт сама команда (`grouped`), а не цикл событий окна.
         undoManager.groupsByEvent = false
@@ -75,10 +78,18 @@ final class SessionContext {
         return try await body()
     }
 
-    /// Откатить всё сделанное этой сессией: ошибка команды или шага пакета (research R6).
-    func rollBack() {
+    /// Откатить всё сделанное этой сессией: ошибка команды или шага пакета (research R6). Возвращается, когда всё
+    /// уже вернулось: большая смена типа откатывается в фоне.
+    func rollBack() async {
         while undoManager.canUndo {
             undoManager.undo()
+        }
+        if let rewrite = databases.pendingRewrite {
+            do {
+                try await rewrite.value
+            } catch {
+                warnings.append(ControlWarning(.partialRollback, "Свойство базы вернуть не удалось: \(error.localizedDescription)"))
+            }
         }
         // Отмена создания кладёт страницу в корзину, как ⌘Z. Страницы самой команды стираются: неудачный пакет агента
         // не оставляет в корзине следов.
@@ -92,6 +103,12 @@ final class SessionContext {
             try? attachments.discardIfUnreferenced(id)
         }
         importedAttachments = []
+    }
+
+    /// Откат не тронул блоки, которые после команды правили в окне или пришли с другого Mac.
+    func keptOnRollback(_ count: Int, inPage pageId: UUID) {
+        let title = (try? store.page(pageId))?.displayTitle ?? pageId.uuidString.lowercased()
+        warnings.append(ControlWarning(.partialRollback, "«\(title)»: блоков, изменённых после команды, откат не тронул — \(count)"))
     }
 }
 
@@ -187,7 +204,8 @@ public final class CommandSession {
                 throw ControlError(.invalidValue, "--cursor — значение nextCursor из прошлого ответа", hint: "Начать сначала: без --cursor",
                                    details: ["argument": "cursor"])
             }
-            offset = value
+            // Курсор за концом списка — пустая часть; без сложения с огромным числом.
+            offset = min(value, items.count)
         }
         let end = min(items.count, offset + limit)
         let page = offset < end ? Array(items[offset..<end]) : []
@@ -209,7 +227,7 @@ public final class CommandSession {
     public func willWrite(_ pageId: UUID) async throws {
         guard context.checkpointedPages.insert(pageId).inserted else { return }
         // Снимок — сейчас, без пауз до правки; версией он станет после команды (`CommandExecutor.write`).
-        if let pending = try AgentEditCheckpoint(host: host).capture(pageId, agent: agent) {
+        if let pending = try AgentEditCheckpoint(host: host).capture(pageId, agent: agent, lastAgentWrite: context.agentWrites[pageId]) {
             context.pendingCheckpoints.append(pending)
         }
     }

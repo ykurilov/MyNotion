@@ -141,6 +141,22 @@ import Testing
         #expect(try fixture.cell(last.id, hours.id) == .number(999))
     }
 
+    @Test func batchRollsBackLargeTypeChangeBeforeAnswering() async throws {
+        let tasks = try await fixture.createDatabase()
+        try await fixture.ok("db.prop.add", ["database": "Задачи", "name": "Часы", "type": "text"])
+        let rows: [ControlJSON] = (0..<DatabaseOperations.backgroundRewriteThreshold).map { ["Название": .string("Р\($0)"), "Часы": .string("\($0)")] }
+        try await fixture.ok("db.row.add", ["database": "Задачи", "rows": .array(rows)])
+        let response = await fixture.run("batch", ["steps": [
+            ["command": "db.prop.type", "args": ["database": "Задачи", "property": "Часы", "type": "number"]],
+            ["command": "page.rename", "args": ["page": "Нет такой страницы", "title": "Б"]],
+        ]])
+        #expect(response.error?.code == .batchFailed)
+        let hours = try fixture.property("Часы", in: tasks)
+        #expect(hours.kind == .text, "«Пакет откачен» пришёл раньше, чем вернулся тип свойства")
+        let last = try #require(try fixture.rows(tasks).first { $0.title == "Р999" })
+        #expect(try fixture.cell(last.id, hours.id).flatMap { try? $0.decoded(as: InlineText.self) }?.string == "999")
+    }
+
     @Test func movesDuplicatesDeletesAndRestoresProperty() async throws {
         let tasks = try await fixture.createDatabase()
         for name in ["А", "Б", "В"] { try await fixture.ok("db.prop.add", ["database": "Задачи", "name": .string(name), "type": "text"]) }

@@ -101,6 +101,17 @@ import Testing
         #expect(missing.code == .rowNotFound)
     }
 
+    @Test func renamingRowRecordsAgentVersion() async throws {
+        try await fixture.ok("db.row.add", ["database": "Задачи", "values": ["Название": "Отчёт", "Часы": 1]])
+        let id = try row("Отчёт").id
+        try await fixture.ok("db.cell.set", ["database": "Задачи", "row": "Отчёт", "property": "Часы", "value": 2])
+        #expect(try fixture.host.versions.versions(ofPage: id).filter { $0.summary.agent != nil }.isEmpty, "Значение без названия — не правка страницы строки")
+        try await fixture.ok("db.cell.set", ["database": "Задачи", "row": "Отчёт", "property": "Название", "value": "Итоги"])
+        let versions = try fixture.host.versions.versions(ofPage: id).filter { $0.summary.agent != nil }
+        #expect(versions.count == 1, "Название строки сменено без версии «до правки агента»")
+        #expect(try versions.first.flatMap { try fixture.host.versions.snapshot($0.id) }?.title == "Отчёт")
+    }
+
     @Test func trashesRestoresAndDuplicatesRows() async throws {
         try await fixture.ok("db.row.add", ["database": "Задачи", "rows": [["Название": "А", "Часы": 1], ["Название": "Б"]]])
         try await fixture.ok("db.row.trash", ["database": "Задачи", "rows": ["А", "Б"]])

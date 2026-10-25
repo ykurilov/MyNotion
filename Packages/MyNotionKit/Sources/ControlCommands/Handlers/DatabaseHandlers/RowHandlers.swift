@@ -14,7 +14,9 @@ enum RowHandlers {
             let database = try session.database()
             let row = try session.databaseRefs.row(session.string("row") ?? "", inDatabase: database.page.id)
             let writer = RowValuesWriter(session: session, database: database)
-            try writer.write([try writer.parse(session.args["values"] ?? [:])], to: [row.id])
+            let input = try writer.parse(session.args["values"] ?? [:])
+            try await writer.willRename(row.id, by: input)
+            try writer.write([input], to: [row.id])
             return try session.rowResult(row.id, of: database.page.id, "✓ Строка «\(row.displayTitle)» изменена")
         },
         "db.cell.set": { session in
@@ -22,7 +24,9 @@ enum RowHandlers {
             let row = try session.databaseRefs.row(session.string("row") ?? "", inDatabase: database.page.id)
             let property = try session.databaseRefs.property(session.string("property") ?? "", in: database.catalog)
             let writer = RowValuesWriter(session: session, database: database)
-            try writer.write([try writer.parse([(property, session.args["value"] ?? .null)])], to: [row.id])
+            let input = try writer.parse([(property, session.args["value"] ?? .null)])
+            try await writer.willRename(row.id, by: input)
+            try writer.write([input], to: [row.id])
             return try session.rowResult(row.id, of: database.page.id, "✓ «\(property.name)» у «\(row.displayTitle)»")
         },
         "db.row.trash": { session in
@@ -162,6 +166,12 @@ struct RowValuesWriter {
                                details: ["property": .string(property.name), "limit": "one"])
         }
         return ids
+    }
+
+    /// Название строки — название её страницы: перед сменой — версия «до правки агента», как у `page rename`.
+    func willRename(_ rowId: UUID, by input: RowInput) async throws {
+        guard input.cells.contains(where: { $0.property.kind == .title }) else { return }
+        try await session.willWrite(rowId)
     }
 
     /// Записать строки: `rowIds == nil` — новые строки пачкой, иначе — существующие по порядку. Возвращает id строк.

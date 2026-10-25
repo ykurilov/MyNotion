@@ -10,6 +10,7 @@ public final class CommandExecutor {
     let registry: HandlerRegistry
     let log: any CommandLogging
     private let writeLock = WriteLock()
+    private let agentWrites = AgentWriteTimes()
     #if DEBUG
     /// Сессия последней записи — только для тестов: отмена держит операции сессии без сильной ссылки.
     /// В сборке для людей её не держим: команда отпускает свою сессию сразу после ответа.
@@ -62,7 +63,7 @@ public final class CommandExecutor {
 
     private func execute(_ request: ControlRequest, progress: @escaping (ControlProgress) -> Void,
                          stillWanted: () throws -> Void) async -> ControlResponse {
-        let context = SessionContext(host: host, progress: progress)
+        let context = SessionContext(host: host, agentWrites: agentWrites, progress: progress)
         do {
             let (spec, args, handler) = try prepare(request.command, request.args)
             var request = request
@@ -94,9 +95,10 @@ public final class CommandExecutor {
         do {
             let result = isBatch ? try await handler(session) : try await session.context.grouped { try await handler(session) }
             try await recordCheckpoints(of: session)
+            session.context.agentWrites.record(session.context.checkpointedPages, at: session.host.now)
             return result
         } catch {
-            session.context.rollBack()
+            await session.context.rollBack()
             throw error
         }
     }

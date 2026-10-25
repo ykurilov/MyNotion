@@ -7,6 +7,7 @@
 #   scripts/install-cli.sh --skip-app            # приложение не трогать: ссылка и скилл (ссылка ждёт сборку 005)
 #
 # Приложение копируется, только если оно не запущено: иначе сообщение и выход без изменений.
+# Прежние приложение и скилл уходят в Корзину, только когда новые уже встали на место.
 set -euo pipefail
 
 REPO=${0:A:h:h}
@@ -17,9 +18,31 @@ while (( $# )); do
     --target) target=${2:a}; shift 2;;
     --app) app=${2:a}; shift 2;;
     --skip-app) skip_app=1; shift;;
-    *) sed -n '2,9p' $0; exit 2;;
+    *) sed -n '2,10p' $0; exit 2;;
   esac
 done
+
+# В Корзину: прежнюю версию ещё можно вернуть. Без `trash` (macOS до 15) — стереть.
+discard() {
+  if (( $+commands[trash] )); then trash $1; else rm -rf $1; fi
+}
+
+# Поставить $1 на место $2. Прежнее — в резерв рядом; не встало новое — резерв возвращается.
+replace() {
+  local new=$1 installed=$2 reserve=$2.old
+  [[ ! -e $reserve ]] || discard $reserve || true
+  [[ ! -e $reserve ]] || { print -u2 -- "Не удалось убрать прошлый резерв $reserve — ничего не изменено"; return 1; }
+  if [[ -e $installed ]] && ! mv $installed $reserve; then
+    print -u2 -- "Не удалось отложить $installed — ничего не изменено"
+    return 1
+  fi
+  if ! mv $new $installed; then
+    [[ ! -e $reserve ]] || mv $reserve $installed || true
+    print -u2 -- "Не удалось поставить $installed — оставлена прежняя версия"
+    return 1
+  fi
+  [[ ! -e $reserve ]] || discard $reserve || print -u2 -- "Внимание: прежняя версия осталась в $reserve"
+}
 
 installed=$target/MyNotion.app
 helper=$installed/Contents/Helpers/mynotion
@@ -48,8 +71,7 @@ if (( ! skip_app )); then
   # На Mac без сертификата (iMac) подпись остаётся ad-hoc.
   signed=0; $REPO/scripts/sign-app.sh $installed.new || signed=$?
   if (( signed == 3 )); then print -u2 -- "Внимание: подпись осталась ad-hoc"; elif (( signed )); then exit $signed; fi
-  rm -rf $installed
-  mv $installed.new $installed
+  replace $installed.new $installed || exit 1
   print -- "Приложение: $installed"
 fi
 
@@ -67,8 +89,7 @@ skill=~/.agents/skills/mynotion
 mkdir -p ${skill:h}
 rm -rf $skill.new
 cp -R Tools/mynotion-skill $skill.new
-rm -rf $skill
-mv $skill.new $skill
+replace $skill.new $skill || exit 1
 print -- "Скилл: $skill"
 
 # Codex читает ~/.agents/skills сам. Если на этом Mac он видит соседние скиллы только по ссылкам из своей папки —

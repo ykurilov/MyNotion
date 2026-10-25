@@ -33,7 +33,9 @@ struct BlockPageEditor {
         let undo = BlockSnapshot.changes(from: after, to: before)
         guard !undo.isEmpty else { return result }
         BlockHistory.register(target: session.pageTree, host: HostBox(host: host), pageId: pageId, undo: undo,
-                              redo: BlockSnapshot.changes(from: before, to: after), actionName: actionName)
+                              redo: BlockSnapshot.changes(from: before, to: after), actionName: actionName) { [weak context = session.context] kept in
+            context?.keptOnRollback(kept, inPage: pageId)
+        }
         session.touch([pageId])
         host.treeDidChange([pageId])
         return result
@@ -99,6 +101,30 @@ enum BlockSnapshot {
         return result
     }
 
+    /// Обратная правка без того, что после `applied` поменяли мимо команды (ввод в окне, синхронизация): такие блоки откат
+    /// не трогает, и контейнеры, где они лежат, не удаляет. `kept` — сколько блоков оставлено.
+    @MainActor
+    static func sparingLaterEdits(_ undo: BlockChanges, of applied: BlockChanges, in document: PageDocument) -> (changes: BlockChanges, kept: Int) {
+        let left = Dictionary(applied.upserts.map { ($0.id, $0) }) { _, last in last }
+        func isAsLeft(_ id: UUID) -> Bool {
+            guard let expected = left[id] else { return document.block(id) == nil }
+            return document.block(id).map { sameContent($0, expected) } ?? false
+        }
+        let changed = Set((undo.upserts.map(\.id) + undo.removals).filter { !isAsLeft($0) })
+        guard !changed.isEmpty else { return (undo, 0) }
+        var containers: Set<UUID> = []
+        for id in changed {
+            var container = document.block(id)?.containerId
+            while let current = container, containers.insert(current).inserted {
+                container = document.block(current)?.containerId
+            }
+        }
+        var result = undo
+        result.upserts = undo.upserts.filter { !changed.contains($0.id) }
+        result.removals = undo.removals.filter { !changed.contains($0) && !containers.contains($0) }
+        return (result, changed.count)
+    }
+
     /// Блоки потока контейнера (`nil` — страницы) по порядку.
     static func flow(_ blocks: [Block], of containerId: UUID?) -> [Block] {
         blocks.filter { $0.containerId == containerId }.sorted {
@@ -110,17 +136,21 @@ enum BlockSnapshot {
 /// Шаги отмены правок блоков: каждый кладёт в `UndoManager` обратный себе.
 @MainActor
 enum BlockHistory {
-    static func register(target: PageTreeOperations, host: HostBox, pageId: UUID, undo: BlockChanges, redo: BlockChanges, actionName: String) {
+    /// `onKept` — отмена оставила блоки, изменённые после правки (`BlockSnapshot.sparingLaterEdits`).
+    static func register(target: PageTreeOperations, host: HostBox, pageId: UUID, undo: BlockChanges, redo: BlockChanges, actionName: String,
+                         onKept: @escaping @MainActor @Sendable (Int) -> Void) {
         guard let undoManager = target.undoManager else { return }
         undoManager.registerUndo(withTarget: target) { target in
             MainActor.assumeIsolated {
                 let host = host.host
                 guard let document = try? host.openDocuments.open(pageId) else { return }
-                document.apply(BlockSnapshot.rebased(undo, onto: document))
+                let (spared, kept) = BlockSnapshot.sparingLaterEdits(undo, of: redo, in: document)
+                if kept > 0 { onKept(kept) }
+                document.apply(BlockSnapshot.rebased(spared, onto: document))
                 host.openDocuments.saveAll()
                 host.openDocuments.release(pageId)
                 host.treeDidChange([pageId])
-                register(target: target, host: HostBox(host: host), pageId: pageId, undo: redo, redo: undo, actionName: actionName)
+                register(target: target, host: HostBox(host: host), pageId: pageId, undo: redo, redo: spared, actionName: actionName, onKept: onKept)
             }
         }
         undoManager.setActionName(actionName)

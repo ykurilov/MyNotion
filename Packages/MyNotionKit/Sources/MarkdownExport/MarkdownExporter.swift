@@ -154,14 +154,13 @@ public struct MarkdownExporter: Sendable {
                 do { snapshot = try DatabaseExportSnapshot.read(page.id, from: store) } catch {
                     throw MarkdownExportError.cannotRead(error.localizedDescription)
                 }
-                if let snapshot {
-                    let values = DatabaseValueText(snapshot: snapshot)
-                    try createFolder(location.folder)
-                    try writeDatabase(snapshot, values: values, at: location, in: plan, into: draft)
-                    databases[page.id] = (snapshot, values)
-                    do { rowContents.merge(try store.childPageContents(of: page.id)) { first, _ in first } } catch {
-                        throw MarkdownExportError.cannotRead(error.localizedDescription)
-                    }
+                guard let snapshot else { throw Self.erased(page) }
+                let values = DatabaseValueText(snapshot: snapshot)
+                try createFolder(location.folder)
+                try writeDatabase(snapshot, values: values, at: location, in: plan, into: draft)
+                databases[page.id] = (snapshot, values)
+                do { rowContents.merge(try store.childPageContents(of: page.id)) { first, _ in first } } catch {
+                    throw MarkdownExportError.cannotRead(error.localizedDescription)
                 }
                 progress?(MarkdownExportProgress(pagesDone: index + 1, pagesTotal: plan.orderedPages.count))
                 continue
@@ -170,7 +169,8 @@ public struct MarkdownExporter: Sendable {
             if content == nil {
                 do { content = try store.pageContent(page.id) } catch { throw MarkdownExportError.cannotRead(error.localizedDescription) }
             }
-            if let content, let location = plan.location(of: page.id) {
+            guard let content else { throw Self.erased(page) }
+            if let location = plan.location(of: page.id) {
                 let (attachmentPaths, coverName, missing) = try copyAttachments(of: content, at: location, in: plan, into: draft,
                                                                                 createFolder: createFolder)
                 missingFiles += missing
@@ -190,6 +190,11 @@ public struct MarkdownExporter: Sendable {
             progress?(MarkdownExportProgress(pagesDone: index + 1, pagesTotal: plan.orderedPages.count))
         }
         return (blockCount, missingFiles)
+    }
+
+    /// Страницу стёрли (с другого Mac или в окне) между планом и чтением: выгрузка без неё была бы неполной.
+    private static func erased(_ page: Page) -> MarkdownExportError {
+        .cannotRead("страница «\(page.displayTitle)» удалена во время выгрузки")
     }
 
     /// База: `Задачи.csv` и схема `Задачи.mynotion-database.json` рядом; строки — файлами в `Задачи/` (пишет обход страниц).

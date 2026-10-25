@@ -90,6 +90,21 @@ import Testing
         #expect(host.openDocuments.document(for: page.id) == nil)
     }
 
+    @Test func writeKeepsSubpageLinkFromColumn() async throws {
+        let (page, column, _) = try pageWithColumn()
+        let child = try host.page("Подстраница", parent: page.id)
+        try host.store.write { tx in
+            for block in try tx.blocks(ofPage: page.id) where block.kind == .pageLink { try tx.deleteBlock(block.id) }
+            try tx.insertBlock(Block(pageId: page.id, kind: .pageLink, linkedPageId: child.id, sortKey: .between(nil, nil), containerId: column))
+        }
+        try await ok("page.write", ["page": .string(page.id.controlText), "markdown": "Один абзац"])
+        let blocks = try #require(try host.store.pageContent(page.id)).blocks
+        let links = blocks.filter { $0.linkedPageId == child.id }
+        #expect(links.count == 1, "Ссылка на живую подстраницу из колонки пропала со страницы")
+        #expect(links.first?.containerId == nil)
+        #expect(blocks.filter { $0.containerId == nil }.map(\.kind) == [.paragraph, .pageLink])
+    }
+
     @Test func writeKeepsKnownAttachmentInColumn() async throws {
         let (page, _, paragraphs) = try pageWithColumn()
         try file("схема.png", Self.png)
