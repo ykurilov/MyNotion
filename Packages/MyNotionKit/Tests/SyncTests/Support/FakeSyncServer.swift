@@ -206,6 +206,7 @@ final class SwitchableTransport: SyncTransport, @unchecked Sendable {
     private let base: any SyncTransport
     private let lock = NSLock()
     private var online = true
+    private var acksToLose = 0
 
     init(_ base: any SyncTransport) {
         self.base = base
@@ -242,8 +243,18 @@ final class SwitchableTransport: SyncTransport, @unchecked Sendable {
         }
     }
 
+    /// Следующие `count` подтверждений теряются по дороге, как при обрыве связи.
+    func loseAcks(_ count: Int) {
+        lock.withLock { acksToLose = count }
+    }
+
     func ack(_ seq: Int) async throws {
         try checkOnline()
+        let isLost = lock.withLock {
+            defer { acksToLose = max(0, acksToLose - 1) }
+            return acksToLose > 0
+        }
+        if isLost { throw URLError(.networkConnectionLost) }
         try await base.ack(seq)
     }
 

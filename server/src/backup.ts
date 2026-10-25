@@ -11,6 +11,7 @@ const SUFFIX = '.db';
  * Цельная копия базы через встроенный механизм SQLite: безопасна при работающем сервере.
  * Снимки страниц по ссылке — открытый текст — в копию не идут: остаются ссылки, а снимки приложение
  * выложит заново после восстановления (их файлы в копию и так не попадают).
+ * Битая копия удаляется до чистки старых: иначе за две недели она вытеснила бы все целые.
  */
 export async function backupDatabase(db: Db, dir: string, date: Date, keep = 14): Promise<string> {
   mkdirSync(dir, { recursive: true });
@@ -24,11 +25,35 @@ export async function backupDatabase(db: Db, dir: string, date: Date, keep = 14)
   } finally {
     copy.close();
   }
+  const problem = integrityProblem(file);
+  if (problem) {
+    rmSync(file, { force: true });
+    throw new Error(`копия не прошла проверку целостности: ${problem}`);
+  }
   const copies = readdirSync(dir)
     .filter((name) => name.startsWith(PREFIX) && name.endsWith(SUFFIX))
     .sort();
   for (const old of copies.slice(0, Math.max(0, copies.length - keep))) rmSync(join(dir, old));
   return file;
+}
+
+/**
+ * `null`, если SQLite считает файл целым, иначе первая найденная беда. Копия переходит из WAL в обычный журнал:
+ * остаётся одним файлом, без `-wal` и `-shm` рядом.
+ */
+function integrityProblem(file: string): string | null {
+  try {
+    const copy = new Database(file, { fileMustExist: true });
+    try {
+      copy.pragma('journal_mode = DELETE');
+      const result = copy.pragma('integrity_check', { simple: true });
+      return result === 'ok' ? null : String(result);
+    } finally {
+      copy.close();
+    }
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
 }
 
 const FILES_PREFIX = 'files-';

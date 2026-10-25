@@ -1,5 +1,6 @@
 import Attachments
 import ControlCommands
+import Databases
 import Foundation
 import NotesCore
 import PageVersions
@@ -30,7 +31,14 @@ final class AppControlHost: ControlHost {
     var now: Date { Date() }
     var shareControl: (any ShareControl)? { library.sharing }
 
+    /// Команды дерева и баз: открытые строки принимают записанное, как после правки баз в окне; таблицы перечитывают
+    /// строки, переименованные мимо операций баз.
     func treeDidChange(_ pageIds: Set<UUID>) {
+        let rows = pageIds.filter { library.databaseRow($0) != nil }
+        if !rows.isEmpty {
+            library.openDocuments.applyExternalChanges(toPages: rows.intersection(library.openDocuments.openPageIds))
+            DatabaseOperations.announce(rows)
+        }
         library.treeDidChange(pageIds)
     }
 

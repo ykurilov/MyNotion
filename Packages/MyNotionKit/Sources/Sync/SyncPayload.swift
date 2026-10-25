@@ -62,9 +62,11 @@ public struct SyncChange: Sendable, Hashable, Codable {
     public var baseHlc: HybridTimestamp?
     /// Для корзины и стирания — какие правки страницы видел удаливший Mac.
     public var known: ClockKnowledge?
+    /// Для места страницы — когда она создана: без этого второй Mac ставит дату первой синхронизации.
+    public var createdAt: Date?
 
     public init(entity: Entity, id: UUID, pageId: UUID? = nil, value: Value, hlc: HybridTimestamp,
-                baseHlc: HybridTimestamp? = nil, known: ClockKnowledge? = nil) {
+                baseHlc: HybridTimestamp? = nil, known: ClockKnowledge? = nil, createdAt: Date? = nil) {
         self.entity = entity
         self.id = id
         self.pageId = pageId
@@ -72,6 +74,7 @@ public struct SyncChange: Sendable, Hashable, Codable {
         self.hlc = hlc
         self.baseHlc = baseHlc
         self.known = known
+        self.createdAt = createdAt
     }
 
     /// Поле и его новое значение.
@@ -137,7 +140,7 @@ public struct SyncChange: Sendable, Hashable, Codable {
         }
     }
 
-    private enum CodingKeys: String, CodingKey { case entity, id, pageId, field, value, hlc, baseHlc, known }
+    private enum CodingKeys: String, CodingKey { case entity, id, pageId, field, value, hlc, baseHlc, known, createdAt }
     private enum PlacementKeys: String, CodingKey { case parentId, sortKey }
     private enum BlockPlacementKeys: String, CodingKey { case containerId, sortKey }
     private enum KindKeys: String, CodingKey { case kind, indent, linkedPageId }
@@ -150,6 +153,7 @@ public struct SyncChange: Sendable, Hashable, Codable {
         hlc = try container.decode(HybridTimestamp.self, forKey: .hlc)
         baseHlc = try container.decodeIfPresent(HybridTimestamp.self, forKey: .baseHlc)
         known = try container.decodeIfPresent(ClockKnowledge.self, forKey: .known)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
         let field = try container.decode(String.self, forKey: .field)
         if entity.isDatabaseRecord {
             value = .databaseField(field, try container.decodeIfPresent(JSONValue.self, forKey: .value) ?? .null)
@@ -201,6 +205,7 @@ public struct SyncChange: Sendable, Hashable, Codable {
         try container.encode(hlc, forKey: .hlc)
         try container.encodeIfPresent(baseHlc, forKey: .baseHlc)
         try container.encodeIfPresent(known, forKey: .known)
+        try container.encodeIfPresent(createdAt, forKey: .createdAt)
         switch value {
         case .title(let title): try container.encode(title, forKey: .value)
         case .icon(let icon): try container.encode(icon, forKey: .value)

@@ -122,6 +122,55 @@ struct NotesStoreTests {
         #expect(stored.fieldClocks.text == block.fieldClocks.text)
     }
 
+    // MARK: Часы после перезапуска
+
+    /// Хранилище над той же базой, как после перезапуска приложения: часы начинают с нуля, время Mac — `millis`.
+    private func reopened(atWallMillis millis: Int64) -> NotesStore {
+        let clock = HybridLogicalClock(deviceId: UUID(), wallClock: AdjustableWallClock(millis: millis).reading)
+        return NotesStore(database: store.database, clock: clock)
+    }
+
+    @Test("После перезапуска свои метки позже сохранённых, хотя время Mac отстало")
+    func clockResumesAfterStoredStampsOnReopen() throws {
+        wall.set(1_000_000)
+        let page = try store.write { try $0.createPage(title: "Черновик") }
+        let earlier = try #require(page.fieldClocks.title)
+
+        let restarted = reopened(atWallMillis: 2_000)
+        var renamed = page
+        renamed.title = "Чистовик"
+        try restarted.write { try $0.updatePage(renamed) }
+
+        let stored = try #require(try restarted.page(page.id))
+        #expect(try #require(stored.fieldClocks.title) > earlier)
+    }
+
+    @Test("Метка, пришедшая с другого Mac, тоже переживает перезапуск")
+    func receivedStampSurvivesReopen() throws {
+        let remote = HybridTimestamp(wallMillis: 5_000_000, counter: 3, deviceId: UUID())
+        let page = try store.write { tx in
+            tx.clock.receive(remote)
+            return try tx.createPage(title: "С другого Mac")
+        }
+
+        let restarted = reopened(atWallMillis: 2_000)
+        let next = try restarted.write { try $0.createPage(title: "После перезапуска", after: page.sortKey) }
+        #expect(try #require(next.fieldClocks.title) > remote)
+    }
+
+    @Test("База без отметки часов: метки находятся по записям страниц и ячеек")
+    func clockResumesFromRecordsWithoutStoredMark() throws {
+        wall.set(1_000_000)
+        let page = try store.write { try $0.createPage(title: "Строка") }
+        wall.set(3_000_000)
+        let cell = try store.write { try $0.setCell(rowId: page.id, propertyId: UUID(), value: .string("Старое")) }
+        try store.database.dbWriter.write { try $0.execute(sql: "DELETE FROM app_meta") }
+
+        let restarted = reopened(atWallMillis: 2_000)
+        let next = try restarted.write { try $0.setCell(rowId: page.id, propertyId: cell.propertyId, value: .string("Новое")) }
+        #expect(next.hlc > cell.hlc)
+    }
+
     // MARK: Транзакции
 
     @Test("Ошибка внутри записи не оставляет половину изменений")

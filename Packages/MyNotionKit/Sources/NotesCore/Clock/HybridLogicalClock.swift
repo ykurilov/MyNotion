@@ -123,6 +123,13 @@ public final class HybridLogicalClock: Sendable {
         }
     }
 
+    /// Последняя выданная или учтённая метка; `nil`, пока часы ничего не выдали.
+    public var lastIssued: HybridTimestamp? {
+        latest.withLock { state in
+            state.wallMillis == .min ? nil : HybridTimestamp(wallMillis: state.wallMillis, counter: state.counter, deviceId: deviceId)
+        }
+    }
+
     /// Учесть метку, пришедшую с другого Mac; возвращает метку момента приёма.
     @discardableResult
     public func receive(_ remote: HybridTimestamp) -> HybridTimestamp {

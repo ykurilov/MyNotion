@@ -16,7 +16,8 @@ public enum SyncSetup {
     public static func enable(store: NotesStore, account: SyncAccount) throws {
         try store.write { transaction in
             try SyncAccountStore.save(account, in: transaction.database)
-            try transaction.database.execute(sql: "DELETE FROM outbox_entry")
+            try transaction.database.execute(sql: "DELETE FROM outbox_entry; DELETE FROM app_meta WHERE key LIKE ?",
+                                             arguments: [Outbox.setAsidePrefix + "%"])
             try Outbox.enqueueAllRecords(in: transaction)
         }
         store.keepsDeletionMarks = true
@@ -27,7 +28,8 @@ public enum SyncSetup {
     public static func disable(store: NotesStore, secrets: any SyncSecrets) throws {
         let account = try SyncAccountStore(store: store).account()
         try store.database.dbWriter.write { db in
-            try db.execute(sql: "DELETE FROM sync_account; DELETE FROM outbox_entry;")
+            try db.execute(sql: "DELETE FROM sync_account; DELETE FROM outbox_entry; DELETE FROM app_meta WHERE key LIKE ?",
+                           arguments: [Outbox.setAsidePrefix + "%"])
         }
         store.keepsDeletionMarks = false
         try TombstoneCollector(store: store).collect(deviceAcks: [])

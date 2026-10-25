@@ -198,14 +198,7 @@ private struct MergeRun {
 
     /// Все правки содержимого страницы на этом Mac были известны удалившему.
     private func isContentKnown(ofPage pageId: UUID, to known: ClockKnowledge) throws -> Bool {
-        var stamps: [HybridTimestamp] = []
-        if let page = try transaction.page(pageId) {
-            stamps += [page.fieldClocks.title, page.fieldClocks.icon].compactMap { $0 }
-        }
-        for (block, _) in try transaction.blocks(ofPage: pageId, includingDeleted: true) {
-            stamps += block.fieldClocks.all
-        }
-        return stamps.allSatisfy { $0 == .distantPast || known.covers($0) }
+        try transaction.contentStamps(ofPage: pageId).allSatisfy { $0 == .distantPast || known.covers($0) }
     }
 
     /// Вернуть страницу из корзины своей правкой: на прежнее место, ссылка — снова в родителе; если родителя нет — в корень.
@@ -284,7 +277,7 @@ private struct MergeRun {
         guard let title, let icon, let placement, let trashedAt, let id = changes.first?.id else { return nil }
         let now = Date()
         var page = Page(id: id, title: title.0, icon: icon.0, parentId: placement.0, sortKey: placement.1, trashedAt: trashedAt.0,
-                        createdAt: now, updatedAt: now,
+                        createdAt: changes.lazy.compactMap(\.createdAt).first ?? now, updatedAt: now,
                         fieldClocks: PageFieldClocks(title: title.1, icon: icon.1, placement: placement.2, trashedAt: trashedAt.1))
         for change in changes { _ = mergeViewField(change, into: &page) }
         return page

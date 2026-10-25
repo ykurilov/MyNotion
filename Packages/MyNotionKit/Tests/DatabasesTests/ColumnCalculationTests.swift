@@ -70,6 +70,18 @@ struct ColumnCalculationTests {
         #expect(try total(.countAll, of: t.number, search: "отчет")?.value == "2")
     }
 
+    @Test("Фильтр по связи не видит строк в корзине — как и сама ячейка")
+    func relationFilterSkipsTrashedTargets() throws {
+        let relation = try t.quiet.addRelation(to: t.base.databaseId, name: "Связь", target: t.base.databaseId)
+        try t.quiet.linkRow(t.rows[0], through: relation.id, to: t.rows[1])
+        try t.quiet.setRowsTrashed([t.rows[1]], true)
+
+        try t.quiet.setFilter(.condition(FilterCondition(propertyId: relation.id, op: .isNotEmpty, value: .null)), of: t.base.viewId)
+        #expect(try t.shownTitles().isEmpty)
+        try t.quiet.setFilter(.condition(FilterCondition(propertyId: relation.id, op: .isEmpty, value: .null)), of: t.base.viewId)
+        #expect(try t.shownTitles().contains("Отчёт за месяц"))
+    }
+
     @Test("У каждой группы — свой итог")
     func perGroup() throws {
         try t.quiet.group(by: t.select.id, in: t.base.viewId)

@@ -91,4 +91,52 @@ struct BackgroundTypeChangeTests {
         #expect(try value(rows[5], hours.id) == ["runs": [], "string": "своё"])
         #expect(try value(rows[6], hours.id) == ["runs": [], "string": "6"])
     }
+
+    @Test("Сбой посреди перевода не оставляет смеси: перевод доводится до конца при следующем запуске")
+    func interruptedRewriteResumes() async throws {
+        let failure = FailingCellBatches(propertyId: hours.id, failingBatch: 4)
+        store.addWriteHook(failure)
+        await #expect(throws: DeliberateBatchFailure.self) { try await operations.startChangeType(hours.id, to: .text).value }
+        #expect(try store.write { try $0.property(hours.id)?.kind } == .text)
+        #expect(try value(rows[7], hours.id) == ["runs": [], "string": "7"])
+        #expect(try value(rows[2_999], hours.id) == .number(39), "до сбоя переведена только часть")
+
+        failure.isOn = false
+        let restarted = DatabaseOperations(store: store)
+        try await restarted.resumeInterruptedRewrite().value
+        #expect(try value(rows[7], hours.id) == ["runs": [], "string": "7"])
+        #expect(try value(rows[2_999], hours.id) == ["runs": [], "string": "39"])
+        #expect(try store.appMeta(PendingRewrite.metaKey) == nil, "журнал убран")
+    }
+}
+
+struct DeliberateBatchFailure: Error {}
+
+/// Отказ записи на пачке значений свойства с номером `failingBatch` (как полный диск посреди перевода).
+final class FailingCellBatches: NotesWriteHook, @unchecked Sendable {
+    let propertyId: UUID
+    let failingBatch: Int
+    private let lock = NSLock()
+    private var batches = 0
+    private var on = true
+
+    init(propertyId: UUID, failingBatch: Int) {
+        self.propertyId = propertyId
+        self.failingBatch = failingBatch
+    }
+
+    var isOn: Bool {
+        get { lock.withLock { on } }
+        set { lock.withLock { on = newValue } }
+    }
+
+    func notesWillCommit(_ changes: NotesChanges, in transaction: NotesTransaction) throws {
+        guard changes.database.cells.contains(where: { $0.propertyId == propertyId }) else { return }
+        let fails = lock.withLock { () -> Bool in
+            guard on else { return false }
+            batches += 1
+            return batches == failingBatch
+        }
+        if fails { throw DeliberateBatchFailure() }
+    }
 }

@@ -105,6 +105,13 @@ public struct CellIndexer: NotesWriteHook {
         /// Все ячейки свойства — заново (смена типа, варианты, свойство пришло после ячеек).
         mutating func reindex(_ propertyId: UUID) throws {
             contexts[propertyId] = nil
+            if let kind = try context(propertyId)?.property.kind, !CellIndexer.searchableKinds.contains(kind) {
+                // Тип сменили на неискомый: прежний текст ячеек уходит из поиска (⌘K).
+                let offset = NotesTransaction.cellSearchRowidOffset
+                try db.execute(sql: "DELETE FROM search_index WHERE rowid IN (SELECT searchRowid + \(offset) FROM db_cell_search WHERE propertyId = ?)",
+                               arguments: [propertyId.databaseText])
+                try db.execute(sql: "DELETE FROM db_cell_search WHERE propertyId = ?", arguments: [propertyId.databaseText])
+            }
             if let property = try context(propertyId)?.property, property.kind == .title {
                 titleProperties[property.databaseId] = nil
                 try indexTitles(ofDatabase: property.databaseId)

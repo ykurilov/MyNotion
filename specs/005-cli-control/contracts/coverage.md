@@ -46,3 +46,4 @@
 - `PageTreeOperations.isEmptyForTemplate` — вопрос окну «спрашивать ли про замену текста»; команда ничего не спрашивает: `page create --template` пишет в новую страницу.
 - `matching`, `offersCreation`, `shown`, `random`, `canonical` — подсказки списка вариантов в окне (поиск по набору, «Создать…», цвет по очереди); команда называет вариант прямо.
 - `PageTreeOperations.perform`, `PageTreeOperations.registerUndo`, `DatabaseOperations.perform`, `DatabaseOperations.registerUndo`, `announce` — служебные: транзакция, отмена, оповещение окна. Команда идёт через них сама.
+- `resumeInterruptedRewrite`, `repairDuplicateIds` — служебные: окно при открытии доводит прерванную большую смену типа, после правок с другого Mac разводятся совпавшие номера ID. Приложение зовёт их само.

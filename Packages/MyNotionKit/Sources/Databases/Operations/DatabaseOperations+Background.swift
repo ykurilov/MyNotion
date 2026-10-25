@@ -5,7 +5,8 @@ import NotesCore
 /// Смена типа на большой базе — в фоне, по образцу пересчёта формул (research R21, SC-305): снимок свойства читается
 /// и значения переводятся вне записи; первая короткая запись — тип, настройки и варианты, дальше значения пачками по
 /// `batchSize` строк, между пачками очередь записи свободна — правки с главного потока проходят. Пачка пишет значение,
-/// только если в ячейке всё ещё прочитанное (иначе её уже поправили). ⌘Z — один шаг, тоже в фоне.
+/// только если в ячейке всё ещё прочитанное (иначе её уже поправили). ⌘Z — один шаг, тоже в фоне. Значения, которые ещё
+/// не записаны, лежат в журнале: перезапись, прерванную падением или ошибкой записи, следующая доводит до конца.
 extension DatabaseOperations {
     /// С этого числа строк меню и панель меняют тип в фоне; меньше — одной записью сразу.
     public static let backgroundRewriteThreshold = 1_000
@@ -37,14 +38,25 @@ extension DatabaseOperations {
         }
     }
 
+    /// Довести до конца перезапись, прерванную падением или ошибкой записи: тип уже новый, часть значений — прежние.
+    /// Окно зовёт при открытии; каждая новая перезапись делает это сама.
+    @discardableResult
+    public func resumeInterruptedRewrite() -> Task<Void, any Error> {
+        enqueueRewrite(actionName: nil) { _ in nil }
+    }
+
     /// Очередь фоновых перезаписей: план (на чтении), запись пачками, шаг отмены — по готовности.
     private func enqueueRewrite(actionName: String?,
                                 plan makePlan: @escaping @MainActor (DatabaseOperations) async throws -> PropertyRewrite.Plan?) -> Task<Void, any Error> {
         let previous = pendingRewrite
         let task = Task { @MainActor [weak self] in
             _ = try? await previous?.value
-            guard let self, let plan = try await makePlan(self) else { return }
+            guard let self else { return }
             let store = self.store
+            // Новая перезапись не читает смесь прежних и новых значений.
+            let resumed = try await Task.detached(priority: .userInitiated) { try PropertyRewrite.resumeInterrupted(store: store) }.value
+            if let resumed { Self.announce([resumed]) }
+            guard let plan = try await makePlan(self) else { return }
             let databaseId = plan.target.databaseId
             let after = try await Task.detached(priority: .userInitiated) { () throws -> PropertyState in
                 try PropertyRewrite.write(plan, store: store)
@@ -165,11 +177,11 @@ enum PropertyRewrite {
         }
     }
 
-    /// Записать план: свойство и варианты — одной короткой записью, значения — пачками со сверкой.
+    /// Записать план: свойство, варианты и журнал значений — одной короткой записью, значения — пачками со сверкой.
     static func write(_ plan: Plan, store: NotesStore) throws {
         let property = plan.target
-        var optionIds: [String: String] = [:]
-        try store.write { transaction throws in
+        let pending = try store.write { transaction throws -> PendingRewrite in
+            var optionIds: [String: String] = [:]
             try transaction.saveProperty(property)
             for option in plan.options { try transaction.saveOption(option) }
             let existing = try transaction.options(ofProperty: property.id)
@@ -182,26 +194,46 @@ enum PropertyRewrite {
                 last = option.sortKey
                 optionIds[SortableText.make(name)] = option.id.databaseText
             }
-        }
-        let resolved: [(rowId: UUID, value: JSONValue?, expected: JSONValue?)] = plan.values.map { item in
-            switch item.result {
-            case .value(let value): return (item.rowId, value, item.expected)
-            case .optionNames(let names):
-                let ids = names.compactMap { optionIds[SortableText.make($0)] }.map(JSONValue.string)
-                return (item.rowId, property.kind == .multiSelect ? .array(ids) : ids.first, item.expected)
+            let values = plan.values.map { item -> PendingRewrite.Value in
+                switch item.result {
+                case .value(let value): return .init(rowId: item.rowId, value: value, expected: item.expected)
+                case .optionNames(let names):
+                    let ids = names.compactMap { optionIds[SortableText.make($0)] }.map(JSONValue.string)
+                    return .init(rowId: item.rowId, value: property.kind == .multiSelect ? .array(ids) : ids.first, expected: item.expected)
+                }
             }
+            let pending = PendingRewrite(propertyId: property.id, databaseId: property.databaseId, numbersRows: plan.numbersRows, values: values)
+            try pending.save(in: transaction.database)
+            return pending
         }
-        for start in stride(from: 0, to: resolved.count, by: batchSize) {
-            let batch = resolved[start..<min(start + batchSize, resolved.count)]
+        try finish(pending, store: store)
+    }
+
+    /// Перезапись, прерванная падением или ошибкой записи, — до конца; `nil`, если прерванной нет. Иначе — её база.
+    static func resumeInterrupted(store: NotesStore) throws -> UUID? {
+        guard let pending = try store.database.dbWriter.read(PendingRewrite.read) else { return nil }
+        try finish(pending, store: store)
+        return pending.databaseId
+    }
+
+    /// Значения журнала — пачками со сверкой; последней записью журнал убирается. Записанные пачки при повторе
+    /// пропускаются: в ячейке уже не прочитанное значение.
+    private static func finish(_ pending: PendingRewrite, store: NotesStore) throws {
+        let values = pending.values
+        for start in stride(from: 0, to: values.count, by: batchSize) {
+            let batch = values[start..<min(start + batchSize, values.count)]
             try store.write { transaction throws in
-                let current = try currentValues(of: property.id, rows: batch.map(\.rowId), in: transaction.database)
+                let current = try currentValues(of: pending.propertyId, rows: batch.map(\.rowId), in: transaction.database)
                 // Ячейку поправили после чтения — правка главнее.
                 let writes = batch.filter { (current[$0.rowId] ?? nil) == $0.expected }.map { (rowId: $0.rowId, value: $0.value) }
-                try transaction.setCells(writes, propertyId: property.id)
+                try transaction.setCells(writes, propertyId: pending.propertyId)
             }
         }
-        if plan.numbersRows {
-            try store.write { try UniqueIds.numberRows(of: property.id, inDatabase: property.databaseId, in: $0) }
+        try store.write { transaction throws in
+            if pending.numbersRows {
+                try UniqueIds.numberRows(of: pending.propertyId, inDatabase: pending.databaseId, in: transaction)
+            }
+            try PendingRewrite.remove(in: transaction.database)
         }
     }
 
@@ -215,6 +247,38 @@ enum PropertyRewrite {
             result[rowId] = text.flatMap(JSONValue.init(jsonText:))
         }
         return result
+    }
+}
+
+/// Журнал фоновой перезаписи в `app_meta` (только этот Mac): что осталось записать в ячейки свойства.
+struct PendingRewrite: Codable, Sendable {
+    struct Value: Codable, Sendable {
+        var rowId: UUID
+        var value: JSONValue?
+        /// Что было в ячейке при чтении: другое значение — ячейку уже поправили или записали.
+        var expected: JSONValue?
+    }
+
+    var propertyId: UUID
+    var databaseId: UUID
+    var numbersRows: Bool
+    var values: [Value]
+
+    static let metaKey = "databases.pendingRewrite"
+
+    func save(in db: Database) throws {
+        let text = String(decoding: try JSONEncoder().encode(self), as: UTF8.self)
+        try db.execute(sql: "INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                       arguments: [Self.metaKey, text])
+    }
+
+    static func read(_ db: Database) throws -> PendingRewrite? {
+        guard let text = try String.fetchOne(db, sql: "SELECT value FROM app_meta WHERE key = ?", arguments: [metaKey]) else { return nil }
+        return try JSONDecoder().decode(PendingRewrite.self, from: Data(text.utf8))
+    }
+
+    static func remove(in db: Database) throws {
+        try db.execute(sql: "DELETE FROM app_meta WHERE key = ?", arguments: [metaKey])
     }
 }
 

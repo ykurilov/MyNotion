@@ -250,6 +250,56 @@ extension NotesTransaction {
         try database.execute(sql: "UPDATE page SET updatedAt = ? WHERE id = ?", arguments: [Date(), rowId.databaseText])
     }
 
+    /// Метки записей баз страницы: ячейки и связи строки; у страницы-базы — схема, свойства, варианты и виды.
+    func databaseContentStamps(ofPage pageId: UUID) throws -> [HybridTimestamp] {
+        var stamps = try cells(ofRow: pageId).map(\.hlc)
+        stamps += try linksOfRow(pageId).flatMap(\.fieldClocks.all)
+        guard let schema = try database(pageId) else { return stamps }
+        stamps += schema.fieldClocks.all
+        for property in try properties(ofDatabase: pageId, includingDeleted: true) {
+            stamps += property.fieldClocks.all
+            stamps += try options(ofProperty: property.id, includingDeleted: true).flatMap(\.fieldClocks.all)
+        }
+        return stamps + (try views(ofDatabase: pageId, includingDeleted: true).flatMap(\.fieldClocks.all))
+    }
+
+    /// Новые метки записям баз страницы (к `restampPageWithBlocks`): они уходят на другие Mac целиком.
+    func restampDatabaseRecords(ofPage pageId: UUID) throws {
+        for cell in try cells(ofRow: pageId) {
+            let restamped = CellRecord(rowId: cell.rowId, propertyId: cell.propertyId, value: cell.value, hlc: clock.now())
+            try restamped.save(in: database)
+            changes.database.cells.append(restamped)
+        }
+        for link in try linksOfRow(pageId) {
+            try restamp(link, write: { try $0.save(in: database) }) { changes.database.relationLinks.append($0) }
+        }
+        guard let schema = try database(pageId) else { return }
+        try restamp(schema, write: { try $0.save(in: database) }) { changes.database.databases.append($0) }
+        for property in try properties(ofDatabase: pageId, includingDeleted: true) {
+            try restamp(property, write: { try $0.save(in: database) }) { changes.database.properties.append($0) }
+            for option in try options(ofProperty: property.id, includingDeleted: true) {
+                try restamp(option, write: { try $0.save(in: database) }) { changes.database.options.append($0) }
+            }
+        }
+        for view in try views(ofDatabase: pageId, includingDeleted: true) {
+            try restamp(view, write: { try $0.save(in: database) }) { changes.database.views.append($0) }
+        }
+    }
+
+    private func linksOfRow(_ rowId: UUID) throws -> [RelationLink] {
+        try Row.fetchAll(database, sql: "SELECT * FROM db_relation_link WHERE rowId = ? ORDER BY id", arguments: [rowId.databaseText])
+            .map(RelationLink.init(row:))
+    }
+
+    private func restamp<Record: ClockedDatabaseRecord>(_ record: Record, write: (Record) throws -> Void,
+                                                        record changed: (RecordChange<Record>) -> Void) throws {
+        var restamped = record
+        let fields = Set(Record.Field.allCases)
+        restamped.fieldClocks.stamp(fields, with: clock.now())
+        try write(restamped)
+        changed(RecordChange(record: restamped, changedFields: fields, isNew: true))
+    }
+
     /// Стереть записи баз вместе со страницей: её ячейки, связи и места в видах; у страницы-базы — схему,
     /// свойства, варианты, виды и вычисленное.
     func eraseDatabaseRecords(ofPage pageId: UUID) throws {

@@ -54,17 +54,19 @@ public final class PageTreeOperations {
     }
 
     /// «Преобразовать в → Страница», как в Notion: блок становится ссылкой на подстраницу с его текстом в названии,
-    /// вложенные под ним блоки переезжают внутрь (со своими колонками, таблицами и подстраницами).
-    /// Страница не открывается; ⌘Z одним шагом возвращает блок с детьми на место.
+    /// вложенные под ним блоки переезжают внутрь (со своими колонками, таблицами и подстраницами), у свёрнутого
+    /// заголовка — весь его раздел (`HeadingSections`). Страница не открывается; ⌘Z одним шагом возвращает блок с детьми на место.
     @discardableResult
     public func turnIntoSubpage(_ blockId: UUID, in pageId: UUID) throws -> Page {
-        try createSubpage(in: pageId, linkAt: .replacing(blockId: blockId), movesChildren: true) { block in
+        let isFolded = try BlockViewStateStore(database: store.database).collapsedBlockIds(ofPage: pageId).contains(blockId)
+        return try createSubpage(in: pageId, linkAt: .replacing(blockId: blockId), movesChildren: true, takesSection: isFolded) { block in
             block.text.string.trimmingCharacters(in: .whitespacesAndNewlines)
         }
     }
 
     private func createSubpage(
-        in parentId: UUID, linkAt placement: SubpageLinkPlacement, movesChildren: Bool = false, title: (Block) -> String
+        in parentId: UUID, linkAt placement: SubpageLinkPlacement, movesChildren: Bool = false, takesSection: Bool = false,
+        title: (Block) -> String
     ) throws -> Page {
         let created = try perform { transaction in
             guard try transaction.page(parentId) != nil else { throw NotesStoreError.pageNotFound(parentId) }
@@ -79,7 +81,8 @@ public final class PageTreeOperations {
             var link = Block(pageId: parentId, kind: .pageLink, linkedPageId: page.id, sortKey: placed.sortKey)
             link.indent = anchor.indent
             link.containerId = anchor.containerId
-            let children = movesChildren ? try Self.moveChildren(of: anchor, in: blocks, into: page.id, transaction) : ChildrenMove()
+            let children = movesChildren
+                ? try Self.moveChildren(of: anchor, in: blocks, into: page.id, takesSection: takesSection, transaction) : ChildrenMove()
             if placement.replaces { try transaction.deleteBlock(anchor.id) }
             let inserted = try transaction.insertBlock(link)
             return InlineSubpage(page: page, link: inserted, replaced: placement.replaces ? anchor : nil, children: children)
@@ -293,13 +296,18 @@ public final class PageTreeOperations {
     /// Дети блока — следующие за ним в его потоке блоки с отступом больше — переезжают в начало новой страницы
     /// копиями с новыми id: вложенность между собой, типы, цвет, данные (файлы, адреса) те же, контейнеры
     /// (колонки, таблицы) — со своими потоками. Подстраницы, чьи ссылки среди детей, переезжают под новую страницу.
-    private static func moveChildren(of anchor: Block, in blocks: [Block], into pageId: UUID,
+    /// `takesSection` у заголовка — дети это его раздел: свёрнутый, он прячет и блоки на своей глубине.
+    private static func moveChildren(of anchor: Block, in blocks: [Block], into pageId: UUID, takesSection: Bool = false,
                                      _ transaction: NotesTransaction) throws -> ChildrenMove {
         let flow = blocks.filter { $0.containerId == anchor.containerId }.sorted(by: flowOrder)
         guard let index = flow.firstIndex(where: { $0.id == anchor.id }) else { return ChildrenMove() }
-        let children = flow[(index + 1)...].prefix { $0.indent > anchor.indent }
+        let isSection = takesSection && HeadingSections.level(anchor.kind) != nil
+        let children = isSection
+            ? flow[(index + 1)..<HeadingSections.sectionEnd(flow, ofHeadingAt: index)]
+            : flow[(index + 1)...].prefix { $0.indent > anchor.indent }
         guard !children.isEmpty else { return ChildrenMove() }
-        let copy = BlockCopier.copy(Array(children), pageBlocks: blocks, into: pageId, indentBase: anchor.indent + 1)
+        let copy = BlockCopier.copy(Array(children), pageBlocks: blocks, into: pageId,
+                                    indentBase: isSection ? anchor.indent : anchor.indent + 1)
         var move = ChildrenMove()
         move.originals = copy.originals
         let copies = copy.blocks

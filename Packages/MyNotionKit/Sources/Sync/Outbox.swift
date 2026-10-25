@@ -54,6 +54,67 @@ public struct Outbox: Sendable {
         }
     }
 
+    // MARK: Отложенные по размеру
+
+    /// Изменения одной записи, которые сервер не принял по размеру (больше 4 МБ), лежат здесь, а не в очереди,
+    /// чтобы не держать остальные. Ключ — `sync.setAside:<страница>:<сущность>:<id>`.
+    static let setAsidePrefix = "sync.setAside:"
+
+    /// Пачку не приняли по размеру. Несколько записей — каждая уходит своей пачкой на том же месте очереди;
+    /// одна — откладывается до своей следующей правки.
+    public func setAside(_ entry: OutboxEntry) throws {
+        let groups = Self.groupedByRecord(entry.changes)
+        let encoder = SyncJSON.encoder()
+        try store.database.dbWriter.write { db in
+            try db.execute(sql: "DELETE FROM outbox_entry WHERE id = ?", arguments: [entry.id.uuidString.lowercased()])
+            if groups.count > 1 {
+                for group in groups {
+                    try db.execute(sql: "INSERT INTO outbox_entry (id, createdAt, payload) VALUES (?, ?, ?)",
+                                   arguments: [UUID.timeOrdered().uuidString.lowercased(), entry.createdAt, try encoder.encode(group)])
+                }
+                return
+            }
+            guard let group = groups.first, let first = group.first else { return }
+            let key = Self.setAsidePrefix + "\((first.pageId ?? first.id).uuidString.lowercased()):\(Self.recordKey(first))"
+            try db.execute(sql: "INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                           arguments: [key, String(decoding: try encoder.encode(group), as: UTF8.self)])
+        }
+    }
+
+    /// Страницы, на которых лежат отложенные изменения.
+    public func setAsidePageIds() throws -> [UUID] {
+        try store.database.dbWriter.read { db in
+            try String.fetchAll(db, sql: "SELECT key FROM app_meta WHERE key LIKE ? ORDER BY key", arguments: [Self.setAsidePrefix + "%"])
+                .compactMap { UUID(uuidString: String($0.dropFirst(Self.setAsidePrefix.count).prefix(36))) }
+        }
+    }
+
+    /// Отложенные изменения записей, которые снова правят в этой транзакции: они уходят вместе с правкой.
+    /// Удалённый блок и стёртая страница свои отложенные забирают с собой — передавать их больше незачем.
+    static func takeSetAside(touching changes: [SyncChange], erasedPageIds: Set<UUID>, in db: Database) throws -> [SyncChange] {
+        let rows = try Row.fetchAll(db, sql: "SELECT key, value FROM app_meta WHERE key LIKE ?", arguments: [setAsidePrefix + "%"])
+        guard !rows.isEmpty else { return [] }
+        let touched = Set(changes.map(recordKey))
+        let deleted = Set(changes.filter { $0.entity == .block && $0.value == .deleted }.map(recordKey))
+        var taken: [SyncChange] = []
+        for row in rows {
+            let key: String = row["key"]
+            let rest = key.dropFirst(setAsidePrefix.count)
+            let record = String(rest.dropFirst(37))
+            let isErased = [rest.prefix(36), rest.suffix(36)].contains { UUID(uuidString: String($0)).map(erasedPageIds.contains) == true }
+            guard touched.contains(record) || isErased else { continue }
+            try db.execute(sql: "DELETE FROM app_meta WHERE key = ?", arguments: [key])
+            guard !deleted.contains(record), !isErased else { continue }
+            let value: String = row["value"]
+            taken += try SyncJSON.decoder().decode([SyncChange].self, from: Data(value.utf8))
+        }
+        return taken
+    }
+
+    static func recordKey(_ change: SyncChange) -> String {
+        "\(change.entity.rawValue):\(change.id.uuidString.lowercased())"
+    }
+
     /// Положить изменения в очередь: пачками не больше `maximumChunkBytes`, поля одной записи — в одной пачке.
     static func enqueue(_ changes: [SyncChange], in db: Database) throws {
         guard !changes.isEmpty else { return }
@@ -81,7 +142,7 @@ public struct Outbox: Sendable {
         var order: [String] = []
         var groups: [String: [SyncChange]] = [:]
         for change in changes {
-            let key = "\(change.entity.rawValue):\(change.id)"
+            let key = recordKey(change)
             if groups[key] == nil { order.append(key) }
             groups[key, default: []].append(change)
         }
@@ -113,8 +174,10 @@ public struct Outbox: Sendable {
 struct OutboxRecorder: NotesWriteHook {
     func notesWillCommit(_ changes: NotesChanges, in transaction: NotesTransaction) throws {
         guard try SyncAccountStore.isEnabled(in: transaction.database) else { return }
-        let outgoing = try ChangeEncoding.outgoing(changes, in: transaction)
+        var outgoing = try ChangeEncoding.outgoing(changes, in: transaction)
         guard !outgoing.isEmpty else { return }
+        let setAside = try Outbox.takeSetAside(touching: outgoing, erasedPageIds: Set(changes.erasedPageIds), in: transaction.database)
+        if !setAside.isEmpty { outgoing = ChangeEncoding.deduplicated(setAside + outgoing) }
         try Outbox.enqueue(outgoing, in: transaction.database)
         // Не дожидаясь главного потока: его подписчик (`queue: .main`) держал бы поток записи, пока главный, в свою
         // очередь, ждёт запись (копия ветки с очереди записи при включённой синхронизации — взаимная блокировка).
@@ -173,7 +236,7 @@ enum ChangeEncoding {
 
     /// Одно поле записи правили в транзакции несколько раз — уходит последнее значение. Ячейки строки — разные
     /// записи с одним id: их различает свойство.
-    private static func deduplicated(_ changes: [SyncChange]) -> [SyncChange] {
+    static func deduplicated(_ changes: [SyncChange]) -> [SyncChange] {
         func key(_ change: SyncChange) -> String {
             var key = "\(change.entity.rawValue):\(change.id):\(change.value.field)"
             if change.entity == .cell, case .databaseField(_, let value) = change.value { key += ":\(value["propertyId"]?.string ?? "")" }
@@ -207,7 +270,7 @@ enum ChangeEncoding {
         case .visitedAt: .visitedAt(page.visitedAt)
         case .isTemplate: .isTemplate(page.isTemplate)
         }
-        return SyncChange(entity: .page, id: page.id, value: value, hlc: hlc)
+        return SyncChange(entity: .page, id: page.id, value: value, hlc: hlc, createdAt: field == .placement ? page.createdAt : nil)
     }
 
     static func blockChange(_ block: Block, field: Block.Field, hlc: HybridTimestamp, baseHlc: HybridTimestamp?) -> SyncChange {
