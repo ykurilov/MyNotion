@@ -976,6 +976,16 @@ public class PageTextView: NSTextView {
 
     public override var shouldDrawInsertionPoint: Bool { false }
 
+    /// Место текста на экране — по раскладке с начала страницы (`NSTextLayoutManager.ensureLayoutFromStart`):
+    /// иначе абзац, разложенный первым после правки, остался бы на прикидочном месте.
+    public override func firstRect(forCharacterRange range: NSRange, actualRange: NSRangePointer?) -> NSRect {
+        if let textLayoutManager, let storage = textContentStorage,
+           let location = storage.location(storage.documentRange.location, offsetBy: range.location) {
+            textLayoutManager.ensureLayoutFromStart(through: location)
+        }
+        return super.firstRect(forCharacterRange: range, actualRange: actualRange)
+    }
+
     /// Курсор к выделению; полосы выделения перерисовать там, где они были и где стали.
     /// `isFocused: false` — текст отдаёт фокус: окно ещё считает его первым, но курсор и выделение уже гаснут.
     func updateSelectionLook(isFocused: Bool? = nil) {
