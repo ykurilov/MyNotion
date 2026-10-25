@@ -51,7 +51,7 @@ final class SelectionModesTests: XCTestCase {
         let body = app.pageBody
         let origin = body.coordinate(withNormalizedOffset: .zero)
         let start = origin.withOffset(CGVector(dx: add.minX - 24 - body.frame.minX, dy: add.midY - body.frame.minY))
-        start.press(forDuration: 0.2, thenDragTo: start.withOffset(CGVector(dx: 16, dy: 6)))
+        start.click(forDuration: 0.2, thenDragTo: start.withOffset(CGVector(dx: 16, dy: 6)))
         app.typeKey(.delete, modifierFlags: [])
         XCTAssertEqual(app.pageBody.value as? String, "пять", "Протяжка с поля не выделила блок")
 

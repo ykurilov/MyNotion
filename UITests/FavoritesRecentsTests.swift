@@ -35,7 +35,7 @@ final class FavoritesRecentsTests: XCTestCase {
         XCTAssertTrue(waitForTitles(app, in: "favorites", ["Гамма", "Альфа", "Бета"]))
 
         // Перетащить «Бету» в начало раздела.
-        favoriteMiddle(app, "Бета").press(forDuration: 0.5, thenDragTo: favoriteMiddle(app, "Гамма"))
+        favoriteMiddle(app, "Бета").click(forDuration: 0.5, thenDragTo: favoriteMiddle(app, "Гамма"))
         XCTAssertTrue(waitForTitles(app, in: "favorites", ["Бета", "Гамма", "Альфа"]))
 
         // ☆ ещё раз у открытой «Альфы» — убрана.

@@ -28,7 +28,7 @@ final class PageTreeTests: XCTestCase {
         XCTAssertEqual(visibleTitles(app), ["Проекты", "MyNotion", "Заметки", "Входящие"])
 
         // 2.2. Перетащить ветку «MyNotion» на «Входящие»: «Заметки» уезжают вместе с ней.
-        middle(app, "MyNotion").press(forDuration: 0.5, thenDragTo: middle(app, "Входящие"))
+        middle(app, "MyNotion").click(forDuration: 0.5, thenDragTo: middle(app, "Входящие"))
         XCTAssertTrue(waitForTitles(app, ["Проекты", "Входящие", "MyNotion", "Заметки"]))
 
         // Свернуть «MyNotion»: выделить строку и нажать стрелку влево.

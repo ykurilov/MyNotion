@@ -122,7 +122,7 @@ final class SyncTwoMacsUITests: XCTestCase {
         XCTAssertTrue(waitForFavorites(second, ["Альфа", "Бета", "Гамма"], timeout: 20), "Звёзды не дошли до Mac B")
 
         first.activate()
-        favoriteMiddle(first, "Гамма").press(forDuration: 0.5, thenDragTo: favoriteMiddle(first, "Альфа"))
+        favoriteMiddle(first, "Гамма").click(forDuration: 0.5, thenDragTo: favoriteMiddle(first, "Альфа"))
         XCTAssertTrue(waitForFavorites(first, ["Гамма", "Альфа", "Бета"]))
         let moved = Date()
         let arrived = waitForFavorites(second, ["Гамма", "Альфа", "Бета"], timeout: 10)
@@ -213,11 +213,11 @@ final class SyncTwoMacsUITests: XCTestCase {
         defer { if isFrozen { kill(server, SIGCONT) } }
 
         first.activate()
-        favoriteMiddle(first, "Бета").press(forDuration: 0.3, thenDragTo: favoriteMiddle(first, "Гамма"))
+        favoriteMiddle(first, "Бета").click(forDuration: 0.3, thenDragTo: favoriteMiddle(first, "Гамма"))
         XCTAssertTrue(waitForFavorites(first, ["Бета", "Гамма", "Альфа"]))
         second.activate()
         XCTAssertEqual(favoriteTitles(second), initial, "Правка Mac A дошла до Mac B при замороженном сервере")
-        favoriteMiddle(second, "Альфа").press(forDuration: 0.3, thenDragTo: favoriteMiddle(second, "Гамма"))
+        favoriteMiddle(second, "Альфа").click(forDuration: 0.3, thenDragTo: favoriteMiddle(second, "Гамма"))
         XCTAssertTrue(waitForFavorites(second, ["Альфа", "Гамма", "Бета"]))
         RunLoop.current.run(until: Date().addingTimeInterval(1))
         let firstAlone = favoriteTitles(first), secondAlone = favoriteTitles(second)

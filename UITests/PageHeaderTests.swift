@@ -60,7 +60,7 @@ final class PageHeaderTests: XCTestCase {
         let save = app.descendants(matching: .any)["save-cover-position"]
         XCTAssertTrue(save.waitForExistence(timeout: 5), "Режим «Переместить» не включился")
         cover.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.3))
-            .press(forDuration: 0.2, thenDragTo: cover.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.7)))
+            .click(forDuration: 0.2, thenDragTo: cover.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.7)))
         save.click()
         XCTAssertTrue(waitForAbsence(save), "«Сохранить положение» не закрыла режим")
 
