@@ -28,11 +28,11 @@ enum AttachmentHandlers {
             inserted.containerId = anchor.containerId
             inserted.indent = anchor.indent
             // Как вставка в окне: пустой абзац под курсором становится файлом.
-            if anchor.kind == .paragraph, anchor.text.string.isEmpty, !document.blocks.contains(where: { $0.containerId == anchor.id }) {
+            if anchor.kind == .paragraph, anchor.text.string.isEmpty, document.flow(anchor.id).isEmpty {
                 inserted.sortKey = anchor.sortKey
                 return BlockChanges(upserts: [inserted], removals: [anchor.id])
             }
-            let next = document.blocks.filter { $0.containerId == anchor.containerId && $0.sortKey > anchor.sortKey }.map(\.sortKey).min()
+            let next = document.siblings(of: anchor).filter { $0.sortKey > anchor.sortKey }.map(\.sortKey).min()
             inserted.sortKey = .between(anchor.sortKey, next)
             return BlockChanges(upserts: [inserted])
         }
@@ -66,7 +66,7 @@ enum AttachmentHandlers {
     /// Обложка, затем файлы блоков в порядке чтения.
     static let list: CommandHandler = { session in
         let page = try session.page()
-        let blocks = try session.host.openDocuments.document(for: page.id)?.blocks ?? session.host.store.pageContent(page.id)?.blocks ?? []
+        let blocks = try session.host.openDocuments.document(for: page.id)?.allBlocks ?? session.host.store.pageContent(page.id)?.blocks ?? []
         var items: [ControlJSON] = []
         if case .file(let ref)? = page.cover?.source { items.append(session.attachmentJSON(ref, kind: "cover")) }
         for block in readingOrder(blocks) {

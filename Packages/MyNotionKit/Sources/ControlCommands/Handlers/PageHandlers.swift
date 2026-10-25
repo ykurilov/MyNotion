@@ -93,7 +93,7 @@ public enum PageHandlers {
         try await session.editContent(of: page.id, checkpoint: true) { document in
             let anchor = stored.map { document.block($0.id) ?? $0 } ?? document.blocks.filter { $0.containerId == nil }.max { $0.sortKey < $1.sortKey }
             let next = anchor.flatMap { anchor in
-                document.blocks.filter { $0.containerId == anchor.containerId && $0.sortKey > anchor.sortKey }.map(\.sortKey).min()
+                document.siblings(of: anchor).filter { $0.sortKey > anchor.sortKey }.map(\.sortKey).min()
             }
             var key = anchor?.sortKey
             let blocks = session.blocks(fromMarkdown: session.string("markdown") ?? "", pageId: page.id, existing: document.blocks,
@@ -419,5 +419,12 @@ struct PageOutline {
             steps += 1
         }
         return false
+    }
+}
+
+extension PageDocument {
+    /// Соседи блока: поток его колонки или ячейки, а у блока страницы — поток страницы. `blocks` колонок и таблиц не содержит.
+    func siblings(of block: Block) -> [Block] {
+        block.containerId.map(flow) ?? blocks.filter { $0.containerId == nil }
     }
 }
