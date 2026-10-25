@@ -35,13 +35,14 @@ final class VersionHistoryTests: XCTestCase {
         let firstPreviewTime = textOf(app.staticTexts["version-preview-time"])
         XCTAssertFalse(firstPreviewTime.isEmpty, "Нет строки времени версии")
 
-        // Группировка «1 час»: вторая строка — уже не соседняя минута, а прошлый час; обратно «1 минута».
-        let secondByMinute = rowTime(rows, 1)
-        XCTAssertFalse(secondByMinute.isEmpty, "Не прочитать время строки")
+        // Группировка «1 час»: соседние минуты сливаются в часы — первые строки уже другие; обратно «1 минута».
+        // Три строки, а не одна: в первую минуту часа вторая строка «по минутам» (xx:59) совпадает со второй «по часам».
+        let topByMinute = topRowTimes(rows)
+        XCTAssertFalse(topByMinute.contains(""), "Не прочитать время строк: \(topByMinute)")
         chooseGrouping(app, "version-grouping-60")
-        XCTAssertTrue(waitFor { rowTime(rows, 1) != secondByMinute }, "«1 час» не объединил версии: \(secondByMinute)")
+        XCTAssertTrue(waitFor { topRowTimes(rows) != topByMinute }, "«1 час» не объединил версии: \(topByMinute)")
         chooseGrouping(app, "version-grouping-1")
-        XCTAssertTrue(waitFor { rowTime(rows, 1) == secondByMinute })
+        XCTAssertTrue(waitFor { topRowTimes(rows) == topByMinute })
         let minuteRows = rows.count
 
         // Прошлая версия: другая строка времени, «Восстановить» включена; раскрытие — что менялось.
@@ -108,6 +109,12 @@ final class VersionHistoryTests: XCTestCase {
     @MainActor
     private func rowTime(_ rows: XCUIElementQuery, _ index: Int) -> String {
         textOf(rows.element(boundBy: index).staticTexts.firstMatch)
+    }
+
+    /// Время первых трёх строк списка.
+    @MainActor
+    private func topRowTimes(_ rows: XCUIElementQuery) -> [String] {
+        (0..<3).map { rowTime(rows, $0) }
     }
 
     /// Текст надписи SwiftUI: в `value`, у некоторых — в `label`.
