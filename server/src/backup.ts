@@ -17,6 +17,12 @@ export async function backupDatabase(db: Db, dir: string, date: Date, keep = 14)
   mkdirSync(dir, { recursive: true });
   const file = join(dir, `${PREFIX}${date.toISOString().slice(0, 10)}${SUFFIX}`);
   await db.backup(file);
+  // Проверка — до VACUUM: пересборка копии скрыла бы поломку исходной базы.
+  const problem = integrityProblem(file);
+  if (problem) {
+    rmSync(file, { force: true });
+    throw new Error(`копия не прошла проверку целостности: ${problem}`);
+  }
   const copy = new Database(file);
   try {
     copy.pragma('journal_mode = DELETE');
@@ -24,11 +30,6 @@ export async function backupDatabase(db: Db, dir: string, date: Date, keep = 14)
     copy.exec('UPDATE shares SET document = NULL, digest = NULL, published_at = NULL; DELETE FROM share_files; VACUUM;');
   } finally {
     copy.close();
-  }
-  const problem = integrityProblem(file);
-  if (problem) {
-    rmSync(file, { force: true });
-    throw new Error(`копия не прошла проверку целостности: ${problem}`);
   }
   const copies = readdirSync(dir)
     .filter((name) => name.startsWith(PREFIX) && name.endsWith(SUFFIX))
