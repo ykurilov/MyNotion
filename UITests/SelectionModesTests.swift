@@ -27,12 +27,13 @@ final class SelectionModesTests: XCTestCase {
         XCTAssertEqual(app.pageBody.value as? String, "раз\nдва\nтри\nчетыре\nпять", "Выделенный через блоки текст стёрся не как текст")
 
         // Esc выделяет блок с курсором, ↑ — блок выше, ⇧↑ — расширяет; ⌘C копирует блоки, Delete удаляет их целиком.
+        // Простой текст буфера — Markdown для других программ: абзацы через пустую строку.
         app.typeKey(.escape, modifierFlags: [])
         app.typeKey(.upArrow, modifierFlags: [])
         app.typeKey(.upArrow, modifierFlags: .shift)
         NSPasteboard.general.clearContents()
         app.typeKey("c", modifierFlags: .command)
-        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "три\nчетыре", "⌘C в режиме блоков скопировал не те блоки")
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "три\n\nчетыре", "⌘C в режиме блоков скопировал не те блоки")
         app.typeKey(.delete, modifierFlags: [])
         XCTAssertEqual(app.pageBody.value as? String, "раз\nдва\nпять", "Delete в режиме блоков удалил не те блоки")
 
