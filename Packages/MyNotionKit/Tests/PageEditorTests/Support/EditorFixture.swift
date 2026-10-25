@@ -15,6 +15,8 @@ final class EditorFixture {
         var checked: Bool = false
         var link: UUID?
         var props: BlockProps = .empty
+        /// Оформление в строке.
+        var runs: [StyledRun] = []
 
         static func paragraph(_ text: String = "") -> Spec { Spec(kind: .paragraph, text: text) }
         static func heading(_ level: Int, _ text: String) -> Spec {
@@ -49,7 +51,7 @@ final class EditorFixture {
             var key: FractionalSortKey?
             for spec in specs {
                 key = .between(key, nil)
-                try tx.insertBlock(Block(pageId: page.id, kind: spec.kind, text: InlineText(spec.text), indent: spec.indent,
+                try tx.insertBlock(Block(pageId: page.id, kind: spec.kind, text: InlineText(spec.text, runs: spec.runs), indent: spec.indent,
                                          isChecked: spec.checked, linkedPageId: spec.link, sortKey: key!, props: spec.props))
             }
             return page.id

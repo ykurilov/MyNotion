@@ -93,6 +93,8 @@ targets:
         product: ControlServer
       - package: MyNotionKit
         product: ControlCommands
+      - package: MyNotionKit
+        product: PageMarkdown
       - target: mynotion-cli
         embed: true
         copy:
