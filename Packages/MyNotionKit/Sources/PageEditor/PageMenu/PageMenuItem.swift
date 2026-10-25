@@ -4,7 +4,7 @@ import NotesCore
 /// Место пункта в меню «•••» страницы (contracts/pages-ui.md, «Меню «•••» страницы»): порядок и группы.
 /// Меню собирается из описателей (`PageMenuItem`): каждая история добавляет свой файл в `App/MainWindow/PageMenu/`.
 public enum PageMenuSlot: Int, CaseIterable, Comparable, Sendable {
-    case findAction, duplicate, moveTo, versionHistory, exportDatabase
+    case findAction, duplicate, moveTo, versionHistory, share, exportDatabase
     case appearance
     case template, trash
     case footer
@@ -12,7 +12,7 @@ public enum PageMenuSlot: Int, CaseIterable, Comparable, Sendable {
     /// Группа: между группами — линия.
     var group: Int {
         switch self {
-        case .findAction, .duplicate, .moveTo, .versionHistory, .exportDatabase: 0
+        case .findAction, .duplicate, .moveTo, .versionHistory, .share, .exportDatabase: 0
         case .appearance: 1
         case .template, .trash: 2
         case .footer: 3

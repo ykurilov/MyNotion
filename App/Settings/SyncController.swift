@@ -165,6 +165,12 @@ final class SyncController {
         engine?.syncNow()
     }
 
+    /// Адрес сервера и ключ этого Mac — для ссылок на страницы (006); `nil` — синхронизация выключена.
+    func shareConnection() -> (serverURL: URL, deviceToken: String)? {
+        guard let account, let secret = try? secrets.load(for: account.deviceId) else { return nil }
+        return (account.serverURL, secret.deviceToken)
+    }
+
     /// Открытая страница: её файлы — первыми в очереди скачивания (FR-120).
     func prioritizeFiles(onPage pageId: UUID) {
         guard let fileWork, (try? attachments?.attachmentIds(onPage: pageId).isEmpty) == false else { return }

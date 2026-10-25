@@ -8,6 +8,7 @@ import Testing
 @Suite("Миграция v9 → v10")
 struct DatabaseMigrationV10Tests {
     static let upToV9 = SchemaMigrations(steps: Array(SchemaMigrations.current.steps.prefix { $0.version != "v10" }))
+    static let upToV10 = SchemaMigrations(steps: Array(SchemaMigrations.current.steps.prefix { $0.version != "v11" }))
 
     @Test("База v9 → v10: страницы те же, таблицы те же, добавился один индекс; копия v9 рядом")
     func addsOnlyLiveRowsIndex() throws {
@@ -28,7 +29,7 @@ struct DatabaseMigrationV10Tests {
         let before = try Self.dump(v9)
         v9.close()
 
-        let database = try AppDatabase.open(at: folder.databaseURL)
+        let database = try AppDatabase.open(at: folder.databaseURL, migrations: Self.upToV10)
         defer { database.close() }
         #expect(try database.appliedSchemaVersion() == "v10")
         let after = try Self.dump(database)

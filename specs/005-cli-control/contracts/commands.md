@@ -28,6 +28,7 @@
 | `page duplicate` | `<стр>` | W |
 | `page trash` / `page restore` | `<стр>` | W B |
 | `page layout` | `<стр> [--full-width on\|off] [--small-text on\|off]` | W B |
+| `page share` | `on\|off\|rotate\|show <стр> [--subpages on\|off]`: ссылка для чтения в браузере | W (этап 8, фича 006) |
 | `trash list` | — | R |
 | `trash delete` | `<стр> --force` (навсегда) | W |
 | `trash empty` | `--force` | W |

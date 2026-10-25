@@ -45,6 +45,25 @@ CREATE TABLE IF NOT EXISTS files (
   created_at  INTEGER NOT NULL,
   updated_at  INTEGER NOT NULL
 );
+-- Доступ по ссылке: открытый снимок страницы, который собрало приложение (specs/006-share-link)
+CREATE TABLE IF NOT EXISTS shares (
+  page_id           TEXT PRIMARY KEY,
+  token             TEXT NOT NULL UNIQUE,
+  enabled           INTEGER NOT NULL,
+  include_subpages  INTEGER NOT NULL DEFAULT 1,
+  document          TEXT,
+  digest            TEXT,
+  published_at      INTEGER,
+  created_at        INTEGER NOT NULL,
+  updated_at        INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS share_files (
+  page_id     TEXT NOT NULL,
+  file_id     TEXT NOT NULL,
+  bytes       INTEGER NOT NULL,
+  created_at  INTEGER NOT NULL,
+  PRIMARY KEY (page_id, file_id)
+);
 CREATE TABLE IF NOT EXISTS meta (
   key    TEXT PRIMARY KEY,
   value  INTEGER NOT NULL
@@ -55,6 +74,8 @@ export function openDatabase(path: string): Db {
   const db = new Database(path);
   db.pragma('journal_mode = WAL');
   db.pragma('synchronous = NORMAL');
+  // стёртое (снимок выключенной ссылки — открытый текст) затирается нулями, а не остаётся в свободных страницах
+  db.pragma('secure_delete = ON');
   db.exec(SCHEMA);
   return db;
 }

@@ -16,6 +16,8 @@ public protocol ControlHost: AnyObject {
     var windowControl: any WindowControl { get }
     /// Импорт, выгрузка, синхронизация (этап 7); `nil` — их нет (тесты).
     var transferControl: (any TransferControl)? { get }
+    /// Ссылки на страницы для чтения (006); `nil` — их нет (тесты).
+    var shareControl: (any ShareControl)? { get }
     var appInfo: AppInfo { get }
     /// Часы команд: окно «до правки агента» (подменяются в тестах).
     var now: Date { get }

@@ -28,6 +28,7 @@ final class AppControlHost: ControlHost {
     var versions: PageVersionStore { library.versions.versions }
     var versionRecorder: PageVersionRecorder { library.versions.recorder }
     var now: Date { Date() }
+    var shareControl: (any ShareControl)? { library.sharing }
 
     func treeDidChange(_ pageIds: Set<UUID>) {
         library.treeDidChange(pageIds)
