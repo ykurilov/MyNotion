@@ -198,14 +198,7 @@ private struct MergeRun {
 
     /// Все правки содержимого страницы на этом Mac были известны удалившему.
     private func isContentKnown(ofPage pageId: UUID, to known: ClockKnowledge) throws -> Bool {
-        var stamps: [HybridTimestamp] = []
-        if let page = try transaction.page(pageId) {
-            stamps += [page.fieldClocks.title, page.fieldClocks.icon].compactMap { $0 }
-        }
-        for (block, _) in try transaction.blocks(ofPage: pageId, includingDeleted: true) {
-            stamps += block.fieldClocks.all
-        }
-        return stamps.allSatisfy { $0 == .distantPast || known.covers($0) }
+        try transaction.contentStamps(ofPage: pageId).allSatisfy { $0 == .distantPast || known.covers($0) }
     }
 
     /// Вернуть страницу из корзины своей правкой: на прежнее место, ссылка — снова в родителе; если родителя нет — в корень.

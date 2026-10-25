@@ -90,6 +90,29 @@ struct ChangeMergerV4Tests {
         #expect(try a.cellText(db) == "позже" && b.cellText(db) == "позже")
     }
 
+    @Test("Правка ячейки строки, стёртой навсегда на другом Mac без знания о правке, возвращает строку в корзину целиком")
+    func cellEditRevivesUnawarelyErasedRow() throws {
+        let db = try makeTasksDatabase(on: a)
+        try exchange([a, b], numbering: numbering)
+        a.wall.set(30_000)
+        try a.tree.moveToTrash(db.row)
+        try a.tree.deleteForever(db.row)
+        b.wall.set(25_000)
+        try b.store.write { tx in try tx.setCell(rowId: db.row, propertyId: db.text, value: ["runs": [], "string": "правка без связи"]) }
+
+        try exchange([a, b], numbering: numbering)
+
+        for mac in [a, b] {
+            let row = try #require(try mac.page(db.row), "\(mac.name): строка не пропала")
+            #expect(row.trashedAt != nil, "\(mac.name): строка в корзине")
+            #expect(try mac.cellText(db) == "правка без связи", "\(mac.name): правка цела")
+            #expect(try mac.store.write { try $0.cell(rowId: db.row, propertyId: db.select)?.value } == .string(db.option.uuidString.lowercased()),
+                    "\(mac.name): остальные ячейки на месте")
+            #expect(try mac.store.write { try $0.relationLinks(propertyId: db.relation, rowId: db.row).map(\.targetRowId) } == [db.otherRow],
+                    "\(mac.name): связь строки на месте")
+        }
+    }
+
     @Test("Одновременные варианты и связи — все на месте; одна связь с двух Mac — одна запись")
     func optionsAndLinksMerge() throws {
         let db = try makeTasksDatabase(on: a)

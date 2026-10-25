@@ -144,16 +144,22 @@ public final class NotesTransaction {
         try erase(pageId, erasedAt: clock.now(), known: try contentKnowledge(ofPage: pageId))
     }
 
-    /// Какие правки содержимого страницы (название, иконка, блоки, в том числе удалённые) есть на этом Mac.
+    /// Какие правки содержимого страницы есть на этом Mac.
     package func contentKnowledge(ofPage pageId: UUID) throws -> ClockKnowledge {
-        var knowledge = ClockKnowledge()
+        ClockKnowledge(try contentStamps(ofPage: pageId))
+    }
+
+    /// Метки правок содержимого страницы: название, иконка, блоки (в том числе удалённые) и записи баз — ячейки и связи
+    /// строки, схема страницы-базы. По ним решается, видел ли их Mac, стёрший страницу или убравший её в корзину.
+    package func contentStamps(ofPage pageId: UUID) throws -> [HybridTimestamp] {
+        var stamps: [HybridTimestamp] = []
         if let page = try page(pageId) {
-            for stamp in [page.fieldClocks.title, page.fieldClocks.icon].compactMap({ $0 }) { knowledge.record(stamp) }
+            stamps += [page.fieldClocks.title, page.fieldClocks.icon].compactMap { $0 }
         }
         for (block, _) in try blocks(ofPage: pageId, includingDeleted: true) {
-            for stamp in block.fieldClocks.all { knowledge.record(stamp) }
+            stamps += block.fieldClocks.all
         }
-        return knowledge
+        return stamps + (try databaseContentStamps(ofPage: pageId))
     }
 
     private func erase(_ pageId: UUID, erasedAt: HybridTimestamp, known: ClockKnowledge) throws {
@@ -358,7 +364,7 @@ public final class NotesTransaction {
                        arguments: [pageId.databaseText, erasedAt.description, try JSONColumn.encode(known)])
     }
 
-    /// Новые метки всем полям страницы и её живых блоков: так этот Mac отправляет страницу целиком,
+    /// Новые метки всем полям страницы, её живых блоков и записей баз: так этот Mac отправляет страницу целиком,
     /// и она перекрывает стирание на других Mac (research R8).
     package func restampPageWithBlocks(_ pageId: UUID) throws {
         guard var page = try page(pageId) else { throw NotesStoreError.pageNotFound(pageId) }
@@ -369,6 +375,7 @@ public final class NotesTransaction {
         for block in try blocks(ofPage: pageId) {
             try restampBlock(block)
         }
+        try restampDatabaseRecords(ofPage: pageId)
     }
 
     /// Новые метки всем полям живого блока: блок уходит на другие Mac целиком.
