@@ -89,6 +89,8 @@ public enum ControlWarningCode: String, Sendable, Hashable, Codable, CaseIterabl
     case truncated = "truncated"
     /// Импорт прошёл, но в указанную страницу ветку перенести не удалось.
     case notMoved = "not_moved"
+    /// Откат вернул не всё: блоки, изменённые после команды в окне или синхронизацией, остались как есть.
+    case partialRollback = "partial_rollback"
 }
 
 /// Ошибка команды: сообщение по-русски одним предложением, подсказка — что сделать, в `details` — что нужно агенту дальше.

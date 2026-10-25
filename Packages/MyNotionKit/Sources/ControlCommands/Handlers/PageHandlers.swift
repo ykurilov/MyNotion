@@ -114,6 +114,7 @@ public enum PageHandlers {
 
     static let rename: CommandHandler = { session in
         let page = try session.page()
+        try await session.willWrite(page.id)
         try session.pageTree.rename(page.id, to: session.string("title") ?? "")
         return try session.pageResult(page.id)
     }
@@ -145,6 +146,7 @@ public enum PageHandlers {
 
     static let layout: CommandHandler = { session in
         let page = try session.page()
+        try await session.willWrite(page.id)
         if let fullWidth = session.string("fullWidth") { try session.pageTree.setFullWidth(page.id, fullWidth == "on") }
         if let smallText = session.string("smallText") { try session.pageTree.setSmallText(page.id, smallText == "on") }
         return try session.pageResult(page.id)
@@ -275,23 +277,28 @@ extension CommandSession {
     }
 
     /// `page write` и `--markdown` у `page create`: всё содержимое заново. Ссылки на подстраницы и встроенные базы,
-    /// которых в Markdown нет, остаются в конце: Markdown не удаляет страниц.
+    /// которых в Markdown нет, остаются в конце страницы, даже если лежали в колонке: Markdown не удаляет страниц.
     func replaceContent(of pageId: UUID, with markdown: String, checkpoint: Bool) async throws {
         let outline = try PageOutline(store: host.store)
         guard let page = outline.page(pageId) else { throw NotesStoreError.pageNotFound(pageId) }
         try outline.requireEditable(page)
         try await editContent(of: pageId, checkpoint: checkpoint) { document in
-            var blocks = self.blocks(fromMarkdown: markdown, pageId: pageId, existing: document.blocks, outline: outline)
+            var blocks = self.blocks(fromMarkdown: markdown, pageId: pageId, existing: document.allBlocks, outline: outline)
             let linked = Set(blocks.compactMap(\.linkedPageId))
-            let kept = document.blocks.filter { block in
-                guard block.containerId == nil, [.pageLink, .database].contains(block.kind), let target = block.linkedPageId,
+            // Колонки уходят вместе со своими блоками: ссылки из них — в поток страницы, иначе пропали бы с ней.
+            let kept = document.allBlocks.filter { block in
+                guard [.pageLink, .database].contains(block.kind), let target = block.linkedPageId,
                       !linked.contains(target), let child = outline.page(target) else { return false }
                 return child.parentId == pageId && !outline.isInTrash(child)
-            }.sorted { $0.sortKey < $1.sortKey }
+            }
             var key = blocks.filter { $0.containerId == nil }.map(\.sortKey).max()
             for var link in kept {
                 key = .between(key, nil)
                 link.sortKey = key!
+                if link.containerId != nil {
+                    link.containerId = nil
+                    link.indent = 0
+                }
                 blocks.append(link)
             }
             if blocks.isEmpty {
@@ -311,21 +318,27 @@ extension CommandSession {
         let changes = try change(document)
         guard !changes.isEmpty else { return }
         let inverse = document.apply(changes)
-        Self.registerContentUndo(inverse, in: pageId, documents: documents, undoManager: undoManager)
+        Self.registerContentUndo(inverse, undoing: changes, in: pageId, documents: documents, undoManager: undoManager, context: context)
         touch([pageId])
         guard documents.saveAll() else {
             throw ControlError(.writeFailed, "Не удалось записать страницу на диск", hint: "Повторите команду; место на диске: df -h")
         }
     }
 
-    private static func registerContentUndo(_ changes: BlockChanges, in pageId: UUID, documents: OpenDocuments, undoManager: UndoManager) {
-        undoManager.registerUndo(withTarget: documents) { [weak undoManager] documents in
+    /// Шаг отмены `changes` к правке `applied`; блоки, изменённые после неё мимо команды, отмена оставляет.
+    private static func registerContentUndo(_ changes: BlockChanges, undoing applied: BlockChanges, in pageId: UUID, documents: OpenDocuments,
+                                            undoManager: UndoManager, context: SessionContext) {
+        undoManager.registerUndo(withTarget: documents) { [weak undoManager, weak context] documents in
             MainActor.assumeIsolated {
                 guard let document = try? documents.open(pageId) else { return }
-                let inverse = document.apply(changes)
+                let (spared, kept) = BlockSnapshot.sparingLaterEdits(changes, of: applied, in: document)
+                if kept > 0 { context?.keptOnRollback(kept, inPage: pageId) }
+                let inverse = document.apply(spared)
                 documents.saveAll()
                 documents.release(pageId)
-                if let undoManager { registerContentUndo(inverse, in: pageId, documents: documents, undoManager: undoManager) }
+                if let undoManager, let context {
+                    registerContentUndo(inverse, undoing: spared, in: pageId, documents: documents, undoManager: undoManager, context: context)
+                }
             }
         }
         undoManager.setActionName("Правка агента")

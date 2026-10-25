@@ -24,7 +24,7 @@ struct BatchRunner {
                 let result = try await session.context.grouped { try await step.handler(stepSession) }
                 results.append(result.data)
             } catch {
-                session.context.rollBack()
+                await session.context.rollBack()
                 let inner = ControlError.wrapping(error)
                 throw ControlError(.batchFailed, "Шаг \(step.number) («\(step.spec.invocation)»): \(inner.message). Пакет откачен",
                                    hint: inner.hint, details: ["step": .number(Double(step.number)), "command": .string(step.spec.name),

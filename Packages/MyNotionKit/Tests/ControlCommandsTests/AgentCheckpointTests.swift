@@ -39,6 +39,40 @@ import Testing
         #expect(try agentVersions(page.id).count == 2)
     }
 
+    @Test func checkpointCoversAgentWorkWithShortPauses() async throws {
+        let page = try host.page("А", texts: ["было"])
+        let executor = CommandExecutor(host: host, log: RecordingLog())
+        func write(_ text: String) async {
+            let response = await executor.run(ControlRequest(command: "page.write", args: ["page": .string(page.id.controlText), "markdown": .string(text)],
+                                                             agent: "codex"))
+            #expect(response.ok)
+        }
+        await write("1")
+        host.clock.advance(minutes: 8)
+        await write("2")
+        host.clock.advance(minutes: 8)
+        await write("3")
+        #expect(try agentVersions(page.id).count == 1, "Работа агента с паузами меньше 10 минут разбита на несколько «до правки агента»")
+        host.clock.advance(minutes: 11)
+        await write("4")
+        #expect(try agentVersions(page.id).count == 2)
+    }
+
+    @Test func renameAndLayoutRecordAgentVersion() async throws {
+        let executor = CommandExecutor(host: host, log: RecordingLog())
+        let page = try host.page("Старое название", texts: ["текст"])
+        let renamed = await executor.run(ControlRequest(command: "page.rename", args: ["page": .string(page.id.controlText), "title": "Новое"],
+                                                        agent: "codex"))
+        #expect(renamed.ok)
+        let version = try #require(try agentVersions(page.id).first, "page rename без версии «до правки агента»")
+        #expect(try host.versions.snapshot(version.id)?.title == "Старое название")
+        let narrow = try host.page("Узкая", texts: ["текст"])
+        let widened = await executor.run(ControlRequest(command: "page.layout", args: ["page": .string(narrow.id.controlText), "fullWidth": "on"],
+                                                        agent: "codex"))
+        #expect(widened.ok)
+        #expect(try agentVersions(narrow.id).count == 1, "page layout без версии «до правки агента»")
+    }
+
     @Test func eachPageGetsItsOwn() async throws {
         let first = try host.page("А", texts: ["1"])
         let second = try host.page("Б", texts: ["2"])

@@ -383,6 +383,26 @@ struct MarkdownExporterTests {
         #expect(try FileManager.default.contentsOfDirectory(atPath: destination.path).isEmpty)
     }
 
+    @Test("Страницу стёрли навсегда посреди выгрузки — ошибка, а не успех без неё")
+    func pageErasedDuringExportFails() throws {
+        let pages = try store.write { tx in try (0..<5).map { try tx.createPage(title: "Страница \($0)") } }
+        try makeDestination()
+        let store = store
+        let erased = Mutex(false)
+        let erasing = exporter { data, url in
+            let first = erased.withLock { value -> Bool in defer { value = true }; return !value }
+            if first { try store.write { try $0.erasePage(pages[3].id) } }
+            try data.write(to: url)
+        }
+
+        let error = #expect(throws: MarkdownExportError.self) {
+            try erasing.export(into: destination, progress: nil)
+        }
+
+        #expect(error?.errorDescription?.contains("Страница 3") == true, "\(error?.errorDescription ?? "успех без стёртой страницы")")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: destination.path).isEmpty)
+    }
+
     @Test("Нет папки для выгрузки — понятная ошибка, ничего не создано")
     func missingDestination() throws {
         try store.write { try $0.createPage(title: "Страница") }
