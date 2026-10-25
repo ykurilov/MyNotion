@@ -207,7 +207,7 @@ enum ChangeEncoding {
         case .visitedAt: .visitedAt(page.visitedAt)
         case .isTemplate: .isTemplate(page.isTemplate)
         }
-        return SyncChange(entity: .page, id: page.id, value: value, hlc: hlc)
+        return SyncChange(entity: .page, id: page.id, value: value, hlc: hlc, createdAt: field == .placement ? page.createdAt : nil)
     }
 
     static func blockChange(_ block: Block, field: Block.Field, hlc: HybridTimestamp, baseHlc: HybridTimestamp?) -> SyncChange {

@@ -113,6 +113,20 @@ struct ChangeMergerV4Tests {
         }
     }
 
+    @Test("«Создано» строки на другом Mac — дата создания на первом, а не день первой синхронизации")
+    func rowCreationDateTravels() throws {
+        let db = try makeTasksDatabase(on: a)
+        let longAgo = Date(timeIntervalSince1970: 1_600_000_000)
+        try a.store.database.dbWriter.write { try $0.execute(sql: "UPDATE page SET createdAt = ?", arguments: [longAgo]) }
+        try SyncSetup.enable(store: a.store, account: SyncAccount(serverURL: URL(string: "https://sync.test")!,
+                                                                  deviceId: a.serverDeviceId, deviceName: a.name))
+
+        try exchange([a, b], numbering: numbering)
+
+        let row = try #require(try b.page(db.row))
+        #expect(abs(row.createdAt.timeIntervalSince(longAgo)) < 0.01, "Создано на B: \(row.createdAt)")
+    }
+
     @Test("Одновременные варианты и связи — все на месте; одна связь с двух Mac — одна запись")
     func optionsAndLinksMerge() throws {
         let db = try makeTasksDatabase(on: a)

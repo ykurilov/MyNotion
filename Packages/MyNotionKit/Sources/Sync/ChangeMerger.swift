@@ -277,7 +277,7 @@ private struct MergeRun {
         guard let title, let icon, let placement, let trashedAt, let id = changes.first?.id else { return nil }
         let now = Date()
         var page = Page(id: id, title: title.0, icon: icon.0, parentId: placement.0, sortKey: placement.1, trashedAt: trashedAt.0,
-                        createdAt: now, updatedAt: now,
+                        createdAt: changes.lazy.compactMap(\.createdAt).first ?? now, updatedAt: now,
                         fieldClocks: PageFieldClocks(title: title.1, icon: icon.1, placement: placement.2, trashedAt: trashedAt.1))
         for change in changes { _ = mergeViewField(change, into: &page) }
         return page
