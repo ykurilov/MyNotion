@@ -52,6 +52,9 @@ xcodebuild build -scheme MyNotion -destination 'platform=macOS,arch=arm64'
 | `Formulas` | язык формул: разбор, вычисление, функции по разделам |
 | `DatabaseGrid`, `DatabaseViewBar`, `DatabaseRowPage` | сетка таблицы, строка вида, страница строки; реестры пунктов меню и окон |
 | `NotionSchemaFetch` | схема баз из Notion по ключу (Q3) |
+| `ControlProtocol`, `ControlClient` | команда `mynotion`: каталог команд, разбор аргументов, формат ответа и ошибок; клиент (запускает приложение, если оно закрыто) |
+| `ControlServer`, `ControlCommands` | вход для команд в приложении: сокет, исполнитель с одним шагом отмены на команду, обработчики страниц, блоков, баз, окон, библиотеки, импорта и выгрузки, журнал |
+| `PageMarkdown` | Markdown ↔ блоки страницы для `page read`, `page write` и `page create --markdown`; чего в MyNotion нет, переносится текстом с предупреждением |
 
 ### Вкладки и меню «История»
 
@@ -115,6 +118,18 @@ cd server && imac-run --setup 'pnpm install --frozen-lockfile' -- pnpm test
 | `--import-notion <путь>` | импортировать выгрузку Notion (ZIP «Export → Markdown & CSV» или распакованную папку) в ветку «Импорт из Notion — <дата>» без окна выбора, напечатать отчёт и выйти (код 0 — готово, 1 — ошибка, ветка откачена, 2 — эта выгрузка уже импортирована, повтор не начат) |
 
 **Служебные режимы не берут фокус.** Галерея, снимки окна, замеры и эталонная база (`--ui-gallery`, `--ui-gallery-only`, `--window-snapshot`, `--hover-sidebar-row`, `--generate-reference-library`, `--launch-report`, `--typing-benchmark`, `--search-benchmark`, `--export-markdown`, `--import-notion`, а также `--generate-visual-sample` и `--generate-rich-sample` вместе с ними) идут, пока человек работает в других программах. Приложение не становится активным, не стоит в Dock, его окна лежат под всеми окнами. Нигде в этих режимах нет `activate`, `makeKeyAndOrderFront` и `orderFrontRegardless`. Новый служебный флаг обязан работать так же: он добавляется в `LaunchPresence.serviceFlags` (модуль `ServiceLaunch`) и в его тест. Запуск без служебных флагов — обычное приложение.
+
+## Команда mynotion для агентов
+
+Приложение слушает сокет и отвечает на команды `mynotion`: страницы и блоки, базы, поиск, избранное, история версий, окна, импорт и выгрузка. Каждый ответ — одна строка JSON (`{"ok":true,"data":…}` или `{"ok":false,"error":{…}}`). Каталог команд — `mynotion commands --json`; весь охват окна — `specs/005-cli-control/contracts/coverage.md` (его сверяет тест `CoverageTableTests`).
+
+**Установка.** `scripts/install-cli.sh` собирает Release на iMac, кладёт `MyNotion.app` в `/Applications`, ссылку `~/.local/bin/mynotion` на `MyNotion.app/Contents/Helpers/mynotion` и скилл `mynotion` в `~/.agents/skills`. `--target <папка>` — другое место приложения (на iMac: `~/Applications`), `--app <MyNotion.app>` — готовая сборка, `--skip-app` — только ссылка и скилл. Запущенное приложение скрипт не заменяет. Клиент находит своё приложение по ссылке, поэтому после переустановки ничего настраивать не нужно.
+
+**Сокет.** `~/Library/Application Support/MyNotion/control.sock`, права `0600`: команды видны только владельцу. Для другой базы (`--database <путь>`) сокет лежит рядом с ней; если путь длиннее 100 байт, он ложится в `$TMPDIR` по хэшу папки базы. Клиенту другой сокет задают `--socket <путь>` или `MYNOTION_SOCKET`. Закрытое приложение клиент запускает сам, в фоне и без фокуса (`--no-launch` отключает запуск, тогда ответ — `app_not_running`, код выхода 5).
+
+**Журнал.** Одна строка на команду в журнале системы: имя, указатель страницы или блока, итог или код ошибки, длительность, имя агента (`--agent` или `MYNOTION_AGENT`). Текста записей в нём нет. Читать: `log show --predicate 'category == "control"'`. Имя агента попадает и в историю версий страницы («Откатить правку агента» — `mynotion history restore`).
+
+**Тесты и проверки.** Тесты модулей `Control*` и `PageMarkdown` — как остальные (`swift test --filter …` на iMac). Сквозной сценарий — `scripts/imac/cli-e2e.zsh`, живые проверки групп — `scripts/imac/cli-live-check.zsh`, замеры ответа — `scripts/imac/cli-bench.zsh` (все через `scripts/imac/run-on-imac.sh lock --`).
 
 ## Сервер синхронизации и файлов
 

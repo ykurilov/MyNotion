@@ -34,6 +34,11 @@ let package = Package(
         .library(name: "DatabaseViewBar", targets: ["DatabaseViewBar"]),
         .library(name: "DatabaseRowPage", targets: ["DatabaseRowPage"]),
         .library(name: "NotionSchemaFetch", targets: ["NotionSchemaFetch"]),
+        .library(name: "ControlProtocol", targets: ["ControlProtocol"]),
+        .library(name: "ControlServer", targets: ["ControlServer"]),
+        .library(name: "ControlClient", targets: ["ControlClient"]),
+        .library(name: "ControlCommands", targets: ["ControlCommands"]),
+        .library(name: "PageMarkdown", targets: ["PageMarkdown"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.11.1"),
@@ -92,6 +97,18 @@ let package = Package(
         .target(name: "DatabaseRowPage", dependencies: ["Databases", "DatabaseGrid", "PageEditor", .product(name: "GRDB", package: "GRDB.swift")]),
         // Схема баз из Notion по ключу (Q3, research R19): только чтение.
         .target(name: "NotionSchemaFetch", dependencies: ["Formulas"]),
+        // 005 (plan.md, Source Code). Протокол команд: запрос, ответ, ошибки, каталог, разбор аргументов — только Foundation.
+        .target(name: "ControlProtocol"),
+        // Unix-сокет приложения: права 0600, проверка владельца, одна строка запроса — ответ (research R1).
+        .target(name: "ControlServer", dependencies: ["ControlProtocol"]),
+        // Тонкий клиент команды `mynotion`: подключение, запуск приложения в фоне, вывод (research R8).
+        .target(name: "ControlClient", dependencies: ["ControlProtocol"]),
+        // Выполнение команд без окна: только через операции 001–004 (research R2, R3).
+        .target(name: "ControlCommands", dependencies: ["ControlProtocol", "NotesCore", "Databases", "Formulas", "PageVersions", "PageSearch",
+                                                        "Attachments", "MarkdownExport", "NotionImport", "Navigation", "PageMarkdown", "PageCover",
+                                                        .product(name: "GRDB", package: "GRDB.swift")]),
+        // Страница ↔ Markdown для агента (research R5).
+        .target(name: "PageMarkdown", dependencies: ["NotesCore", "MarkdownExport", "NotionImport", "Attachments"]),
 
         .testTarget(name: "VisualStyleTests", dependencies: ["VisualStyle"]),
         .testTarget(name: "NotesCoreTests", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
@@ -122,6 +139,14 @@ let package = Package(
         .testTarget(name: "DatabaseViewBarTests", dependencies: ["DatabaseViewBar", "DatabaseGrid", "Databases", "NotesCore"]),
         .testTarget(name: "DatabaseRowPageTests", dependencies: ["DatabaseRowPage", "DatabaseGrid", "Databases", "NotesCore"]),
         .testTarget(name: "NotionSchemaFetchTests", dependencies: ["NotionSchemaFetch", "Formulas"]),
+        .testTarget(name: "ControlProtocolTests", dependencies: ["ControlProtocol"]),
+        .testTarget(name: "ControlServerTests", dependencies: ["ControlServer", "ControlProtocol"]),
+        .testTarget(name: "ControlClientTests", dependencies: ["ControlClient", "ControlServer", "ControlProtocol"]),
+        .testTarget(name: "ControlCommandsTests", dependencies: ["ControlCommands", "ControlProtocol", "NotesCore", "Databases", "PageVersions",
+                                                                 "MarkdownExport", "NotionImport", "Attachments", "Sync", "PageSearch", "Backlinks", "PageCover",
+                                                                 .product(name: "GRDB", package: "GRDB.swift")]),
+        .testTarget(name: "PageMarkdownTests", dependencies: ["PageMarkdown", "NotesCore", "MarkdownExport", "NotionImport", "Attachments", "PageEditor"],
+                    resources: [.copy("Fixtures")]),
     ],
     swiftLanguageModes: [.v6]
 )

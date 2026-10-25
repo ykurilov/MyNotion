@@ -36,6 +36,19 @@ public final class NotesStore: Sendable {
         }
     }
 
+    /// Одна страница без блоков; `nil`, если её нет.
+    public func page(_ pageId: UUID) throws -> Page? {
+        try database.dbWriter.read { db in try NotesTransaction.fetchPage(pageId, in: db) }
+    }
+
+    /// Один живой блок; `nil`, если его нет или он удалён.
+    public func block(_ blockId: UUID) throws -> Block? {
+        try database.dbWriter.read { db in
+            try Row.fetchOne(db, sql: "SELECT * FROM block WHERE id = ? AND isDeleted = 0", arguments: [blockId.databaseText])
+                .map(Block.init(row:))
+        }
+    }
+
     /// Страница и её блоки по порядку; `nil`, если страницы нет.
     public func pageContent(_ pageId: UUID) throws -> PageContent? {
         try database.dbWriter.read { db in

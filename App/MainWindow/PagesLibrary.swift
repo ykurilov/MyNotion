@@ -49,6 +49,9 @@ final class PagesLibrary {
     @ObservationIgnored private var windows: [WeakWindow] = []
     /// «Файл → Новое окно»: ставит первое окно (открывать окна SwiftUI умеет только из вида).
     @ObservationIgnored var openNewWindow: (@MainActor () -> Void)?
+    /// Страница окна, которое сейчас открывает команда `open --new-window`: следующая новая модель берёт её, а не страницу
+    /// окна, где работают.
+    @ObservationIgnored var pageForNextNewWindow: UUID?
 
     private struct WeakWindow {
         weak var model: MainWindowModel?
@@ -94,7 +97,8 @@ final class PagesLibrary {
             isFirstWindowClaimed = true
             return firstWindow
         }
-        return MainWindowModel(library: self, opening: activeWindow?.openPageId)
+        defer { pageForNextNewWindow = nil }
+        return MainWindowModel(library: self, opening: pageForNextNewWindow ?? activeWindow?.openPageId)
     }
 
     func register(_ window: MainWindowModel) {
@@ -180,8 +184,8 @@ final class PagesLibrary {
         openDocuments.document(for: pageId)?.adoptIcon(of: stored)
     }
 
-    /// Правки с другого Mac легли в базу; открытые страницы их уже приняли (research R5).
-    private func remoteChangesApplied() {
+    /// Правки с другого Mac (или записи команд мимо документов) легли в базу; открытые страницы их уже приняли (research R5).
+    func remoteChangesApplied() {
         reloadTree()
         // Ячейки, свойства, виды с другого Mac: открытые таблицы перечитывают себя.
         DatabaseOperations.announce(nil)

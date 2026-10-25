@@ -181,6 +181,20 @@ extension PageTextView {
         }
     }
 
+    /// Свёрнутость страницы сменили мимо редактора (команда `mynotion`): перечитать её и перерисовать изменённое.
+    @objc func blockViewStateDidChangeOutsideEditor(_ notification: Notification) {
+        guard collapsedParagraphs.store != nil,
+              notification.userInfo?[BlockViewStateStore.pageIdKey] as? UUID == document.pageId else { return }
+        let before = collapsedBlockIds
+        collapsedParagraphs.load(pageId: document.pageId)
+        let changed = before.symmetricDifference(collapsedBlockIds)
+        guard !changed.isEmpty else { return }
+        refreshBlockStructure()
+        redrawBlocks(Array(changed))
+        // Курсор, оставшийся внутри спрятанного, уходит из него, как при ⌘⌥T.
+        if !collapsedBlockIds.isSubset(of: before) { setSelectedRange(selectedRange()) }
+    }
+
     func toggleCollapsed(ofBlock id: UUID) {
         setCollapsed(!collapsedBlockIds.contains(id), ofBlock: id)
     }

@@ -71,6 +71,10 @@ struct MyNotionApp: App {
         }
         AppDelegate.importController = importController
         AppDelegate.exportController = exportController
+        // 005: команды из командной строки — после открытия базы и отката импорта; служебные запуски сокет не занимают.
+        if options.allowsSync, let pages {
+            ControlBootstrap.start(library: pages, importController: importController)
+        }
     }
 
     var body: some Scene {
@@ -252,6 +256,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "Не выходить")
         alert.addButton(withTitle: "Выйти без сохранения")
         return alert.runModal() == .alertSecondButtonReturn ? .terminateNow : .terminateCancel
+    }
+
+    /// Выход решён: сокет команд закрывается (после «Не выходить» он остаётся).
+    func applicationWillTerminate(_ notification: Notification) {
+        ControlBootstrap.stop()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

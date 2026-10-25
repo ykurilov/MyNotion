@@ -37,6 +37,15 @@ struct TableModelTests {
         autosave.stop()
     }
 
+    @Test("allBlocks открытой страницы включает столбцы и строки таблицы, которых нет в потоке страницы")
+    func allBlocksIncludeTableContents() throws {
+        let document = try openDocument()
+        let stored = try #require(try store.pageContent(pageId)).blocks
+        #expect(Set(document.allBlocks.map(\.id)) == Set(stored.map(\.id)))
+        #expect(document.allBlocks.contains { $0.kind == .tableRow })
+        #expect(!document.blocks.contains { $0.kind == .tableRow })
+    }
+
     @Test("Новая таблица во всю ширину, как у Notion 7.39: первый столбец 240, второй — остаток; узко — пополам, не уже наименьшего")
     func newTableWidths() {
         #expect(TableGrid.columnWidths(ofNewTableFitting: 716) == [240, 476])

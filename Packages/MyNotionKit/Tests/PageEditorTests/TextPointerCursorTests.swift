@@ -88,6 +88,57 @@ struct TextPointerCursorTests {
         #expect(set == [NSCursor.pointingHand], "За одно событие поставлено \(set.count) указателей, нужен один: рука")
     }
 
+    @Test("Над подстраницей, упоминанием и ссылкой — рука без I-beam, рядом в тексте — I-beam",
+          arguments: ["page-icon", "page-title", "mention", "link", "text"])
+    func clickableTextShowsPointingHand(target: String) throws {
+        let subpage = UUID(), mentioned = UUID()
+        var link = EditorFixture.Spec.paragraph()
+        link.kind = .pageLink
+        link.link = subpage
+        let fixture = try EditorFixture([.paragraph("Текст и ссылка тут"), link, .paragraph("Упомянуть ")])
+        let view = fixture.textView
+        view.linkedPages = [subpage: LinkedPage(title: "Оффер", icon: nil)]
+        view.mentionDirectory = MentionDirectory(pages: [mentioned: LinkedPage(title: "Планы", icon: "📘")])
+        fixture.select(inBlock: 0, "ссылка")
+        fixture.step { view.setLink(URL(string: "https://www.notion.so")!) }
+        let atom = fixture.textLocation(ofBlock: 2) + 10
+        fixture.step { view.insertAtom(.mention(mentioned), in: NSRange(location: atom, length: 0), blockAt: 2) }
+        view.layoutSubtreeIfNeeded()
+        let manager = try #require(view.textLayoutManager)
+        manager.ensureLayout(for: manager.documentRange)
+        func middle(ofCharacters range: NSRange) -> NSPoint {
+            let screen = view.firstRect(forCharacterRange: range, actualRange: nil)
+            let local = view.convert(fixture.window.convertFromScreen(screen), from: nil)
+            return NSPoint(x: local.midX, y: local.midY)
+        }
+        let origin = view.textContainerOrigin
+        let row = try #require(view.markerLine(ofBlockAt: 1))
+        let rowY = origin.y + row.top + row.height / 2
+        let point: NSPoint
+        switch target {
+        case "page-icon": point = NSPoint(x: origin.x + row.markerColumn.midX, y: rowY)
+        case "page-title": point = NSPoint(x: origin.x + row.textStart + 15, y: rowY)
+        case "mention": point = middle(ofCharacters: NSRange(location: atom, length: 1))
+        case "link": point = middle(ofCharacters: NSRange(location: 8, length: 6))
+        default: point = middle(ofCharacters: NSRange(location: 0, length: 5))
+        }
+        let expected: NSCursor = target == "text" ? .iBeam : .pointingHand
+        let location = view.convert(point, to: nil)
+        let moved = try #require(NSEvent.mouseEvent(with: .mouseMoved, location: location,
+            modifierFlags: [], timestamp: 0, windowNumber: fixture.window.windowNumber,
+            context: nil, eventNumber: 1, clickCount: 0, pressure: 0))
+        NSCursor.arrow.set()
+        let set = CursorSetRecorder.record { view.mouseMoved(with: moved) }
+        #expect(set.last == expected, "\(target): после mouseMoved указатель \(String(describing: set.last))")
+        if target != "text" { #expect(set == [NSCursor.pointingHand], "\(target): за одно событие \(set.count) указателей — мигание") }
+        NSCursor.arrow.set()
+        let update = try #require(NSEvent.enterExitEvent(with: .cursorUpdate, location: location,
+            modifierFlags: [], timestamp: 0, windowNumber: fixture.window.windowNumber,
+            context: nil, eventNumber: 2, trackingNumber: 0, userData: nil))
+        view.cursorUpdate(with: update)
+        #expect(NSCursor.current == expected, "\(target): cursorUpdate поставил \(NSCursor.current)")
+    }
+
     @Test("Иконка и кнопка шапки выбирают pointing hand", arguments: [true, false])
     func headerChromeRestoresPointingHand(icon: Bool) throws {
         let fixture = try EditorFixture([.paragraph("Текст")], icon: "🥰")

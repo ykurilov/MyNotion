@@ -140,6 +140,19 @@ public final class PageVersionRecorder: Sendable {
         }
     }
 
+    /// Версия «до правки агента» (005) из снимка, снятого вызывающим прямо перед правкой, с именем агента в сводке —
+    /// на очереди записывателя. Пишется уже после правки, поэтому отметку страницы не снимает: правка ждёт своей версии.
+    @discardableResult
+    public func recordAgentCheckpoint(_ content: PageContent, agent: String, deviceName: String?) async throws -> PageVersionInfo {
+        try await withCheckedThrowingContinuation { continuation in
+            queue.async {
+                continuation.resume(with: Result {
+                    try self.record(content, deviceName: deviceName, agent: agent, clearsDueMark: false)
+                })
+            }
+        }
+    }
+
     // MARK: Очередь записывателя
 
     private func scheduleCheck(after delay: TimeInterval) {
@@ -186,17 +199,24 @@ public final class PageVersionRecorder: Sendable {
 
     /// Снимок страницы из базы; сводка — разница с прошлой версией. Страницы нет — отметка снимается.
     @discardableResult
-    private func record(_ pageId: UUID, deviceName: String?) throws -> PageVersionInfo? {
-        let createdAt = now()
+    private func record(_ pageId: UUID, deviceName: String?, agent: String? = nil) throws -> PageVersionInfo? {
         guard let content = try store.pageContent(pageId) else {
             try versions.clearDue(pageId: pageId, upTo: .distantFuture)
             return nil
         }
+        return try record(content, deviceName: deviceName, agent: agent)
+    }
+
+    private func record(_ content: PageContent, deviceName: String?, agent: String? = nil, clearsDueMark: Bool = true) throws -> PageVersionInfo {
+        let createdAt = now()
+        let pageId = content.page.id
         let snapshot = PageSnapshot(page: content.page, blocks: content.blocks)
         let previous = try versions.latest(ofPage: pageId)
         let author = deviceName ?? state.withLock { $0.localDeviceName }
-        let info = try versions.save(snapshot, pageId: pageId, createdAt: createdAt, deviceName: author,
-                                     summary: VersionDiff.summary(from: previous?.snapshot, to: snapshot))
+        var summary = VersionDiff.summary(from: previous?.snapshot, to: snapshot)
+        summary.agent = agent
+        let info = try versions.save(snapshot, pageId: pageId, createdAt: createdAt, deviceName: author, summary: summary,
+                                     clearsDueMark: clearsDueMark)
         onRecorded?(info)
         return info
     }

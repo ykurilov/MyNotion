@@ -313,17 +313,23 @@ extension PageTextView {
         }
     }
 
-    /// Атом под точкой (координаты окна текста).
+    /// Щелчок по атому под точкой (координаты окна текста).
     func openAtom(at point: NSPoint) -> Bool {
+        guard let index = atomCharacter(at: point) else { return false }
+        return openAtom(atCharacter: index)
+    }
+
+    /// Знак атома под точкой (координаты окна текста).
+    func atomCharacter(at point: NSPoint) -> Int? {
         let index = characterIndexForInsertion(at: point)
         for candidate in [index, index - 1] where candidate >= 0 {
             guard atomAttachment(at: candidate) != nil else { continue }
             let rect = firstRect(forCharacterRange: NSRange(location: candidate, length: 1), actualRange: nil)
-            guard let window else { return openAtom(atCharacter: candidate) }
+            guard let window else { return candidate }
             let local = convert(window.convertFromScreen(rect), from: nil)
-            if local.insetBy(dx: -1, dy: -1).contains(point) { return openAtom(atCharacter: candidate) }
+            if local.insetBy(dx: -1, dy: -1).contains(point) { return candidate }
         }
-        return false
+        return nil
     }
 
     /// Справочник сменился: атомы видимой области раскладываются и рисуются заново.

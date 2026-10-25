@@ -10,6 +10,15 @@ public struct BlockViewStateStore: Sendable {
         self.database = database
     }
 
+    /// Свёрнутость сменили мимо редактора (команда `mynotion`): открытая страница перечитывает её.
+    public static let didChangeOutsideEditor = Notification.Name("MyNotion.BlockViewStateStore.didChangeOutsideEditor")
+    /// Ключ `userInfo`: id страницы.
+    public static let pageIdKey = "pageId"
+
+    public static func postChangedOutsideEditor(pageId: UUID) {
+        NotificationCenter.default.post(name: didChangeOutsideEditor, object: nil, userInfo: [pageIdKey: pageId])
+    }
+
     /// Свёрнутые блоки страницы; блоки, которых на странице нет, не возвращаются.
     public func collapsedBlockIds(ofPage pageId: UUID) throws -> Set<UUID> {
         try database.dbWriter.read { db in

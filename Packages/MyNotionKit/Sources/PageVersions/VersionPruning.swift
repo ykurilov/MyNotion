@@ -4,7 +4,8 @@ import NotesCore
 /// Прореживание истории (spec, Clarifications; по умолчанию, ждёт Юрия): младше суток — все версии; от суток до 30 дней —
 /// последняя в каждом часе; старше — последняя в каждом дне; последняя версия страницы — всегда. Снимки «до восстановления»
 /// (contracts/page-operations.md: версия «до восстановления» остаётся) прореживаются тем же правилом, но отдельно от
-/// остальных: версия «после» того же часа их не вытесняет, и к виду до восстановления можно вернуться и без ⌘Z.
+/// остальных: версия «после» того же часа их не вытесняет, и к виду до восстановления можно вернуться и без ⌘Z. Так же
+/// отдельно живут снимки «до правки агента» (005): правка агента не вытесняет вид страницы до неё.
 public enum VersionPruning {
     static let keepAllAge: TimeInterval = 86_400
     static let hourlyAge: TimeInterval = 30 * 86_400
@@ -27,11 +28,12 @@ public enum VersionPruning {
     }
 
     /// Корзина версии: час (от суток до 30 дней) или день (старше); младше суток — без корзины, остаётся.
-    /// У снимков «до восстановления» корзины свои.
+    /// У снимков «до восстановления» и «до правки агента» корзины свои.
     private struct Bucket: Hashable {
         let isDay: Bool
         let start: Date
         let isBeforeRestore: Bool
+        let isAgentCheckpoint: Bool
     }
 
     private static func bucket(of version: VersionStamp, now: Date, calendar: Calendar) -> Bucket? {
@@ -39,7 +41,7 @@ public enum VersionPruning {
         guard age >= keepAllAge else { return nil }
         let isDay = age >= hourlyAge
         return calendar.dateInterval(of: isDay ? .day : .hour, for: version.createdAt).map {
-            Bucket(isDay: isDay, start: $0.start, isBeforeRestore: version.isBeforeRestore)
+            Bucket(isDay: isDay, start: $0.start, isBeforeRestore: version.isBeforeRestore, isAgentCheckpoint: version.isAgentCheckpoint)
         }
     }
 }
