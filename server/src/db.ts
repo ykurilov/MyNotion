@@ -74,6 +74,8 @@ export function openDatabase(path: string): Db {
   const db = new Database(path);
   db.pragma('journal_mode = WAL');
   db.pragma('synchronous = NORMAL');
+  // стёртое (снимок выключенной ссылки — открытый текст) затирается нулями, а не остаётся в свободных страницах
+  db.pragma('secure_delete = ON');
   db.exec(SCHEMA);
   return db;
 }

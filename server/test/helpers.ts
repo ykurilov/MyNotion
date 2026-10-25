@@ -44,6 +44,7 @@ export interface CallOptions {
 export interface FilesOptions {
   limitBytes?: number;
   now?: () => number;
+  sharesLimitBytes?: number;
 }
 
 export function createTestServer(limits?: AppOptions['limits'], filesOptions: FilesOptions = {}): TestServer {
@@ -52,7 +53,7 @@ export function createTestServer(limits?: AppOptions['limits'], filesOptions: Fi
   const journal = createJournal(db, { devices });
   const filesDir = makeTempDir('mynotion-files-');
   const files = createFiles(db, { dir: filesDir, limitBytes: filesOptions.limitBytes ?? 1024 ** 3, now: filesOptions.now });
-  const shares = createShares(db, { dir: makeTempDir('mynotion-shares-'), limitBytes: 1024 ** 3 });
+  const shares = createShares(db, { dir: makeTempDir('mynotion-shares-'), limitBytes: filesOptions.sharesLimitBytes ?? 1024 ** 3 });
   const app = createApp({ devices, journal, files, shares, limits });
   const firstDevice = devices.bootstrap('Первый Mac');
   return {

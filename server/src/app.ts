@@ -1,12 +1,14 @@
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
-import { createReadStream } from 'node:fs';
+import { createReadStream, existsSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import { ApiError } from './errors.js';
 import type { Devices } from './devices.js';
 import { PART_MAX_BYTES, type Files } from './files.js';
 import { MAX_DOCUMENT_BYTES } from './share-document.js';
-import { renderNotFoundPage, renderSharedPage, STYLESHEET_PATH } from './share-render.js';
+import { KATEX_ASSETS_PATH, renderNotFoundPage, renderSharedPage, STYLESHEET_PATH } from './share-render.js';
 import { SHARE_STYLESHEET } from './share-style.js';
 import { MAX_SHARE_FILE_BYTES, type Shares } from './shares.js';
 import {
@@ -250,7 +252,7 @@ const PUBLIC_HEADERS = {
   'x-content-type-options': 'nosniff',
 } as const;
 const PAGE_CSP =
-  "default-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self'; media-src 'self'; script-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+  "default-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self'; media-src 'self'; font-src 'self'; script-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 /** Картинки и видео показываются на странице; всё остальное (и svg — в нём бывает скрипт) только скачивается. */
 const INLINE_TYPES = new Set([
   'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'image/heic', 'image/heif',
@@ -264,6 +266,58 @@ const htmlResponse = (html: string, status: number) =>
   });
 const notFoundPage = () => htmlResponse(renderNotFoundPage(), 404);
 
+/** Стили и шрифты KaTeX из пакета: только эти файлы, по точному имени. */
+const KATEX_DIR = dirname(createRequire(import.meta.url).resolve('katex/dist/katex.min.css'));
+const KATEX_FILE = /^(katex\.min\.css|fonts\/KaTeX_[A-Za-z0-9_-]+\.(woff2|woff|ttf))$/;
+const KATEX_TYPES: Record<string, string> = { css: 'text/css; charset=utf-8', woff2: 'font/woff2', woff: 'font/woff', ttf: 'font/ttf' };
+
+/** Готовый HTML страницы на версию снимка; ссылка подставляется при отдаче — после смены ссылки кэш тот же. */
+const TOKEN_SLOT = '\u0000share-token\u0000';
+const HTML_CACHE_CHARS = 64 * 1024 * 1024;
+
+function createPageCache() {
+  const pages = new Map<string, string>();
+  let total = 0;
+  return (key: string, render: () => string | null): string | null => {
+    const cached = pages.get(key);
+    if (cached !== undefined) {
+      pages.delete(key);
+      pages.set(key, cached);
+      return cached;
+    }
+    const html = render();
+    if (html === null || html.length > HTML_CACHE_CHARS / 4) return html;
+    pages.set(key, html);
+    total += html.length;
+    for (const [oldKey, oldHtml] of pages) {
+      if (total <= HTML_CACHE_CHARS) break;
+      pages.delete(oldKey);
+      total -= oldHtml.length;
+    }
+    return html;
+  };
+}
+
+/** Один диапазон `bytes=…` (как просят Safari и перемотка видео); `null` — заголовка нет, `'invalid'` — вне файла. */
+function parseRange(header: string | undefined, size: number): { start: number; end: number } | 'invalid' | null {
+  if (!header) return null;
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!match || (match[1] === '' && match[2] === '')) return null;
+  let start: number;
+  let end: number;
+  if (match[1] === '') {
+    const suffix = Number(match[2]);
+    if (suffix === 0) return 'invalid';
+    start = Math.max(0, size - suffix);
+    end = size - 1;
+  } else {
+    start = Number(match[1]);
+    end = match[2] === '' ? size - 1 : Math.min(Number(match[2]), size - 1);
+  }
+  if (start >= size || start > end) return 'invalid';
+  return { start, end };
+}
+
 function mountPublicShares(app: Hono<Env>, shares: Shares): void {
   app.get('/robots.txt', () =>
     new Response('User-agent: *\nDisallow: /\n', { headers: { ...PUBLIC_HEADERS, 'content-type': 'text/plain; charset=utf-8' } }),
@@ -275,13 +329,27 @@ function mountPublicShares(app: Hono<Env>, shares: Shares): void {
     }),
   );
 
+  app.get(`${KATEX_ASSETS_PATH}*`, (c) => {
+    const name = c.req.path.slice(KATEX_ASSETS_PATH.length);
+    const path = join(KATEX_DIR, name);
+    if (!KATEX_FILE.test(name) || !existsSync(path)) return notFoundPage();
+    return new Response(readFileSync(path), {
+      headers: { ...PUBLIC_HEADERS, 'content-type': KATEX_TYPES[name.split('.').pop()!]!, 'cache-control': 'public, max-age=86400' },
+    });
+  });
+
+  const cachedPage = createPageCache();
   const page = (token: string, pageId: string | undefined) => {
     const published = shares.open(token);
     if (!published) return notFoundPage();
     const id = pageId?.toLowerCase() ?? published.share.pageId;
+    // файлы снимка только догружаются, пока digest тот же, — их числа хватает, чтобы отличить версию
+    const key = [published.share.pageId, published.share.digest, id, published.storedFiles.size].join('\n');
     // без подстраниц снимок и так содержит одну страницу — лишнего не откроется
-    const html = renderSharedPage(published.document, id, { token, availableFiles: published.storedFiles });
-    return html === null ? notFoundPage() : htmlResponse(html, 200);
+    const html = cachedPage(key, () =>
+      renderSharedPage(published.document, id, { token: TOKEN_SLOT, availableFiles: published.storedFiles }),
+    );
+    return html === null ? notFoundPage() : htmlResponse(html.replaceAll(TOKEN_SLOT, token), 200);
   };
 
   app.get('/s/:token', (c) => page(c.req.param('token'), undefined));
@@ -296,22 +364,28 @@ function mountPublicShares(app: Hono<Env>, shares: Shares): void {
       ...PUBLIC_HEADERS,
       'cache-control': 'private, no-cache',
       etag,
+      'accept-ranges': 'bytes',
+      'cross-origin-resource-policy': 'same-origin',
       'content-security-policy': "default-src 'none'; sandbox",
     };
     if (c.req.header('if-none-match') === etag) return new Response(null, { status: 304, headers });
     const inline = INLINE_TYPES.has(found.file.mimeType);
-    const disposition = `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(found.file.name)}`;
-    return new Response(Readable.toWeb(createReadStream(found.path)) as ReadableStream, {
-      headers: {
-        ...headers,
-        'content-type': inline ? found.file.mimeType : 'application/octet-stream',
-        'content-length': String(found.size),
-        'content-disposition': disposition,
-      },
-    });
+    headers['content-type'] = inline ? found.file.mimeType : 'application/octet-stream';
+    headers['content-disposition'] = `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(found.file.name)}`;
+    const range = parseRange(c.req.header('range'), found.size);
+    if (range === 'invalid') return new Response(null, { status: 416, headers: { ...headers, 'content-range': `bytes */${found.size}` } });
+    const { start, end } = range ?? { start: 0, end: found.size - 1 };
+    const body = found.size === 0 ? null : (Readable.toWeb(createReadStream(found.path, { start, end })) as ReadableStream);
+    if (range) {
+      headers['content-range'] = `bytes ${start}-${end}/${found.size}`;
+    }
+    headers['content-length'] = String(end - start + 1);
+    return new Response(body, { status: range ? 206 : 200, headers });
   });
 
+  app.all('/s', () => notFoundPage());
   app.all('/s/*', () => notFoundPage());
+  app.all('/share-assets/*', () => notFoundPage());
 }
 
 // MARK: Управление ссылками (с токеном устройства)

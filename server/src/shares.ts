@@ -38,7 +38,7 @@ export interface Shares {
   putFile(pageId: string, fileId: string, body: ReadableStream<Uint8Array> | null): Promise<'created' | 'exists'>;
   /** Открытая ссылка: `null` — нет такой, выключена или ещё без снимка. */
   open(token: string): PublishedShare | null;
-  /** Путь файла открытой ссылки, если он есть в её снимке и уже загружен. */
+  /** Путь файла открытой ссылки, если он есть в её снимке и уже загружен (того же размера, что в снимке). */
   filePath(published: PublishedShare, fileId: string): { path: string; file: SharedFile; size: number } | null;
 }
 
@@ -81,11 +81,20 @@ export function createShares(db: Db, options: { dir: string; limitBytes: number;
   const setToken = db.prepare('UPDATE shares SET token = ?, updated_at = ? WHERE page_id = ?');
   const setDocument = db.prepare('UPDATE shares SET document = ?, digest = ?, published_at = ?, updated_at = ? WHERE page_id = ?');
   const deleteShare = db.prepare('DELETE FROM shares WHERE page_id = ?');
-  const filesOf = db.prepare('SELECT file_id FROM share_files WHERE page_id = ?');
+  const filesOf = db.prepare('SELECT file_id, bytes FROM share_files WHERE page_id = ?');
   const insertFile = db.prepare('INSERT OR REPLACE INTO share_files (page_id, file_id, bytes, created_at) VALUES (?, ?, ?, ?)');
   const deleteFile = db.prepare('DELETE FROM share_files WHERE page_id = ? AND file_id = ?');
   const deleteFiles = db.prepare('DELETE FROM share_files WHERE page_id = ?');
-  const usedBytes = db.prepare('SELECT COALESCE(SUM(bytes), 0) AS total FROM share_files');
+  const fileBytes = db.prepare('SELECT COALESCE(SUM(bytes), 0) AS total FROM share_files');
+  const documentBytes = db.prepare('SELECT COALESCE(SUM(LENGTH(CAST(document AS BLOB))), 0) AS total FROM shares');
+  // место под файлы, которые ещё грузятся: проверка и бронь — одним синхронным шагом, параллельные загрузки лимит не обходят
+  let reservedBytes = 0;
+  const usedBytes = () =>
+    (fileBytes.get() as { total: number }).total + (documentBytes.get() as { total: number }).total + reservedBytes;
+  const storageFull = () => new ApiError(507, 'storage_full', 'На сервере кончилось место для опубликованных страниц');
+
+  // недогруженные файлы прошлого запуска
+  rmSync(tmpDir, { recursive: true, force: true });
 
   // Разобранный снимок — до смены digest: страница открывается без разбора JSON на каждый запрос.
   const parsed = new Map<string, { digest: string; document: SharedDocument }>();
@@ -99,7 +108,14 @@ export function createShares(db: Db, options: { dir: string; limitBytes: number;
     publishedAt: row.published_at,
   });
   const rowOf = (pageId: string) => selectByPage.get(pageId) as Row | undefined;
-  const storedFiles = (pageId: string) => new Set((filesOf.all(pageId) as { file_id: string }[]).map((row) => row.file_id));
+  /** Загруженные файлы ссылки: id → размер. */
+  const storedSizes = (pageId: string) =>
+    new Map((filesOf.all(pageId) as { file_id: string; bytes: number }[]).map((row) => [row.file_id, row.bytes]));
+  /** Файлы снимка, которые уже лежат на сервере в нужном размере. */
+  const storedFiles = (pageId: string, document: SharedDocument) => {
+    const sizes = storedSizes(pageId);
+    return new Set([...document.files.values()].filter((file) => sizes.get(file.id) === file.byteCount).map((file) => file.id));
+  };
 
   function eraseContent(pageId: string): void {
     db.transaction(() => {
@@ -108,6 +124,8 @@ export function createShares(db: Db, options: { dir: string; limitBytes: number;
     })();
     parsed.delete(pageId);
     rmSync(pageDir(pageId), { recursive: true, force: true });
+    // старые версии страниц базы лежат и в журнале WAL — переносим и обрезаем его
+    db.pragma('wal_checkpoint(TRUNCATE)');
   }
 
   function documentOf(row: Row): SharedDocument | null {
@@ -157,15 +175,21 @@ export function createShares(db: Db, options: { dir: string; limitBytes: number;
       if (row.enabled !== 1) throw new ApiError(409, 'share_disabled', 'Доступ по ссылке выключен — снимок не нужен');
       if (typeof digest !== 'string' || !/^[0-9a-f]{64}$/.test(digest)) throw badRequest('Поле digest должно быть SHA-256');
       const document = parseSharedDocument(raw, pageId);
-      const stored = storedFiles(pageId);
+      const json = JSON.stringify(raw);
+      const previous = row.document === null ? 0 : Buffer.byteLength(row.document);
+      if (usedBytes() - previous + Buffer.byteLength(json) > limitBytes) throw storageFull();
+      const sizes = storedSizes(pageId);
+      // убранный из снимка или сменивший размер файл стирается: новый догрузит приложение
+      const stale = [...sizes].filter(([fileId, bytes]) => document.files.get(fileId)?.byteCount !== bytes).map(([fileId]) => fileId);
       const stamp = now();
       db.transaction(() => {
-        setDocument.run(JSON.stringify(raw), digest, stamp, stamp, pageId);
-        for (const fileId of stored) if (!document.files.has(fileId)) deleteFile.run(pageId, fileId);
+        setDocument.run(json, digest, stamp, stamp, pageId);
+        for (const fileId of stale) deleteFile.run(pageId, fileId);
       })();
-      for (const fileId of stored) if (!document.files.has(fileId)) rmSync(filePath(pageId, fileId), { force: true });
+      for (const fileId of stale) rmSync(filePath(pageId, fileId), { force: true });
       parsed.set(pageId, { digest, document });
-      return [...document.files.keys()].filter((fileId) => !stored.has(fileId));
+      const kept = new Set([...sizes.keys()].filter((fileId) => !stale.includes(fileId)));
+      return [...document.files.keys()].filter((fileId) => !kept.has(fileId));
     },
 
     async putFile(rawPageId, rawFileId, body) {
@@ -177,12 +201,11 @@ export function createShares(db: Db, options: { dir: string; limitBytes: number;
       const document = row.enabled === 1 ? documentOf(row) : null;
       const declared = document?.files.get(fileId);
       if (!declared) throw new ApiError(409, 'file_not_in_document', 'Этого файла нет в опубликованной странице');
-      if (storedFiles(pageId).has(fileId)) return 'exists';
+      if (storedSizes(pageId).get(fileId) === declared.byteCount) return 'exists';
       if (declared.byteCount > MAX_SHARE_FILE_BYTES) throw new ApiError(413, 'too_large', 'Файл больше 100 МБ');
-      if ((usedBytes.get() as { total: number }).total + declared.byteCount > limitBytes) {
-        throw new ApiError(507, 'storage_full', 'На сервере кончилось место для опубликованных файлов');
-      }
+      if (usedBytes() + declared.byteCount > limitBytes) throw storageFull();
       if (!body) throw badRequest('Тело файла не должно быть пустым');
+      reservedBytes += declared.byteCount;
       mkdirSync(tmpDir, { recursive: true });
       const tmp = join(tmpDir, `${randomUUID()}.tmp`);
       try {
@@ -209,6 +232,7 @@ export function createShares(db: Db, options: { dir: string; limitBytes: number;
         insertFile.run(pageId, fileId, size, now());
         return 'created';
       } finally {
+        reservedBytes -= declared.byteCount;
         rmSync(tmp, { force: true });
       }
     },
@@ -219,7 +243,7 @@ export function createShares(db: Db, options: { dir: string; limitBytes: number;
       if (!row || row.enabled !== 1) return null;
       const document = documentOf(row);
       if (!document) return null;
-      return { share: toShare(row), document, storedFiles: storedFiles(row.page_id) };
+      return { share: toShare(row), document, storedFiles: storedFiles(row.page_id, document) };
     },
 
     filePath(published, rawFileId) {

@@ -102,3 +102,28 @@ describe('ежедневная копия файлов', () => {
     expect(readdirSync(target)).toEqual([]);
   });
 });
+
+describe('копия базы и страницы по ссылке', () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'mynotion-backup-'));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it('в копию не попадают открытые снимки страниц: только ссылки, без содержимого', async () => {
+    const source = openDatabase(join(dir, 'source.db'));
+    source
+      .prepare("INSERT INTO shares (page_id, token, enabled, include_subpages, document, digest, published_at, created_at, updated_at) VALUES ('p', 't', 1, 1, ?, 'd', 1, 1, 1)")
+      .run('{"title":"Тайная-заметка-в-копии"}');
+    source.prepare("INSERT INTO share_files (page_id, file_id, bytes, created_at) VALUES ('p', 'f', 1, 1)").run();
+
+    const file = await backupDatabase(source, join(dir, 'backups'), new Date('2026-10-18T03:00:00Z'));
+    expect(readFileSync(file).includes(Buffer.from('Тайная-заметка-в-копии'))).toBe(false);
+    const copy = new Database(file, { readonly: true });
+    expect(copy.prepare('SELECT token, enabled, document, digest FROM shares').all()).toEqual([
+      { token: 't', enabled: 1, document: null, digest: null },
+    ]);
+    expect(copy.prepare('SELECT COUNT(*) AS n FROM share_files').get()).toEqual({ n: 0 });
+    copy.close();
+  });
+});

@@ -157,4 +157,29 @@ describe('отрисовка опубликованной страницы', () 
     expect(html).not.toContain('url(x)');
     expect(html).not.toContain('</style>');
   });
+
+  it('формула — разметкой KaTeX без скриптов; строчная формула в тексте; ошибка — исходником', () => {
+    const inline = block('paragraph', 'Масса ￼ тут', {
+      text: { string: 'Масса ￼ тут', runs: [{ start: 6, length: 1, style: 'equation', latex: 'm_0' }] },
+    });
+    const html = render(one(block('equation', '\\frac{a}{b}'), inline, block('equation', '\\href{javascript:alert(1)}{x}'), block('equation', '\\frac{')));
+    expect(html).toMatch(/<div class="block equation">.*class="katex-display"/s);
+    expect(html).toContain('<span class="katex"><span class="katex-mathml"><math');
+    // \\href без trust — не ссылка: адрес остаётся только текстом исходника формулы
+    expect(html).not.toMatch(/href="javascript/i);
+    expect(html).toContain('/share-assets/katex/katex.min.css');
+    expect(render(one(block('paragraph', 'без формул')))).not.toContain('katex.min.css');
+  });
+
+  it('много блоков в одной таблице и много пробегов в строке рисуются быстро', () => {
+    const table = block('table');
+    const column = block('tableColumn', '', { container: table.id });
+    const rows = Array.from({ length: 20_000 }, () => block('tableRow', '', { container: table.id }));
+    const cells = rows.map((row) => block('tableCell', 'ячейка', { container: row.id, props: { columnId: column.id } }));
+    const long = 'ж'.repeat(20_000);
+    const runs = Array.from({ length: 10_000 }, (_, index) => ({ start: index * 2, length: 1, style: 'bold' }));
+    const started = performance.now();
+    render(one(table, column, ...rows, ...cells, block('paragraph', long, { text: { string: long, runs } })));
+    expect(performance.now() - started).toBeLessThan(3000);
+  });
 });

@@ -1,5 +1,9 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createTestServer, expectRussianError, joinDevice, type TestServer } from './helpers.js';
+import { openDatabase } from '../src/db.js';
+import { createShares } from '../src/shares.js';
+import { createTestServer, expectRussianError, joinDevice, makeTempDir, type TestServer } from './helpers.js';
 import { block, CHILD, digestOf, documentOf, IMAGE, page, PDF, PNG_1x1, PRIVATE, richDocument, ROOT } from './share-fixtures.js';
 
 interface Share {
@@ -241,5 +245,129 @@ describe('открытая страница', () => {
     const css = await open(server, '/share-assets/share.css');
     expect(css.status).toBe(200);
     expect(css.headers.get('content-type')).toMatch(/^text\/css/);
+  });
+});
+
+describe('видео по частям, место и служебные ответы', () => {
+  let server: TestServer;
+  let token: string;
+  const VIDEO = '0193a000-0000-7000-8000-0000000000f3';
+  const clip = Buffer.from(Array.from({ length: 100 }, (_, index) => index));
+  const videoDocument = () =>
+    documentOf(
+      [page(ROOT, 'Видео', [block('video', '', { props: { videoSource: 'file', file: VIDEO } })])],
+      [{ id: VIDEO, name: 'clip.mp4', mimeType: 'video/mp4', byteCount: clip.length }],
+    );
+  beforeEach(async () => {
+    server = createTestServer();
+    token = (await enable(server)).token;
+  });
+
+  it('видео отдаётся по частям: 206 с Content-Range, неверный диапазон — 416', async () => {
+    await publish(server, videoDocument());
+    await putFile(server, VIDEO, clip);
+    const whole = await open(server, `/s/${token}/files/${VIDEO}`);
+    expect(whole.status).toBe(200);
+    expect(whole.headers.get('accept-ranges')).toBe('bytes');
+
+    const part = await server.call('GET', `/s/${token}/files/${VIDEO}`, { token: null, headers: { range: 'bytes=10-19' } });
+    expect(part.status).toBe(206);
+    expect(part.headers.get('content-range')).toBe('bytes 10-19/100');
+    expect(part.headers.get('content-length')).toBe('10');
+    expect([...Buffer.from(await part.arrayBuffer())]).toEqual([10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
+
+    const tail = await server.call('GET', `/s/${token}/files/${VIDEO}`, { token: null, headers: { range: 'bytes=-5' } });
+    expect(tail.headers.get('content-range')).toBe('bytes 95-99/100');
+    const open_ = await server.call('GET', `/s/${token}/files/${VIDEO}`, { token: null, headers: { range: 'bytes=90-' } });
+    expect(open_.headers.get('content-range')).toBe('bytes 90-99/100');
+
+    const bad = await server.call('GET', `/s/${token}/files/${VIDEO}`, { token: null, headers: { range: 'bytes=200-300' } });
+    expect(bad.status).toBe(416);
+    expect(bad.headers.get('content-range')).toBe('bytes */100');
+  });
+
+  it('параллельные загрузки не превышают лимит места', async () => {
+    const SECOND = '0193a000-0000-7000-8000-0000000000f4';
+    const document = documentOf(
+      [page(ROOT, 'Два видео', [block('video', '', { props: { videoSource: 'file', file: VIDEO } }), block('video', '', { props: { videoSource: 'file', file: SECOND } })])],
+      [
+        { id: VIDEO, name: 'a.mp4', mimeType: 'video/mp4', byteCount: clip.length },
+        { id: SECOND, name: 'b.mp4', mimeType: 'video/mp4', byteCount: clip.length },
+      ],
+    );
+    server = createTestServer(undefined, { sharesLimitBytes: Buffer.byteLength(JSON.stringify(document)) + 150 });
+    token = (await enable(server)).token;
+    await publish(server, document);
+    const results = await Promise.all([putFile(server, VIDEO, clip), putFile(server, SECOND, clip)]);
+    expect(results.map((response) => response.status).sort()).toEqual([201, 507]);
+  });
+
+  it('снимок тоже считается в месте: большой снимок сверх лимита — 507', async () => {
+    server = createTestServer(undefined, { sharesLimitBytes: 1000 });
+    await enable(server);
+    const response = await publish(server);
+    expect(response.status).toBe(507);
+    expectRussianError(await response.json(), 'storage_full');
+  });
+
+  it('файл с тем же id, но другого размера, просится заново', async () => {
+    await publish(server, videoDocument());
+    await putFile(server, VIDEO, clip);
+    const shorter = clip.subarray(0, 50);
+    const changed = documentOf(
+      [page(ROOT, 'Видео', [block('video', '', { props: { videoSource: 'file', file: VIDEO } })])],
+      [{ id: VIDEO, name: 'clip.mp4', mimeType: 'video/mp4', byteCount: shorter.length }],
+    );
+    const answer = (await (await publish(server, changed)).json()) as { missingFiles: string[] };
+    expect(answer.missingFiles).toEqual([VIDEO]);
+    expect((await putFile(server, VIDEO, Buffer.from(shorter))).status).toBe(201);
+    const file = await open(server, `/s/${token}/files/${VIDEO}`);
+    expect(file.headers.get('content-length')).toBe('50');
+  });
+
+  it('выключение затирает снимок в файле базы, а не только помечает удалённым', async () => {
+    const dir = makeTempDir();
+    const db = openDatabase(join(dir, 'sync.db'));
+    const shares = createShares(db, { dir: join(dir, 'shares'), limitBytes: 1024 ** 3 });
+    shares.setEnabled(ROOT, true);
+    const document = documentOf([page(ROOT, 'Тайная-заметка-для-проверки', [block('paragraph', 'секретный-абзац-'.repeat(400))])]);
+    shares.publish(ROOT, digestOf(document), document);
+    shares.setEnabled(ROOT, false);
+    db.close();
+    for (const name of readdirSync(dir).filter((file) => file.startsWith('sync.db'))) {
+      expect(readFileSync(join(dir, name)).includes(Buffer.from('Тайная-заметка-для-проверки'))).toBe(false);
+    }
+  });
+
+  it('служебные адреса ссылок отвечают страницей 404 с теми же заголовками', async () => {
+    for (const path of ['/s', '/share-assets/нет.css']) {
+      const response = await open(server, path);
+      expect(response.status).toBe(404);
+      expect(response.headers.get('x-robots-tag')).toBe('noindex, nofollow');
+      expect(await response.text()).toContain('Ссылка не работает');
+    }
+  });
+
+  it('формулы рисуются на сервере, стили формул открываются без входа', async () => {
+    await publish(server);
+    const html = await (await open(server, `/s/${token}`)).text();
+    expect(html).toContain('class="katex');
+    expect(html).toContain('<math');
+    const css = await open(server, '/share-assets/katex/katex.min.css');
+    expect(css.status).toBe(200);
+    const font = /url\((fonts\/KaTeX_Main-Regular\.woff2)\)/.exec(await css.text());
+    expect(font).not.toBeNull();
+    const fontResponse = await open(server, `/share-assets/katex/${font![1]}`);
+    expect(fontResponse.status).toBe(200);
+    expect(fontResponse.headers.get('content-type')).toBe('font/woff2');
+  });
+
+  it('повторный показ страницы берётся из готового HTML, но со своей ссылкой', async () => {
+    await publish(server);
+    const first = await (await open(server, `/s/${token}`)).text();
+    const rotated = (await (await server.call('POST', `/shares/${ROOT}/rotate`)).json()) as Share;
+    const second = await (await open(server, `/s/${rotated.token}`)).text();
+    expect(second).not.toContain(token);
+    expect(second.replaceAll(rotated.token, token)).toBe(first);
   });
 });

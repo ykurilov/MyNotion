@@ -1,3 +1,4 @@
+import katex from 'katex';
 import type { InlineText, Run, SharedBlock, SharedDocument, SharedPage } from './share-document.js';
 
 // Веб-страница из снимка: только HTML и CSS, без скриптов. Раскрытие — `<details>`, тема — по системе.
@@ -10,6 +11,8 @@ export interface RenderOptions {
 }
 
 export const STYLESHEET_PATH = '/share-assets/share.css';
+/** Стили и шрифты формул KaTeX — со своего адреса, как и вся страница. */
+export const KATEX_ASSETS_PATH = '/share-assets/katex/';
 const LOCKED = 'Нет доступа';
 
 const escape = (text: string) =>
@@ -23,6 +26,8 @@ interface Context {
   page: SharedPage;
   /** Контейнер → его блоки по порядку. */
   flows: Map<string, SharedBlock[]>;
+  /** На странице есть формулы — нужны стили KaTeX. */
+  hasMath: boolean;
 }
 
 const pageUrl = (context: Context, pageId: string) =>
@@ -50,6 +55,16 @@ function colorClasses(color: SharedBlock['color']): string {
 
 const classes = (...names: string[]) => names.filter(Boolean).join(' ');
 
+/** Формула в HTML и MathML на сервере (`trust: false` — ни ссылок, ни стилей из LaTeX); не разобралась — исходником. */
+function renderMath(context: Context, latex: string, displayMode: boolean): string {
+  context.hasMath = true;
+  try {
+    return katex.renderToString(latex, { displayMode, throwOnError: true, trust: false, strict: 'ignore', output: 'htmlAndMathml', maxSize: 50, maxExpand: 1000 });
+  } catch {
+    return `<code class="equation">${escape(latex)}</code>`;
+  }
+}
+
 // MARK: Текст в строке
 
 function renderMention(context: Context, run: Extract<Run, { style: 'mention' }>): string {
@@ -66,7 +81,7 @@ function renderAtom(context: Context, run: Run): string | null {
     case 'date':
       return `<span class="date">${escape(run.text)}</span>`;
     case 'equation':
-      return `<code class="equation">${escape(run.latex)}</code>`;
+      return renderMath(context, run.latex, false);
     default:
       return null;
   }
@@ -89,11 +104,17 @@ function renderInline(context: Context, text: InlineText): string {
     cuts.add(run.start + run.length);
   }
   const points = [...cuts].filter((point) => point <= string.length).sort((a, b) => a - b);
+  // пробеги по началу: на каждом куске — только те, что его покрывают, без перебора всех
+  const byStart = [...runs].sort((a, b) => a.start - b.start);
+  let next = 0;
+  let open: Run[] = [];
   let html = '';
   for (let index = 0; index < points.length - 1; index += 1) {
     const start = points[index]!;
     const end = points[index + 1]!;
-    const active = runs.filter((run) => run.start <= start && run.start + run.length >= end);
+    while (next < byStart.length && byStart[next]!.start <= start) open.push(byStart[next++]!);
+    open = open.filter((run) => run.start + run.length > start);
+    const active = open.filter((run) => run.start + run.length >= end);
     const atom = active.find((run) => run.style === 'mention' || run.style === 'date' || run.style === 'equation');
     if (atom && end - start === 1 && string[start] === '￼') {
       html += renderAtom(context, atom) ?? '';
@@ -235,7 +256,7 @@ function renderBlock(context: Context, node: Node): string {
     case 'code':
       return `<pre class="block code" data-language="${escape(block.props.language ?? 'plain')}"><code>${escape(block.text.string)}</code></pre>`;
     case 'equation':
-      return `<div class="block equation"><code>${escape(block.text.string)}</code></div>`;
+      return `<div class="block equation">${renderMath(context, block.text.string, true)}</div>`;
     case 'tableOfContents':
       return renderTableOfContents(context);
     case 'image':
@@ -426,7 +447,7 @@ function renderBreadcrumbs(context: Context): string {
   return `<nav class="breadcrumbs">${links.join('<span class="crumb-gap">/</span>')}<span class="crumb-gap">/</span><span>${label(page)}</span></nav>`;
 }
 
-function shell(title: string, body: string, bodyClass = ''): string {
+function shell(title: string, body: string, bodyClass = '', hasMath = false): string {
   return `<!doctype html>
 <html lang="ru">
 <head>
@@ -436,7 +457,7 @@ function shell(title: string, body: string, bodyClass = ''): string {
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="light dark">
 <title>${escape(title)}</title>
-<link rel="stylesheet" href="${STYLESHEET_PATH}">
+<link rel="stylesheet" href="${STYLESHEET_PATH}">${hasMath ? `\n<link rel="stylesheet" href="${KATEX_ASSETS_PATH}katex.min.css">` : ''}
 </head>
 <body${bodyClass ? ` class="${bodyClass}"` : ''}>
 ${body}
@@ -455,10 +476,14 @@ export function renderSharedPage(document: SharedDocument, pageId: string, optio
   const orphans: SharedBlock[] = [];
   for (const block of page.blocks) {
     if (block.container === null) pageFlow.push(block);
-    else if (ids.has(block.container)) flows.set(block.container, [...(flows.get(block.container) ?? []), block]);
+    else if (ids.has(block.container)) {
+      const flow = flows.get(block.container);
+      if (flow) flow.push(block);
+      else flows.set(block.container, [block]);
+    }
     else orphans.push({ ...block, container: null });
   }
-  const context: Context = { document, options, page, flows };
+  const context: Context = { document, options, page, flows, hasMath: false };
   const icon = page.icon ? `<div class="page-icon-large">${escape(page.icon)}</div>` : '';
   const cover = renderCover(context);
   const content = renderFlow(context, [...pageFlow, ...orphans]);
@@ -472,7 +497,7 @@ ${content}
 ${database}
 </article>
 </main>`;
-  return shell(pageTitle(page), body, classes(page.fullWidth ? 'full-width' : '', page.smallText ? 'small-text' : ''));
+  return shell(pageTitle(page), body, classes(page.fullWidth ? 'full-width' : '', page.smallText ? 'small-text' : ''), context.hasMath);
 }
 
 /** Одна и та же страница для неизвестной, выключенной и сменённой ссылки: по ней не понять, была ли ссылка. */
