@@ -497,6 +497,17 @@ import Testing
         #expect(try viewState.collapsedBlockIds(ofPage: withToggle.id).isEmpty)
     }
 
+    @Test func collapseHeading() async throws {
+        let (withHeading, headingIds) = try makePage("Заголовок", [(.heading2, "раздел", 0), (.paragraph, "под ним", 0)])
+        let viewState = BlockViewStateStore(database: host.store.database)
+        let collapsed = await run("block.collapse", ["block": id(headingIds[0])])
+        #expect(collapsed.ok)
+        #expect(try viewState.collapsedBlockIds(ofPage: withHeading.id) == [headingIds[0]])
+        let expanded = await run("block.expand", ["block": id(headingIds[0])])
+        #expect(expanded.ok)
+        #expect(try viewState.collapsedBlockIds(ofPage: withHeading.id).isEmpty)
+    }
+
     @Test func collapseTellsOpenEditor() async throws {
         let (withToggle, toggleIds) = try makePage("Открытый переключатель", [(.toggle, "список", 0), (.paragraph, "внутри", 1)])
         let seen = EventLog()

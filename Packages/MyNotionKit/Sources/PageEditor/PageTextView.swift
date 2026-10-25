@@ -387,7 +387,7 @@ public class PageTextView: NSTextView {
     }
 
     public override func insertNewline(_ sender: Any?) {
-        if !hasMarkedText(), handleNewlineInContainer() || handleNewlineInEmptyChild() || handleNewlineInEmptyItem() { return }
+        if !hasMarkedText(), handleNewlineInContainer() || handleNewlineInCollapsedHeading() || handleNewlineInEmptyChild() || handleNewlineInEmptyItem() { return }
         super.insertNewline(sender)
     }
 
