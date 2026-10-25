@@ -36,6 +36,30 @@ describe('ежедневная копия базы', () => {
       'mynotion-sync-2026-10-05.db',
     ]);
   });
+
+  it('битую копию не оставляет и старые целые ради неё не стирает', async () => {
+    const source = openDatabase(join(dir, 'source.db'));
+    for (let day = 1; day <= 3; day++) {
+      await backupDatabase(source, join(dir, 'backups'), new Date(`2026-10-0${day}T03:00:00Z`), 3);
+    }
+    // Индекс пропадает из схемы, его страницы остаются ничьими — проверка целостности их находит.
+    source.exec('CREATE TABLE заметки (текст TEXT); CREATE INDEX заметки_по_тексту ON заметки (текст);');
+    const insert = source.prepare('INSERT INTO заметки (текст) VALUES (?)');
+    for (let row = 0; row < 500; row++) insert.run(`вымышленная строка ${row}`);
+    source.unsafeMode(true);
+    source.pragma('writable_schema = ON');
+    source.prepare("DELETE FROM sqlite_master WHERE name = 'заметки_по_тексту'").run();
+    source.pragma('writable_schema = OFF');
+
+    await expect(backupDatabase(source, join(dir, 'backups'), new Date('2026-10-04T03:00:00Z'), 3)).rejects.toThrow(
+      /целостности/,
+    );
+    expect(readdirSync(join(dir, 'backups')).sort()).toEqual([
+      'mynotion-sync-2026-10-01.db',
+      'mynotion-sync-2026-10-02.db',
+      'mynotion-sync-2026-10-03.db',
+    ]);
+  });
 });
 
 describe('ежедневная копия файлов', () => {
