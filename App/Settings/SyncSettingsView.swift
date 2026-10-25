@@ -35,6 +35,7 @@ struct SyncSettingsView: View {
             }
             Divider()
             ProofreadingSettingsSection(labelWidth: Self.labelWidth)
+            MistakeUnderliningToggle()
             HStack {
                 Spacer()
                 Button("Готово", action: close)
