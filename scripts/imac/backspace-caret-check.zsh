@@ -56,7 +56,8 @@ page() {
     print -r -- "- Делать нейропродавцов на заказ для компаний"
     print -r -- "### Что вы сделаете:"
     print -r -- "- $last"
-    [[ -n $below ]] && print -r -- "$below"
+    # Пустая строка: без неё Markdown считает «below» второй строкой того же пункта (мягкий перенос), а не абзацем.
+    [[ -n $below ]] && print -r -- "" && print -r -- "$below"
   } > $out/$name.md
   mn page create --title "Проверка $name" --markdown $out/$name.md > $out/$name-create.json 2>&1
   local id=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['data']['page']['id'])" $out/$name-create.json)
