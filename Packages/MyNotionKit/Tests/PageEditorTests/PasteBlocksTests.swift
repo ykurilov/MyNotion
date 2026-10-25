@@ -10,7 +10,7 @@ import Testing
 struct PasteBlocksTests {
     /// Разбор, который на текст «markdown» отвечает этими блоками, а на прочий — «вставлять текстом».
     private static func reader(_ blocks: [Block]) -> PageTextView.PastedTextReader {
-        { text, _, _ in text == "markdown" ? blocks : nil }
+        { text, _, _, _ in text == "markdown" ? blocks : nil }
     }
 
     private static func block(_ kind: BlockKind, _ text: String = "", indent: Int = 0, runs: [StyledRun] = []) -> Block {
@@ -151,7 +151,7 @@ struct PasteBlocksTests {
     func pasteAsPlainText() throws {
         let editor = try EditorFixture([.paragraph()])
         var asked = false
-        editor.textView.pastedTextReader = { _, _, _ in
+        editor.textView.pastedTextReader = { _, _, _, _ in
             asked = true
             return [Self.block(.heading1, "не должно")]
         }

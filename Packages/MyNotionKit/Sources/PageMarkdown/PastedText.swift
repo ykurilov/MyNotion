@@ -1,14 +1,17 @@
 import Foundation
 import NotesCore
 
-/// Текст другой программы при ⌘V → блоки страницы: Markdown ответов ИИ (кнопка «Копировать» Claude, ChatGPT)
-/// и обычный текст со строками-списками. Разбор тот же, что у `mynotion page write` (`MarkdownBlocksBuilder`),
-/// только без файлов с диска и ссылок на страницы.
+/// Текст другой программы при ⌘V → блоки страницы: Markdown ответов ИИ (кнопка «Копировать» Claude, ChatGPT),
+/// отрисованный HTML (ответ чата или страница, выделенные мышью) и обычный текст со строками-списками.
+/// Разбор тот же, что у `mynotion page write` (`MarkdownBlocksBuilder`), только без файлов с диска и ссылок на страницы.
 public enum PastedText {
-    /// `nil` — вставлять как раньше, текстом в строку: одна строка или обычный текст без Markdown и списков.
-    /// `hasRichText` — в буфере есть и оформленный текст (HTML, RTF). Тогда блоками — только явный Markdown:
-    /// простой текст страницы браузера тоже бывает со строками «1.», а оформление лучше взять из HTML.
-    public static func blocks(from text: String, pageId: UUID, hasRichText: Bool) -> [Block]? {
+    /// `nil` — вставлять как раньше, текстом в строку: одна строка или текст без Markdown, списков и строения в HTML.
+    /// `html` — HTML буфера: главнее простого текста, если в нём есть строение (заголовок, список, цитата, код
+    /// рядом с текстом, таблица, разделитель); HTML-обёртка простого текста (редактор кода) уступает его Markdown.
+    /// `hasRichText` — в буфере есть и оформленный текст (HTML, RTF). Тогда из простого текста блоками — только явный
+    /// Markdown: простой текст страницы бывает со строками «1.», а оформление лучше возьмёт вставка с оформлением.
+    public static func blocks(from text: String, html: String? = nil, pageId: UUID, hasRichText: Bool) -> [Block]? {
+        if let html, let blocks = structuredBlocks(fromHTML: html, pageId: pageId) { return blocks }
         let lines = text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
             .components(separatedBy: "\n")
         guard lines.filter({ !isBlank($0) }).count > 1 else { return nil }
@@ -20,12 +23,25 @@ public enum PastedText {
         } else {
             return nil
         }
+        let blocks = blocks(fromMarkdown: markdown, pageId: pageId)
+        return blocks.contains { $0.containerId == nil } ? blocks : nil
+    }
+
+    /// Блоки HTML, если в нём есть строение и их больше одного; абзацы без строения — `nil`: Word, Pages и Заметки
+    /// вставляет с оформлением прежняя вставка, а Markdown внутри HTML-обёртки читается из простого текста.
+    private static func structuredBlocks(fromHTML html: String, pageId: UUID) -> [Block]? {
+        let blocks = blocks(fromMarkdown: PastedHTML.markdown(from: html), pageId: pageId)
+        let flow = blocks.filter { $0.containerId == nil }
+        guard flow.count > 1, flow.contains(where: { $0.kind != .paragraph }) else { return nil }
+        return blocks
+    }
+
+    private static func blocks(fromMarkdown markdown: String, pageId: UUID) -> [Block] {
         let builder = MarkdownBlocksBuilder(attachments: nil, baseFolder: nil, linkTarget: { _ in nil })
         // Пустые строки — только разделители абзацев: пустых абзацев вставка не добавляет.
-        let blocks = builder.blocks(fromMarkdown: markdown, pageId: pageId).blocks.filter { block in
+        return builder.blocks(fromMarkdown: markdown, pageId: pageId).blocks.filter { block in
             !(block.kind == .paragraph && block.containerId == nil && block.text.string.isEmpty && block.props.isEmpty)
         }
-        return blocks.contains { $0.containerId == nil } ? blocks : nil
     }
 
     // MARK: Признаки
@@ -59,10 +75,10 @@ public enum PastedText {
 
     /// `- пункт`, `* пункт`, `+ пункт`, `1. пункт`, `1) пункт`.
     nonisolated(unsafe) private static let markdownListItem = LinePattern(#"^\s*([-*+]|\d{1,9}[.)])[ \t]+\S"#)
-    /// Знаки списков обычного текста: `• пункт`, `— пункт` и подобные.
-    nonisolated(unsafe) private static let plainListItem = LinePattern(#"^\s*[•◦▪‣·—–][ \t]+\S"#)
-    nonisolated(unsafe) private static let plainMarker = try! NSRegularExpression(pattern: #"^(\s*)[•◦▪‣·—–][ \t]+"#)
-    nonisolated(unsafe) private static let anyMarker = try! NSRegularExpression(pattern: #"^(\s*)([-*+•◦▪‣·—–]|\d{1,9}[.)])[ \t]+"#)
+    /// Знаки списков обычного текста: `• пункт` и подобные. Тире — нет: им начинаются реплики диалога.
+    nonisolated(unsafe) private static let plainListItem = LinePattern(#"^\s*[•◦▪‣·][ \t]+\S"#)
+    nonisolated(unsafe) private static let plainMarker = try! NSRegularExpression(pattern: #"^(\s*)[•◦▪‣·][ \t]+"#)
+    nonisolated(unsafe) private static let anyMarker = try! NSRegularExpression(pattern: #"^(\s*)([-*+•◦▪‣·]|\d{1,9}[.)])[ \t]+"#)
 
     private static func isBlank(_ line: String) -> Bool {
         line.allSatisfy { $0 == " " || $0 == "\t" }

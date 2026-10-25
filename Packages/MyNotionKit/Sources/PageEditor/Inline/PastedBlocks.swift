@@ -5,9 +5,9 @@ import NotesCore
 /// на место курсора, как Notion. Первый блок вставки сливается с текстом до курсора, последний — с текстом после;
 /// остальные встают целиком. Вся вставка — один шаг ⌘Z.
 extension PageTextView {
-    /// Блоки из текста буфера; `nil` — вставлять текстом в строку. Блоки потока страницы — без `containerId`,
-    /// содержимое таблиц и колонок — с id своего контейнера из этого же списка; страница — `pageId`.
-    public typealias PastedTextReader = @MainActor (_ text: String, _ pageId: UUID, _ hasRichText: Bool) -> [Block]?
+    /// Блоки из простого текста и HTML буфера; `nil` — вставлять текстом в строку. Блоки потока страницы —
+    /// без `containerId`, содержимое таблиц и колонок — с id своего контейнера из этого же списка; страница — `pageId`.
+    public typealias PastedTextReader = @MainActor (_ text: String, _ html: String?, _ pageId: UUID, _ hasRichText: Bool) -> [Block]?
 
     /// `false` — ставить блоки здесь нельзя (курсор у блока без текста): вставка идёт текстом.
     func pasteBlocks(_ pasted: [Block], replacing selection: NSRange) -> Bool {

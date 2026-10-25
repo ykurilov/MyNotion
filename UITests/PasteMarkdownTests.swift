@@ -32,6 +32,27 @@ final class PasteMarkdownTests: XCTestCase {
         XCTAssertTrue(try library.savedTextStyles(ofPage: "Вставка")[1].contains("bold"), "Нет жирного")
     }
 
+    /// Ответ чата, выделенный мышью: в буфере отрисованный HTML, а простой текст — без значков Markdown.
+    @MainActor
+    func testPastingChatHTMLMakesHeadingListAndBold() throws {
+        let app = library.launchApp()
+        app.createPage(titled: "Вставка HTML")
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString("<meta charset='utf-8'><h2 style=\"margin: 0\">План</h2><p>Сначала <strong>главное</strong>:</p>"
+            + "<ul><li>первый<ul><li>вложенный</li></ul></li><li>второй</li></ul>", forType: .html)
+        pasteboard.setString("План\nСначала главное:\n\nпервый\nвложенный\nвторой", forType: .string)
+        app.typeKey("v", modifierFlags: .command)
+        XCTAssertTrue(waitUntil { app.pageBody.value as? String == "План\nСначала главное:\nпервый\nвложенный\nвторой" },
+                      "HTML не стал блоками: \(app.pageBody.value ?? "")")
+
+        app.quit()
+        let saved = try library.savedBlocks(ofPage: "Вставка HTML")
+        XCTAssertEqual(saved.map(\.kind), ["heading2", "paragraph", "bulletItem", "bulletItem", "bulletItem"])
+        XCTAssertEqual(saved.map(\.indent), [0, 0, 0, 1, 0])
+        XCTAssertTrue(try library.savedTextStyles(ofPage: "Вставка HTML")[1].contains("bold"), "Нет жирного")
+    }
+
     private func waitUntil(timeout: TimeInterval = 5, _ condition: () -> Bool) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {

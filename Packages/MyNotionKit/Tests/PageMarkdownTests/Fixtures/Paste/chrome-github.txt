@@ -1,0 +1,90 @@
+Skip to content
+Navigation Menu
+Platform
+Solutions
+Resources
+Open Source
+Enterprise
+Pricing
+mxstbr
+markdown-test-file
+Repository navigation
+Code
+Pull requests
+1
+ (1)
+Actions
+Security and quality
+Insights
+mxstbr
+markdown-test-file
+Public
+Go to file
+mxstbr
+mxstbr
+Update README.md
+803abba
+ · 
+9 years ago
+Name		
+LICENSE
+Initial commit
+9 years ago
+README.md
+Update README.md
+9 years ago
+TEST.md
+Create TEST.md
+9 years ago
+Repository files navigation
+README
+MIT license
+Markdown Test File
+See the raw source of TEST.md for the deets! (this is the test file rendered)
+
+This repo contains a markdown file which covers a lot of the syntax. We use it for testing our markdown support.
+
+Inspiration
+The file is based on the source of John Gruber's Markdown Syntax page (this is the page rendered) with all the HTML and some more complex stuff removed. (if you want to support the full entirety of Markdown we'd recommend just using the full page instead of this shortened version)
+
+Full credits for that idea go to this StackOverflow question.
+
+License
+This repo is licensed under the MIT License, Copyright © 2017 Space Program Inc.
+
+About
+A pure markdown test page to make sure your markdown support works as intended
+
+raw.githubusercontent.com/mxstbr/markdown-test-file/master/TEST.md
+Topics
+Resources
+Readme
+MIT license
+Activity
+Stars
+102 stars
+Watchers
+1 watching
+Forks
+224 forks
+Report repository
+Releases
+No releases published
+Contributors
+1
+ (1)
+@mxstbr
+mxstbrMax Stoiber
+Footer
+© 2026 GitHub, Inc.
+Footer navigation
+Terms
+Privacy
+Security
+Status
+Community
+Docs
+Contact
+Manage cookies
+Do not share my personal information
+Объяснить

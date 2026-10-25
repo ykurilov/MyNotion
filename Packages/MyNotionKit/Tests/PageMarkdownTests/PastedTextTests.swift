@@ -91,9 +91,9 @@ struct PastedTextTests {
         #expect(blocks("Первая строка письма\nВторая строка\n\nПодпись") == nil)
     }
 
-    @Test("Обычный текст со строками-списками «•», «—», «1)» — списки, остальное — абзацы, знаки текста не разбираются")
+    @Test("Обычный текст со строками-списками «•», «1)» — списки, остальное — абзацы, знаки текста не разбираются")
     func plainTextLists() throws {
-        let text = "Покупки на неделю:\n• хлеб\n• file_name_x.txt\n  • вложенный *пункт\n— сыр\nИтого три."
+        let text = "Покупки на неделю:\n• хлеб\n• file_name_x.txt\n  • вложенный *пункт\n• сыр\nИтого три."
         let blocks = try #require(blocks(text))
         #expect(blocks.map(\.kind) == [.paragraph, .bulletItem, .bulletItem, .bulletItem, .bulletItem, .paragraph])
         #expect(blocks.map(\.text.string) == ["Покупки на неделю:", "хлеб", "file_name_x.txt", "вложенный *пункт", "сыр", "Итого три."])
@@ -101,6 +101,11 @@ struct PastedTextTests {
         #expect(blocks.allSatisfy { $0.text.runs.isEmpty })
         let numbered = try #require(self.blocks("Шаги:\n1) открыть\n2) закрыть"))
         #expect(numbered.map(\.kind) == [.paragraph, .numberedItem, .numberedItem])
+    }
+
+    @Test("Реплики диалога с тире — не список: вставятся как раньше")
+    func dialogue() {
+        #expect(blocks("— Привет, — сказал он.\n— Здравствуй.\n– И тебе.") == nil)
     }
 
     @Test("Есть HTML или RTF: блоками — только явный Markdown, одни списки «1.» отдаются оформленному тексту")

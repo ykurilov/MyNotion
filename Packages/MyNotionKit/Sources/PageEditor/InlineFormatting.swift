@@ -296,12 +296,15 @@ extension PageTextView {
             setLink(url)
             return
         }
-        // Markdown простого текста главнее HTML: кнопка «Копировать» чатов ИИ кладёт Markdown, а HTML без заголовков и списков.
-        if allowsBlockStructure, let plain, let reader = pastedTextReader,
-           let blocks = reader(InlineFormatting.normalizedNewlines(plain), document.pageId,
-                               pasteboard.availableType(from: InlineFormatting.richPasteboardTypes) != nil),
-           pasteBlocks(blocks, replacing: selection) {
-            return
+        // Заголовки, списки, код и таблицы HTML (ответ чата, выделенный мышью) и Markdown простого текста — блоками.
+        if allowsBlockStructure, let reader = pastedTextReader {
+            let html = Self.html(from: pasteboard)
+            if plain != nil || html != nil,
+               let blocks = reader(InlineFormatting.normalizedNewlines(plain ?? ""), html, document.pageId,
+                                   pasteboard.availableType(from: InlineFormatting.richPasteboardTypes) != nil),
+               pasteBlocks(blocks, replacing: selection) {
+                return
+            }
         }
         if let rich = Self.richText(from: pasteboard) {
             var pasted = InlineFormatting.pastedText(from: rich)
@@ -315,6 +318,23 @@ extension PageTextView {
         insertPasted(NSAttributedString(string: InlineFormatting.normalizedNewlines(plain)), replacing: selection)
         // Адрес ролика в пустой строке — меню «Встроить видео / Закладка / Ссылка».
         if selection.length == 0 { offerPastedVideoLink(InlineFormatting.normalizedNewlines(plain), at: selection.location) }
+    }
+
+    /// HTML буфера: `public.html` браузеров и редакторов или главная страница веб-архива Safari.
+    private static func html(from pasteboard: NSPasteboard) -> String? {
+        if let data = pasteboard.data(forType: .html) {
+            return String(data: data, encoding: .utf8) ?? pasteboard.string(forType: .html)
+        }
+        let webArchive = NSPasteboard.PasteboardType("Apple Web Archive pasteboard type")
+        guard let data = pasteboard.data(forType: webArchive),
+              let archive = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+              let main = archive["WebMainResource"] as? [String: Any], let html = main["WebResourceData"] as? Data else { return nil }
+        let encoding = (main["WebResourceTextEncodingName"] as? String).map { CFStringConvertIANACharSetNameToEncoding($0 as CFString) }
+        if let encoding, encoding != kCFStringEncodingInvalidId,
+           let text = String(data: html, encoding: String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(encoding))) {
+            return text
+        }
+        return String(data: html, encoding: .utf8)
     }
 
     private static func richText(from pasteboard: NSPasteboard) -> NSAttributedString? {
