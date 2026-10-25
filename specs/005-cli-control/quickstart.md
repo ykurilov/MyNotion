@@ -152,3 +152,18 @@ scripts/imac/run-on-imac.sh lock -- zsh scripts/imac/cli-e2e.zsh
 - Тест бюджета запуска (≤ 1 с) падает на самом первом, холодном запуске после сборки — и на 004 (1,21 с), и на 005 (1,29 с). Тёплый запуск 0,6 с. Разница 005 и 004 — 0,08 с, в пределах разброса; это свойство холодного старта, а не команды.
 - Память растёт одним скачком на первой записи: 69 МБ до команд → 196 МБ после первого `page create`, дальше стоит (189–196 МБ после 480 команд, без роста). Чтение (`page get`, 200 вызовов) память не меняет. Скачок — перечитывание дерева из 10 000 страниц окном после записи (так же при создании страницы мышью); на пустой базе память в покое 28–30 МБ. Бюджет 200 МБ с эталоном 004 после записи проходит впритык (196 МБ).
 - «Покой без команд» (57–69 МБ на эталоне) от открытого сокета не растёт: прирост в пределах ≤ 2 МБ.
+
+### Итоги T069 — полный прогон (iMac, 25.10.2026)
+
+| Набор | Результат |
+|-------|-----------|
+| `swift test --jobs 4`, пакет `MyNotionKit`, все модули | 2086 тестов, все зелёные (в том числе 252 в `ControlCommandsTests` и «import notion: Остановить») |
+| Сценарий A (`cli-e2e.zsh`) | 48 проверок ✓; шаг 9 теперь проверяет, что ссылка на чужую живую страницу при `history restore` не возвращается (правило 004) |
+| `cli-live-check.zsh` (окно, страницы, базы, импорт и выгрузка) | 82 проверки ✓ |
+| Бюджет запуска и памяти (`LaunchAndMemoryTests`, Release) | зелёный: прогрев 0,64 с, пять замеров 0,60–0,61 с, память 58,5 МБ |
+| UI-тесты (`run-on-imac.sh uitest`) | 52 теста, 2 пропущены, **7 красных** (ниже) |
+| Замеры (`uitest --release`) | **3 красных** (ниже) |
+
+Красные UI-тесты: `BlockEditingTests.testDragBlockByHandleUndoRedoAndRelaunch`, `FavoritesRecentsTests.testFavoritesStarMenuDragTrashCollapseAndRelaunch`, `NotionImportUITests.testImportFromFileMenuShowsReportAndWarnsOnRepeat`, `PageHeaderTests.testCoverAndAppearanceSurviveRelaunch`, `PageTreeTests.testTreeSurvivesMoveTrashAndRelaunch`, `SelectStatusDateTests.testSelectStatusDateAndRelaunch`, `SelectionModesTests.testTextAndBlockSelectionModesSurviveRelaunch`. Те же семь, с тем же текстом ошибок, падают на основной ветке без 005 (`ef854eb`, отдельный прогон тех же классов на iMac), и на нашей ветке при повторе. Значит, это не регрессия 005: перетаскивание мышью и часть сценариев на этом iMac не проходят. Чинить не стали (код 004).
+
+Красные замеры: `TabsPerformanceTests` (p95 переключения вкладки 105 мс против порога 50), `TabsProbeTests.testTwentyRichTabsSwitchQuicklyWithOneEditor`, `VersionPreviewProbeTests` (память после закрытия просмотра версии). На основной ветке `ef854eb` те же замеры тоже красные (вкладки p95 61–122 мс, просмотр версий 13–63 МБ), на нашей — 68 мс при повторе. iMac при прогоне был занят (load average ≈ 7). Не регрессия 005; пороги не менялись.
