@@ -62,6 +62,8 @@ public final class SyncEngine {
     @ObservationIgnored private var wakeRequested = false
     @ObservationIgnored private var enqueueObserver: (any NSObjectProtocol)?
     @ObservationIgnored private var lastTombstoneCheck: ContinuousClock.Instant?
+    /// До какого номера сервер уже знает о применённом; `nil` — после запуска ещё не подтверждали.
+    @ObservationIgnored private var ackedSeq: Int?
     /// Отправка и докачка файлов; ставит приложение.
     @ObservationIgnored public var fileWork: (any SyncFileWork)?
     @ObservationIgnored private var fileTask: Task<Void, Never>?
@@ -160,9 +162,15 @@ public final class SyncEngine {
         }
     }
 
+    /// Всё отправлено — кроме отложенных по размеру правок: о них значок говорит, пока их не сократят.
     private func markReady() {
-        status = .ready
         lastSyncedAt = Date()
+        guard let pageId = try? outbox.setAsidePageIds().first else {
+            status = .ready
+            return
+        }
+        let title = (try? store.page(pageId))?.displayTitle ?? "Без названия"
+        status = .error("Правка на странице «\(title)» больше 4 МБ и не уходит на другие Mac — сократите её. Остальные правки уходят")
     }
 
     /// Пауза, которую прерывает новая правка или `syncNow()`.
@@ -185,7 +193,13 @@ public final class SyncEngine {
                 let batchId = entry.id.uuidString.lowercased()
                 let batch = SyncBatch(formatVersion: formatVersionForTests ?? SyncBatch.currentFormatVersion,
                                       deviceId: account.deviceId, deviceName: account.deviceName, changes: entry.changes)
-                let seq = try await transport.postChanges(batchId: batchId, ciphertext: try cipher.seal(batch, batchId: batchId))
+                let seq: Int
+                do {
+                    seq = try await transport.postChanges(batchId: batchId, ciphertext: try cipher.seal(batch, batchId: batchId))
+                } catch SyncServerError.tooLarge {
+                    try outbox.setAside(entry)
+                    continue
+                }
                 try outbox.remove(entry.id)
                 try accounts.recordSent(seq: seq)
             }
@@ -195,6 +209,8 @@ public final class SyncEngine {
     /// Одна порция журнала: применить пачки других Mac по порядку и подтвердить. `true` — на сервере есть ещё.
     private func receive(wait: Int) async throws -> Bool {
         guard let account = try accounts.account() else { return false }
+        // Потерянное раньше подтверждение — до долгого ожидания: без новых пачек оно иначе ждало бы до 25 с.
+        try await acknowledgePulled()
         let page: SyncChangesPage
         do {
             page = try await interruptibly { [transport] in try await transport.changes(after: account.lastPulledSeq, wait: wait) }
@@ -223,11 +239,16 @@ public final class SyncEngine {
             }
         }
         try applier.apply(pending)
-        if let pulled = try accounts.account()?.lastPulledSeq, pulled > account.lastPulledSeq {
-            try await transport.ack(pulled)
-        }
+        try await acknowledgePulled()
         if let failure { throw failure }
         return page.hasMore
+    }
+
+    /// Подтвердить применённое. Подтверждение, потерянное по дороге, уходит на следующем круге и без новых пачек.
+    private func acknowledgePulled() async throws {
+        guard let pulled = try accounts.account()?.lastPulledSeq, pulled > (ackedSeq ?? 0) else { return }
+        try await transport.ack(pulled)
+        ackedSeq = pulled
     }
 
     /// Журнал до нашего номера сжат: начать со снимка.
@@ -236,6 +257,7 @@ public final class SyncEngine {
         let snapshot = try cipher.openSnapshot(envelope.ciphertext, seq: envelope.seq)
         try applier.apply(snapshot)
         try await transport.ack(envelope.seq)
+        ackedSeq = envelope.seq
     }
 
     /// Выложить снимок всех записей на момент последней применённой пачки — после него сервер сожмёт журнал.

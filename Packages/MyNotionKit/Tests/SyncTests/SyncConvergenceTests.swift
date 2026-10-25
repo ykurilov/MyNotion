@@ -154,6 +154,52 @@ struct SyncConvergenceTests {
         await #expect(throws: SyncServerError.unauthorized) { try await again.connection.currentDevice() }
     }
 
+    @Test("Правка больше 4 МБ не держит остальные: они доходят, значок говорит о большой правке, сокращённая — доходит",
+          arguments: SyncTestServerKind.available)
+    func oversizedEditDoesNotBlockQueue(_ kind: SyncTestServerKind) async throws {
+        let server = try await kind.start()
+        defer { server.stop() }
+        let (a, b) = try await connectedPair(server)
+        defer { a.stop(); b.stop() }
+
+        let big = try a.store.write { try $0.createPage(title: "Огромная вставка") }
+        let blockId = try #require(try a.store.pageContent(big.id)?.blocks.first).id
+        try a.setText(String(repeating: "текст ", count: 600_000), ofBlock: blockId)
+        let after = try a.store.write { try $0.createPage(title: "Обычная после большой") }
+
+        try await eventually("обычная правка дошла до B", within: .seconds(20)) {
+            try b.store.pageOutline().contains { $0.id == after.id }
+        }
+        try await eventually("A говорит о большой правке", within: .seconds(10)) {
+            if case .error(let message) = a.engine.status { message.contains("Огромная вставка") } else { false }
+        }
+
+        try a.setText("коротко", ofBlock: blockId)
+        try await eventually("сокращённый блок дошёл до B", within: .seconds(20)) {
+            try b.store.pageContent(big.id)?.blocks.map(\.text.string) == ["коротко"]
+        }
+        try await eventually("A снова готов", within: .seconds(10)) { a.engine.status == .ready }
+    }
+
+    @Test("Потерянное подтверждение уходит снова и без новых правок", arguments: SyncTestServerKind.available)
+    func lostAckIsRetried(_ kind: SyncTestServerKind) async throws {
+        let server = try await kind.start()
+        defer { server.stop() }
+        let (a, b) = try await connectedPair(server)
+        defer { a.stop(); b.stop() }
+
+        b.connection.loseAcks(1)
+        let page = try a.store.write { try $0.createPage(title: "Подтвердить") }
+        try await eventually("страница дошла до B", within: .seconds(10)) {
+            try b.store.pageOutline().contains { $0.id == page.id }
+        }
+        let pulled = try #require(try SyncAccountStore(store: b.store).account()).lastPulledSeq
+        try await eventually("сервер знает, что B всё получил", within: .seconds(10)) {
+            let me = try await b.connection.currentDevice()
+            return me.lastAckSeq >= pulled
+        }
+    }
+
     // MARK: Помощники
 
     private func connectedPair(_ server: any SyncTestServer) async throws -> (EngineTestMac, EngineTestMac) {
