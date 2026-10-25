@@ -115,7 +115,7 @@ final class SelectStatusDateTests: XCTestCase {
         let left = Self.titleWidth + CGFloat(index - 1) * Self.columnWidth
         let origin = grid.coordinate(withNormalizedOffset: .zero)
         origin.withOffset(CGVector(dx: left + 199, dy: Self.header / 2))
-            .press(forDuration: 0.2, thenDragTo: origin.withOffset(CGVector(dx: left + Self.columnWidth - 1, dy: Self.header / 2)))
+            .click(forDuration: 0.2, thenDragTo: origin.withOffset(CGVector(dx: left + Self.columnWidth - 1, dy: Self.header / 2)))
     }
 
     private func waitUntil(timeout: TimeInterval = 5, _ condition: () -> Bool) -> Bool {

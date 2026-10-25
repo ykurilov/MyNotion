@@ -102,7 +102,7 @@ final class BlockEditingTests: XCTestCase {
         let handle = app.blockDragHandle
         let lineHeight = handle.frame.height
         let grip = handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        grip.press(forDuration: 0.3, thenDragTo: grip.withOffset(CGVector(dx: 0, dy: lineHeight * 3)))
+        grip.click(forDuration: 0.3, thenDragTo: grip.withOffset(CGVector(dx: 0, dy: lineHeight * 3)))
         XCTAssertEqual(app.pageBody.value as? String, "два\nтри\nодин", "Блок не переставился")
 
         app.typeKey("z", modifierFlags: .command)

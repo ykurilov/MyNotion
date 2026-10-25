@@ -27,12 +27,13 @@ final class SelectionModesTests: XCTestCase {
         XCTAssertEqual(app.pageBody.value as? String, "раз\nдва\nтри\nчетыре\nпять", "Выделенный через блоки текст стёрся не как текст")
 
         // Esc выделяет блок с курсором, ↑ — блок выше, ⇧↑ — расширяет; ⌘C копирует блоки, Delete удаляет их целиком.
+        // Простой текст буфера — Markdown для других программ: абзацы через пустую строку.
         app.typeKey(.escape, modifierFlags: [])
         app.typeKey(.upArrow, modifierFlags: [])
         app.typeKey(.upArrow, modifierFlags: .shift)
         NSPasteboard.general.clearContents()
         app.typeKey("c", modifierFlags: .command)
-        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "три\nчетыре", "⌘C в режиме блоков скопировал не те блоки")
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "три\n\nчетыре", "⌘C в режиме блоков скопировал не те блоки")
         app.typeKey(.delete, modifierFlags: [])
         XCTAssertEqual(app.pageBody.value as? String, "раз\nдва\nпять", "Delete в режиме блоков удалил не те блоки")
 
@@ -51,7 +52,7 @@ final class SelectionModesTests: XCTestCase {
         let body = app.pageBody
         let origin = body.coordinate(withNormalizedOffset: .zero)
         let start = origin.withOffset(CGVector(dx: add.minX - 24 - body.frame.minX, dy: add.midY - body.frame.minY))
-        start.press(forDuration: 0.2, thenDragTo: start.withOffset(CGVector(dx: 16, dy: 6)))
+        start.click(forDuration: 0.2, thenDragTo: start.withOffset(CGVector(dx: 16, dy: 6)))
         app.typeKey(.delete, modifierFlags: [])
         XCTAssertEqual(app.pageBody.value as? String, "пять", "Протяжка с поля не выделила блок")
 

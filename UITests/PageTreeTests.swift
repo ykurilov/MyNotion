@@ -28,7 +28,7 @@ final class PageTreeTests: XCTestCase {
         XCTAssertEqual(visibleTitles(app), ["Проекты", "MyNotion", "Заметки", "Входящие"])
 
         // 2.2. Перетащить ветку «MyNotion» на «Входящие»: «Заметки» уезжают вместе с ней.
-        middle(app, "MyNotion").press(forDuration: 0.5, thenDragTo: middle(app, "Входящие"))
+        drag(app, "MyNotion", onto: "Входящие")
         XCTAssertTrue(waitForTitles(app, ["Проекты", "Входящие", "MyNotion", "Заметки"]))
 
         // Свернуть «MyNotion»: выделить строку и нажать стрелку влево.
@@ -113,6 +113,17 @@ final class PageTreeTests: XCTestCase {
     @MainActor
     private func middle(_ app: XCUIApplication, _ title: String) -> XCUICoordinate {
         row(app, title).coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+    }
+
+    /// Перетащить строку на другую, как человек: мышь сначала встаёт на строку, и только когда строка откликнулась
+    /// (появилась «•••»), кнопка нажимается; над целью мышь задерживается до отпускания. Под нагрузкой iMac
+    /// нажатие сразу после перелёта мыши и отпускание без задержки роняли страницу не туда.
+    @MainActor
+    private func drag(_ app: XCUIApplication, _ title: String, onto target: String) {
+        middle(app, title).hover()
+        let menu = row(app, title).descendants(matching: .any).matching(identifier: "page-tree-menu").firstMatch
+        XCTAssertTrue(menu.waitForExistence(timeout: 5), "Строка «\(title)» не откликнулась на мышь")
+        middle(app, title).click(forDuration: 0.5, thenDragTo: middle(app, target), withVelocity: .slow, thenHoldForDuration: 0.5)
     }
 
     /// Названия видимых строк дерева сверху вниз. Название — надпись, а при переименовании поле ввода: тип любой.

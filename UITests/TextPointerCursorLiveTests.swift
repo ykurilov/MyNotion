@@ -128,9 +128,10 @@ final class TextPointerCursorLiveTests: XCTestCase {
                 let handle = app.blockDragHandle.frame
                 hover(CGPoint(x: handle.midX, y: handle.midY))
                 try checkControl("\(name)-handle", hand)
-                let add = app.descendants(matching: .any)["block-handle-add"].frame
+                // У заголовка на месте «+» — стрелка свёртывания раздела.
+                let add = (name == "h1" ? app.blockFoldHandle : app.blockAddHandle).frame
                 hover(CGPoint(x: add.midX, y: add.midY))
-                try checkControl("\(name)-add", hand)
+                try checkControl("\(name)-\(name == "h1" ? "fold" : "add")", hand)
             }
         }
         for identifier in ["page-cover", "page-icon"] {

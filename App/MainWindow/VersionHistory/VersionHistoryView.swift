@@ -205,7 +205,7 @@ private struct VersionGroupingMenu: View {
         ZStack(alignment: .topLeading) {
             Color.clear
                 .contentShape(Rectangle())
-                .onTapGesture { history.isGroupingMenuShown = false }
+                .onTapGesture { close() }
             VStack(alignment: .leading, spacing: 1) {
                 Text("Группировать изменения")
                     .font(.system(size: 12, weight: .medium))
@@ -215,7 +215,7 @@ private struct VersionGroupingMenu: View {
                 ForEach(VersionGrouping.allCases) { grouping in
                     Button {
                         history.grouping = grouping
-                        history.isGroupingMenuShown = false
+                        close()
                     } label: {
                         HStack {
                             Text(grouping.title).font(.system(size: 14))
@@ -239,10 +239,16 @@ private struct VersionGroupingMenu: View {
             .frame(width: Layout.groupingMenuWidth)
             .background(PopupSurfaceBackground())
             .offset(x: below.minX, y: below.maxY + Layout.groupingMenuGap)
-            .onExitCommand { history.isGroupingMenuShown = false }
+            .onExitCommand { close() }
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("version-grouping-menu")
         }
+    }
+
+    /// Убрать список, когда щелчок уже обработан: убранный посреди своего щелчка вид оставлял жест незаконченным,
+    /// и следующий щелчок по версии иногда терялся.
+    private func close() {
+        DispatchQueue.main.async { history.isGroupingMenuShown = false }
     }
 }
 

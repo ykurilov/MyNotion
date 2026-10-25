@@ -1,7 +1,7 @@
 import XCTest
 
 /// Импорт из Notion (US6): «Файл → Импорт из Notion…» → окно выбора (путь через ⌘⇧G) → «Перенести» → окно итога
-/// → страницы выгрузки в базе. Повтор той же выгрузки — вопрос до начала, «Отмена» дублей не создаёт.
+/// → страницы выгрузки в базе; CSV-таблица «Задачи» — база, её строки — страницы. Повтор той же выгрузки — вопрос до начала, «Отмена» дублей не создаёт.
 final class NotionImportUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -26,7 +26,7 @@ final class NotionImportUITests: XCTestCase {
         // Текст SwiftUI на macOS виден тестам как значение элемента, а не как подпись.
         let summaryElement = app.staticTexts["notion-import-summary"]
         let summary = (summaryElement.value as? String).flatMap { $0.isEmpty ? nil : $0 } ?? summaryElement.label
-        XCTAssertTrue(summary.contains("Перенесено страниц: 6"), "Отчёт: \(summary)")
+        XCTAssertTrue(summary.contains("Перенесено страниц: 7"), "Отчёт: \(summary)")
         XCTAssertTrue(summary.contains("Импорт из Notion — "), "Нет названия ветки: \(summary)")
         XCTAssertTrue(app.descendants(matching: .any)["notion-import-simplified"].exists, "Нет списка упрощённого")
         XCTAssertTrue(app.staticTexts["notion-import-notice-line"].exists, "Нет строки «Цвета и колонки Notion в Markdown не выгружает»")
@@ -44,8 +44,10 @@ final class NotionImportUITests: XCTestCase {
         let projects = try library.savedBlocks(ofPage: "Проекты")
         XCTAssertEqual(projects.first?.kind, "paragraph")
         XCTAssertTrue(projects.contains { $0.kind == "checkbox" && $0.isChecked && $0.text == "Сделано" }, "\(projects)")
-        XCTAssertEqual(projects.filter { $0.kind == "pageLink" }.count, 3, "Ссылки на MyNotion, Задачи и Дневник: \(projects)")
-        XCTAssertEqual(try library.savedBlocks(ofPage: "Купить молоко").map(\.text), ["Статус: Готово\nСрок: 18 октября 2026", "Две бутылки."])
+        XCTAssertEqual(projects.filter { $0.kind == "pageLink" }.count, 2, "Ссылки на MyNotion и Дневник: \(projects)")
+        XCTAssertEqual(projects.filter { $0.kind == "database" }.count, 1, "Задачи — встроенная база: \(projects)")
+        // Статус и срок строки — поля базы, в тексте страницы их нет.
+        XCTAssertEqual(try library.savedBlocks(ofPage: "Купить молоко").map(\.text), ["Две бутылки."])
         XCTAssertEqual(try library.savedIcon(ofPage: "Проекты"), "📁")
     }
 

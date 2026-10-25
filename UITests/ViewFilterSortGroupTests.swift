@@ -164,7 +164,7 @@ final class ViewFilterSortGroupTests: XCTestCase {
         for character in "кот" {
             query.append(character)
             app.typeText(String(character))
-            XCTAssertTrue(waitUntil { field.value as? String == query }, "Встроенная база потеряла фокус поиска")
+            XCTAssertTrue(waitUntil { field.value as? String == query }, "Встроенная база потеряла фокус поиска: в поле «\(field.value as? String ?? "нет поля")», ждали «\(query)»")
         }
         app.typeKey(.leftArrow, modifierFlags: [])
         app.typeText("с")
