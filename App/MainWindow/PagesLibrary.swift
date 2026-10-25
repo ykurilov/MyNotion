@@ -194,6 +194,8 @@ final class PagesLibrary {
 
     /// Правки с другого Mac (или записи команд мимо документов) легли в базу; открытые страницы их уже приняли (research R5).
     func remoteChangesApplied() {
+        // Строки, созданные без связи на двух Mac, могли получить один номер ID: позже созданная берёт следующий.
+        try? DatabaseOperations.repairDuplicateIds(in: store)
         reloadTree()
         // Ячейки, свойства, виды с другого Mac: открытые таблицы перечитывают себя.
         DatabaseOperations.announce(nil)

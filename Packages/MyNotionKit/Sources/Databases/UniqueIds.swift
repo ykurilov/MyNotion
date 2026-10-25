@@ -4,7 +4,7 @@ import NotesCore
 
 /// Номера свойства ID (research R9): номер новой строки — наибольший известный этому Mac номер в базе + 1, по индексу
 /// `sortNumber`. Строки в корзине свои ячейки хранят, поэтому их номера не выдаются снова. Одно свойство ID на базу.
-/// Починку совпавших номеров после синхронизации добавит этап «Сквозное» (T104).
+/// Совпавшие после синхронизации номера разводит `repairDuplicates`.
 enum UniqueIds {
     /// Неудалённое свойство ID базы.
     static func property(ofDatabase databaseId: UUID, in transaction: NotesTransaction) throws -> DatabaseProperty? {
@@ -43,10 +43,55 @@ enum UniqueIds {
         }
     }
 
+    /// Строки, чей номер уже есть у строки с более ранним `(createdAt, id)` той же базы, — по порядку создания.
+    /// Номера сравниваются по `sortNumber`: его пишет `CellIndexer` в транзакции приёма, поэтому поиск идёт по индексу.
+    static func duplicateRows(in db: Database) throws -> [(rowId: UUID, propertyId: UUID)] {
+        try Row.fetchAll(db, sql: """
+            SELECT c.rowId, c.propertyId FROM db_property pr
+            JOIN db_cell c ON c.propertyId = pr.id AND c.sortNumber IS NOT NULL
+            JOIN page p ON p.id = c.rowId AND p.parentId = pr.databaseId AND p.isTemplate = 0
+            WHERE pr.type = 'uniqueId' AND pr.deletedAt IS NULL AND EXISTS (
+                SELECT 1 FROM db_cell d JOIN page q ON q.id = d.rowId AND q.parentId = pr.databaseId AND q.isTemplate = 0
+                WHERE d.propertyId = c.propertyId AND d.sortNumber = c.sortNumber AND d.rowId != c.rowId
+                  AND (q.createdAt < p.createdAt OR (q.createdAt = p.createdAt AND q.id < p.id)))
+            ORDER BY p.createdAt, p.id
+            """).compactMap { row in
+            guard let rowId = UUID(uuidString: row[0]), let propertyId = UUID(uuidString: row[1]) else { return nil }
+            return (rowId, propertyId)
+        }
+    }
+
+    /// Совпавшие номера после синхронизации (research R9): строка с более поздним `(createdAt, id)` получает следующий
+    /// свободный номер обычной правкой ячейки — правка уходит на другие Mac. Починка на двух Mac сразу даёт той же строке
+    /// тот же номер или сходится по «позднее побеждает»; остаток ловит следующая проверка. Возвращает перенумерованные строки.
+    static func repairDuplicates(in transaction: NotesTransaction) throws -> Set<UUID> {
+        var repaired: Set<UUID> = []
+        // Переписанная ячейка до конца транзакции хранит прежний `sortNumber`: следующие номера считаются здесь.
+        var next: [UUID: Int] = [:]
+        for (rowId, propertyId) in try duplicateRows(in: transaction.database) {
+            let number = try next[propertyId] ?? nextNumber(of: propertyId, in: transaction)
+            try transaction.setCell(rowId: rowId, propertyId: propertyId, value: .number(Double(number)))
+            next[propertyId] = number + 1
+            repaired.insert(rowId)
+        }
+        return repaired
+    }
+
     /// Второе свойство ID в базе не заводится (spec, Notion 7.39: в списке типов ID серый).
     static func ensureNone(inDatabase databaseId: UUID, except propertyId: UUID? = nil, in transaction: NotesTransaction) throws {
         if let existing = try property(ofDatabase: databaseId, in: transaction), existing.id != propertyId {
             throw NotesStoreError.invalidRecord("в базе уже есть свойство ID")
         }
+    }
+}
+
+extension DatabaseOperations {
+    /// После правок с другого Mac: развести совпавшие номера ID (`UniqueIds.repairDuplicates`). Без совпадений — только чтение.
+    @discardableResult
+    public static func repairDuplicateIds(in store: NotesStore) throws -> Set<UUID> {
+        guard try !store.database.dbWriter.read({ try UniqueIds.duplicateRows(in: $0) }).isEmpty else { return [] }
+        let repaired = try store.write { try UniqueIds.repairDuplicates(in: $0) }
+        if !repaired.isEmpty { announce(repaired) }
+        return repaired
     }
 }
