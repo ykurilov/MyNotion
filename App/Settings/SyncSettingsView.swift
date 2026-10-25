@@ -33,6 +33,9 @@ struct SyncSettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("sync-settings-error")
             }
+            Divider()
+            ProofreadingSettingsSection(labelWidth: Self.labelWidth)
+            MistakeUnderliningToggle()
             HStack {
                 Spacer()
                 Button("Готово", action: close)

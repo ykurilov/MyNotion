@@ -11,6 +11,7 @@ import PageSearch
 import ServiceLaunch
 import SwiftUI
 import Sync
+import VisualStyle
 
 @main
 struct MyNotionApp: App {
@@ -45,6 +46,8 @@ struct MyNotionApp: App {
             Self.generateReferenceLibraryAndExit(at: referenceLibraryURL)
         }
         self.options = options
+        AppProofreading.install(fake: options.usesFakeProofreader)
+        MistakeUnderlining.install()
         if let appearanceName = options.appearanceName {
             NSApplication.shared.appearance = NSAppearance(named: appearanceName)
         }

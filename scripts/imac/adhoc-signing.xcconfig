@@ -1,0 +1,5 @@
+// Сборки на Mac без сертификата Developer ID (iMac): подпись ad-hoc вместо постоянной из project.yml.
+// Подключает lib.sh через XCODE_XCCONFIG_FILE; установленное приложение переподписывает scripts/sign-app.sh
+// на основном Mac, где сертификат есть.
+CODE_SIGN_IDENTITY = -
+DEVELOPMENT_TEAM =

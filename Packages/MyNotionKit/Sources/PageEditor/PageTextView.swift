@@ -7,7 +7,7 @@ import VisualStyle
 /// Системное поведение текста — выделение, ⌘Z, проверка орфографии, ввод с IME, ⌘F — от `NSTextView`;
 /// правки уходят в `PageDocument` через `PageTextStorageMapper`. Над текстом — шапка с иконкой и названием.
 @MainActor
-public class PageTextView: NSTextView {
+public class PageTextView: NSTextView, FollowsMistakeUnderlining {
     /// Блоки, которые правит этот редактор: поток страницы, колонки или ячейка таблицы (`FlowDocument`).
     public let document: FlowDocument
     public let header: PageHeaderView
@@ -20,7 +20,8 @@ public class PageTextView: NSTextView {
     /// Поле-надпись рисует текст на 2 правее своего края.
     static let hintLabelTextInset: CGFloat = 2
     /// Проверка орфографии при наборе включена в меню «Правописание» (FR-013).
-    private var spellCheckingWanted = true
+    /// Красные подчёркивания: «Подчёркивать ошибки» в Настройках и «Правописание → Проверять при вводе» у этой страницы.
+    private(set) var spellCheckingWanted = MistakeUnderlining.isEnabled
     /// Шаблоны, которые предлагает пустая страница (US7), и что делать при выборе; строки появляются, только когда они нужны.
     var templateChoices: [TemplateChoice] = [] {
         didSet { if templateChoices != oldValue { updateTemplateRows() } }
@@ -94,6 +95,8 @@ public class PageTextView: NSTextView {
     /// Виды блоков без своего текста на экране: их ставит страница, TextKit 2 этого не делает (US4).
     private(set) lazy var blockViews = BlockViewHosting(textView: self)
     let formatBar = FormatBarController()
+    /// «Исправить ошибки»: окно правок под выделением.
+    let proofreading = ProofreadController()
     /// Последние цвета текста и фона: окно цветов и ⌘⇧H.
     var recentColors = RecentColors()
     let colorMenu = ColorMenuController()
@@ -151,6 +154,7 @@ public class PageTextView: NSTextView {
         collapsedParagraphs.textView = self
         popups.textView = self
         formatBar.textView = self
+        proofreading.textView = self
         colorMenu.textView = self
 
         configureTextBehaviour()
@@ -215,6 +219,8 @@ public class PageTextView: NSTextView {
         isIncrementalSearchingEnabled = false
         isContinuousSpellCheckingEnabled = spellCheckingWanted
         isGrammarCheckingEnabled = false
+        isAutomaticSpellingCorrectionEnabled = MistakeUnderlining.correctsSpellingAutomatically
+        NotificationCenter.default.addObserver(self, selector: #selector(mistakeUnderliningDidChange), name: MistakeUnderlining.didChange, object: nil)
         drawsBackground = true
         backgroundColor = Palette.pageBackground
         // Курсор и выделение рисует сам редактор, как в Notion: системные — на всю строку и красят текст в белый.
@@ -461,6 +467,7 @@ public class PageTextView: NSTextView {
         if handleMentionPickerCommand(selector) { return }
         if handlePopupCommand(selector) { return }
         if colorMenu.handleCommand(selector) { return }
+        if proofreading.handleCommand(selector) { return }
         if formatBar.handleCommand(selector) { return }
         if handleBlockSelectionCommand(selector) { return }
         if handleArrowIntoCode(selector) { return }
@@ -705,6 +712,7 @@ public class PageTextView: NSTextView {
         super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
         guard !isLoadingText else { return }
         updateSelectionLook()
+        proofreading.selectionDidChange(selectedRange())
         guard !stillSelecting else {
             formatBar.hide()
             return
@@ -805,6 +813,13 @@ public class PageTextView: NSTextView {
         let focused = isFocused ?? (window?.firstResponder === self)
         let active = spellCheckingWanted && window?.isKeyWindow == true && focused
         if isContinuousSpellCheckingEnabled != active { super.isContinuousSpellCheckingEnabled = active }
+    }
+
+    /// «Подчёркивать ошибки» переключили в Настройках: подчёркивания и автоисправление — сразу, без перезапуска.
+    @objc private func mistakeUnderliningDidChange() {
+        spellCheckingWanted = MistakeUnderlining.isEnabled
+        isAutomaticSpellingCorrectionEnabled = MistakeUnderlining.correctsSpellingAutomatically
+        updateSpellingMarks()
     }
 
     public override func toggleContinuousSpellChecking(_ sender: Any?) {
