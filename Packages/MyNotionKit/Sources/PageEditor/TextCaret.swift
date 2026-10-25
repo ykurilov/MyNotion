@@ -114,7 +114,7 @@ public final class TextCaret {
         guard let layoutManager = textView.textLayoutManager, let storage = layoutManager.textContentManager as? NSTextContentStorage,
               let textLocation = storage.location(storage.documentRange.location, offsetBy: location) else { return nil }
         // Раскладка с начала текста: абзац, разложенный раньше предыдущих, встаёт на прикидочное место.
-        layoutManager.ensureLayout(for: NSTextRange(location: storage.documentRange.location, end: textLocation) ?? NSTextRange(location: textLocation))
+        layoutManager.ensureLayoutFromStart(through: textLocation)
         let atEnd = location >= (textView.textStorage?.length ?? 0)
         var found: NSTextLayoutFragment? = atEnd ? nil : layoutManager.textLayoutFragment(for: textLocation)
         if found == nil {
