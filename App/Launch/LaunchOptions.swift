@@ -67,6 +67,8 @@ struct LaunchOptions {
     var versionTiming = PageVersionRecorder.Timing.standard
     /// `--generate-versions-sample`: только страница «Замер: история версий» с 200 версиями (UI-тест US6).
     var generatesVersionsSample = false
+    /// `--fake-proofreader`: «Исправить ошибки» без сети и ключа (UI-тесты, снимки).
+    var usesFakeProofreader = false
     /// Служебный запуск — в фоне: не забирает фокус и не всплывает.
     let presence: LaunchPresence
 
@@ -95,6 +97,7 @@ struct LaunchOptions {
             case "--relations-demo-linked": (opensRelationsDemo, linksRelationsDemo) = (true, true)
             case "--relations-demo-open": relationsDemoDatabase = remaining.popFirst()
             case "--generate-versions-sample": generatesVersionsSample = true
+            case "--fake-proofreader": usesFakeProofreader = true
             case "--versions-quick": versionTiming = PageVersionRecorder.Timing(minimumInterval: 2, quietPeriod: 1)
             case "--launch-report": launchReportURL = remaining.popFirst().map(Self.fileURL)
             case "--window-snapshot": windowSnapshotURL = remaining.popFirst().map(Self.fileURL)

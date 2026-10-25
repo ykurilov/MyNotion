@@ -36,6 +36,7 @@ struct MyNotionApp: App {
             Self.generateReferenceLibraryAndExit(at: referenceLibraryURL)
         }
         self.options = options
+        AppProofreading.install(fake: options.usesFakeProofreader)
         if let appearanceName = options.appearanceName {
             NSApplication.shared.appearance = NSAppearance(named: appearanceName)
         }

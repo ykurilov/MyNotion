@@ -467,6 +467,20 @@ public enum Metrics {
     /// строка типа блока, разделитель, ряд из 7 кнопок по 36 (шесть как у Notion и цвет «A»).
     /// Панель форматирования, как у Notion 7.39 (снимки 19.10.2026, ±1,3): строка типа и два ряда по 5 кнопок,
     /// без разделителя между ними. Отсчёт — от левого верхнего угла карточки.
+    /// Окно «Исправить ошибки» под выделением: карточка всплывающих окон, правки и кнопки, как в окнах поверх страницы.
+    public enum ProofreadPanel {
+        public static let width: CGFloat = 380
+        public static let padding: CGFloat = 12
+        /// Правки выше — с прокруткой.
+        public static let maximumTextHeight: CGFloat = 220
+        public static let buttonHeight: CGFloat = 28
+        public static let buttonCornerRadius: CGFloat = 6
+        public static let buttonHorizontalPadding: CGFloat = 14
+        public static let buttonSpacing: CGFloat = 8
+        public static let textToButtonsSpacing: CGFloat = 12
+        public static let fontSize: CGFloat = 14
+    }
+
     public enum FormatBar {
         public static let horizontalPadding: CGFloat = 7
         public static let verticalPadding: CGFloat = 6
@@ -497,7 +511,11 @@ public enum Metrics {
         public static let colorButtonGlyphSize: CGFloat = 12
         /// «Tx»: «T» шрифтом значков и «x» мельче, ниже строки.
         public static let clearFormattingSubscriptSize: CGFloat = 10
+        /// Строка «Исправить ошибки» под кнопками, отделённая линией посередине промежутка; значок и название — как в строке типа.
+        public static let actionDividerSpacing: CGFloat = 9
+        public static let actionRowHeight: CGFloat = 32
         public static let height: CGFloat = 2 * verticalPadding + kindRowHeight + kindToButtonsSpacing + CGFloat(buttonRows) * buttonRowHeight
+            + actionDividerSpacing + actionRowHeight
         /// Список типов — сбоку от карточки (Notion, сверено 18.10.2026: ≈ 8,8 ± 1,3) и заходит на неё до подсветки
         /// последней кнопки: поле карточки + половина зазора между местом кнопки 36 и подсветкой 32.
         public static let kindMenuOverlap: CGFloat = horizontalPadding + (buttonWidth - buttonHighlightSize.width) / 2

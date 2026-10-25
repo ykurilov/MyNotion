@@ -93,6 +93,8 @@ targets:
         product: ControlServer
       - package: MyNotionKit
         product: ControlCommands
+      - package: MyNotionKit
+        product: Proofreading
       - target: mynotion-cli
         embed: true
         copy:
@@ -233,6 +235,7 @@ schemes:
         - package: MyNotionKit/ControlClientTests
         - package: MyNotionKit/ControlCommandsTests
         - package: MyNotionKit/PageMarkdownTests
+        - package: MyNotionKit/ProofreadingTests
         - UITests
     profile:
       config: Release

@@ -87,6 +87,8 @@ public class PageTextView: NSTextView {
     /// Виды блоков без своего текста на экране: их ставит страница, TextKit 2 этого не делает (US4).
     private(set) lazy var blockViews = BlockViewHosting(textView: self)
     let formatBar = FormatBarController()
+    /// «Исправить ошибки»: окно правок под выделением.
+    let proofreading = ProofreadController()
     /// Последние цвета текста и фона: окно цветов и ⌘⇧H.
     var recentColors = RecentColors()
     let colorMenu = ColorMenuController()
@@ -144,6 +146,7 @@ public class PageTextView: NSTextView {
         collapsedParagraphs.textView = self
         popups.textView = self
         formatBar.textView = self
+        proofreading.textView = self
         colorMenu.textView = self
 
         configureTextBehaviour()
@@ -437,6 +440,7 @@ public class PageTextView: NSTextView {
         if handleMentionPickerCommand(selector) { return }
         if handlePopupCommand(selector) { return }
         if colorMenu.handleCommand(selector) { return }
+        if proofreading.handleCommand(selector) { return }
         if formatBar.handleCommand(selector) { return }
         if handleBlockSelectionCommand(selector) { return }
         if handleArrowIntoCode(selector) { return }
@@ -679,6 +683,7 @@ public class PageTextView: NSTextView {
         super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
         guard !isLoadingText else { return }
         updateSelectionLook()
+        proofreading.selectionDidChange(selectedRange())
         guard !stillSelecting else {
             formatBar.hide()
             return
