@@ -9,10 +9,15 @@ public final class NotesStore: Sendable {
     public let clock: HybridLogicalClock
     private let writeHooks = Mutex<[any NotesWriteHook]>([])
     private let deletionMarks = Mutex(false)
+    private let recordedClock = Mutex<HybridTimestamp?>(nil)
 
     public init(database: AppDatabase, clock: HybridLogicalClock) {
         self.database = database
         self.clock = clock
+        // Часы после запуска начинают с нуля: свои новые метки — позже всех сохранённых, даже если время Mac отстало.
+        if let stored = try? database.dbWriter.read(Self.latestStoredStamp) {
+            clock.receive(stored)
+        }
     }
 
     /// Подписчик (поиск, синхронизация) будет писать в каждую транзакцию записи перед её фиксацией.
@@ -117,8 +122,45 @@ public final class NotesStore: Sendable {
                     try hook.notesWillCommit(changes, in: transaction)
                 }
             }
+            try recordClock(in: db)
             return result
         }
+    }
+
+    // MARK: Часы после перезапуска
+
+    static let clockMarkKey = "clock.latest"
+
+    /// Последняя метка — в той же транзакции, что записи с ней: после перезапуска часы продолжат с неё.
+    private func recordClock(in db: Database) throws {
+        guard let issued = clock.lastIssued else { return }
+        let isLater = recordedClock.withLock { recorded in
+            guard recorded.map({ issued > $0 }) ?? true else { return false }
+            recorded = issued
+            return true
+        }
+        guard isLater else { return }
+        try db.execute(sql: "INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                       arguments: [Self.clockMarkKey, issued.description])
+    }
+
+    /// Отметка последней метки, а в базе, записанной до отметок, — самая поздняя метка записей
+    /// (записи меток сортируются так же, как сами метки).
+    static func latestStoredStamp(_ db: Database) throws -> HybridTimestamp? {
+        if let mark = try String.fetchOne(db, sql: "SELECT value FROM app_meta WHERE key = ?", arguments: [clockMarkKey]) {
+            return HybridTimestamp(mark)
+        }
+        let clockMaps = ["page", "block", "db_database", "db_property", "db_select_option", "db_relation_link", "db_view"].map { table in
+            """
+            SELECT max(clock.value) AS stamp
+            FROM \(table), json_each(CASE WHEN json_valid(fieldClocks) THEN fieldClocks ELSE '{}' END) AS clock
+            WHERE clock.type = 'text'
+            """
+        }
+        let stamps = [("block", "textBaseClock"), ("page_tombstone", "erasedAt"), ("reminder_state", "doneClock"),
+                      ("db_cell", "hlc"), ("db_row_order", "hlc")].map { "SELECT max(\($1)) AS stamp FROM \($0)" }
+        let sql = "SELECT max(stamp) FROM (" + (clockMaps + stamps).joined(separator: " UNION ALL ") + ")"
+        return try String.fetchOne(db, sql: sql).flatMap { HybridTimestamp($0) }
     }
 }
 
