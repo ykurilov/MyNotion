@@ -62,7 +62,7 @@ log show --last 10m --predicate 'subsystem == "cloud.kurilov.mynotion" && catego
 
 ## Команды по группам
 
-- Страницы, корзина: [references/pages.md](references/pages.md)
+- Страницы, корзина, ссылка для чтения: [references/pages.md](references/pages.md)
 - Блоки, иконки, обложки: [references/blocks.md](references/blocks.md)
 - Базы данных: [references/databases.md](references/databases.md)
 - Поиск, избранное, недавние, шаблоны, история, вложения: [references/library.md](references/library.md)

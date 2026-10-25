@@ -11,7 +11,7 @@ public struct HandlerRegistry: Sendable {
 
     public static let standard = HandlerRegistry([
         ServiceHandlers.all, PageHandlers.all, BlockHandlers.all, DatabaseHandlers.all, LibraryHandlers.all, WindowHandlers.all,
-        TransferHandlers.all,
+        TransferHandlers.all, ShareHandlers.all,
     ].reduce(into: [:]) { result, group in
         result.merge(group) { first, _ in first }
     })
