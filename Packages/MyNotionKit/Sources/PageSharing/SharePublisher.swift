@@ -11,11 +11,15 @@ public actor SharePublisher {
     private let fileURL: @Sendable (UUID) -> URL?
     private let transport: @Sendable () -> (any SyncShareTransport)?
     private let delay: Duration
+    private let retryDelay: Duration
 
     /// Ссылка → страницы и строки баз её последнего снимка.
     private var watched: [UUID: Set<UUID>] = [:]
     private var pendingIds: Set<UUID> = []
     private var pendingDatabases = false
+    /// Ссылки, чья публикация (или закрытие — страница ушла в корзину) не дошла до сервера: повтор с нарастающей паузой.
+    private var failedIds: Set<UUID> = []
+    private var retryAttempt = 0
     private var flushTask: Task<Void, Never>?
     private var publishing: Set<UUID> = []
     private var publishAgain: Set<UUID> = []
@@ -25,12 +29,14 @@ public actor SharePublisher {
     public private(set) var lastErrors: [UUID: String] = [:]
 
     public init(builder: SharedDocumentBuilder, shares: PageShareStore, fileURL: @escaping @Sendable (UUID) -> URL?,
-                transport: @escaping @Sendable () -> (any SyncShareTransport)?, delay: Duration = .seconds(2)) {
+                transport: @escaping @Sendable () -> (any SyncShareTransport)?, delay: Duration = .seconds(2),
+                retryDelay: Duration = .seconds(15)) {
         self.builder = builder
         self.shares = shares
         self.fileURL = fileURL
         self.transport = transport
         self.delay = delay
+        self.retryDelay = retryDelay
     }
 
     /// Подписчик записи: отмечает затронутые страницы, публикация — после паузы, вне транзакции.
@@ -134,9 +140,13 @@ public actor SharePublisher {
         undelivered.withLock { $0 -= 1 }
         pendingIds.formUnion(ids)
         pendingDatabases = pendingDatabases || databases
+        scheduleFlush(after: delay)
+    }
+
+    private func scheduleFlush(after pause: Duration) {
         guard flushTask == nil else { return }
-        flushTask = Task { [delay] in
-            try? await Task.sleep(for: delay)
+        flushTask = Task {
+            try? await Task.sleep(for: pause)
             await self.flush()
         }
     }
@@ -148,12 +158,26 @@ public actor SharePublisher {
         pendingIds = []
         pendingDatabases = false
         guard let enabled = try? shares.all().filter(\.enabled) else { return }
+        var failed: Set<UUID> = []
         for share in enabled {
             let scope = watched[share.pageId]
             // снимок ещё не собирался на этом запуске — проверим по digest, ничего не теряя
-            let touched = scope.map { !$0.isDisjoint(with: ids) || (databases && !$0.isEmpty) } ?? true
+            let touched = failedIds.contains(share.pageId)
+                || scope.map { !$0.isDisjoint(with: ids) || (databases && !$0.isEmpty) } ?? true
             guard touched else { continue }
-            try? await publish(share.pageId)
+            do {
+                try await publish(share.pageId)
+            } catch {
+                failed.insert(share.pageId)
+            }
+        }
+        failedIds = failed
+        if failed.isEmpty {
+            retryAttempt = 0
+        } else {
+            // 15 с, 30 с, минута… не реже раза в 4 минуты; сверка раз в 5 минут и запуск — ещё одна страховка
+            retryAttempt += 1
+            scheduleFlush(after: retryDelay * (1 << min(retryAttempt - 1, 4)))
         }
     }
 

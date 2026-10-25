@@ -23,7 +23,7 @@ struct SharePublisherTests {
             shares: PageShareStore(database: library.database),
             fileURL: { id in localFiles.map { $0.contains(id) } ?? true ? folder.appendingPathComponent(id.uuidString) : nil },
             transport: { connected ? server : nil },
-            delay: .milliseconds(20))
+            delay: .milliseconds(20), retryDelay: .milliseconds(20))
         library.store.addWriteHook(publisher.changeWatcher)
         return publisher
     }
@@ -83,6 +83,16 @@ struct SharePublisherTests {
         #expect(server.isEnabled(library.child) == false)
     }
 
+    @Test("Сервер не ответил — закрытие страницы в корзине повторяется само")
+    func failedCloseIsRetried() async throws {
+        let publisher = publisher()
+        try await publisher.setEnabled(true, pageId: library.child, includeSubpages: true)
+        server.failNextCalls(2)
+        try library.trash(library.child)
+        await publisher.waitForPendingPublications()
+        #expect(server.isEnabled(library.child) == false)
+    }
+
     @Test("Повторное включение — та же ссылка, смена — новая")
     func reenableKeepsTokenRotateChangesIt() async throws {
         let publisher = publisher()
@@ -111,6 +121,7 @@ final class FakeShareServer: SyncShareTransport, @unchecked Sendable {
         var files: Set<UUID> = []
         var uploads: [UUID] = []
         var neededFiles: [UUID: [UUID]] = [:]
+        var failures = 0
     }
 
     private let state = Mutex(State())
@@ -120,10 +131,22 @@ final class FakeShareServer: SyncShareTransport, @unchecked Sendable {
     func isEnabled(_ pageId: UUID) -> Bool? { state.withLock { $0.shares[pageId]?.enabled } }
     func digest(of pageId: UUID) -> String? { state.withLock { $0.shares[pageId]?.digest } }
 
+    /// Следующие `count` вызовов падают, как без сети.
+    func failNextCalls(_ count: Int) { state.withLock { $0.failures = count } }
+
+    private func failIfAsked() throws {
+        try state.withLock { state in
+            guard state.failures > 0 else { return }
+            state.failures -= 1
+            throw URLError(.notConnectedToInternet)
+        }
+    }
+
     func shares() async throws -> [SyncShare] { state.withLock { Array($0.shares.values) } }
 
     func setShare(_ pageId: UUID, enabled: Bool, includeSubpages: Bool?) async throws -> SyncShare {
-        state.withLock { state in
+        try failIfAsked()
+        return state.withLock { state in
             let old = state.shares[pageId]
             let share = SyncShare(pageId: pageId, token: old?.token ?? UUID().uuidString, enabled: enabled,
                                   includeSubpages: includeSubpages ?? old?.includeSubpages ?? true,
