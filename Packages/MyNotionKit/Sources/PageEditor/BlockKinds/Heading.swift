@@ -27,7 +27,7 @@ extension BlockKindDescriptor {
         return BlockKindDescriptor(
             kind: kind,
             menuItem: PopupMenuItem(title: "Заголовок \(level)", icon: .label(label), keywords: ["h\(level)", "heading", hashes],
-                                    action: .setKind(kind)),
+                                    action: .setKind(kind), hint: "⌥⌘\(level)"),
             markdownShortcuts: [hashes],
             textStyle: style,
             emptyHint: "Заголовок \(level)",

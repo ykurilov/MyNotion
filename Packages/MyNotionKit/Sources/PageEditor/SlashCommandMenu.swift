@@ -35,7 +35,7 @@ struct PopupMenuItem: Equatable {
     var icon: Icon
     var keywords: [String]
     var action: Action
-    /// Серая подсказка клавиш справа в меню блока: «⌘D», «Del».
+    /// Серая подсказка клавиш справа в меню блока и в «Преобразовать в»: «⌘D», «Del», «⌥⌘1».
     var hint: String? = nil
     /// Над строкой — черта между группами меню блока.
     var startsGroup = false
@@ -599,7 +599,12 @@ final class PopupMenuRowView: NSView {
                 textEnd = Self.drawShortcut(hint, in: bounds) - padding
             }
         }
-        if isChecked { textEnd = drawCheckmark() - padding }
+        if isChecked {
+            textEnd = drawCheckmark() - padding
+        } else if style == .kindPicker, let hint = item.hint {
+            // «Преобразовать в»: клавиши типа справа, как у Notion.
+            textEnd = Self.drawShortcut(hint, in: bounds) - padding
+        }
         let textX = padding + iconSize + Metrics.PopupMenu.iconToTitleSpacing
         let titleStyle = Typography.popupMenuTitle
         let title = NSAttributedString(string: item.title, attributes: [

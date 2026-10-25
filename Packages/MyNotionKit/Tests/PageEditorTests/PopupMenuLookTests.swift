@@ -139,9 +139,16 @@ struct PopupMenuLookTests {
             let color = try #require(pixels.averageInkColor(in: ink))
             #expect(colorDistance(color, Palette.textSecondary.resolved(in: theme)) <= 0.15, "\(item.title): символы \(color) — не textSecondary")
         }
-        let (view, pixels) = try Self.row(PopupMenuItem.blockKinds[1], .kindPicker, theme: theme)
-        #expect(pixels.inkBounds(in: NSRect(x: view.bounds.width - 40, y: 0, width: 40, height: view.bounds.height)) == nil,
+        // В «Преобразовать в» быстрых символов нет; у заголовков и «Текст» — серые клавиши «⌥⌘1», как у Notion.
+        let (bulletView, bulletPixels) = try Self.row(PopupMenuItem.blockKinds[4], .kindPicker, theme: theme)
+        #expect(bulletPixels.inkBounds(in: NSRect(x: bulletView.bounds.width - 40, y: 0, width: 40, height: bulletView.bounds.height)) == nil,
                 "В списке «Преобразовать в» быстрых символов нет")
+        let (view, pixels) = try Self.row(PopupMenuItem.blockKinds[1], .kindPicker, theme: theme)
+        let keys = try #require(pixels.inkBounds(in: NSRect(x: view.bounds.width - 50, y: 0, width: 50, height: view.bounds.height)),
+                                "У «Заголовок 1» не видно «⌥⌘1»")
+        #expect(abs(view.bounds.width - keys.maxX - 10) <= 1.5)
+        let keysColor = try #require(pixels.averageInkColor(in: keys))
+        #expect(colorDistance(keysColor, Palette.textSecondary.resolved(in: theme)) <= 0.15, "«⌥⌘1» — не textSecondary")
         // В меню блока справа: стрелка подменю у «Преобразовать в» и «Цвет», серая подсказка «⌘D» у «Дублировать».
         for item in [PopupMenuItem.turnInto, .color, .duplicate] {
             let (view, pixels) = try Self.row(item, .blockMenu, theme: theme)
