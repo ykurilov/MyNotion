@@ -100,6 +100,8 @@ final class MainWindowModel {
         databaseOperations.onUndoFailure = { [weak self] error in
             self?.loadError = "Не удалось отменить: \(SaveStatus.reason(for: error))"
         }
+        // Большая смена типа, прерванная падением, доводится до конца в фоне.
+        databaseOperations.resumeInterruptedRewrite()
         search = PageSearchController(store: library.store, tree: { [weak library] in library?.tree ?? PageTreeSnapshot(allPages: []) },
                                       open: { [weak self] in self?.open(PageOpenRequest.fromClick($0)) })
         search.openResult = { [weak self] result in
