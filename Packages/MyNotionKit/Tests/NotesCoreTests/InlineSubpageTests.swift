@@ -310,6 +310,24 @@ struct InlineSubpageTests {
         #expect(try viewState.collapsedBlockIds(ofPage: subpage.id) == [moved[0].id])
     }
 
+    @Test("Свёрнутый заголовок в страницу: его раздел переезжает вместе с ним, следующий заголовок того же уровня остаётся; ⌘Z возвращает")
+    func turnIntoPageMovesFoldedHeadingSection() throws {
+        let (page, ids) = try projects(blocks: [(.heading2, "Раздел", 0), (.paragraph, "текст", 0), (.bulletItem, "пункт", 0),
+                                                (.bulletItem, "под-пункт", 1), (.heading3, "Подраздел", 0),
+                                                (.paragraph, "в подразделе", 0), (.heading2, "Следующий", 0)])
+        try BlockViewStateStore(database: store.database).setCollapsed(true, blockId: ids[0])
+        let undoManager = makeUndoManager()
+        let before = try outline(page)
+
+        let subpage = try undoable(undoManager) { try tree.turnIntoSubpage(ids[0], in: page) }
+
+        #expect(try outline(page) == ["→ Раздел", "Следующий"])
+        #expect(try outline(subpage.id) == ["текст", "пункт", "под-пункт", "Подраздел", "в подразделе"])
+        #expect(try blocks(subpage.id).map(\.indent) == [0, 0, 1, 0, 0])
+        undoManager.undo()
+        #expect(try outline(page) == before)
+    }
+
     @Test("Подстраница на месте блока несуществующей страницы или блока не создаётся")
     func needsBlock() throws {
         let (page, _) = try projects(["до"])
