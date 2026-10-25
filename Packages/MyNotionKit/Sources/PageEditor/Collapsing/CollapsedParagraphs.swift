@@ -2,9 +2,10 @@ import AppKit
 import NotesCore
 import VisualStyle
 
-/// Свёрнутые переключатели страницы на этом Mac (research R1; contracts/blocks-and-keys.md, «Раскрывающийся список»).
-/// Текст страницы не меняется: дети свёрнутых прячутся от раскладки (`HiddenParagraphs`). Свёрнутость пишется сразу
-/// в `block_view_state` и не входит ни в отмену, ни в синхронизацию.
+/// Свёрнутые переключатели и заголовки страницы на этом Mac (research R1; contracts/blocks-and-keys.md, «Раскрывающийся
+/// список»). Текст страницы не меняется: дети свёрнутых переключателей и разделы свёрнутых заголовков (`HeadingSections`)
+/// прячутся от раскладки (`HiddenParagraphs`). Свёрнутость пишется сразу в `block_view_state` и не входит ни в отмену,
+/// ни в синхронизацию.
 @MainActor
 final class CollapsedParagraphs {
     weak var textView: PageTextView?
@@ -22,22 +23,34 @@ final class CollapsedParagraphs {
         try? store?.setCollapsed(collapsed, blockId: id)
     }
 
-    /// Блоки, которые прячутся: поддеревья свёрнутых переключателей.
+    /// Блоки, которые прячутся: поддеревья свёрнутых переключателей и разделы свёрнутых заголовков.
     func hiddenBlockIds(in blocks: [Block]) -> Set<UUID> {
         guard !collapsedIds.isEmpty else { return [] }
         var hidden: Set<UUID> = []
         var index = 0
         // Поля блоков читаются по месту, без копии блока: страница бывает на 10 000 блоков, а проход — на каждое нажатие.
         while index < blocks.count {
-            guard blocks[index].kind == .toggle, collapsedIds.contains(blocks[index].id) else {
+            guard Self.folds(blocks[index].kind), collapsedIds.contains(blocks[index].id),
+                  let end = Self.foldedEnd(blocks, ofBlockAt: index) else {
                 index += 1
                 continue
             }
-            let end = BlockMoveController.subtreeEnd(blocks, of: index)
             for child in (index + 1)..<end { hidden.insert(blocks[child].id) }
             index = max(end, index + 1)
         }
         return hidden
+    }
+
+    /// Сворачивается ли блок такого типа: переключатель и заголовок.
+    static func folds(_ kind: BlockKind) -> Bool { kind == .toggle || kind.isHeading }
+
+    /// Конец того, что прячет свёрнутый блок `index`: детей переключателя, раздела заголовка; не сворачивается — `nil`.
+    static func foldedEnd(_ blocks: [Block], ofBlockAt index: Int) -> Int? {
+        switch blocks[index].kind {
+        case .toggle: BlockMoveController.subtreeEnd(blocks, of: index)
+        case .heading1, .heading2, .heading3: HeadingSections.sectionEnd(blocks, ofHeadingAt: index)
+        default: nil
+        }
     }
 
     // MARK: Вид абзацев по поддереву
@@ -154,24 +167,24 @@ extension PageTextView {
         get { collapsedParagraphs.store }
         set {
             collapsedParagraphs.store = newValue
-            // Без переключателей на странице свёрнутости нет — база не читается (путь открытия страницы).
-            guard document.blocks.contains(where: { $0.kind == .toggle }) else { return }
+            // Без переключателей и заголовков на странице свёрнутости нет — база не читается (путь открытия страницы).
+            guard document.blocks.contains(where: { CollapsedParagraphs.folds($0.kind) }) else { return }
             collapsedParagraphs.load(pageId: document.pageId)
             if !collapsedBlockIds.isEmpty { refreshBlockStructure() }
         }
     }
 
-    /// Свёрнутые переключатели на этом Mac.
+    /// Свёрнутые переключатели и заголовки на этом Mac.
     public var collapsedBlockIds: Set<UUID> { collapsedParagraphs.collapsedIds }
 
-    /// Свернуть или раскрыть переключатель. Не шаг отмены и не правка документа: пишется сразу в вид блока.
+    /// Свернуть или раскрыть переключатель или заголовок. Не шаг отмены и не правка документа: пишется сразу в вид блока.
     public func setCollapsed(_ collapsed: Bool, ofBlock id: UUID) {
-        guard let index = document.index(ofBlock: id), document.blocks[index].kind == .toggle || !collapsed else { return }
+        guard let index = document.index(ofBlock: id), CollapsedParagraphs.folds(document.blocks[index].kind) || !collapsed else { return }
         commitEdits()
         collapsedParagraphs.set(collapsed, id)
         refreshBlockStructure()
         redrawBlocks([id])
-        // Курсор, оставшийся внутри спрятанного, уходит к концу строки переключателя.
+        // Курсор, оставшийся внутри спрятанного, уходит к концу строки переключателя или заголовка.
         let selection = selectedRange()
         if collapsed, selection.length == 0, let position = mapper.blockPosition(at: selection.location),
            hiddenParagraphs.isHidden(document.blocks[position.index].id) {
@@ -199,10 +212,10 @@ extension PageTextView {
         setCollapsed(!collapsedBlockIds.contains(id), ofBlock: id)
     }
 
-    /// ⌘Enter на переключателях под курсором или выделением: если хоть один раскрыт — свернуть все, иначе раскрыть.
+    /// ⌘Enter на переключателях и заголовках под курсором или выделением: если хоть один раскрыт — свернуть все, иначе раскрыть.
     func toggleCollapsedSelectedBlocks() {
         guard let selected = selectedBlockRange() else { return }
-        let toggles = selected.map { document.blocks[$0].id }.filter { document.block($0)?.kind == .toggle }
+        let toggles = selected.map { document.blocks[$0].id }.filter { document.block($0).map { CollapsedParagraphs.folds($0.kind) } ?? false }
         guard !toggles.isEmpty else { return }
         let collapse = toggles.contains { !collapsedBlockIds.contains($0) }
         for id in toggles { setCollapsed(collapse, ofBlock: id) }
@@ -220,13 +233,19 @@ extension PageTextView {
         if collapse { setSelectedRange(selectedRange()) }
     }
 
-    /// Раскрыть всех свёрнутых предков блока (выделение внутри спрятанного, переход к блоку).
+    /// Раскрыть все свёрнутые блоки, которые прячут блок `index`: предков-переключателей и заголовки, в чьём разделе он лежит
+    /// (выделение внутри спрятанного, переход к блоку).
     func expandAncestors(ofBlockAt index: Int) {
-        let collapsed = ancestorIndices(ofBlockAt: index).map { document.blocks[$0].id }.filter(collapsedBlockIds.contains)
+        let blocks = document.blocks
+        let collapsed = collapsedBlockIds.filter { id in
+            guard let owner = document.index(ofBlock: id), owner < index,
+                  let end = CollapsedParagraphs.foldedEnd(blocks, ofBlockAt: owner) else { return false }
+            return index < end
+        }
         guard !collapsed.isEmpty else { return }
         for id in collapsed { collapsedParagraphs.set(false, id) }
         refreshBlockStructure()
-        redrawBlocks(collapsed)
+        redrawBlocks(Array(collapsed))
     }
 
     /// Перейти к блоку (поиск страниц, оглавление): свёрнутые предки раскрываются, курсор — в начало блока.
@@ -247,6 +266,7 @@ extension PageTextView {
         hiddenParagraphs.setHiddenBlocks(collapsedParagraphs.hiddenBlockIds(in: blocks))
         let hidden = hiddenParagraphs
         collapsedParagraphs.apply(collapsedParagraphs.adjustments(in: blocks, isHidden: hidden.isHidden), in: self)
+        blockHandles.updateFoldHandle()
     }
 
     /// Набор в блоке без смены блоков: мэппер переписал вид абзаца под курсором и соседей — вернуть им поправки.
@@ -282,16 +302,25 @@ extension PageTextView {
 
     // MARK: Курсор и выделение у спрятанного
 
-    /// Спрятанный отрезок текста вокруг места: дети свёрнутого переключателя. `toggleEnd` — конец текста переключателя.
+    /// Спрятанный отрезок текста вокруг места: дети свёрнутого переключателя, раздел свёрнутого заголовка.
+    /// `toggleEnd` — конец текста владельца: переключателя или заголовка.
     func hiddenRegion(at location: Int) -> (range: NSRange, toggleEnd: Int)? {
         guard !hiddenParagraphs.hiddenBlockIds.isEmpty, !mapper.hasPendingEdits,
-              let position = mapper.blockPosition(at: location), hiddenParagraphs.isHidden(document.blocks[position.index].id) else { return nil }
-        // Владелец — ближайший видимый предок: спрятанное идёт одним куском под ним.
-        guard let owner = ancestorIndices(ofBlockAt: position.index).first(where: { !hiddenParagraphs.isHidden(document.blocks[$0].id) })
-        else { return nil }
+              let position = mapper.blockPosition(at: location), hiddenParagraphs.isHidden(document.blocks[position.index].id),
+              let owner = hiddenRunOwner(ofBlockAt: position.index) else { return nil }
+        // Спрятанное идёт одним куском под владельцем — до первого видимого блока.
+        let blocks = document.blocks
+        var end = position.index
+        while end < blocks.count, hiddenParagraphs.isHidden(blocks[end].id) { end += 1 }
         let start = mapper.paragraphStart(ofBlockAt: owner + 1)
-        let end = mapper.paragraphStart(ofBlockAt: BlockMoveController.subtreeEnd(document.blocks, of: owner))
-        return (NSRange(location: start, length: end - start), start - 1)
+        return (NSRange(location: start, length: mapper.paragraphStart(ofBlockAt: end) - start), start - 1)
+    }
+
+    /// Владелец спрятанного блока `index` — ближайший видимый блок выше: свёрнутый переключатель или заголовок.
+    func hiddenRunOwner(ofBlockAt index: Int) -> Int? {
+        var owner = index - 1
+        while owner >= 0, hiddenParagraphs.isHidden(document.blocks[owner].id) { owner -= 1 }
+        return owner >= 0 ? owner : nil
     }
 
     /// Выделение с учётом спрятанного (research R1): курсор внутри уходит к концу строки переключателя, а шагом вправо
@@ -324,15 +353,15 @@ extension PageTextView {
 
     // MARK: ⌫ и Enter у переключателя
 
-    /// ⌫ в начале абзаца сразу под свёрнутым переключателем склеивает его с текстом переключателя, а не со спрятанным
-    /// ребёнком; переключатель остаётся свёрнутым.
+    /// ⌫ в начале абзаца сразу под свёрнутым переключателем или заголовком склеивает его с текстом владельца, а не
+    /// со спрятанным блоком; владелец остаётся свёрнутым.
     func handleBackspaceUnderCollapsedToggle() -> Bool {
         let selection = selectedRange()
         guard selection.length == 0, !hiddenParagraphs.hiddenBlockIds.isEmpty,
               let position = mapper.blockPosition(at: selection.location), position.offset == 0, position.index > 0,
               document.blocks[position.index].kind == .paragraph,
               hiddenParagraphs.isHidden(document.blocks[position.index - 1].id),
-              let toggle = ancestorIndices(ofBlockAt: position.index - 1).first(where: { !hiddenParagraphs.isHidden(document.blocks[$0].id) })
+              let toggle = hiddenRunOwner(ofBlockAt: position.index - 1)
         else { return false }
         let blocks = document.blocks
         let joined = blocks[position.index]
@@ -394,6 +423,33 @@ extension PageTextView {
         changeBlocks(gap..<gap, to: [inserted], actionName: "Новый блок")
         setSelectedRange(NSRange(location: mapper.paragraphStart(ofBlockAt: gap), length: 0))
         return true
+    }
+
+    /// Enter в свёрнутом заголовке: в конце — новый абзац после скрытой части (заголовок разворачивается), в начале
+    /// непустого — пустой абзац над заголовком; в середине заголовок раскрывается, и текст делится как обычно.
+    func handleNewlineInCollapsedHeading() -> Bool {
+        let selection = selectedRange()
+        guard selection.length == 0, let position = mapper.blockPosition(at: selection.location) else { return false }
+        let blocks = document.blocks
+        let index = position.index
+        let heading = blocks[index]
+        guard heading.kind.isHeading, collapsedBlockIds.contains(heading.id) else { return false }
+        if position.offset == heading.pageTextLength {
+            // Абзац после раздела сам входит в раздел (до следующего заголовка того же уровня): заголовок разворачивается,
+            // чтобы новый абзац был виден.
+            let gap = HeadingSections.sectionEnd(blocks, ofHeadingAt: index)
+            setCollapsed(false, ofBlock: heading.id)
+            changeBlocks(gap..<gap, to: [BlockDraft(id: nil, kind: .paragraph, indent: heading.indent)], actionName: "Новый блок")
+            setSelectedRange(NSRange(location: mapper.paragraphStart(ofBlockAt: gap), length: 0))
+            return true
+        }
+        if position.offset == 0 {
+            changeBlocks(index..<index, to: [BlockDraft(id: nil, kind: .paragraph, indent: heading.indent)], actionName: "Новый блок")
+            setSelectedRange(NSRange(location: mapper.paragraphStart(ofBlockAt: index + 1), length: 0))
+            return true
+        }
+        setCollapsed(false, ofBlock: heading.id)
+        return false
     }
 
     /// Enter в пустом вложенном абзаце — выход на уровень выше, как ⇧Tab.

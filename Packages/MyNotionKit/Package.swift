@@ -109,7 +109,7 @@ let package = Package(
                                                         "Attachments", "MarkdownExport", "NotionImport", "Navigation", "PageMarkdown", "PageCover",
                                                         .product(name: "GRDB", package: "GRDB.swift")]),
         // Страница ↔ Markdown для агента (research R5).
-        .target(name: "PageMarkdown", dependencies: ["NotesCore", "MarkdownExport", "NotionImport", "Attachments"]),
+        .target(name: "PageMarkdown", dependencies: ["NotesCore", "MarkdownExport", "NotionImport", "Attachments", "LinkPreview"]),
         // «Исправить ошибки»: запрос к DeepSeek, ключ в связке ключей, перенос оформления и правки по словам — без AppKit.
         .target(name: "Proofreading", dependencies: ["NotesCore"]),
 

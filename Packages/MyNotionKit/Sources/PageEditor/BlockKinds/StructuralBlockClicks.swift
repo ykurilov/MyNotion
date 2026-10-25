@@ -2,10 +2,14 @@ import AppKit
 import NotesCore
 
 extension PageTextView {
-    /// Щелчок по треугольнику переключателя, подсказке пустого переключателя или иконке выноски.
+    /// Щелчок по треугольнику переключателя, подписи свёрнутого заголовка, подсказке пустого переключателя или иконке выноски.
     func handleStructuralBlockClick(at point: NSPoint) -> Bool {
         if let id = toggle(at: point) {
             toggleCollapsed(ofBlock: id)
+            return true
+        }
+        if let id = foldedLabel(at: point) {
+            setCollapsed(false, ofBlock: id)
             return true
         }
         if let index = emptyToggleHint(at: point) {

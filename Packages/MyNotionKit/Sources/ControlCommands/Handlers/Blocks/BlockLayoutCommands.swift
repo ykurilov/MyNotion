@@ -98,7 +98,7 @@ enum BlockLayoutCommands {
     }
 }
 
-/// `block check`, `uncheck`, `expand`, `collapse`: отметка задачи и раскрытие переключателя.
+/// `block check`, `uncheck`, `expand`, `collapse`: отметка задачи, раскрытие переключателя и заголовка.
 enum BlockStateCommands {
     static let check: CommandHandler = { session in try await setChecked(session, true) }
     static let uncheck: CommandHandler = { session in try await setChecked(session, false) }
@@ -128,14 +128,16 @@ enum BlockStateCommands {
     @MainActor
     private static func setCollapsed(_ session: CommandSession, _ collapsed: Bool) throws -> CommandResult {
         let block = try session.block()
-        guard block.kind == .toggle else {
-            throw ControlError(.invalidArgument, "Раскрывать и сворачивать можно только раскрывающийся список (toggle), а это «\(block.kind.rawValue)»",
+        guard block.kind == .toggle || block.kind.isHeading else {
+            throw ControlError(.invalidArgument,
+                               "Раскрывать и сворачивать можно только раскрывающийся список (toggle) и заголовок, а это «\(block.kind.rawValue)»",
                                details: ["kind": .string(block.kind.rawValue)])
         }
         try session.blockStoreRead { try BlockViewStateStore(database: session.host.store.database).setCollapsed(collapsed, blockId: block.id) }
         // Открытая страница перечитывает свёрнутость сама: запись мимо её редактора иначе не видна до переоткрытия.
         BlockViewStateStore.postChangedOutsideEditor(pageId: block.pageId)
         return CommandResult(try session.storedBlockJSON(block.id, extra: ["collapsed": .bool(collapsed)]),
-                             text: collapsed ? "✓ Список свёрнут" : "✓ Список раскрыт")
+                             text: block.kind.isHeading ? (collapsed ? "✓ Заголовок свёрнут" : "✓ Заголовок развёрнут")
+                                 : (collapsed ? "✓ Список свёрнут" : "✓ Список раскрыт"))
     }
 }

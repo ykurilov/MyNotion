@@ -94,8 +94,14 @@ public enum BlockStructure {
 
     /// Перенос блока `index` вместе с вложенными в зазор `gap` (0…count). В свои же вложенные блок не переносится.
     public static func moving(_ blocks: [Block], blockAt index: Int, toGap gap: Int) -> Change? {
-        guard blocks.indices.contains(index), (0...blocks.count).contains(gap) else { return nil }
-        let group = index..<subtreeEnd(blocks, of: index)
+        guard blocks.indices.contains(index) else { return nil }
+        return moving(blocks, group: index..<subtreeEnd(blocks, of: index), toGap: gap)
+    }
+
+    /// Перенос блоков `group` (блок с тем, что едет вместе с ним) в зазор `gap` (0…count).
+    public static func moving(_ blocks: [Block], group: Range<Int>, toGap gap: Int) -> Change? {
+        guard !group.isEmpty, group.upperBound <= blocks.count, (0...blocks.count).contains(gap) else { return nil }
+        let index = group.lowerBound
         guard gap < group.lowerBound || gap > group.upperBound else { return nil }
         let moved = blocks[group].map(BlockDraft.init)
         if gap < index {

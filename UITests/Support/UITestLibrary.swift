@@ -114,6 +114,7 @@ extension XCUIApplication {
     var pageBody: XCUIElement { textViews["page-body"] }
     var blockDragHandle: XCUIElement { descendants(matching: .any)["block-handle-drag"] }
     var blockAddHandle: XCUIElement { descendants(matching: .any)["block-handle-add"] }
+    var blockFoldHandle: XCUIElement { descendants(matching: .any)["block-handle-fold"] }
 
     func popupItem(_ identifier: String) -> XCUIElement {
         descendants(matching: .menuItem)["popup-item-\(identifier)"]

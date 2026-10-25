@@ -95,6 +95,8 @@ targets:
         product: ControlCommands
       - package: MyNotionKit
         product: Proofreading
+      - package: MyNotionKit
+        product: PageMarkdown
       - target: mynotion-cli
         embed: true
         copy:

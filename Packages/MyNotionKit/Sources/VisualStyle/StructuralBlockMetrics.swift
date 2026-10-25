@@ -11,6 +11,13 @@ extension Metrics {
         public static let childrenTopSpacing: CGFloat = 4
     }
 
+    /// Свёрнутый заголовок: стрелка — та же, что у переключателя (`Toggle`), в месте «+» ручек; справа от текста —
+    /// серая подпись «…N блоков» шрифтом абзаца.
+    public enum HeadingFold {
+        /// От конца текста заголовка до подписи.
+        public static let labelSpacing: CGFloat = 8
+    }
+
     /// Черта слева во всю высоту цитаты и её детей, текст правее черты.
     public enum Quote {
         public static let barWidth: CGFloat = 3

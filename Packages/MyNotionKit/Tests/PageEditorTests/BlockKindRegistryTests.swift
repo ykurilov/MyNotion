@@ -76,10 +76,13 @@ struct BlockKindRegistryTests {
         #expect(MarkdownShortcuts.exitsOnEmptyEnter(.bulletItem) && !MarkdownShortcuts.exitsOnEmptyEnter(.paragraph))
     }
 
-    @Test("Рисователи по типу: у блоков 001 их нет, точка вызова на месте")
+    @Test("Рисователи по типу: у блоков 001 их нет, у заголовков — только стрелка и подпись свёрнутого")
     func paintersHook() {
-        for kind in [BlockKind.paragraph, .heading1, .bulletItem, .numberedItem, .checkbox, .pageLink] {
+        for kind in [BlockKind.paragraph, .bulletItem, .numberedItem, .checkbox, .pageLink] {
             #expect(BlockKindRegistry.descriptor(for: kind).painters.isEmpty)
+        }
+        for kind in [BlockKind.heading1, .heading2, .heading3] {
+            #expect(BlockKindRegistry.descriptor(for: kind).painters.map { "\(type(of: $0))" } == ["HeadingFoldPainter"])
         }
     }
 }

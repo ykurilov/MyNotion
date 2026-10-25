@@ -24,6 +24,8 @@ struct BlockLine {
     var baseline: CGFloat
     /// Где в пустой строке стоит курсор: начало текста блока.
     var caretX: CGFloat = 0
+    /// Где кончается текст строки: за ним — подпись свёрнутого заголовка.
+    var textEnd: CGFloat = 0
 
     /// Колонка маркера: от края вложенности на ширину `Metrics.BlockMarker.columnWidth`.
     var markerColumn: CGRect {
@@ -65,7 +67,9 @@ final class BlockLayoutFragment: NSTextLayoutFragment, @unchecked Sendable {
         // Колонка маркера лежит левее текста, название подстраницы — правее пустой строки.
         let containerWidth = textLayoutManager?.textContainer?.size.width ?? Metrics.Page.columnWidth
         // Сверху — место поля выноски: у первого блока страницы TextKit не даёт отступа над абзацем.
-        let wide = CGRect(x: -layoutFragmentFrame.minX, y: -Metrics.Callout.verticalPadding, width: containerWidth,
+        // Слева — ещё и место ручек: стрелка свёрнутого заголовка видна всегда (`HeadingFoldPainter`).
+        let gutter = Metrics.BlockHandles.addButtonLeadingOffset
+        let wide = CGRect(x: -layoutFragmentFrame.minX - gutter, y: -Metrics.Callout.verticalPadding, width: containerWidth + gutter,
                           height: layoutFragmentFrame.height + Metrics.Callout.verticalPadding)
         return bounds.union(wide)
     }
@@ -96,7 +100,8 @@ final class BlockLayoutFragment: NSTextLayoutFragment, @unchecked Sendable {
         func blockLine(_ line: NSTextLineFragment) -> BlockLine {
             let top = layoutFragmentFrame.minY + line.typographicBounds.minY + offset.y
             return BlockLine(indent: block.indent, shift: textView.layoutShift(ofBlock: block.id), top: top,
-                             height: line.typographicBounds.height, baseline: top + line.glyphOrigin.y)
+                             height: line.typographicBounds.height, baseline: top + line.glyphOrigin.y,
+                             textEnd: layoutFragmentFrame.minX + offset.x + line.textEndX)
         }
         // Пустая строка после последнего перевода строки страницы к тексту блока не относится.
         let lines = textLineFragments.filter { $0.characterRange.length > 0 }
@@ -279,7 +284,7 @@ extension PageTextView {
         let top = frame.minY + line.typographicBounds.minY
         let caretX = frame.minX + line.typographicBounds.minX + line.locationForCharacter(at: 0).x
         return BlockLine(indent: block.indent, shift: layoutShift(ofBlock: block.id), top: top, height: line.typographicBounds.height,
-                         baseline: top + line.glyphOrigin.y, caretX: caretX)
+                         baseline: top + line.glyphOrigin.y, caretX: caretX, textEnd: frame.minX + line.textEndX)
     }
 
     /// Маркер в колонке слева — по описателю типа (`BlockKinds/`).
@@ -305,6 +310,18 @@ extension PageTextView {
             ordinal += 1
         }
         return ordinal
+    }
+
+    /// Последняя строка текста блока в координатах контейнера.
+    func lastTextLine(ofBlockAt index: Int) -> BlockLine? {
+        guard let textLayoutManager, let contentStorage = textContentStorage, document.blocks.indices.contains(index),
+              let location = contentStorage.location(contentStorage.documentRange.location, offsetBy: mapper.paragraphStart(ofBlockAt: index))
+        else { return nil }
+        textLayoutManager.ensureLayout(for: NSTextRange(location: location))
+        guard let fragment = textLayoutManager.textLayoutFragment(for: location),
+              let line = fragment.textLineFragments.last(where: { $0.characterRange.length > 0 }) ?? fragment.textLineFragments.first
+        else { return nil }
+        return blockLine(line, in: fragment, block: document.blocks[index])
     }
 
     /// Строка блока с маркером в координатах контейнера: первая строка его абзаца.
@@ -380,5 +397,16 @@ extension PageTextView {
         textLayoutManager.invalidateLayout(for: range)
         textLayoutManager.textViewportLayoutController.layoutViewport()
         needsDisplay = true
+    }
+}
+
+extension NSTextLineFragment {
+    /// Конец текста строки от левого края фрагмента, без перевода строки в конце абзаца.
+    var textEndX: CGFloat {
+        let string = attributedString.string as NSString
+        var end = characterRange.upperBound
+        while end > characterRange.location, let scalar = UnicodeScalar(string.character(at: end - 1)),
+              CharacterSet.newlines.contains(scalar) { end -= 1 }
+        return typographicBounds.minX + locationForCharacter(at: end).x
     }
 }

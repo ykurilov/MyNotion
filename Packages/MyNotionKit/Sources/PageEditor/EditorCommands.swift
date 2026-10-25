@@ -62,6 +62,11 @@ public enum EditorKeyBindings {
         case ("p", [.command, .shift]): return .moveBlocksToPage
         case ("\u{F700}", [.option, .shift]): return .moveBlocksUp
         case ("\u{F701}", [.option, .shift]): return .moveBlocksDown
+        // ⌥⌘1…3 — заголовок, ⌥⌘0 — обычный текст, как в Notion.
+        case ("1", [.command, .option]): return .setKind(.heading1)
+        case ("2", [.command, .option]): return .setKind(.heading2)
+        case ("3", [.command, .option]): return .setKind(.heading3)
+        case ("0", [.command, .option]): return .setKind(.paragraph)
         default: return nil
         }
     }
