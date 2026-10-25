@@ -142,7 +142,13 @@ pnpm build && pnpm start   # http://localhost:3000/health → {"status":"ok"}
 ```
 
 Настройки — переменными окружения: `PORT` (3000), `DATA_DIR` (`./data`: база, резервные копии, файлы в `files/`),
-`BACKUP_KEEP` (14 копий), `FILES_LIMIT_GB` (50 ГБ на файлы). Развёртывание — `server/Dockerfile` и `docker-compose.yml`.
+`BACKUP_KEEP` (14 копий), `FILES_LIMIT_GB` (50 ГБ на файлы), `SHARES_LIMIT_GB` (10 ГБ на страницы по ссылке).
+Развёртывание — `server/Dockerfile` и `docker-compose.yml`.
+
+**Страницы по ссылке (006).** «•••» → «Поделиться» или `mynotion page share on <стр>`: Mac кладёт на сервер открытую
+копию страницы (снимок без закрытого), сервер показывает её по адресу `/s/<ссылка>` любому браузеру без входа.
+API и граница снимка — в [contracts/share-api.md](specs/006-share-link/contracts/share-api.md). Браузерные проверки:
+`cd server && pnpm build && pnpm exec playwright test` (снимки экрана — в `server/e2e-results/screenshots/`).
 
 ## Проверки на iMac
 
