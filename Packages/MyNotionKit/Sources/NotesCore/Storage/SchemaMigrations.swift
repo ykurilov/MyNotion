@@ -47,6 +47,9 @@ private let blockKindsOf002 = blockKindsOf001 + [
     "table", "tableRow", "tableColumn", "tableCell", "columnList", "column",
 ]
 
+/// Типы блоков v9 (004). Выпущенный шаг не меняется: новый тип — новая миграция, как v6 и v9.
+private let blockKindsOf004 = blockKindsOf002 + ["database"]
+
 private func createInitialSchema(_ db: Database) throws {
     let blockKinds = blockKindsOf001.map { "'\($0)'" }.joined(separator: ", ")
 
@@ -313,7 +316,7 @@ private func indexVersionFilesAndMoves(_ db: Database) throws {
 /// подписчики модуля `Databases`. `db_cell` и `db_computed` — без rowid: ячейки строки лежат рядом, видимые строки
 /// читаются одним проходом по ключу.
 private func addDatabases(_ db: Database) throws {
-    let blockKinds = BlockKind.allCases.map { "'\($0.rawValue)'" }.joined(separator: ", ")
+    let blockKinds = blockKindsOf004.map { "'\($0)'" }.joined(separator: ", ")
     try db.execute(sql: """
         CREATE TABLE block_v9 (
             id TEXT PRIMARY KEY NOT NULL,
