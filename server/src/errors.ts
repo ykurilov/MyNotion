@@ -8,7 +8,9 @@ export type ErrorCode =
   | 'not_found'
   | 'file_complete'
   | 'file_incomplete'
-  | 'storage_full';
+  | 'storage_full'
+  | 'share_disabled'
+  | 'file_not_in_document';
 
 /** Ошибка с готовым HTTP-статусом и текстом для Юрия: app.ts превращает её в единый JSON. */
 export class ApiError extends Error {

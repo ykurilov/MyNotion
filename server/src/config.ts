@@ -8,6 +8,8 @@ export interface Config {
   backupKeep: number;
   filesDir: string;
   filesLimitBytes: number;
+  sharesDir: string;
+  sharesLimitBytes: number;
 }
 
 export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -20,5 +22,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     backupKeep: Number(env.BACKUP_KEEP ?? 14),
     filesDir: join(dataDir, 'files'),
     filesLimitBytes: Math.round(Number(env.FILES_LIMIT_GB ?? 50) * 1024 ** 3),
+    sharesDir: join(dataDir, 'shares'),
+    sharesLimitBytes: Math.round(Number(env.SHARES_LIMIT_GB ?? 10) * 1024 ** 3),
   };
 }

@@ -7,6 +7,7 @@ import { openDatabase, type Db } from '../src/db.js';
 import { createDevices, type Devices } from '../src/devices.js';
 import { createFiles, type Files } from '../src/files.js';
 import { createJournal, type Journal } from '../src/journal.js';
+import { createShares, type Shares } from '../src/shares.js';
 
 const tempDirs: string[] = [];
 afterAll(() => {
@@ -25,6 +26,7 @@ export interface TestServer {
   journal: Journal;
   files: Files;
   filesDir: string;
+  shares: Shares;
   app: ReturnType<typeof createApp>;
   firstDevice: { deviceId: string; token: string };
   call(method: string, path: string, options?: CallOptions): Promise<Response>;
@@ -50,7 +52,8 @@ export function createTestServer(limits?: AppOptions['limits'], filesOptions: Fi
   const journal = createJournal(db, { devices });
   const filesDir = makeTempDir('mynotion-files-');
   const files = createFiles(db, { dir: filesDir, limitBytes: filesOptions.limitBytes ?? 1024 ** 3, now: filesOptions.now });
-  const app = createApp({ devices, journal, files, limits });
+  const shares = createShares(db, { dir: makeTempDir('mynotion-shares-'), limitBytes: 1024 ** 3 });
+  const app = createApp({ devices, journal, files, shares, limits });
   const firstDevice = devices.bootstrap('Первый Mac');
   return {
     db,
@@ -58,6 +61,7 @@ export function createTestServer(limits?: AppOptions['limits'], filesOptions: Fi
     journal,
     files,
     filesDir,
+    shares,
     app,
     firstDevice,
     call(method, path, options = {}) {

@@ -8,6 +8,7 @@ import { openDatabase } from './db.js';
 import { createDevices } from './devices.js';
 import { createFiles } from './files.js';
 import { createJournal } from './journal.js';
+import { createShares } from './shares.js';
 
 const DAY_MS = 24 * 3600_000;
 const config = readConfig();
@@ -17,7 +18,9 @@ const devices = createDevices(db);
 const journal = createJournal(db, { devices });
 const files = createFiles(db, { dir: config.filesDir, limitBytes: config.filesLimitBytes });
 
-const server = serve({ fetch: createApp({ devices, journal, files }).fetch, port: config.port }) as Server;
+const shares = createShares(db, { dir: config.sharesDir, limitBytes: config.sharesLimitBytes });
+
+const server = serve({ fetch: createApp({ devices, journal, files, shares }).fetch, port: config.port }) as Server;
 // долгое ожидание держит запрос до 25 с: сокеты не рвём раньше
 server.keepAliveTimeout = 65_000;
 server.requestTimeout = 0;
