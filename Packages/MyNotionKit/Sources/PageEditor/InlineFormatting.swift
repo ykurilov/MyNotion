@@ -285,7 +285,7 @@ extension PageTextView {
             }
             return
         }
-        if pasteInlineText(from: pasteboard, replacing: selection) { return }
+        if pasteCopiedBlocks(from: pasteboard, replacing: selection) || pasteInlineText(from: pasteboard, replacing: selection) { return }
         // Файлы из Finder и картинка из буфера — блоками (US5).
         if Self.pasteboardHasAttachments(pasteboard) {
             Task { await pasteAttachments(from: pasteboard) }

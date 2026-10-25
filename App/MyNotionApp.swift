@@ -28,6 +28,10 @@ struct MyNotionApp: App {
         PageTextView.defaultPastedTextReader = { text, html, pageId, hasRichText in
             PastedText.blocks(from: text, html: html, pageId: pageId, hasRichText: hasRichText)
         }
+        // ⌘C нескольких блоков — для других программ ещё Markdown простым текстом и HTML.
+        PageTextView.defaultCopiedBlocksWriter = { blocks, pageTitle in
+            (CopiedBlocksText.markdown(for: blocks, pageTitle: pageTitle), CopiedBlocksText.html(for: blocks, pageTitle: pageTitle))
+        }
         let options = LaunchOptions(arguments: CommandLine.arguments)
         // До первого окна: служебный запуск не появляется в Dock и не может стать активным.
         NSApplication.shared.setActivationPolicy(options.presence.activationPolicy)
