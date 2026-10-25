@@ -3,9 +3,9 @@
 # Выполняется НА iMac внутри `imac-run --gui` (в копии проекта):
 #
 #   imac-run --gui --no-fallback --no-setup --wait 3000 --fetch build/real-cursor -- \
-#     'zsh scripts/imac/real-cursor-check.zsh [page|inactive|window|both] [--skip-build]'
+#     'zsh scripts/imac/real-cursor-check.zsh [page|inactive|window|links|both] [--skip-build]'
 #
-# both — page и window. inactive — page и затем окно MyNotion позади другого приложения.
+# both — page и window. links — ссылка в тексте и подстраницы (рука). inactive — page и затем окно MyNotion позади другого приложения.
 # PROBE_MAX_X / PROBE_MAX_Y (экранные точки) — window проходит только часть окна.
 #
 # Над страницей путь из 4 предков: проба водит мышь по каждой крошке и по «…», ожидается HAND, плюс снимок build/real-cursor/breadcrumbs-hover.png.

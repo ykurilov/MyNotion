@@ -346,6 +346,8 @@ extension PageTextView {
         // Один указатель на событие. NSTextView.mouseMoved всегда ставит I-beam, рука ставилась следом —
         // над ⋮⋮, + и иконкой указатель мигал на каждом сдвиге мыши (живая трасса, scripts/imac/real-cursor-check.zsh).
         if let pointer = descendantPointer(atWindowPoint: event.locationInWindow) { return pointer.set() }
+        // Над подстраницей, упоминанием и ссылкой тоже только рука: I-beam NSTextView перед ней — мигание.
+        if isClickableText(at: convert(event.locationInWindow, from: nil)) { return NSCursor.pointingHand.set() }
         // CoverView уже выбрала свой курсор: I-beam NSTextView его бы затёр.
         let overCover = coverSlot.view?.frame.contains(convert(event.locationInWindow, from: nil)) == true
         if !overCover { super.mouseMoved(with: event) }
@@ -379,10 +381,16 @@ extension PageTextView {
         }
         // Курсоры вложенных редакторов, разделителей и resize-ручек принадлежат их видам.
         guard target == nil || target === self || target === emptyParagraphHint ||
-                target?.isDescendant(of: emptyParagraphHint) == true,
-              textPointerRect.contains(point) else { return false }
+                target?.isDescendant(of: emptyParagraphHint) == true else { return false }
+        if isClickableText(at: point) { NSCursor.pointingHand.set(); return true }
+        guard textPointerRect.contains(point) else { return false }
         NSCursor.iBeam.set()
         return true
+    }
+
+    /// Подстраница, упоминание или ссылка под точкой: они открываются щелчком, над ними рука, как в Notion.
+    func isClickableText(at point: NSPoint) -> Bool {
+        linkedPage(at: point) != nil || atomCharacter(at: point) != nil || link(at: point) != nil
     }
 
     private var textPointerRect: NSRect {
