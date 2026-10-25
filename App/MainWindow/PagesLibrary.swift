@@ -117,9 +117,17 @@ final class PagesLibrary {
         windowModels.first { $0.window?.isKeyWindow == true } ?? windowModels.first
     }
 
-    /// Страница удалена навсегда (нет ни в дереве, ни в корзине): вкладки пропускают её в «назад/вперёд».
+    /// Страница удалена навсегда (нет ни в дереве, ни в корзине, ни в базе — строк баз в дереве нет):
+    /// вкладки пропускают её в «назад/вперёд».
     func isDeletedForever(_ pageId: UUID) -> Bool {
-        tree.page(pageId) == nil && trashedPagesById[pageId] == nil
+        tree.page(pageId) == nil && trashedPagesById[pageId] == nil && (try? store.page(pageId)) == nil
+    }
+
+    /// Строка базы не в корзине: в дереве строк нет (research R1), поэтому — по записи в базе.
+    func databaseRow(_ pageId: UUID) -> Page? {
+        guard tree.page(pageId) == nil, trashedPagesById[pageId] == nil, let page = try? store.page(pageId),
+              page.trashedAt == nil, page.parentId.map(tree.isDatabase) == true else { return nil }
+        return page
     }
 
     /// Запись корзины, в которой лежит страница (сама страница или её предок), — её возвращает «Вернуть».

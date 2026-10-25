@@ -70,8 +70,6 @@ extension MainWindowModel {
         let rows = touched.filter { pageId in openDocuments.document(for: pageId).map(isDatabaseRow) ?? false }
         if !rows.isEmpty { openDocuments.applyExternalChanges(toPages: rows) }
         library.treeDidChange(touched)
-        // Строку из просмотра убрали в корзину или стёрли — просмотр закрывается.
-        if let rowPeek, !isLiveRow(rowPeek.document.pageId) { closeRowPeek() }
     }
 
     /// Добавки шапки страницы строки: свойства под названием. У обычной страницы — ничего.

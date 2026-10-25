@@ -396,6 +396,8 @@ final class MainWindowModel {
             return openEditor(releasedPageId, focus: reopenFocus ?? .body, scroll: scrollBeforeReload, remember: false)
         }
         if let openPageId, tree.page(openPageId) == nil, !isLiveRow(openPageId) { closeOpenDocument() }
+        // Строку из просмотра убрали в корзину или стёрли — просмотр закрывается.
+        if let rowPeek, !isLiveRow(rowPeek.document.pageId) { closeRowPeek() }
         showActiveTab(focus: .body)
     }
 
@@ -411,7 +413,7 @@ final class MainWindowModel {
         _ = tabsRevision
         return tabs.items.enumerated().map { index, tab in
             let isActive = index == tabs.activeIndex
-            let page = tab.pageId.flatMap { tree.page($0) ?? library.trashedPagesById[$0] }
+            let page = tab.pageId.flatMap { tree.page($0) ?? library.trashedPagesById[$0] ?? library.databaseRow($0) }
             let title = isActive ? liveTitleOfOpenPage ?? page?.title : page?.title
             return TabStripItem(id: tab.id, title: page == nil ? TabStripItem.recentPagesTitle : (title?.isEmpty == false ? title! : Page.untitledTitle),
                                 icon: page == nil ? .recentPages : page?.icon.map(TabStripItem.Icon.emoji) ?? .none, isActive: isActive)
