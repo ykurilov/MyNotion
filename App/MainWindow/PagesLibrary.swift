@@ -41,6 +41,8 @@ final class PagesLibrary {
     @ObservationIgnored let reminders: ReminderNotifications
     /// Синхронизация между Mac (US5); выключена — ничего не делает.
     @ObservationIgnored private(set) var sync: SyncController!
+    /// Ссылки на страницы для чтения (006).
+    @ObservationIgnored private(set) var sharing: ShareController!
     /// История версий страниц (003, US6).
     @ObservationIgnored private(set) var versions: AppPageVersions!
     /// Окно, открытое при запуске: его ждут замеры, галерея и снимки окна.
@@ -69,6 +71,8 @@ final class PagesLibrary {
         reloadTree()
         sync = SyncController(store: store, openDocuments: openDocuments, attachments: attachments, startsEngine: startsSync)
         sync.onRemoteChange = { [weak self] _ in self?.remoteChangesApplied() }
+        sharing = ShareController(store: store, attachments: attachments, sync: sync)
+        if startsSync { sharing.start() }
         versions = AppPageVersions(store: store, deviceName: sync.deviceName, timing: versionTiming)
         firstWindow = MainWindowModel(library: self, opening: nil, restoresTabs: true)
         reminders.openBlock = { [weak self] pageId, blockId in self?.openBlock(blockId, inPage: pageId) }

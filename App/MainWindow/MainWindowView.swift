@@ -220,6 +220,13 @@ private struct PagesWindow: View {
         // Строка базы по центру — над всем окном, под историей версий (US1, «Страница строки»).
         .overlay { RowPeekHost(model: model, mode: .centerPeek, mentions: mentionSettings(pages: linkedPages), linkedPages: linkedPages) }
         .overlay { VersionHistoryOverlay(model: model, mentions: mentionSettings(pages: linkedPages)) }
+        .modalCard(isPresented: model.sharePageId != nil) {
+            if let pageId = model.sharePageId {
+                ShareDialogView(controller: model.sharing, pageId: pageId, pageTitle: model.tree.page(pageId)?.title ?? "",
+                                openSyncSettings: { model.sharePageId = nil; model.isSyncSettingsShown = true },
+                                close: { model.sharePageId = nil })
+            }
+        }
         .modalCard(isPresented: model.isSyncSettingsShown) {
             SyncSettingsView(controller: model.syncSettingsPreview ?? model.sync) { model.isSyncSettingsShown = false }
         }

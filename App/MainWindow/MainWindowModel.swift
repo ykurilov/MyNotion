@@ -138,6 +138,8 @@ final class MainWindowModel {
     var sync: SyncController! { library.sync }
     /// Настройки синхронизации — карточкой поверх этого окна (⌘, или «Настройки синхронизации…» у значка).
     var isSyncSettingsShown = false
+    /// Окно «Поделиться» для этой страницы (006).
+    var sharePageId: UUID?
     /// Галерея показывает в карточке настроек свой образец вместо настоящего подключения.
     var syncSettingsPreview: SyncController?
 

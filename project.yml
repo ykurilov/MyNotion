@@ -73,6 +73,8 @@ targets:
         product: PagePicker
       - package: MyNotionKit
         product: PageCover
+      - package: MyNotionKit
+        product: PageSharing
       # 004: базы данных.
       - package: MyNotionKit
         product: Formulas
@@ -228,6 +230,7 @@ schemes:
         - package: MyNotionKit/NavigationTests
         - package: MyNotionKit/PagePickerTests
         - package: MyNotionKit/PageCoverTests
+        - package: MyNotionKit/PageSharingTests
         - package: MyNotionKit/ControlProtocolTests
         - package: MyNotionKit/ControlServerTests
         - package: MyNotionKit/ControlClientTests

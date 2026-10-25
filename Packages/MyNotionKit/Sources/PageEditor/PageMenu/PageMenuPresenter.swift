@@ -95,6 +95,7 @@ extension PageMenuSlot {
         case .duplicate: "square.on.square"
         case .moveTo: "arrow.turn.up.right"
         case .versionHistory: "clock.arrow.circlepath"
+        case .share: "link"
         case .exportDatabase: "square.and.arrow.up"
         case .appearance: "textformat"
         case .template: "doc.on.doc"
