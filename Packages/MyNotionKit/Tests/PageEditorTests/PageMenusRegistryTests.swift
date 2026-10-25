@@ -59,7 +59,7 @@ struct PageMenusRegistryTests {
         let items = [PageMenuItem(slot: .findAction, title: { _ in "Найти действие…" }, kind: .search), Self.item(.duplicate, "Дублировать"),
                      Self.item(.moveTo, "Переместить в"), Self.item(.trash, "Удалить в корзину"),
                      PageMenuItem(slot: .footer, title: { _ in "Изменено" }, kind: .footer)]
-        let view = PageMenuView(rows: PageMenuLayout.rows(items, context: context), context: context)
+        let view = PageMenuView(rows: PageMenuLayout.rows(items, context: context), context: { context })
         #expect(view.visibleTitles == ["Дублировать", "Переместить в", "Удалить в корзину"])
         view.filter("уда")
         #expect(view.visibleTitles == ["Удалить в корзину"])
@@ -71,10 +71,42 @@ struct PageMenusRegistryTests {
     func actionRuns() throws {
         var ran: [UUID] = []
         let item = PageMenuItem(slot: .trash, title: { _ in "Удалить в корзину" }, kind: .action({ ran.append($0.page.id) }, shortcut: "⌘⌫"))
-        let view = PageMenuView(rows: PageMenuLayout.rows([item], context: context), context: context)
+        let view = PageMenuView(rows: PageMenuLayout.rows([item], context: context), context: { context })
         let row = try #require(view.actions.rowViews.first)
         row.press()
         #expect(ran == [context.page.id])
+    }
+
+    @Test("«Вид страницы ›»: переключатель в одном открытом меню — туда и обратно много раз, каждый щелчок по текущей странице")
+    func appearanceTogglesFollowPage() throws {
+        var page = context.page
+        let item = PageMenuItem(slot: .appearance, title: { _ in "Вид страницы" }, kind: .toggles([
+            PageMenuToggle(title: "Мелкий шрифт", isOn: { $0.page.isSmallText }, toggle: { page.isSmallText = !$0.page.isSmallText }),
+            PageMenuToggle(title: "Широкая страница", isOn: { $0.page.isFullWidth }, toggle: { page.isFullWidth = !$0.page.isFullWidth }),
+        ]))
+        let view = PageMenuView(rows: PageMenuLayout.rows([item], context: context), context: { PageMenuContext(page: page, wordCount: 0) })
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 400), styleMask: [.titled], backing: .buffered, defer: true)
+        window.contentView = view
+        try #require(view.actions.rowViews.first).press()
+        defer { view.submenu.close() }
+        let smallText = try #require(view.submenu.rows.first)
+        let fullWidth = try #require(view.submenu.rows.last)
+
+        var widths: [Bool] = []
+        for _ in 0..<4 {
+            fullWidth.press()
+            widths.append(page.isFullWidth)
+        }
+        #expect(widths == [true, false, true, false])
+        smallText.press()
+        fullWidth.press()
+        smallText.press()
+        #expect(page.isFullWidth && !page.isSmallText)
+
+        // Подменю открыли снова в том же меню — переключатели показывают страницу, а не меню на момент открытия.
+        view.submenu.close()
+        try #require(view.actions.rowViews.first).press()
+        #expect(view.submenu.rows.map(\.isOn) == [false, true])
     }
 
     @Test("Подменю «Вид страницы ›» — по середине своей строки, заходит на меню на 4, как у Notion 7.39 (T101 № 11)")
@@ -97,7 +129,7 @@ struct PageMenusRegistryTests {
         let items = [PageMenuItem(slot: .findAction, title: { _ in "Найти действие…" }, kind: .search), Self.item(.duplicate, "Дублировать"),
                      Self.item(.moveTo, "Переместить в"), Self.item(.versionHistory, "История версий"), Self.item(.template, "Сделать шаблоном"),
                      Self.item(.trash, "Удалить в корзину"), PageMenuItem(slot: .footer, title: { _ in "Изменено" }, kind: .footer)]
-        let view = PageMenuView(rows: PageMenuLayout.rows(items, context: context), context: context)
+        let view = PageMenuView(rows: PageMenuLayout.rows(items, context: context), context: { context })
         #expect(view.fittingSize.width == 256)
         #expect(view.actions.rowViews.allSatisfy { $0.action.icon != nil })
     }
