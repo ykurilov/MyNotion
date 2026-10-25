@@ -40,6 +40,7 @@ let package = Package(
         .library(name: "ControlCommands", targets: ["ControlCommands"]),
         .library(name: "PageMarkdown", targets: ["PageMarkdown"]),
         .library(name: "PageSharing", targets: ["PageSharing"]),
+        .library(name: "Proofreading", targets: ["Proofreading"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.11.1"),
@@ -50,7 +51,7 @@ let package = Package(
         .target(name: "PageTree", dependencies: ["NotesCore", "VisualStyle"]),
         // Тяжёлые модули (вложения, видео, напоминания, закладки) редактор видит только через протоколы фабрик
         // видов `BlockViewFactories`, которые передаёт приложение (plan.md, Structure Decision).
-        .target(name: "PageEditor", dependencies: ["NotesCore", "VisualStyle", "EmojiPicker", "CodeHighlighting", "MathRendering"]),
+        .target(name: "PageEditor", dependencies: ["NotesCore", "VisualStyle", "EmojiPicker", "CodeHighlighting", "MathRendering", "Proofreading"]),
         // Окно выбора эмодзи (FR-034): список и названия — из Unicode и CLDR (scripts/emoji/build-emoji-data.py).
         .target(name: "EmojiPicker", dependencies: ["VisualStyle"], resources: [.copy("Resources/emoji.tsv")]),
         .target(name: "PageSearch", dependencies: ["NotesCore", "VisualStyle", .product(name: "GRDB", package: "GRDB.swift")]),
@@ -109,14 +110,16 @@ let package = Package(
                                                         "Attachments", "MarkdownExport", "NotionImport", "Navigation", "PageMarkdown", "PageCover",
                                                         .product(name: "GRDB", package: "GRDB.swift")]),
         // Страница ↔ Markdown для агента (research R5).
-        .target(name: "PageMarkdown", dependencies: ["NotesCore", "MarkdownExport", "NotionImport", "Attachments"]),
+        .target(name: "PageMarkdown", dependencies: ["NotesCore", "MarkdownExport", "NotionImport", "Attachments", "LinkPreview"]),
+        // «Исправить ошибки»: запрос к DeepSeek, ключ в связке ключей, перенос оформления и правки по словам — без AppKit.
+        .target(name: "Proofreading", dependencies: ["NotesCore"]),
         // 006. Ссылка на страницу только для чтения: снимок без закрытого, публикация после правок (contracts/share-api.md).
         .target(name: "PageSharing", dependencies: ["NotesCore", "MarkdownExport", "PageCover", "Sync", .product(name: "GRDB", package: "GRDB.swift")]),
 
         .testTarget(name: "VisualStyleTests", dependencies: ["VisualStyle"]),
         .testTarget(name: "NotesCoreTests", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "PageTreeTests", dependencies: ["PageTree"]),
-        .testTarget(name: "PageEditorTests", dependencies: ["PageEditor", "NotesCore", "EmojiPicker"]),
+        .testTarget(name: "PageEditorTests", dependencies: ["PageEditor", "NotesCore", "EmojiPicker", "Proofreading"]),
         .testTarget(name: "EmojiPickerTests", dependencies: ["EmojiPicker", "NotesCore"]),
         .testTarget(name: "PageSearchTests", dependencies: ["PageSearch", "NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "MarkdownExportTests", dependencies: ["MarkdownExport", "NotesCore", "Databases"]),
@@ -151,6 +154,7 @@ let package = Package(
         .testTarget(name: "PageMarkdownTests", dependencies: ["PageMarkdown", "NotesCore", "MarkdownExport", "NotionImport", "Attachments", "PageEditor"],
                     resources: [.copy("Fixtures")]),
         .testTarget(name: "PageSharingTests", dependencies: ["PageSharing", "NotesCore", "Databases", "Sync", .product(name: "GRDB", package: "GRDB.swift")]),
+        .testTarget(name: "ProofreadingTests", dependencies: ["Proofreading", "NotesCore"]),
     ],
     swiftLanguageModes: [.v6]
 )

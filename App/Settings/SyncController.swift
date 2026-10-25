@@ -113,9 +113,9 @@ final class SyncController {
     /// «Добавить Mac»: одноразовый код на 15 минут.
     func makeJoinCode() async {
         await perform {
-            guard let account = self.account, let transport = try self.transport() else { return }
+            guard let account = self.account, let transport = try await self.transport() else { return }
             let invite = try await transport.invite()
-            guard let key = try self.secrets.load(for: account.deviceId)?.encryptionKey else { throw SyncSetupError.missingSecrets }
+            guard let key = try await self.loadSecrets(for: account.deviceId)?.encryptionKey else { throw SyncSetupError.missingSecrets }
             self.joinCode = JoinCode(inviteCode: invite.inviteCode, encryptionKey: key)
             self.joinCodeExpiresAt = invite.expiresAt
         }
@@ -128,7 +128,7 @@ final class SyncController {
 
     func refreshDevices() async {
         await perform {
-            guard let transport = try self.transport() else { return }
+            guard let transport = try await self.transport() else { return }
             self.devices = try await transport.devices()
         }
     }
@@ -136,7 +136,7 @@ final class SyncController {
     /// Отключить другой Mac (потерянный): его токен больше не действует.
     func disconnect(_ device: SyncDevice) async {
         await perform {
-            guard let transport = try self.transport() else { return }
+            guard let transport = try await self.transport() else { return }
             try await transport.deleteDevice(device.deviceId)
             self.devices = try await transport.devices()
         }
@@ -145,7 +145,7 @@ final class SyncController {
     /// Выключить синхронизацию на этом Mac: записи остаются, подключение и очередь удаляются.
     func disable() async {
         await perform {
-            if let account = self.account, let transport = try? self.transport() {
+            if let account = self.account, let transport = try? await self.transport() {
                 // Сервер больше не ждёт этот Mac для сжатия журнала; без связи — не страшно.
                 try? await transport.deleteDevice(account.deviceId)
             }
@@ -184,7 +184,7 @@ final class SyncController {
     }
 
     func refreshFilesUsage() async {
-        guard let account, let secret = try? secrets.load(for: account.deviceId) else { return }
+        guard let account, let secret = try? await loadSecrets(for: account.deviceId) else { return }
         serverFilesUsage = try? await HTTPSyncServer(url: account.serverURL).fileTransport(deviceToken: secret.deviceToken).filesUsage()
     }
 
@@ -217,11 +217,21 @@ final class SyncController {
         startEngine(for: account)
     }
 
+    /// Секреты читаются в фоне: окно и сервер команд поднимаются, даже пока macOS спрашивает доступ к связке ключей,
+    /// а синхронизация стартует, когда ключ получен.
     private func startEngine(for account: SyncAccount) {
-        guard let secret = try? secrets.load(for: account.deviceId) else {
-            errorMessage = SyncSetupError.missingSecrets.localizedDescription
-            return
+        Task { [weak self] in
+            let secret = try? await self?.loadSecrets(for: account.deviceId)
+            guard let self, self.account?.deviceId == account.deviceId, self.engine == nil else { return }
+            guard let secret else {
+                self.errorMessage = SyncSetupError.missingSecrets.localizedDescription
+                return
+            }
+            self.startEngine(for: account, secret: secret)
         }
+    }
+
+    private func startEngine(for account: SyncAccount, secret: SyncSecretValues) {
         let applier = RemoteChangeApplier(store: store, openDocuments: openDocuments, localDeviceName: account.deviceName)
         applier.onApplied = { [weak self] report in
             self?.notices += report.notices.filter { notice in
@@ -258,9 +268,15 @@ final class SyncController {
         return HTTPSyncServer(url: url)
     }
 
-    private func transport() throws -> (any SyncTransport)? {
-        guard let account, let secret = try secrets.load(for: account.deviceId) else { return nil }
+    private func transport() async throws -> (any SyncTransport)? {
+        guard let account, let secret = try await loadSecrets(for: account.deviceId) else { return nil }
         return HTTPSyncServer(url: account.serverURL).transport(deviceToken: secret.deviceToken)
+    }
+
+    /// Чтение связки ключей не на главном потоке: вопрос macOS о доступе не останавливает окно.
+    private func loadSecrets(for deviceId: String) async throws -> SyncSecretValues? {
+        let secrets = secrets
+        return try await Task.detached(priority: .userInitiated) { try secrets.load(for: deviceId) }.value
     }
 
     private func perform(_ action: @escaping @MainActor () async throws -> Void) async {

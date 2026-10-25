@@ -120,6 +120,8 @@ final class FormatBarWindow: NSPanel {
 @MainActor
 final class FormatBarView: NSView {
     let kindRow = FormatBarKindRowView()
+    /// «Исправить ошибки» под кнопками.
+    let proofreadRow = FormatBarActionRowView(title: "Исправить ошибки", symbolName: "text.badge.checkmark", identifier: "format-proofread")
     private(set) var buttons: [FormatBarButtonView] = []
     var state = FormatBarState(kind: .paragraph, active: []) {
         didSet {
@@ -136,6 +138,10 @@ final class FormatBarView: NSView {
         set { kindRow.onClick = newValue }
     }
     var onButton: ((FormatBarButton) -> Void)?
+    var onProofread: (() -> Void)? {
+        get { proofreadRow.onClick }
+        set { proofreadRow.onClick = newValue }
+    }
 
     init() {
         super.init(frame: .zero)
@@ -149,6 +155,7 @@ final class FormatBarView: NSView {
             addSubview(view)
             return view
         }
+        addSubview(proofreadRow)
     }
 
     @available(*, unavailable)
@@ -174,6 +181,14 @@ final class FormatBarView: NSView {
                                   y: rowTop + CGFloat(index / columns) * Metrics.FormatBar.buttonRowHeight,
                                   width: Metrics.FormatBar.buttonWidth, height: Metrics.FormatBar.buttonRowHeight)
         }
+        proofreadRow.frame = NSRect(x: kindRow.frame.minX, y: actionDividerY + Metrics.FormatBar.actionDividerSpacing / 2,
+                                    width: kindRow.frame.width, height: Metrics.FormatBar.actionRowHeight)
+    }
+
+    /// Линия между кнопками и строкой «Исправить ошибки».
+    private var actionDividerY: CGFloat {
+        card.minY + Metrics.FormatBar.verticalPadding + Metrics.FormatBar.kindRowHeight + Metrics.FormatBar.kindToButtonsSpacing
+            + CGFloat(Metrics.FormatBar.buttonRows) * Metrics.FormatBar.buttonRowHeight + Metrics.FormatBar.actionDividerSpacing / 2
     }
 
     func buttonView(_ button: FormatBarButton) -> FormatBarButtonView? {
@@ -182,6 +197,8 @@ final class FormatBarView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         PopupSurface.draw(card: card)
+        Palette.popupDivider.setFill()
+        NSRect(x: card.minX, y: actionDividerY.rounded(.down), width: card.width, height: 1).fill()
     }
 }
 
@@ -257,6 +274,39 @@ final class FormatBarKindRowView: FormatBarControlView {
         let textX = Metrics.FormatBar.kindTitleX - inset
         NSAttributedString(string: state.kindTitle, attributes: [.font: titleStyle.font, .foregroundColor: Palette.textPrimary])
             .draw(in: NSRect(x: textX, y: (bounds.height - titleStyle.lineHeight) / 2, width: textEnd - textX, height: titleStyle.lineHeight))
+    }
+}
+
+/// Строка действия под кнопками: значок на месте значка типа, название — с той же линии, что название типа.
+@MainActor
+final class FormatBarActionRowView: FormatBarControlView {
+    let title: String
+    private let symbolName: String
+
+    init(title: String, symbolName: String, identifier: String) {
+        self.title = title
+        self.symbolName = symbolName
+        super.init(frame: .zero)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
+        setAccessibilityLabel(title)
+        setAccessibilityIdentifier(identifier)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
+
+    override func draw(_ dirtyRect: NSRect) {
+        if isHovered { PopupMenuRowView.drawHighlight(in: bounds) }
+        let inset = Metrics.PopupMenu.rowInset
+        let iconSize = Metrics.PopupMenu.iconSize
+        PopupMenuRowView.drawIcon(.symbol(symbolName), color: Palette.textPrimary,
+                                  in: NSRect(x: Metrics.FormatBar.kindIconCenterX - inset - iconSize / 2, y: (bounds.height - iconSize) / 2,
+                                             width: iconSize, height: iconSize))
+        let titleStyle = Typography.popupMenuTitle
+        let textX = Metrics.FormatBar.kindTitleX - inset
+        NSAttributedString(string: title, attributes: [.font: titleStyle.font, .foregroundColor: Palette.textPrimary])
+            .draw(in: NSRect(x: textX, y: (bounds.height - titleStyle.lineHeight) / 2, width: bounds.maxX - textX, height: titleStyle.lineHeight))
     }
 }
 
@@ -414,6 +464,13 @@ final class FormatBarController {
         observers = []
     }
 
+    /// «Исправить ошибки»: панель уступает место окну правок.
+    func proofread() {
+        guard isShown, let textView else { return }
+        hide()
+        textView.startProofreading()
+    }
+
     func press(_ button: FormatBarButton) {
         guard isShown, let textView else { return }
         guard button != .color else {
@@ -532,6 +589,7 @@ final class FormatBarController {
     private func makeWindow() -> FormatBarWindow {
         let window = FormatBarWindow()
         window.barView.onButton = { [weak self] button in self?.press(button) }
+        window.barView.onProofread = { [weak self] in self?.proofread() }
         window.barView.onKind = { [weak self] in
             guard let self else { return }
             if isKindMenuOpen { closeKindMenu() } else { openKindMenu() }
@@ -605,6 +663,11 @@ extension PageTextView {
     /// Курсор без выделения, режим блоков, набор с подбором букв — панели нет.
     func updateFormatBar() {
         guard !isPerformingCommand else { return }
+        // Пока открыто окно правок, панели нет: окно стоит на её месте.
+        guard !proofreading.isShown else {
+            formatBar.hide()
+            return
+        }
         let selection = selectedRange()
         guard selection.length > 0, !isBlockSelection, !hasMarkedText(), let window, window.firstResponder === self,
               let blocks = selectedBlockRange() else {

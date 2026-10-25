@@ -329,7 +329,7 @@ extension PageTextView {
         guard let textLayoutManager, let contentStorage = textContentStorage, document.blocks.indices.contains(index),
               let location = contentStorage.location(contentStorage.documentRange.location, offsetBy: mapper.paragraphStart(ofBlockAt: index))
         else { return nil }
-        textLayoutManager.ensureLayout(for: NSTextRange(location: location))
+        textLayoutManager.ensureLayoutFromStart(through: location)
         guard let fragment = textLayoutManager.textLayoutFragment(for: location), let line = fragment.textLineFragments.first else { return nil }
         return blockLine(line, in: fragment, block: document.blocks[index])
     }

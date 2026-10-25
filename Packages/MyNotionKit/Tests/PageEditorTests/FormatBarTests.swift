@@ -333,10 +333,10 @@ struct FormatBarTests {
         return view
     }
 
-    @Test("Размер карточки, как у Notion 7.39: 5 мест по 36 и поля 7 (194), строка типа 32, два ряда кнопок по 32")
+    @Test("Размер карточки, как у Notion 7.39: 5 мест по 36 и поля 7 (194), строка типа 32, два ряда кнопок по 32, под чертой «Исправить ошибки» 32")
     func cardSize() {
         #expect(Metrics.FormatBar.width == 194)
-        let height: CGFloat = 6 + 32 + 6 + 2 * 32 + 6
+        let height: CGFloat = 6 + 32 + 6 + 2 * 32 + 9 + 32 + 6
         #expect(Metrics.FormatBar.height == height, "Высота \(Metrics.FormatBar.height)")
     }
 

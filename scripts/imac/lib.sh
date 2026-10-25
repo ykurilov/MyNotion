@@ -8,6 +8,12 @@ WORK=$PWD
 
 fail() { print -u2 -- "[MyNotion/iMac] $*"; exit 3; }
 
+# Постоянная подпись Release (project.yml) — сертификатом Developer ID основного Mac. На iMac его нет:
+# здесь сборки подписываются ad-hoc, а приложение для установки переподписывает scripts/sign-app.sh.
+if ! security find-identity -p codesigning -v 2>/dev/null | grep -q '"Developer ID Application:'; then
+  export XCODE_XCCONFIG_FILE=$WORK/scripts/imac/adhoc-signing.xcconfig
+fi
+
 # macOS 26+ и Xcode 26+ (Swift 6.2), xcodegen — без них MyNotion не собрать.
 require_toolchain() {
   local os xc
