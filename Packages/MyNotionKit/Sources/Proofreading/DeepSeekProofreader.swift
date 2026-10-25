@@ -19,7 +19,7 @@ public struct DeepSeekProofreader: TextProofreader {
             throw ProofreadingError.missingKey
         }
         let data = try await perform(DeepSeekRequest.urlRequest(text: text, key: key))
-        return try DeepSeekRequest.correctedText(from: data)
+        return try DeepSeekRequest.correctedText(from: data, source: text)
     }
 
     /// «Проверить» в Настройках: ключ подходит, если DeepSeek отдаёт по нему список моделей.

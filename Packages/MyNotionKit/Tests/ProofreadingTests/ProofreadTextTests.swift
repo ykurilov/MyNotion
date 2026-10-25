@@ -120,6 +120,13 @@ struct ProofreadTextTests {
         let text = ProofreadText(segments: [original.normalized(), InlineText("второй")])
         #expect(text.displayText(of: text.source, visible: { $0.plainText(pageTitle: { _ in "@Страница" }) }) == "см. @Страница и x+1\nвторой")
     }
+
+    @Test("Для окна: пустая строка внутри блока (два ⇧Enter) остаётся, граница блоков — одна строка")
+    func displayKeepsBlankLineInsideBlock() {
+        let text = ProofreadText(segments: [InlineText("превет\n\nвсем"), InlineText("дила")])
+        #expect(text.displayText(of: text.source, visible: { $0.string }) == "превет\n\nвсем\nдила")
+        #expect(text.displayText(of: "привет\n\nвсем\n\nдела", visible: { $0.string }) == "привет\n\nвсем\nдела")
+    }
 }
 
 @Suite("Правки по словам")

@@ -53,9 +53,24 @@ extension PageTextView {
         commitEdits()
         // Свёрнутый заголовок последним в выделении едет со своим разделом.
         guard let selected = selectedBlockRange().map({ $0.lowerBound..<max($0.upperBound, movedGroupEnd(ofBlockAt: $0.upperBound - 1)) }),
-              let change = BlockMoveController.moving(document.blocks, selected: selected, by: delta) else { return }
+              let change = moving(selected, by: delta) else { return }
         let moved = Set(document.blocks[BlockMoveController.movedGroup(document.blocks, selected: selected)].map(\.id))
         changeBlocks(change.range, to: change.drafts, moved: moved, actionName: "Переставить блок")
+    }
+
+    /// Перестановка на одно место, где свёрнутый сосед переступается целиком, со спрятанным: блок не попадает
+    /// в чужой скрытый раздел.
+    private func moving(_ selected: Range<Int>, by delta: Int) -> BlockStructure.Change? {
+        let blocks = document.blocks
+        let group = BlockMoveController.movedGroup(blocks, selected: selected)
+        if delta > 0, group.upperBound < blocks.count {
+            return BlockMoveController.moving(blocks, group: group, toGap: movedGroupEnd(ofBlockAt: group.upperBound))
+        }
+        if delta < 0, let above = blocks[..<group.lowerBound].lastIndex(where: { $0.indent <= blocks[group.lowerBound].indent }),
+           hiddenParagraphs.isHidden(blocks[above].id), let owner = hiddenRunOwner(ofBlockAt: above) {
+            return BlockMoveController.moving(blocks, group: group, toGap: owner)
+        }
+        return BlockMoveController.moving(blocks, selected: selected, by: delta)
     }
 
     /// Перетащить блок за «⋮⋮» вместе с вложенными (свёрнутый заголовок — с разделом) в зазор `gap` между блоками

@@ -198,8 +198,13 @@ public struct ProofreadText: Sendable {
     // MARK: Для окна правок
 
     /// Строка для показа: метки — видимым текстом вставок (`visible`), граница блоков — одним переводом строки.
+    /// Пустая строка внутри блока (два ⇧Enter) остаётся.
     public func displayText(of text: String, visible: (InlineText) -> String) -> String {
-        var result = text.replacingOccurrences(of: "\n\n", with: "\n")
+        let target = normalized(text)
+        let map = Alignment(source: units, target: target).sourceToTarget
+        // Второй перевод строки каждого разделителя кусков — там, куда его отнесло сравнение.
+        let dropped = Set(segmentRanges.dropFirst().compactMap { map[$0.lowerBound - 1] })
+        var result = String(decoding: target.enumerated().filter { !dropped.contains($0.offset) }.map(\.element), as: UTF16.self)
         for (index, token) in tokens.enumerated().reversed() {
             result = result.replacingOccurrences(of: "⟦\(index + 1)⟧", with: visible(token.original))
         }

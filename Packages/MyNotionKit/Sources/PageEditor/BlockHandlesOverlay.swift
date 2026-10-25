@@ -519,11 +519,12 @@ extension PageTextView {
         let frames = visibleBlockFrames()
         guard let first = frames.first else { return nil }
         let local = BlockMoveController.gap(forPointerY: y, blockFrames: frames.map(\.frame))
+        // Номер блока — из рамки: между видимыми бывают спрятанные в свёрнутом, под последним — его спрятанное.
         if local < frames.count {
-            return (first.index + local, frames[local].frame.lowerBound)
+            return (frames[local].index, frames[local].frame.lowerBound)
         }
         let last = frames[frames.count - 1]
-        return (last.index + 1, last.frame.upperBound)
+        return (endIncludingHidden(ofBlockAt: last.index), last.frame.upperBound)
     }
 
     /// Высоты видимых блоков (координаты окна текста) по порядку.

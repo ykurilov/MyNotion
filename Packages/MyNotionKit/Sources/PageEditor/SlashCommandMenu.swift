@@ -1050,11 +1050,12 @@ extension PageTextView {
         guard let index = document.index(ofBlock: blockId) else { return }
         switch item.action {
         case .setKind(let kind): setKind(kind, ofBlocksAt: index..<index + 1)
-        case .delete: removeBlocks(at: index..<index + 1)
-        case .duplicate: duplicateBlocks(at: index..<index + 1)
+        // Свёрнутый переключатель или заголовок — со спрятанным под ним.
+        case .delete: removeBlocks(at: index..<endIncludingHidden(ofBlockAt: index))
+        case .duplicate: duplicateBlocks(at: index..<endIncludingHidden(ofBlockAt: index))
         case .moveTo:
             // Меню блока внутри выделения действует на всё выделение, как у Notion.
-            let range = selectedBlocks.flatMap { $0.contains(index) ? $0 : nil } ?? index..<index + 1
+            let range = selectedBlocks.flatMap { $0.contains(index) ? $0 : nil } ?? index..<endIncludingHidden(ofBlockAt: index)
             requestMoveBlocks(range, anchor: menuFrame.map { NSRect(x: $0.minX, y: $0.maxY, width: $0.width, height: 0) })
             return
         case .insertColumns(let count):

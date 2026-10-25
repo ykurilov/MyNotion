@@ -323,6 +323,20 @@ extension PageTextView {
         return owner >= 0 ? owner : nil
     }
 
+    /// Конец блока `index` вместе со спрятанным под ним: у свёрнутого переключателя или заголовка — за скрытыми блоками.
+    func endIncludingHidden(ofBlockAt index: Int) -> Int {
+        let blocks = document.blocks
+        var end = index + 1
+        while end < blocks.count, hiddenParagraphs.isHidden(blocks[end].id) { end += 1 }
+        return end
+    }
+
+    /// Ближайший видимый блок выше блока `index`: спрятанные в свёрнутом переступаются; `nil` — выше нет.
+    func visibleBlock(before index: Int) -> Int? {
+        guard index > 0 else { return nil }
+        return hiddenParagraphs.isHidden(document.blocks[index - 1].id) ? hiddenRunOwner(ofBlockAt: index - 1) : index - 1
+    }
+
     /// Выделение с учётом спрятанного (research R1): курсор внутри уходит к концу строки переключателя, а шагом вправо
     /// с конца этой строки — за спрятанное; край выделения, захватившего свёрнутый переключатель, тянется за его детей;
     /// выделение целиком внутри спрятанного (⌘F) раскрывает всех предков.
@@ -355,14 +369,20 @@ extension PageTextView {
 
     /// ⌫ в начале абзаца сразу под свёрнутым переключателем или заголовком склеивает его с текстом владельца, а не
     /// со спрятанным блоком; владелец остаётся свёрнутым.
+    /// Заголовок под свёрнутым заголовком ⌫ делает абзацем, и тот ушёл бы в спрятанный раздел: верхний раскрывается.
     func handleBackspaceUnderCollapsedToggle() -> Bool {
         let selection = selectedRange()
         guard selection.length == 0, !hiddenParagraphs.hiddenBlockIds.isEmpty,
               let position = mapper.blockPosition(at: selection.location), position.offset == 0, position.index > 0,
-              document.blocks[position.index].kind == .paragraph,
               hiddenParagraphs.isHidden(document.blocks[position.index - 1].id),
               let toggle = hiddenRunOwner(ofBlockAt: position.index - 1)
         else { return false }
+        guard document.blocks[position.index].kind == .paragraph else {
+            if document.blocks[position.index].kind.isHeading, document.blocks[toggle].kind.isHeading {
+                setCollapsed(false, ofBlock: document.blocks[toggle].id)
+            }
+            return false
+        }
         let blocks = document.blocks
         let joined = blocks[position.index]
         var drafts = blocks[toggle..<position.index].map(BlockDraft.init)
