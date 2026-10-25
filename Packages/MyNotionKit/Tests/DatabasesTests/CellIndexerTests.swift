@@ -107,6 +107,20 @@ struct CellIndexerTests {
         #expect(try hits().isEmpty)
     }
 
+    @Test("Текст сменил тип на нетекстовый — старое значение пропадает из поиска страниц")
+    func typeChangeDropsSearchRows() throws {
+        try store.write { tx in try tx.setCell(rowId: row, propertyId: text, value: ["runs": [], "string": "квитанция за свет"]) }
+        try store.write { tx throws in
+            var property = try #require(try tx.property(text))
+            property.kind = .number
+            try tx.saveProperty(property)
+        }
+        let hits = try store.database.dbWriter.read { db in
+            try String.fetchAll(db, sql: "SELECT pageId FROM search_index WHERE search_index MATCH ?", arguments: ["квитанция"])
+        }
+        #expect(hits.isEmpty)
+    }
+
     @MainActor
     @Test("Дата с напоминанием — в индексе напоминаний 002; без напоминания и в корзине — нет")
     func dateReminders() throws {

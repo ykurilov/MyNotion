@@ -367,16 +367,20 @@ public struct ViewQuerySQL {
         let paired = property.config["pairedPropertyId"]?.string.flatMap(UUID.init(uuidString:))
         let stored = paired.map { $0.uuidString < property.id.uuidString } ?? false
         let (linkProperty, own, other) = stored ? (paired!, "targetRowId", "rowId") : (property.id, "rowId", "targetRowId")
+        // Строка на другом конце в корзине в ячейке не показывается — и фильтр её не считает.
         func links(_ extra: String, _ arguments: [DatabaseValueConvertible?]) -> String {
             whereArguments.append(linkProperty.databaseText)
             whereArguments += arguments
-            return "p.id IN (SELECT \(own) FROM db_relation_link WHERE propertyId = ? AND isPresent = 1\(extra))"
+            return """
+                p.id IN (SELECT l.\(own) FROM db_relation_link l JOIN page t ON t.id = l.\(other) \
+                WHERE l.propertyId = ? AND l.isPresent = 1 AND t.trashedAt IS NULL\(extra))
+                """
         }
         switch op {
         case .isEmpty: return "NOT " + links("", [])
         case .isNotEmpty: return links("", [])
-        case .contains: return targets.isEmpty ? nil : links(" AND \(other) IN (\(placeholders(targets.count)))", targets)
-        case .doesNotContain: return targets.isEmpty ? nil : "NOT " + links(" AND \(other) IN (\(placeholders(targets.count)))", targets)
+        case .contains: return targets.isEmpty ? nil : links(" AND l.\(other) IN (\(placeholders(targets.count)))", targets)
+        case .doesNotContain: return targets.isEmpty ? nil : "NOT " + links(" AND l.\(other) IN (\(placeholders(targets.count)))", targets)
         default: return nil
         }
     }
