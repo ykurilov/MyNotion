@@ -330,8 +330,9 @@ final class BlockHandleButton: NSView, PointerOwner {
         switch kind {
         case .add:
             if let collapsed = foldState {
-                // Треугольник переключателя (`TogglePainter`): свёрнутый рисует и сам заголовок — стрелка видна без мыши.
-                HeadingFoldPainter.arrowColor.setFill()
+                // Треугольник переключателя (`TogglePainter`): свёрнутый рисует и сам заголовок — стрелка видна без мыши,
+                // тем же цветом; развёрнутый — серый, как «⋮⋮» рядом.
+                (collapsed ? HeadingFoldPainter.arrowColor : Palette.handleIcon).setFill()
                 TogglePainter.triangle(center: center, pointingDown: !collapsed).fill()
                 return
             }
