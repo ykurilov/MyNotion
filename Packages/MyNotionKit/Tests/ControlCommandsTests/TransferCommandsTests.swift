@@ -3,6 +3,7 @@ import ControlProtocol
 import Foundation
 import MarkdownExport
 import NotionImport
+import Synchronization
 import Testing
 @testable import ControlCommands
 @testable import NotesCore
@@ -40,6 +41,40 @@ final class RecordingTransferControl: TransferControl {
         syncNowCalls += 1
         return try (syncNowOutcome ?? .success(syncState)).get()
     }
+}
+
+/// Файл-труба: читатель стоит на ней, пока тест не откроет ворота (`open`) — тогда запись закрывается и читатель
+/// получает конец файла. `readerArrived` дожидается читателя без отсчёта времени.
+final class PipeGate: Sendable {
+    private let arrival = Mutex<(arrived: Bool, waiter: CheckedContinuation<Void, Never>?)>((false, nil))
+    private let opened = DispatchSemaphore(value: 0)
+
+    init(at url: URL) throws {
+        guard mkfifo(url.path, 0o600) == 0 else { throw CocoaError(.fileWriteUnknown) }
+        Thread.detachNewThread { [self] in
+            // Открытие на запись ждёт читателя; дальше он ждёт данных, пока запись не закрыта.
+            guard let writer = FileHandle(forWritingAtPath: url.path) else { return }
+            arrival.withLock { state in
+                state.arrived = true
+                defer { state.waiter = nil }
+                return state.waiter
+            }?.resume()
+            _ = opened.wait(timeout: .now() + 300)
+            try? writer.close()
+        }
+    }
+
+    func readerArrived() async {
+        await withCheckedContinuation { continuation in
+            let arrived = arrival.withLock { state in
+                if !state.arrived { state.waiter = continuation }
+                return state.arrived
+            }
+            if arrived { continuation.resume() }
+        }
+    }
+
+    func open() { opened.signal() }
 }
 
 /// Хост на временной базе с подставными импортом в окне и синхронизацией.
@@ -163,6 +198,25 @@ final class TransferTestHost: ControlHost {
         #expect(response.data?["page"]?["parentId"]?.string == archive.id.controlText)
     }
 
+    @Test("import notion --parent: страницу удалили, пока шёл импорт — импорт успешен, предупреждение not_moved и id ветки")
+    func importWhoseParentVanished() async throws {
+        let archive = try host.base.page("Архив")
+        let folder = Self.notionExport.deletingLastPathComponent()
+        var erased = false
+        let response = await run("import.notion", ["source": "synthetic", "parent": "Архив"], cwd: folder.path) { _ in
+            guard !erased else { return }
+            erased = true
+            let tree = PageTreeOperations(store: host.store)
+            try? tree.moveToTrash(archive.id)
+            try? tree.deleteForever(archive.id)
+        }
+        #expect(erased)
+        #expect(response.ok, "\(String(describing: response.error))")
+        #expect(response.warnings.map(\.code) == [.notMoved])
+        let rootId = try #require(response.data?["report"]?["rootPageId"]?.string.flatMap(UUID.init(uuidString:)))
+        #expect(tree.page(rootId) != nil, "ветка импорта на месте")
+    }
+
     @Test("import notion: ход строками progress — чтение, затем запись")
     func importReportsProgress() async throws {
         var steps: [ControlProgress] = []
@@ -194,16 +248,21 @@ final class TransferTestHost: ControlHost {
         #expect(try host.store.pageOutline().isEmpty)
     }
 
-    @Test("import notion: «Остановить» в окне — ветка убрана, команда отвечает ошибкой")
+    @Test("import notion: «Остановить» в окне — ветка убрана, команда отвечает ошибкой", .timeLimit(.minutes(5)))
     func importStoppedFromWindow() async throws {
-        let big = try Self.makeLargeExport(in: out.url, pages: 400, paragraphs: 60)
-        var stopped = false
-        let response = await run("import.notion", ["source": .string(big.path)]) { [host] _ in
-            guard !stopped else { return }
-            stopped = true
-            host.transfer.stopImport?()
-        }
-        #expect(response.error != nil)
+        let big = try Self.makeLargeExport(in: out.url, pages: 20, paragraphs: 5)
+        // Труба в выгрузке: импорт, читая выгрузку, стоит на ней, пока тест не нажмёт «Остановить» и не откроет ворота, —
+        // «стоп» приходит посреди импорта, как бы ни была занята машина.
+        let gate = try PipeGate(at: big.appendingPathComponent("ворота.bin"))
+        let executor = executor
+        let importTask = Task { await executor.run(ControlRequest(command: "import.notion", args: ["source": .string(big.path)])) }
+        await gate.readerArrived()
+        // Обработчик сообщает окну о начале сразу, как запустил чтение, без пауз: раз читатель на трубе — кнопка уже есть.
+        let stop = try #require(host.transfer.stopImport)
+        stop()
+        gate.open()
+        let response = await importTask.value
+        #expect(response.error?.code == .writeFailed)
         #expect(try host.store.pageOutline().isEmpty)
         #expect(host.transfer.importOutcomes == [false])
     }

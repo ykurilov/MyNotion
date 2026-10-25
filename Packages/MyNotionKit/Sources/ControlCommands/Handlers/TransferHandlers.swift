@@ -86,7 +86,12 @@ public enum TransferHandlers {
 
         session.host.refreshAfterDirectWrite(pages: [report.rootPageId])
         if let parent {
-            try session.pageTree.move(report.rootPageId, toParent: parent.id, at: Int.max)
+            // Импорт уже записан: не перенёсся (страницу удалили, пока шёл импорт) — ветка остаётся, где её создал импорт; ответ успешный.
+            do {
+                try session.pageTree.move(report.rootPageId, toParent: parent.id, at: Int.max)
+            } catch {
+                session.warn(.notMoved, "Импорт прошёл, но в «\(parent.title)» не перенесён: \(ControlError.wrapping(error).message)")
+            }
         }
         let outline = try PageOutline(store: store)
         var data: [String: ControlJSON] = ["report": ImportReportJSON.encode(report), "previousImport": .null]

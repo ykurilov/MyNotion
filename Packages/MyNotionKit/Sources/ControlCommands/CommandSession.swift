@@ -1,3 +1,4 @@
+import Attachments
 import ControlProtocol
 import Databases
 import Foundation
@@ -29,13 +30,19 @@ final class SessionContext {
     var touchedPages: Set<UUID> = []
     /// Страницы, перед правкой которых версия «до правки агента» уже проверена.
     var checkpointedPages: Set<UUID> = []
+    /// Снятые до правки виды страниц: версиями их записывает исполнитель после команды.
+    var pendingCheckpoints: [AgentEditCheckpoint.Pending] = []
+    /// Копии файлов, вложенные командой: откат стирает те, на которые после него никто не ссылается.
+    var importedAttachments: [UUID] = []
     let progress: (ControlProgress) -> Void
     private let store: NotesStore
+    private let attachments: AttachmentStore
     /// Начало команды: страницы, созданные позже, — её собственные.
     private let started = Date()
 
     init(host: any ControlHost, progress: @escaping (ControlProgress) -> Void) {
         store = host.store
+        attachments = host.attachments
         let undoManager = UndoManager()
         // Шаги отмены задаёт сама команда (`grouped`), а не цикл событий окна.
         undoManager.groupsByEvent = false
@@ -80,6 +87,11 @@ final class SessionContext {
             // Подстраница уже стёрта вместе с родителем — ошибка «нет страницы» не важна.
             try? pageTree.deleteForever(page.id)
         }
+        // Файл, вложенный откаченной командой, — сирота: не ждать месяц, пока его уберёт чистка.
+        for id in importedAttachments {
+            try? attachments.discardIfUnreferenced(id)
+        }
+        importedAttachments = []
     }
 }
 
@@ -196,7 +208,10 @@ public final class CommandSession {
     /// Перед первой записью в страницу: версия «до правки агента» (раз на страницу за сессию, R7).
     public func willWrite(_ pageId: UUID) async throws {
         guard context.checkpointedPages.insert(pageId).inserted else { return }
-        try await AgentEditCheckpoint(host: host).beforeWriting(pageId, agent: agent)
+        // Снимок — сейчас, без пауз до правки; версией он станет после команды (`CommandExecutor.write`).
+        if let pending = try AgentEditCheckpoint(host: host).capture(pageId, agent: agent) {
+            context.pendingCheckpoints.append(pending)
+        }
     }
 
     /// Страницы, которые правка изменила мимо операций дерева (их окна перечитают).

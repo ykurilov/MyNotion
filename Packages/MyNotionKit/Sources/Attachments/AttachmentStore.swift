@@ -296,6 +296,17 @@ public final class AttachmentStore: Sendable {
         folder.appendingPathComponent(id.attachmentKey, isDirectory: true)
     }
 
+    /// Стереть копию, на которую никто не ссылается (откат команды, вложившей файл), — сразу, а не через 30 дней.
+    /// Проверка ссылок и удаление строки — одной записью: ссылка, появившаяся рядом, копию сохраняет.
+    public func discardIfUnreferenced(_ id: UUID) throws {
+        let removed = try store.database.dbWriter.write { db -> Bool in
+            try db.execute(sql: "DELETE FROM attachment WHERE id = ? AND NOT EXISTS (\(AttachmentReferenceCounter.liveReference))",
+                           arguments: [id.attachmentKey])
+            return db.changesCount > 0
+        }
+        if removed { try? FileManager.default.removeItem(at: directory(for: id)) }
+    }
+
     /// Стереть копию и её строку.
     func erase(_ id: UUID) throws {
         try? FileManager.default.removeItem(at: directory(for: id))

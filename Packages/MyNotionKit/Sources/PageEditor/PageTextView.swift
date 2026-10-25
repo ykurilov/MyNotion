@@ -170,6 +170,8 @@ public class PageTextView: NSTextView {
                                                name: PageDocument.didApplyExternalChanges, object: document.pageDocument)
         NotificationCenter.default.addObserver(self, selector: #selector(documentDidApplyLocalEdits(_:)),
                                                name: PageDocument.didApplyLocalEdits, object: document.pageDocument)
+        NotificationCenter.default.addObserver(self, selector: #selector(blockViewStateDidChangeOutsideEditor(_:)),
+                                               name: BlockViewStateStore.didChangeOutsideEditor, object: nil)
         Self.liveEditors.add(self)
 
         addSubview(header)

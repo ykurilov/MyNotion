@@ -17,7 +17,9 @@ enum SocketClient {
         defer { close(fd) }
         let deadline = ContinuousClock.now + .milliseconds(request.timeoutMs)
         do {
-            guard try writeAll(LineFraming.frame(request), to: fd) else { return disconnected(request) }
+            // Запись может оборваться: приложение отказало, не дочитав запрос (слишком большой). Его отказ уже в сокете —
+            // читаем ответ всё равно; нет ответа — обрыв связи.
+            _ = try writeAll(LineFraming.frame(request), to: fd)
         } catch {
             return .failure(request.id, ControlError(.invalidArgument, "Запрос не превратить в JSON: \(error.localizedDescription)"))
         }

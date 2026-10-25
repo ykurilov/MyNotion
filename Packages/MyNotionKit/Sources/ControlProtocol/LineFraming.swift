@@ -19,6 +19,8 @@ public enum LineFraming {
 public struct LineBuffer: Sendable {
     public let limit: Int
     private var pending = Data()
+    /// Сколько байт `pending` уже проверено на `\n`: медленный клиент не заставляет перебирать накопленное заново.
+    private var scanned = 0
 
     public init(limit: Int = ControlProtocolVersion.maxFrameBytes) {
         self.limit = limit
@@ -33,12 +35,16 @@ public struct LineBuffer: Sendable {
     public mutating func append(_ data: Data) throws(Failure) -> [Data] {
         pending.append(data)
         var lines: [Data] = []
-        while let end = pending.firstIndex(of: LineFraming.newline) {
-            let line = pending[pending.startIndex..<end]
-            guard line.count <= limit else { throw .frameTooLarge }
-            lines.append(Data(line))
-            pending = Data(pending[pending.index(after: end)...])
+        var lineStart = pending.startIndex
+        var searchFrom = pending.startIndex + scanned
+        while let end = pending[searchFrom...].firstIndex(of: LineFraming.newline) {
+            guard end - lineStart <= limit else { throw .frameTooLarge }
+            lines.append(Data(pending[lineStart..<end]))
+            lineStart = pending.index(after: end)
+            searchFrom = lineStart
         }
+        if lineStart > pending.startIndex { pending = Data(pending[lineStart...]) }
+        scanned = pending.count
         guard pending.count <= limit else { throw .frameTooLarge }
         return lines
     }

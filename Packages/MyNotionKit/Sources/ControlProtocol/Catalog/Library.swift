@@ -22,7 +22,8 @@ extension CommandCatalog {
                  example: "mynotion template mark 'Шаблон встречи'", arguments: [page]),
         .command("template unmark", "Страница больше не шаблон", access: .write, batchable: true, stage: 5,
                  example: "mynotion template unmark 'Шаблон встречи'", arguments: [page]),
-        .command("history list", "Версии страницы: время, Mac, сводка, agent", access: .read, stage: 5,
+        // Список сперва снимает неснятую правку версией — это запись, под замком записи.
+        .command("history list", "Версии страницы: время, Mac, сводка, agent", access: .write, stage: 5,
                  example: "mynotion history list current", arguments: [page]),
         .command("history show", "Содержимое версии", access: .read, stage: 5, example: "mynotion history show current 0193…",
                  arguments: [page, .positional("version", .version, "Версия"),

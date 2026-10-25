@@ -42,10 +42,10 @@ final class FakeLauncher: AppLaunching, @unchecked Sendable {
 /// Ответ сервера по запросу.
 typealias Reply = @Sendable (ControlRequest, AsyncStream<ControlResponseLine>.Continuation) async -> Void
 
-func server(_ path: String, reply: @escaping Reply = { request, continuation in
+func server(_ path: String, limits: ControlSocketServer.Limits = .standard, reply: @escaping Reply = { request, continuation in
     continuation.yield(.result(.success(request.id, ["command": .string(request.command)], text: "✓ Готово «\(request.command)»")))
 }) -> ControlSocketServer {
-    ControlSocketServer(path: path) { request in
+    ControlSocketServer(path: path, limits: limits) { request, _ in
         AsyncStream { continuation in
             Task {
                 await reply(request, continuation)
@@ -159,6 +159,18 @@ final class ServerBox: @unchecked Sendable {
             .run(ControlRequest(command: "import.notion"), settings: settings(folder.socketPath)) { progress.append($0) }
         #expect(response.error?.code == .appDisconnected)
         #expect(progress == [ControlProgress(done: 1, total: 10)])
+    }
+
+    @Test func oversizedRequestGetsItsRefusal() throws {
+        let folder = SocketFolder()
+        let app = server(folder.socketPath, limits: ControlSocketServer.Limits(maxRequestBytes: 1_024))
+        try app.start()
+        defer { app.stop() }
+        // Запрос больше буфера сокета: сервер отказывает, не дочитав, — клиент всё равно видит отказ, а не обрыв.
+        let request = ControlRequest(command: "page.write", args: ["text": .string(String(repeating: "x", count: 300_000))])
+        let response = CommandRunner(launcher: FakeLauncher(running: true)).run(request, settings: settings(folder.socketPath))
+        #expect(response.error?.code == .invalidArgument)
+        #expect(response.error?.message.contains("больше") == true)
     }
 
     @Test func otherProtocolIsVersionMismatch() throws {

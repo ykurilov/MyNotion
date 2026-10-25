@@ -61,6 +61,28 @@ import Testing
         #expect(snapshot.blocks.map(\.text.string) == ["до правки"])
     }
 
+    @Test func versionEqualsWhatCommandSawBeforeEdit() async throws {
+        let page = try host.page("А", texts: ["до правки"])
+        let document = try host.openDocuments.open(page.id)
+        defer { host.openDocuments.release(page.id) }
+        let block = try #require(document.blocks.first)
+        let seen = EventLog()
+        let write: CommandHandler = { session in
+            // Человек печатает в окне, пока команда готовит версию: версия — ровно то, что команда правит.
+            Task { @MainActor in document.setText(InlineText("набрал человек"), ofBlock: block.id) }
+            try await session.willWrite(page.id)
+            seen.events = document.blocks.map(\.text.string)
+            return CommandResult()
+        }
+        let executor = CommandExecutor(host: host, registry: HandlerRegistry(["page.write": write]), log: RecordingLog())
+        let response = await executor.run(ControlRequest(command: "page.write", args: ["page": .string(page.id.controlText), "markdown": "x"],
+                                                         agent: "codex"))
+        #expect(response.ok)
+        let version = try #require(try agentVersions(page.id).first)
+        let snapshot = try #require(try host.versions.snapshot(version.id))
+        #expect(snapshot.blocks.map(\.text.string) == seen.events)
+    }
+
     @Test func storeMarksAgentStamps() async throws {
         let page = try host.page("А", texts: ["1"])
         try await checkpoint.beforeWriting(page.id, agent: "codex")

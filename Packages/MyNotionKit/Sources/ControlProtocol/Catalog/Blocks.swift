@@ -34,8 +34,9 @@ extension CommandCatalog {
         blockAction("block outdent", "Сдвинуть блок влево"),
         blockAction("block check", "Отметить задачу"),
         blockAction("block uncheck", "Снять отметку задачи"),
-        blockAction("block expand", "Раскрыть раскрывающийся список (toggle)"),
-        blockAction("block collapse", "Свернуть раскрывающийся список (toggle)"),
+        // Свёрнутость — вид на этом Mac, а не текст: отмена пакета её не откатит, поэтому вне пакета.
+        blockAction("block expand", "Раскрыть раскрывающийся список (toggle)", batchable: false),
+        blockAction("block collapse", "Свернуть раскрывающийся список (toggle)", batchable: false),
         blockAction("block delete", "Удалить блок"),
         .command("block move-to-page", "Перенести блок на другую страницу", access: .write, batchable: true, stage: 3,
                  example: "mynotion block move-to-page 3f2a91c0-… --page Архив",
@@ -52,8 +53,8 @@ extension CommandCatalog {
                  exclusive: [["gallery", "file", "remove", "list"]], requiresOneOf: [["gallery", "file", "remove", "list", "offset"]]),
     ]
 
-    private static func blockAction(_ invocation: String, _ summary: String) -> CommandSpec {
-        .command(invocation, summary, access: .write, batchable: true, stage: 3, example: "mynotion \(invocation) 3f2a91c0-…",
+    private static func blockAction(_ invocation: String, _ summary: String, batchable: Bool = true) -> CommandSpec {
+        .command(invocation, summary, access: .write, batchable: batchable, stage: 3, example: "mynotion \(invocation) 3f2a91c0-…",
                  arguments: [.positional("block", .block, "Блок")])
     }
 }

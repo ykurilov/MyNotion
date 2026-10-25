@@ -1,6 +1,7 @@
 import ControlProtocol
 import Darwin
 import Foundation
+import Synchronization
 import Testing
 @testable import ControlServer
 
@@ -10,9 +11,9 @@ struct StrangerCredentials: PeerCredentials {
 }
 
 /// Сервер-эхо: в ответ — имя команды и аргументы.
-func echoServer(_ path: String, credentials: any PeerCredentials = KernelPeerCredentials(),
+func echoServer(_ path: String, credentials: any PeerCredentials = KernelPeerCredentials(), limits: ControlSocketServer.Limits = .standard,
                 delay: Duration = .zero) -> ControlSocketServer {
-    ControlSocketServer(path: path, credentials: credentials) { request in
+    ControlSocketServer(path: path, credentials: credentials, limits: limits) { request, _ in
         AsyncStream { continuation in
             Task {
                 if delay > .zero { try? await Task.sleep(for: delay) }
@@ -138,7 +139,7 @@ func echoServer(_ path: String, credentials: any PeerCredentials = KernelPeerCre
     @Test func clientLeavingMidCommandDoesNotStopServer() async throws {
         let folder = SocketFolder()
         let finished = Finished()
-        let server = ControlSocketServer(path: folder.socketPath) { request in
+        let server = ControlSocketServer(path: folder.socketPath) { request, _ in
             AsyncStream { continuation in
                 Task {
                     try? await Task.sleep(for: .milliseconds(200))
@@ -158,6 +159,117 @@ func echoServer(_ path: String, credentials: any PeerCredentials = KernelPeerCre
         for _ in 0..<50 where await !finished.value { try await Task.sleep(for: .milliseconds(20)) }
         #expect(await finished.value)
         #expect(try RawClient.exchange(ControlRequest(command: "app.status"), path: folder.socketPath).last != nil)
+    }
+
+    // MARK: Сроки и предел подключений
+
+    /// Ждать условия до `seconds` секунд.
+    func eventually(seconds: Double = 3, _ condition: () -> Bool) async throws -> Bool {
+        let deadline = ContinuousClock.now + .seconds(seconds)
+        while ContinuousClock.now < deadline {
+            if condition() { return true }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        return condition()
+    }
+
+    @Test func requestDeadlineCoversWholeLine() async throws {
+        let folder = SocketFolder()
+        let server = echoServer(folder.socketPath, limits: ControlSocketServer.Limits(requestTimeout: .milliseconds(300)))
+        try server.start()
+        defer { server.stop() }
+        let fd = try #require(RawClient.connect(folder.socketPath))
+        defer { close(fd) }
+        // Строка по байту чаще срока одного чтения: общий срок на запрос всё равно обрывает такого клиента.
+        for _ in 0..<12 {
+            RawClient.write(Data("{".utf8), to: fd)
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        #expect(server.openConnectionCount == 0)
+    }
+
+    @Test func connectionsBeyondLimitAreRefusedAtOnce() async throws {
+        let folder = SocketFolder()
+        let server = echoServer(folder.socketPath, limits: ControlSocketServer.Limits(requestTimeout: .milliseconds(600), maxConnections: 2))
+        try server.start()
+        defer { server.stop() }
+        // Два молчащих клиента заняли все места.
+        let idle = [RawClient.connect(folder.socketPath), RawClient.connect(folder.socketPath)].compactMap { $0 }
+        defer { idle.forEach { close($0) } }
+        #expect(try await eventually { server.openConnectionCount == 2 })
+        let refused = try RawClient.exchange(ControlRequest(id: "r", command: "app.status"), path: folder.socketPath)
+        guard case .result(let response) = refused.last else { Issue.record("нет ответа"); return }
+        #expect(response.error?.code == .appNotReady)
+        // Молчащих срок запроса выгнал — место снова есть.
+        #expect(try await eventually { server.openConnectionCount == 0 })
+        #expect(try RawClient.exchange(ControlRequest(command: "app.status"), path: folder.socketPath).last?.isFinal == true)
+    }
+
+    @Test func clientThatStopsReadingIsDropped() async throws {
+        let folder = SocketFolder()
+        // Ответ на 4 МБ в буфер сокета не влезает: без чтения клиентом запись встала бы навсегда.
+        let big = String(repeating: "я", count: 2_000_000)
+        let server = ControlSocketServer(path: folder.socketPath, limits: ControlSocketServer.Limits(sendTimeout: .milliseconds(300))) { request, _ in
+            AsyncStream { continuation in
+                continuation.yield(.result(.success(request.id, ["text": .string(big)])))
+                continuation.finish()
+            }
+        }
+        try server.start()
+        defer { server.stop() }
+        let fd = try #require(RawClient.connect(folder.socketPath))
+        defer { close(fd) }
+        RawClient.write(try LineFraming.frame(ControlRequest(command: "page.read")), to: fd)
+        #expect(try await eventually { server.openConnectionCount == 0 }, "клиент, не забирающий ответ, считается ушедшим")
+    }
+
+    @Test func clientLeavingIsSeenWhileCommandWaits() async throws {
+        let folder = SocketFolder()
+        let call = Mutex<ControlCall?>(nil)
+        let server = ControlSocketServer(path: folder.socketPath) { request, current in
+            call.withLock { $0 = current }
+            return AsyncStream { continuation in
+                Task {
+                    try? await Task.sleep(for: .seconds(1))
+                    continuation.yield(.result(.success(request.id, true)))
+                    continuation.finish()
+                }
+            }
+        }
+        try server.start()
+        defer { server.stop() }
+        let fd = try #require(RawClient.connect(folder.socketPath))
+        RawClient.write(try LineFraming.frame(ControlRequest(command: "page.rename")), to: fd)
+        #expect(try await eventually { call.withLock { $0 } != nil })
+        #expect(call.withLock { $0?.isClientGone } == false)
+        close(fd)
+        #expect(try await eventually { call.withLock { $0?.isClientGone } == true })
+    }
+
+    @Test func halfClosedClientStillGetsAnswer() throws {
+        let folder = SocketFolder()
+        let server = ControlSocketServer(path: folder.socketPath) { request, call in
+            AsyncStream { continuation in
+                Task {
+                    try? await Task.sleep(for: .milliseconds(200))
+                    continuation.yield(.result(.success(request.id, ["gone": .bool(call.isClientGone)])))
+                    continuation.finish()
+                }
+            }
+        }
+        try server.start()
+        defer { server.stop() }
+        let fd = try #require(RawClient.connect(folder.socketPath))
+        defer { close(fd) }
+        RawClient.write(try LineFraming.frame(ControlRequest(id: "h", command: "page.get")), to: fd)
+        // Клиент закрыл только свою запись (как `nc -N`) и ждёт ответа: он не ушёл.
+        shutdown(fd, SHUT_WR)
+        let lines = RawClient.readLines(fd)
+        #expect(lines.count == 1)
+        guard case .result(let response) = try LineFraming.decode(ControlResponseLine.self, from: Data(try #require(lines.last).utf8)) else {
+            Issue.record("нет итога"); return
+        }
+        #expect(response.data?["gone"] == false)
     }
 
     @Test func stopRemovesSocketFile() throws {

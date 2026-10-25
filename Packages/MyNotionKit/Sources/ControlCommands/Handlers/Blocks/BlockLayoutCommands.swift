@@ -123,7 +123,8 @@ enum BlockStateCommands {
     static let expand: CommandHandler = { session in try setCollapsed(session, false) }
     static let collapse: CommandHandler = { session in try setCollapsed(session, true) }
 
-    /// Свёрнутость хранится на этом Mac и не пишется в страницу: ни отмены, ни синхронизации (data-model.md, «BlockViewState»).
+    /// Свёрнутость хранится на этом Mac и не пишется в страницу: ни отмены, ни синхронизации (data-model.md, «BlockViewState»),
+    /// поэтому и в пакет не берётся.
     @MainActor
     private static func setCollapsed(_ session: CommandSession, _ collapsed: Bool) throws -> CommandResult {
         let block = try session.block()
@@ -132,6 +133,8 @@ enum BlockStateCommands {
                                details: ["kind": .string(block.kind.rawValue)])
         }
         try session.blockStoreRead { try BlockViewStateStore(database: session.host.store.database).setCollapsed(collapsed, blockId: block.id) }
+        // Открытая страница перечитывает свёрнутость сама: запись мимо её редактора иначе не видна до переоткрытия.
+        BlockViewStateStore.postChangedOutsideEditor(pageId: block.pageId)
         return CommandResult(try session.storedBlockJSON(block.id, extra: ["collapsed": .bool(collapsed)]),
                              text: collapsed ? "✓ Список свёрнут" : "✓ Список раскрыт")
     }

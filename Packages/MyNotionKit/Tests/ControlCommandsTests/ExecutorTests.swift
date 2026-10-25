@@ -92,6 +92,36 @@ import Testing
         _ = await write
     }
 
+    @Test func writeWhoseTimeRanOutInQueueIsNotRun() async {
+        let events = EventLog()
+        let executor = executor(["page.rename": { session in
+            let title = session.string("title") ?? ""
+            events.events.append("start \(title)")
+            try await Task.sleep(for: .milliseconds(300))
+            return CommandResult()
+        }])
+        async let first = executor.run(ControlRequest(command: "page.rename", args: ["page": "x", "title": "1"]))
+        try? await Task.sleep(for: .milliseconds(30))
+        // Клиент второй команды ждёт 100 мс, а очередь освободится через 300: команда не должна выполниться после его ухода.
+        let second = await executor.run(ControlRequest(command: "page.rename", args: ["page": "x", "title": "2"], timeoutMs: 100),
+                                         receivedAt: .now)
+        _ = await first
+        #expect(second.error?.code == .timeout)
+        #expect(events.events == ["start 1"])
+    }
+
+    @Test func commandOfGoneClientIsNotRun() async {
+        let events = EventLog()
+        let executor = executor(["page.rename": { _ in
+            events.events.append("ran")
+            return CommandResult()
+        }])
+        let response = await executor.run(ControlRequest(command: "page.rename", args: ["page": "x", "title": "1"]),
+                                           isClientGone: { true })
+        #expect(response.error?.code == .appDisconnected)
+        #expect(events.events.isEmpty)
+    }
+
     @Test func handlerErrorsBecomeResponses() async {
         let executor = executor([
             "page.get": { session in CommandResult(["page": .string(try session.page().title)]) },
