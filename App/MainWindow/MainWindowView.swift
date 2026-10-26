@@ -176,6 +176,8 @@ private struct PagesWindow: View {
     @State private var widthAtDragStart: Double?
     /// Окно выбора иконки для строк боковой панели; у шапки страницы — своё в редакторе.
     @State private var sidebarIconPicker = EmojiPickerController()
+    /// Окно во весь экран: кнопок окна нет, шторка стоит у левого края панели.
+    @State private var isFullScreen = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -231,6 +233,14 @@ private struct PagesWindow: View {
             SyncSettingsView(controller: model.syncSettingsPreview ?? model.sync) { model.isSyncSettingsShown = false }
         }
         .animation(.easeInOut(duration: Metrics.Window.sidebarToggleDuration), value: model.isSidebarCollapsed)
+        .animation(.easeInOut(duration: Metrics.Window.fullScreenToggleDuration), value: isFullScreen)
+        .onAppear { isFullScreen = model.window?.styleMask.contains(.fullScreen) ?? false }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.willEnterFullScreenNotification)) { note in
+            if (note.object as? NSWindow) === model.window { isFullScreen = true }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.willExitFullScreenNotification)) { note in
+            if (note.object as? NSWindow) === model.window { isFullScreen = false }
+        }
         // Путь страницы — в самой верхней полосе окна, как в Notion; кнопки окна — над боковой панелью.
         .ignoresSafeArea(.container, edges: .top)
         .onAppear { model.attachUndoManager(undoManager) }
@@ -326,7 +336,7 @@ private struct PagesWindow: View {
             items: model.tabStripItems,
             canGoBack: model.canGoBack,
             canGoForward: model.canGoForward,
-            leadingInset: model.isSidebarCollapsed ? Metrics.Tabs.collapsedSidebarLeading : 0,
+            leadingInset: model.isSidebarCollapsed ? Metrics.Tabs.collapsedSidebarLeading(isFullScreen: isFullScreen) : 0,
             previewHoveredTabId: model.previewHoveredTabId,
             actions: TabStripActions(
                 back: { model.goBack() },
@@ -339,13 +349,13 @@ private struct PagesWindow: View {
         )
     }
 
-    /// Шторка: середина — на `sidebarToggleCenterX` от левого края, в строке светофора.
+    /// Шторка: середина — на `sidebarToggleCenterX` от левого края, в строке светофора; во весь экран — у левого края.
     private var sidebarToggle: some View {
         WindowToolbarButton(symbol: "sidebar.left", symbolSize: Metrics.Window.sidebarToggleSymbolSize,
                             label: model.isSidebarCollapsed ? "Показать боковую панель" : "Скрыть боковую панель",
                             action: { model.toggleSidebar() })
             .accessibilityIdentifier("sidebar-toggle")
-            .padding(.leading, Metrics.Window.sidebarToggleCenterX - Metrics.Window.toolbarButtonSize / 2)
+            .padding(.leading, Metrics.Window.sidebarToggleCenterX(isFullScreen: isFullScreen) - Metrics.Window.toolbarButtonSize / 2)
             .padding(.top, (Metrics.Window.titleBarHeight - Metrics.Window.toolbarButtonSize) / 2)
     }
 
