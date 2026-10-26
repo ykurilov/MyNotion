@@ -203,8 +203,15 @@ public enum Metrics {
         public static let toolbarButtonCornerRadius: CGFloat = 6
         /// Середина шторки от левого края окна: на 28 правее середины зелёной кнопки, как у Notion.
         public static let sidebarToggleCenterX: CGFloat = 95
+        /// Во весь экран кнопок окна нет: шторка встаёт к левому краю, квадрат кнопки — вровень с полем поиска (10 от края).
+        public static let sidebarToggleFullScreenCenterX: CGFloat = Sidebar.panelInset + SearchField.extraHorizontalInset + toolbarButtonSize / 2
+        public static func sidebarToggleCenterX(isFullScreen: Bool) -> CGFloat {
+            isFullScreen ? sidebarToggleFullScreenCenterX : sidebarToggleCenterX
+        }
         /// Сворачивание и разворот панели.
         public static let sidebarToggleDuration: Double = 0.2
+        /// Шторка переезжает вместе с системным переходом в полный экран и обратно.
+        public static let fullScreenToggleDuration: Double = 0.4
     }
 
     /// Поле поиска вверху боковой панели (FR-018), как «Search» у Notion 7.38.1 (снимок 17.10.2026, ≈ ±1,5):

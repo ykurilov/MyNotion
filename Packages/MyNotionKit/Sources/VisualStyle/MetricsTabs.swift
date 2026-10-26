@@ -16,6 +16,9 @@ extension Metrics {
         public static let plusSymbolSize: CGFloat = 14
         /// При спрятанной панели полоса начинается сразу за шторкой.
         public static let collapsedSidebarLeading: CGFloat = Window.sidebarToggleCenterX + Window.toolbarButtonSize / 2 + 2
+        public static func collapsedSidebarLeading(isFullScreen: Bool) -> CGFloat {
+            Window.sidebarToggleCenterX(isFullScreen: isFullScreen) + Window.toolbarButtonSize / 2 + 2
+        }
         /// Вкладка: 199 и линия справа; когда не влезают — сжимаются поровну до `minimumTabWidth`.
         public static let tabWidth: CGFloat = 199
         public static let minimumTabWidth: CGFloat = 40
