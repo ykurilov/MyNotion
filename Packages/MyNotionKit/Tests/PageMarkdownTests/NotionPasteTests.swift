@@ -1,6 +1,7 @@
 import Foundation
 import NotesCore
 import Testing
+import NotionAPI
 @testable import PageMarkdown
 
 /// Вставка из Notion в Chrome: в HTML пустых блоков нет, их места знает только буфер Chromium
@@ -12,6 +13,10 @@ struct NotionPasteTests {
         var type = "text"
         var title: String?
         var children: [NotionBlock] = []
+        /// id блока в Notion; `nil` — выдуманный по месту в выделении.
+        var id: String?
+        /// `properties.source` картинки: `attachment:<uuid>:<имя>` или адрес в сети.
+        var source: String?
 
         static let empty = NotionBlock()
         static func text(_ title: String) -> NotionBlock { NotionBlock(title: title) }
@@ -22,7 +27,10 @@ struct NotionPasteTests {
     static func notionJSON(_ blocks: [NotionBlock], blocksV3: Bool = false) -> String {
         func records(_ block: NotionBlock, id: String, into map: inout [String: Any]) {
             var value: [String: Any] = ["id": id, "type": block.type, "alive": true]
-            if let title = block.title { value["properties"] = ["title": [[title]]] }
+            var properties: [String: Any] = [:]
+            if let title = block.title { properties["title"] = [[title]] }
+            if let source = block.source { properties["source"] = [[source]] }
+            if !properties.isEmpty { value["properties"] = properties }
             let childIds = block.children.indices.map { "\(id)-\($0)" }
             if !childIds.isEmpty { value["content"] = childIds }
             map[id] = ["value": value]
@@ -30,7 +38,7 @@ struct NotionPasteTests {
         }
         let selection = blocks.enumerated().map { index, block -> [String: Any] in
             var map: [String: Any] = [:]
-            records(block, id: "block-\(index)", into: &map)
+            records(block, id: block.id ?? "block-\(index)", into: &map)
             return ["blockSubtree": ["block": map]]
         }
         let json: [String: Any] = blocksV3
@@ -96,19 +104,79 @@ struct NotionPasteTests {
         #expect(pasted.map(\.text.string) == ["Первый абзац", "", "Второй", ""])
     }
 
-    @Test("Картинка среди блоков: в HTML её нет, со сверкой не считается — пустые абзацы на своих местах")
+    static let imageId = "3c90c3cc-0d44-4b50-8888-8dd25736052a"
+
+    static func image(_ name: String = "snimok.png", source: String? = nil) -> NotionBlock {
+        NotionBlock(type: "image", title: name, id: imageId, source: source ?? "attachment:1a2b:\(name)")
+    }
+
+    @Test("Картинка среди блоков: в HTML её нет — встаёт блоком-картинкой со ссылкой на блок Notion; пустые абзацы на местах")
     func emptyParagraphsAroundImage() throws {
         let html = """
         <meta charset='utf-8'><p>Первый</p><p><img src="attachment:1a2b:snimok.png" alt="snimok.png"></p>\
         <p>Второй</p><!-- notionvc: 1a2b -->
         """
-        let image = NotionBlock(type: "image")
-        let json = Self.notionJSON([.text("Первый"), .empty, image, .empty, .text("Второй")], blocksV3: true)
+        let json = Self.notionJSON([.text("Первый"), .empty, Self.image(), .empty, .text("Второй")], blocksV3: true)
         let data = Self.webCustomData([("text/_notion-blocks-v3-production", json)])
 
         let pasted = try #require(blocks(html: html, text: "Первый\nВторой", webCustomData: data))
 
-        #expect(pasted.map(\.text.string) == ["Первый", "", "", "Второй"])
+        #expect(pasted.map(\.kind) == [.paragraph, .paragraph, .image, .paragraph, .paragraph])
+        #expect(pasted.map(\.text.string) == ["Первый", "", "", "", "Второй"])
+        let image = pasted[2]
+        #expect(image.props.url == NotionBlockLink.url(forBlock: UUID(uuidString: Self.imageId)!))
+        #expect(image.props.title == "snimok.png")
+        #expect(image.props.attachment == nil)
+    }
+
+    @Test("Картинки без пустых блоков: каждая на своём месте, в начале, между абзацами и в конце")
+    func imagesWithoutEmptyBlocks() throws {
+        let html = "<meta charset='utf-8'><p><img src='attachment:1:a.png'></p><p>Раз</p><p><img src='x'></p><p>Два</p><p><img src='y'></p>"
+        let first = NotionBlock(type: "image", title: "a.png", id: "11111111-1111-4111-8111-111111111111", source: "attachment:1:a.png")
+        let data = Self.notionData([first, .text("Раз"), Self.image("b.jpg"), .text("Два"), Self.image("c.gif")])
+
+        let pasted = try #require(blocks(html: html, webCustomData: data))
+
+        #expect(pasted.map(\.kind) == [.image, .paragraph, .image, .paragraph, .image])
+        #expect(pasted.compactMap(\.props.title) == ["a.png", "b.jpg", "c.gif"])
+        #expect(pasted[0].props.url == NotionBlockLink.url(forBlock: UUID(uuidString: "11111111-1111-4111-8111-111111111111")!))
+    }
+
+    @Test("Картинка по ссылке из сети — та же ссылка, без Notion API; имя — из адреса, если подписи нет")
+    func externalImage() throws {
+        let html = "<meta charset='utf-8'><p>Раз</p><p><img src='https://images.example.org/cat.jpg'></p>"
+        let external = NotionBlock(type: "image", id: Self.imageId, source: "https://images.example.org/cat.jpg")
+        let pasted = try #require(blocks(html: html, webCustomData: Self.notionData([.text("Раз"), external])))
+
+        #expect(pasted.map(\.kind) == [.paragraph, .image])
+        #expect(pasted[1].props.url == URL(string: "https://images.example.org/cat.jpg"))
+        #expect(pasted[1].props.title == "cat.jpg")
+    }
+
+    @Test("Имя картинки без подписи — из `attachment:<uuid>:<имя>`; без всего — «Картинка»")
+    func imageNames() throws {
+        let html = "<meta charset='utf-8'><p><img src='a'></p><p><img src='b'></p>"
+        let fromSource = NotionBlock(type: "image", id: Self.imageId, source: "attachment:9f:Снимок экрана.png")
+        let bare = NotionBlock(type: "image", id: "22222222-2222-4222-8222-222222222222")
+        let pasted = try #require(blocks(html: html, webCustomData: Self.notionData([fromSource, bare])))
+        #expect(pasted.compactMap(\.props.title) == ["Снимок экрана.png", "Картинка"])
+    }
+
+    @Test("Видео, файл, PDF и звук Notion по-прежнему не вставляются и сверке не мешают; картинка без id — тоже")
+    func otherAttachmentsSkipped() throws {
+        let html = "<meta charset='utf-8'><p>Раз</p><p>Два</p>"
+        let noId = NotionBlock(type: "image", title: "x.png", id: "не-uuid")
+        let data = Self.notionData([.text("Раз"), NotionBlock(type: "video"), NotionBlock(type: "file"), noId, .empty,
+                                    NotionBlock(type: "pdf"), .text("Два")])
+        let pasted = try #require(blocks(html: html, webCustomData: data))
+        #expect(shape(pasted) == ["paragraph 0 Раз", "paragraph 0 ", "paragraph 0 Два"])
+    }
+
+    @Test("Выделена одна картинка — один блок-картинка")
+    func onlyImage() throws {
+        let html = "<meta charset='utf-8'><p><img src=\"attachment:1a2b:snimok.png\" alt=\"snimok.png\"></p>"
+        let pasted = try #require(blocks(html: html, text: "", webCustomData: Self.notionData([Self.image()])))
+        #expect(pasted.map(\.kind) == [.image])
     }
 
     @Test("Пустая строка внутри блока Notion: в HTML это два абзаца — пустые блоки всё равно на своих местах")

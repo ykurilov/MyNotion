@@ -10,11 +10,13 @@ public enum PastedText {
     /// рядом с текстом, таблица, разделитель); HTML-обёртка простого текста (редактор кода) уступает его Markdown.
     /// `hasRichText` — в буфере есть и оформленный текст (HTML, RTF). Тогда из простого текста блоками — только явный
     /// Markdown: простой текст страницы бывает со строками «1.», а оформление лучше возьмёт вставка с оформлением.
-    /// `webCustomData` — буфер Chromium (`org.chromium.web-custom-data`): у Notion в нём места пустых блоков.
+    /// `webCustomData` — буфер Chromium (`org.chromium.web-custom-data`): у Notion в нём места пустых блоков и картинок.
+    /// Картинка Notion встаёт блоком-картинкой без файла: в `url` — откуда скачать, в `title` — имя файла;
+    /// скачивает её редактор после вставки.
     public static func blocks(from text: String, html: String? = nil, webCustomData: Data? = nil, pageId: UUID,
                               hasRichText: Bool) -> [Block]? {
         if let html, let webCustomData, let selection = NotionClipboard.selectedBlocks(fromWebCustomData: webCustomData),
-           let blocks = withNotionEmptyBlocks(selection, in: blocks(fromMarkdown: PastedHTML.markdown(from: html), pageId: pageId),
+           let blocks = withNotionBlocks(selection, in: blocks(fromMarkdown: PastedHTML.markdown(from: html), pageId: pageId),
                                               pageId: pageId) {
             return blocks
         }
@@ -43,15 +45,16 @@ public enum PastedText {
         return blocks
     }
 
-    /// Блоки HTML Notion с пустыми абзацами на местах пустых блоков выделения. Верхние блоки HTML — по одному на каждый
-    /// непустой верхний блок выделения, вложенные идут со своим верхним. `nil` — пустых блоков нет или блоки
-    /// не сходятся по числу: тогда вставка как без Notion.
-    private static func withNotionEmptyBlocks(_ selection: [String?], in blocks: [Block], pageId: UUID) -> [Block]? {
-        guard selection.contains(where: { $0 == nil }) else { return nil }
+    /// Блоки HTML Notion с пустыми абзацами и картинками на местах пустых блоков и картинок выделения. Верхние блоки
+    /// HTML — по одному на каждый текстовый верхний блок выделения, вложенные идут со своим верхним. `nil` — пустых
+    /// блоков и картинок нет или блоки не сходятся по числу: тогда вставка как без Notion.
+    private static func withNotionBlocks(_ selection: [NotionClipboard.Entry], in blocks: [Block], pageId: UUID) -> [Block]? {
+        let texts = selection.count { if case .text = $0 { true } else { false } }
+        guard texts < selection.count else { return nil }
         let flow = blocks.indices.filter { blocks[$0].containerId == nil }
         let topIndent = flow.map { blocks[$0].indent }.min() ?? 0
         let tops = flow.filter { blocks[$0].indent == topIndent }
-        guard tops.count == selection.count(where: { $0 != nil }) else { return nil }
+        guard tops.count == texts else { return nil }
         // Куски вставки по верхним блокам: верхний со своими вложенными и содержимым таблиц.
         let pieces = tops.enumerated().map { position, start in
             Array(blocks[start..<(position + 1 < tops.count ? tops[position + 1] : blocks.endIndex)])
@@ -59,10 +62,16 @@ public enum PastedText {
         var result = Array(blocks[..<(tops.first ?? blocks.endIndex)])
         var next = pieces.makeIterator()
         for entry in selection {
-            if entry == nil {
+            switch entry {
+            case .empty:
                 result.append(Block(pageId: pageId, indent: topIndent, sortKey: .between(nil, nil)))
-            } else if let piece = next.next() {
-                result.append(contentsOf: piece)
+            case .image(let url, let name):
+                var props = BlockProps()
+                props.url = url
+                props.title = name
+                result.append(Block(pageId: pageId, kind: .image, indent: topIndent, sortKey: .between(nil, nil), props: props))
+            case .text:
+                if let piece = next.next() { result.append(contentsOf: piece) }
             }
         }
         return result
