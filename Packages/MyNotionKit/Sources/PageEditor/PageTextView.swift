@@ -415,6 +415,15 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
         if !hasMarkedText(), selection.length == 0, let position = mapper.blockPosition(at: selection.location),
            position.offset == document.blocks[position.index].pageTextLength {
             let next = endIncludingHidden(ofBlockAt: position.index)
+            // Пустой абзац перед блоком без текста (ссылка, картинка…) просто убирается; следующий блок выделяется,
+            // курсор в него не попадает.
+            if next == position.index + 1, next < document.blocks.count, document.blocks[position.index].kind == .paragraph,
+               document.blocks[position.index].text.string.isEmpty,
+               document.blocks[next].kind.rendersAsAttachment || document.blocks[next].kind == .pageLink {
+                removeBlocks(at: position.index..<next)
+                selectBlocks(position.index..<position.index + 1)
+                return
+            }
             if next < document.blocks.count, document.blocks[next].kind.rendersAsAttachment {
                 selectBlocks(next..<next + 1)
                 return
