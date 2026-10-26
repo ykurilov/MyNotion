@@ -111,6 +111,19 @@ struct NotionPasteTests {
         #expect(pasted.map(\.text.string) == ["Первый", "", "", "Второй"])
     }
 
+    @Test("Пустая строка внутри блока Notion: в HTML это два абзаца — пустые блоки всё равно на своих местах")
+    func blankLineInsideBlock() throws {
+        let html = "<meta charset='utf-8'><p>Раз</p><p>Два</p><p>Три<br>четыре</p><p>Пять</p><!-- notionvc: 1a2b -->"
+        let json = Self.notionJSON([.text("Раз\n\nДва"), .empty, .text("Три\nчетыре"), .empty, .text("Пять")], blocksV3: true)
+        let data = Self.webCustomData([("text/_notion-blocks-v3-production", json)])
+
+        let pasted = try #require(blocks(html: html, text: "", webCustomData: data))
+
+        #expect(pasted.map(\.text.string.isEmpty) == [false, false, true, false, true, false])
+        #expect(pasted.first?.text.string == "Раз")
+        #expect(pasted.last?.text.string == "Пять")
+    }
+
     @Test("Пустые абзацы между заголовком, списками с вложенностью и абзацем; оформление и ссылки — из HTML")
     func emptyBetweenLists() throws {
         let html = """

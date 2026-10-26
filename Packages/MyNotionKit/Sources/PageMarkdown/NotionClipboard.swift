@@ -33,7 +33,15 @@ enum NotionClipboard {
             // Вложений вставка из HTML не берёт (`PastedHTML` пропускает `img`, `video`…): со сверкой их не считаем.
             guard !attachmentTypes.contains(type) else { continue }
             let title = text(ofTitle: (root["properties"] as? [String: Any])?["title"])
-            result.append(type == "text" && title.isEmpty ? nil : title)
+            if type == "text", title.isEmpty {
+                result.append(nil)
+            } else if type == "text" {
+                // Пустая строка внутри текстового блока (⇧↩ дважды) делит его в HTML на отдельные абзацы.
+                let paragraphs = title.split(separator: /\n[ \t]*\n/).filter { !$0.allSatisfy(\.isWhitespace) }.map(String.init)
+                result.append(contentsOf: paragraphs.isEmpty ? [title] : paragraphs)
+            } else {
+                result.append(title)
+            }
         }
         return result
     }
