@@ -427,30 +427,30 @@ final class MainWindowModel {
 
     /// ⌘[ и «‹».
     func goBack() {
-        if tabs.goBack() { showActiveTab(focus: .body) }
+        if tabs.goBack() { showActiveTab(focus: .bodyWithoutCaret) }
     }
 
     /// ⌘] и «›».
     func goForward() {
-        if tabs.goForward() { showActiveTab(focus: .body) }
+        if tabs.goForward() { showActiveTab(focus: .bodyWithoutCaret) }
     }
 
     /// Щелчок по вкладке.
     func activateTab(_ index: Int) {
         tabs.activate(index)
-        showActiveTab(focus: .body)
+        showActiveTab(focus: .bodyWithoutCaret)
     }
 
     /// ⌃⇥.
     func showNextTab() {
         tabs.showNextTab()
-        showActiveTab(focus: .body)
+        showActiveTab(focus: .bodyWithoutCaret)
     }
 
     /// ⌃⇧⇥.
     func showPreviousTab() {
         tabs.showPreviousTab()
-        showActiveTab(focus: .body)
+        showActiveTab(focus: .bodyWithoutCaret)
     }
 
     /// Перетаскивание вкладки.

@@ -1,6 +1,8 @@
 import AppKit
 import Testing
 @testable import PageEditor
+import NotesCore
+import VisualStyle
 
 @MainActor
 @Suite("Наведение не меняет раскладку текста")
@@ -70,11 +72,19 @@ struct PageLinkRowHighlightTests {
         view.blockHandles.show(forBlockAt: 1, line: line)
         #expect(!highlight.isHidden)
         let host = view.pageEditor
-        let expected = host.convert(line.markerColumn.offsetBy(dx: view.textContainerOrigin.x, dy: view.textContainerOrigin.y), from: view)
-        #expect(highlight.frame.minX == expected.minX)
-        #expect(highlight.frame.height == expected.height)
-        #expect(highlight.frame.maxX == host.convert(NSPoint(x: view.textContainerOrigin.x + view.textContainer!.size.width, y: 0), from: view).x)
+        // Прямоугольник по центру значка по вертикали, слева — небольшой отступ перед значком, справа — край колонки.
+        let origin = view.textContainerOrigin
+        let iconCenterY = origin.y + line.baseline - PageLinkPainter.titleFont.capHeight / 2
+        let expectedCenter = host.convert(NSPoint(x: 0, y: iconCenterY), from: view).y
+        #expect(abs(highlight.frame.midY - expectedCenter) < 0.5)
+        #expect(highlight.frame.height == Metrics.PageLinkBlock.rowHighlightHeight)
+        let iconLeft = host.convert(NSPoint(x: origin.x + line.markerColumn.midX - Metrics.PageLinkBlock.iconSize / 2, y: 0), from: view).x
+        #expect(abs((iconLeft - highlight.frame.minX) - Metrics.PageLinkBlock.rowHighlightLeadingPadding) < 0.5)
+        #expect(highlight.frame.maxX == host.convert(NSPoint(x: origin.x + view.textContainer!.size.width, y: 0), from: view).x)
         #expect(highlight.frame.minX >= view.blockHandles.frame.maxX)
+        // Строка целиком внутри прямоугольника: поля сверху и снизу не меньше нуля и почти равны.
+        let rowTop = host.convert(NSPoint(x: 0, y: origin.y + line.top), from: view).y
+        #expect(highlight.frame.minY >= rowTop - 4)
 
         view.blockHandles.hide()
         #expect(highlight.isHidden)
@@ -157,5 +167,55 @@ struct TrailingParagraphClickTests {
             #expect(editor.document.blocks.count == 3)
             #expect(editor.document.blocks[2].kind == .paragraph)
         }
+    }
+}
+
+@MainActor
+@Suite("Курсор в блоке-ссылке на страницу")
+struct PageLinkCaretTests {
+    @Test("Курсор не показывается в блоке-ссылке: ни при выделении, ни после возврата места")
+    func caretNeverShownInPageLink() throws {
+        let editor = try EditorFixture([EditorFixture.Spec(kind: .pageLink, link: UUID()), .paragraph("Текст")])
+        let view = editor.textView
+        view.caret.showsWithoutKeyWindow = true
+        view.layoutSubtreeIfNeeded()
+        editor.window.makeFirstResponder(view)
+        view.setSelectedRange(NSRange(location: view.mapper.paragraphStart(ofBlockAt: 0), length: 0))
+        view.caret.update()
+        #expect(!view.caret.isShown, "курсор в ссылке после выделения")
+
+        view.restoreScrollPlace(TabScroll(blockId: editor.document.blocks[0].id, offset: 0))
+        view.caret.update()
+        #expect(!view.caret.isShown, "курсор в ссылке после возврата на страницу")
+
+        view.revealCaretAfterReturn()
+        view.setSelectedRange(NSRange(location: view.mapper.paragraphStart(ofBlockAt: 1), length: 0))
+        view.caret.update()
+        #expect(view.caret.isShown, "в обычном абзаце курсор должен быть")
+    }
+}
+
+@MainActor
+@Suite("Возврат на страницу: курсора нет")
+struct ReturnWithoutCaretTests {
+    @Test("Абзац сверху, ссылка ниже: после возврата курсор не показан, после щелчка — виден")
+    func noCaretAfterReturnWithParagraphOnTop() throws {
+        let editor = try EditorFixture([.paragraph("до"), EditorFixture.Spec(kind: .pageLink, link: UUID()), .paragraph("после")])
+        let view = editor.textView
+        view.caret.showsWithoutKeyWindow = true
+        view.layoutSubtreeIfNeeded()
+        view.restoreScrollPlace(TabScroll(blockId: editor.document.blocks[0].id, offset: 0))
+        editor.window.makeFirstResponder(view)
+        view.caret.update()
+        #expect(!view.caret.isShown)
+        // Щелчок под последним блоком ставит курсор сам, без системного отслеживания мыши.
+        let line = try #require(view.markerLine(ofBlockAt: 2))
+        let point = NSPoint(x: view.textContainerOrigin.x + 20, y: view.textContainerOrigin.y + line.top + line.height + 40)
+        let click = try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: view.convert(point, to: nil),
+            modifierFlags: [], timestamp: 0, windowNumber: editor.window.windowNumber,
+            context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
+        editor.step { view.mouseDown(with: click) }
+        view.caret.update()
+        #expect(view.caret.isShown)
     }
 }

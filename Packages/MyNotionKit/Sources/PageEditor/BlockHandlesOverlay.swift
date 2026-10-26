@@ -85,9 +85,13 @@ final class BlockHandlesOverlay: NSView {
     private func showRowHighlight(forBlock block: Block, line: BlockLine, host: PageTextView) {
         guard block.kind == .pageLink else { rowHighlight.isHidden = true; return }
         let origin = textView.textContainerOrigin
-        let row = line.markerColumn.offsetBy(dx: origin.x, dy: origin.y)
-        let width = origin.x + (textView.textContainer?.size.width ?? Metrics.Page.columnWidth) - row.minX
-        rowHighlight.frame = host.convert(NSRect(x: row.minX, y: row.minY, width: width, height: row.height), from: textView)
+        let column = line.markerColumn
+        // Середина строки — середина значка страницы; слева перед значком небольшой отступ.
+        let centerY = origin.y + line.baseline - PageLinkPainter.titleFont.capHeight / 2
+        let minX = origin.x + column.midX - Metrics.PageLinkBlock.iconSize / 2 - Metrics.PageLinkBlock.rowHighlightLeadingPadding
+        let maxX = origin.x + (textView.textContainer?.size.width ?? Metrics.Page.columnWidth)
+        let height = Metrics.PageLinkBlock.rowHighlightHeight
+        rowHighlight.frame = host.convert(NSRect(x: minX, y: centerY - height / 2, width: maxX - minX, height: height), from: textView)
         rowHighlight.isHidden = false
     }
 

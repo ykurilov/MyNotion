@@ -63,7 +63,13 @@ struct PageScrollPlaceTests {
         let restored = try #require(place.current())
         #expect(restored.blockId == saved.blockId)
         #expect(abs(restored.offset - saved.offset) <= 1, "сдвиг был \(saved.offset), стал \(restored.offset)")
-        #expect(reopened.textView.selectedRange().location > 0, "курсор — у блока сверху, а не в начале страницы")
+        #expect(reopened.textView.selectedRange().location > 0, "выделение — у блока сверху, а не в начале страницы")
+        reopened.textView.caret.showsWithoutKeyWindow = true
+        reopened.window.makeFirstResponder(reopened.textView)
+        reopened.textView.caret.update()
+        #expect(!reopened.textView.caret.isShown, "после возврата курсора нет, пока не щёлкнули")
+        reopened.textView.revealCaretAfterReturn()
+        #expect(reopened.textView.caret.isShown, "после щелчка или клавиши курсор появляется")
     }
 
     @Test("Выше блока у верха вид узнал свою высоту уже после возврата места — блок остаётся на месте")

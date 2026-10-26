@@ -33,13 +33,17 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
 
     /// Куда поставить курсор, когда страница появится в окне. `unchanged` — фокус остаётся, где был:
     /// страницу открыли из дерева, и стрелки, Enter и ⌘⌫ дальше работают в дереве.
-    public enum InitialFocus { case title, body, unchanged }
+    /// `bodyWithoutCaret` — страницу показали «назад/вперёд» или сменой вкладки: фокус в тексте, а курсора нет,
+    /// пока человек сам не щёлкнет или не нажмёт клавишу, как в Notion.
+    public enum InitialFocus { case title, body, bodyWithoutCaret, unchanged }
     private var pendingFocus: InitialFocus?
     /// Место прокрутки вкладки, на которое встать при показе (US3); возвращается до первой отрисовки.
     var pendingScrollPlace: TabScroll?
     private var didRestoreScrollPlace = false
     /// Возвращённое место держится, пока раскладка выше него уточняется (`keepScrollAnchor`).
     var scrollAnchor: ScrollAnchor?
+    /// Страницу открыли «назад/вперёд» или сменой вкладки: курсора нет, пока человек сам не щёлкнет или не нажмёт клавишу, как в Notion.
+    var isCaretHiddenUntilUserAction = false
     var isKeepingScrollAnchor = false
     /// Страница показана и принимает ввод.
     public var onReady: (@MainActor () -> Void)?
@@ -385,7 +389,7 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
     }
 
     /// Курсор стоит в блоке-подстранице (у него свой абзац без символов).
-    private var isCaretInPageLink: Bool {
+    var isCaretInPageLink: Bool {
         let selection = selectedRange()
         guard selection.length == 0, let position = mapper.blockPosition(at: selection.location) else { return false }
         return document.blocks[position.index].kind == .pageLink
@@ -447,6 +451,7 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
     public override func moveParagraphForwardAndModifySelection(_ sender: Any?) { perform(.moveBlocksDown) }
 
     public override func keyDown(with event: NSEvent) {
+        revealCaretAfterReturn()
         hideBlockHandles()
         if !hasMarkedText(), let command = EditorKeyBindings.command(for: event), handlesKey(command) {
             perform(command)
@@ -765,9 +770,16 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
         return atParagraphStart && string.character(at: location) == 0x0A
     }
 
+    func revealCaretAfterReturn() {
+        guard isCaretHiddenUntilUserAction else { return }
+        isCaretHiddenUntilUserAction = false
+        caret.update()
+    }
+
     // MARK: Мышь
 
     public override func mouseDown(with event: NSEvent) {
+        revealCaretAfterReturn()
         let point = convert(event.locationInWindow, from: nil)
         if let id = checkbox(at: point) {
             toggleCheckbox(ofBlock: id)
@@ -1172,6 +1184,9 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
             case .title: header.focusTitle()
             case .body where restored: window?.makeFirstResponder(self)
             case .body: focusBody(at: 0)
+            case .bodyWithoutCaret:
+                isCaretHiddenUntilUserAction = true
+                window?.makeFirstResponder(self)
             case .unchanged: break
             }
             onReady?()

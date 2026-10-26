@@ -52,7 +52,10 @@ public final class TextCaret {
 
     private func isVisible(in textView: NSTextView) -> Bool {
         guard let window = textView.window, window.firstResponder === textView, textView.selectedRange().length == 0,
-              (textView as? PageTextView)?.isBlockSelection != true else { return false }
+              (textView as? PageTextView)?.isBlockSelection != true,
+              (textView as? PageTextView)?.isCaretHiddenUntilUserAction != true,
+              // В блоке-ссылке на страницу нет текста для ввода: курсора там не бывает.
+              (textView as? PageTextView)?.isCaretInPageLink != true else { return false }
         return window.isKeyWindow || showsWithoutKeyWindow || Self.isPreviewMode
     }
 
