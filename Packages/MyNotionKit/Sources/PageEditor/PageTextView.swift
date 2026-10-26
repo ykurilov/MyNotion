@@ -385,7 +385,7 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
     }
 
     /// Курсор стоит в блоке-подстранице (у него свой абзац без символов).
-    private var isCaretInPageLink: Bool {
+    var isCaretInPageLink: Bool {
         let selection = selectedRange()
         guard selection.length == 0, let position = mapper.blockPosition(at: selection.location) else { return false }
         return document.blocks[position.index].kind == .pageLink

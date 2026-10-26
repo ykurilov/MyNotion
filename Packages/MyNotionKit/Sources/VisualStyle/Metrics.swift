@@ -107,6 +107,9 @@ public enum Metrics {
 
     public enum PageLinkBlock {
         public static let iconSize: CGFloat = 20
+        /// Подсветка строки под мышью (≈ по снимку Notion): высота и отступ слева от значка.
+        public static let rowHighlightHeight: CGFloat = 28
+        public static let rowHighlightLeadingPadding: CGFloat = 6
         /// Подчёркивание названия: толщина и отступ под базовой линией (≈ по снимку).
         public static let underlineThickness: CGFloat = 1
         public static let underlineOffset: CGFloat = 3
