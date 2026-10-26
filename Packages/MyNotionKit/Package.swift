@@ -41,6 +41,7 @@ let package = Package(
         .library(name: "PageMarkdown", targets: ["PageMarkdown"]),
         .library(name: "PageSharing", targets: ["PageSharing"]),
         .library(name: "Proofreading", targets: ["Proofreading"]),
+        .library(name: "NotionAPI", targets: ["NotionAPI"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.11.1"),
@@ -110,9 +111,11 @@ let package = Package(
                                                         "Attachments", "MarkdownExport", "NotionImport", "Navigation", "PageMarkdown", "PageCover",
                                                         .product(name: "GRDB", package: "GRDB.swift")]),
         // Страница ↔ Markdown для агента (research R5).
-        .target(name: "PageMarkdown", dependencies: ["NotesCore", "MarkdownExport", "NotionImport", "Attachments", "LinkPreview"]),
+        .target(name: "PageMarkdown", dependencies: ["NotesCore", "MarkdownExport", "NotionImport", "Attachments", "LinkPreview", "NotionAPI"]),
         // «Исправить ошибки»: запрос к DeepSeek, ключ в связке ключей, перенос оформления и правки по словам — без AppKit.
         .target(name: "Proofreading", dependencies: ["NotesCore"]),
+        // Картинки вставки из Notion: блок по ключу интеграции, ключ в связке ключей — только Foundation.
+        .target(name: "NotionAPI"),
         // 006. Ссылка на страницу только для чтения: снимок без закрытого, публикация после правок (contracts/share-api.md).
         .target(name: "PageSharing", dependencies: ["NotesCore", "MarkdownExport", "PageCover", "Sync", .product(name: "GRDB", package: "GRDB.swift")]),
 
@@ -151,10 +154,11 @@ let package = Package(
         .testTarget(name: "ControlCommandsTests", dependencies: ["ControlCommands", "ControlProtocol", "NotesCore", "Databases", "PageVersions",
                                                                  "MarkdownExport", "NotionImport", "Attachments", "Sync", "PageSearch", "Backlinks", "PageCover",
                                                                  .product(name: "GRDB", package: "GRDB.swift")]),
-        .testTarget(name: "PageMarkdownTests", dependencies: ["PageMarkdown", "NotesCore", "MarkdownExport", "NotionImport", "Attachments", "PageEditor"],
+        .testTarget(name: "PageMarkdownTests", dependencies: ["PageMarkdown", "NotesCore", "MarkdownExport", "NotionImport", "Attachments", "PageEditor", "NotionAPI"],
                     resources: [.copy("Fixtures")]),
         .testTarget(name: "PageSharingTests", dependencies: ["PageSharing", "NotesCore", "Databases", "Sync", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "ProofreadingTests", dependencies: ["Proofreading", "NotesCore"]),
+        .testTarget(name: "NotionAPITests", dependencies: ["NotionAPI"]),
     ],
     swiftLanguageModes: [.v6]
 )
