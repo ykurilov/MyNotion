@@ -476,9 +476,9 @@ extension PageTextView {
         return true
     }
 
-    /// Подстраница, упоминание или ссылка под точкой: они открываются щелчком, над ними рука, как в Notion.
+    /// Подстраница, упоминание, ссылка или квадрат чекбокса под точкой: они срабатывают щелчком, над ними рука, как в Notion.
     func isClickableText(at point: NSPoint) -> Bool {
-        linkedPage(at: point) != nil || atomCharacter(at: point) != nil || link(at: point) != nil
+        checkbox(at: point) != nil || linkedPage(at: point) != nil || atomCharacter(at: point) != nil || link(at: point) != nil
     }
 
     private var textPointerRect: NSRect {
