@@ -52,3 +52,110 @@ struct HoverLayoutTests {
         }
     }
 }
+
+@MainActor
+@Suite("Подсветка строки блока-подстраницы при наведении")
+struct PageLinkRowHighlightTests {
+    @Test("Над подстраницей строка подсвечена, над абзацем и после ухода — нет")
+    func highlightsOnlyPageLinkRow() throws {
+        let editor = try EditorFixture([.paragraph("Текст"), EditorFixture.Spec(kind: .pageLink, link: UUID())])
+        let view = editor.textView
+        view.layoutSubtreeIfNeeded()
+        let highlight = view.blockHandles.rowHighlight
+
+        view.blockHandles.show(forBlockAt: 0, line: try #require(view.markerLine(ofBlockAt: 0)))
+        #expect(highlight.isHidden)
+
+        let line = try #require(view.markerLine(ofBlockAt: 1))
+        view.blockHandles.show(forBlockAt: 1, line: line)
+        #expect(!highlight.isHidden)
+        let host = view.pageEditor
+        let expected = host.convert(line.markerColumn.offsetBy(dx: view.textContainerOrigin.x, dy: view.textContainerOrigin.y), from: view)
+        #expect(highlight.frame.minX == expected.minX)
+        #expect(highlight.frame.height == expected.height)
+        #expect(highlight.frame.maxX == host.convert(NSPoint(x: view.textContainerOrigin.x + view.textContainer!.size.width, y: 0), from: view).x)
+        #expect(highlight.frame.minX >= view.blockHandles.frame.maxX)
+
+        view.blockHandles.hide()
+        #expect(highlight.isHidden)
+    }
+}
+
+@MainActor
+@Suite("Щелчок по строке блока-подстраницы")
+struct PageLinkRowClickTests {
+    @Test("Щелчок справа от названия открывает страницу и не ставит курсор")
+    func clickBesideTitleOpensPage() throws {
+        let target = UUID()
+        let editor = try EditorFixture([.paragraph("Текст"), EditorFixture.Spec(kind: .pageLink, link: target)])
+        let view = editor.textView
+        view.layoutSubtreeIfNeeded()
+        var opened: UUID?
+        view.onOpenPage = { opened = $0 }
+        let line = try #require(view.markerLine(ofBlockAt: 1))
+        let origin = view.textContainerOrigin
+        let farRight = NSPoint(x: origin.x + view.textContainer!.size.width - 20, y: origin.y + line.top + line.height / 2)
+        #expect(view.linkedPage(at: farRight) == target)
+        #expect(view.linkedPage(at: NSPoint(x: origin.x - 30, y: farRight.y)) == nil)
+        let before = view.selectedRange()
+        let click = try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: view.convert(farRight, to: nil),
+            modifierFlags: [], timestamp: 0, windowNumber: editor.window.windowNumber,
+            context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
+        view.mouseDown(with: click)
+        #expect(opened == target)
+        #expect(view.selectedRange() == before)
+    }
+}
+
+@MainActor
+@Suite("Щелчок ниже последнего блока")
+struct TrailingParagraphClickTests {
+    private func clickBelow(_ editor: EditorFixture) throws {
+        let view = editor.textView
+        view.layoutSubtreeIfNeeded()
+        let last = try #require(view.markerLine(ofBlockAt: editor.document.blocks.count - 1))
+        let point = NSPoint(x: view.textContainerOrigin.x + 100, y: view.textContainerOrigin.y + last.top + last.height + 40)
+        let click = try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: view.convert(point, to: nil),
+            modifierFlags: [], timestamp: 0, windowNumber: editor.window.windowNumber,
+            context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
+        editor.step { view.mouseDown(with: click) }
+    }
+
+    @Test("После страницы-ссылки добавляется пустой абзац с курсором; ⌘Z убирает")
+    func addsParagraphAfterPageLink() throws {
+        let editor = try EditorFixture([.paragraph("Текст"), EditorFixture.Spec(kind: .pageLink, link: UUID())])
+        try clickBelow(editor)
+        #expect(editor.document.blocks.count == 3)
+        #expect(editor.document.blocks[2].kind == .paragraph && editor.document.blocks[2].text.string.isEmpty)
+        #expect(editor.textView.selectedRange().location == editor.textView.mapper.paragraphStart(ofBlockAt: 2))
+        editor.undo()
+        #expect(editor.document.blocks.count == 2)
+    }
+
+    @Test("Повторный щелчок не плодит пустые абзацы")
+    func repeatedClickAddsNothing() throws {
+        let editor = try EditorFixture([.paragraph("Текст"), EditorFixture.Spec(kind: .pageLink, link: UUID())])
+        try clickBelow(editor)
+        try clickBelow(editor)
+        try clickBelow(editor)
+        #expect(editor.document.blocks.count == 3)
+    }
+
+    @Test("Если последний абзац пуст, курсор встаёт в него без нового блока")
+    func reusesEmptyLastParagraph() throws {
+        let editor = try EditorFixture([.paragraph("Текст"), .paragraph("")])
+        try clickBelow(editor)
+        #expect(editor.document.blocks.count == 2)
+        #expect(editor.textView.selectedRange().location == editor.textView.mapper.paragraphStart(ofBlockAt: 1))
+    }
+
+    @Test("После заголовка и списка с текстом тоже добавляется абзац")
+    func addsParagraphAfterTextBlocks() throws {
+        for last in [EditorFixture.Spec.heading(1, "Заголовок"), .bullet("Пункт")] {
+            let editor = try EditorFixture([.paragraph("Текст"), last])
+            try clickBelow(editor)
+            #expect(editor.document.blocks.count == 3)
+            #expect(editor.document.blocks[2].kind == .paragraph)
+        }
+    }
+}

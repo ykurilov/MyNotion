@@ -13,6 +13,8 @@ final class BlockHandlesOverlay: NSView {
     let dragHandle = BlockHandleButton(kind: .drag)
     let dropIndicator = BlockDropLine()
     let dragGhost = BlockDragGhost()
+    /// Подсветка строки блока-подстраницы под мышью, как в Notion: от значка до правого края колонки.
+    let rowHighlight = BlockRowHighlight()
     /// Блок, у которого показаны ручки.
     private(set) var blockId: UUID?
     /// Где нажали «⋮⋮» (координаты окна).
@@ -63,6 +65,7 @@ final class BlockHandlesOverlay: NSView {
         if superview !== host { host.addSubview(self) }
         if dropIndicator.superview !== host { host.addSubview(dropIndicator) }
         if dragGhost.superview !== host { host.addSubview(dragGhost) }
+        if rowHighlight.superview !== host { host.addSubview(rowHighlight, positioned: .below, relativeTo: self) }
         let block = textView.document.blocks[index]
         blockId = block.id
         updateFoldHandle()
@@ -76,11 +79,22 @@ final class BlockHandlesOverlay: NSView {
         frame = host.convert(NSRect(x: columnLeft - Metrics.BlockHandles.addButtonLeadingOffset, y: centerY - height / 2, width: width, height: height),
                              from: textView)
         isHidden = false
+        showRowHighlight(forBlock: block, line: line, host: host)
+    }
+
+    private func showRowHighlight(forBlock block: Block, line: BlockLine, host: PageTextView) {
+        guard block.kind == .pageLink else { rowHighlight.isHidden = true; return }
+        let origin = textView.textContainerOrigin
+        let row = line.markerColumn.offsetBy(dx: origin.x, dy: origin.y)
+        let width = origin.x + (textView.textContainer?.size.width ?? Metrics.Page.columnWidth) - row.minX
+        rowHighlight.frame = host.convert(NSRect(x: row.minX, y: row.minY, width: width, height: row.height), from: textView)
+        rowHighlight.isHidden = false
     }
 
     func hide() {
         guard !isDragging else { return }
         isHidden = true
+        rowHighlight.isHidden = true
         blockId = nil
     }
 
@@ -200,6 +214,27 @@ final class BlockDropLine: NSView {
     override func draw(_ dirtyRect: NSRect) {
         Palette.dropIndicator.setFill()
         bounds.fill(using: .sourceOver)
+    }
+}
+
+/// Светлый скруглённый фон строки блока под мышью (цвет наведения, как в боковой панели).
+@MainActor
+final class BlockRowHighlight: NSView {
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        isHidden = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
+
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func draw(_ dirtyRect: NSRect) {
+        Palette.hoverBackground.setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: Metrics.BlockHandles.rowHighlightCornerRadius,
+                     yRadius: Metrics.BlockHandles.rowHighlightCornerRadius).fill()
     }
 }
 
@@ -499,7 +534,7 @@ extension PageTextView {
         guard let top = frames.map(\.lowerBound).min(), let bottom = frames.map(\.upperBound).max() else { return nil }
         let rect = NSRect(x: textContainerOrigin.x, y: top, width: textContainer?.size.width ?? Metrics.Page.columnWidth, height: bottom - top)
         guard let bitmap = bitmapImageRepForCachingDisplay(in: rect) else { return nil }
-        let chrome = ([blockHandles, emptyParagraphHint, slashQueryHighlight, caret.view] + insertionIndicators(in: self)).filter { !$0.isHidden }
+        let chrome = ([blockHandles, blockHandles.rowHighlight, emptyParagraphHint, slashQueryHighlight, caret.view] + insertionIndicators(in: self)).filter { !$0.isHidden }
         chrome.forEach { $0.isHidden = true }
         drawsBackground = false
         cacheDisplay(in: rect, to: bitmap)

@@ -774,6 +774,10 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
             return
         }
         if handleStructuralBlockClick(at: point) { return }
+        if isBelowLastBlock(point) {
+            placeCaretInTrailingParagraph()
+            return
+        }
         if let pageId = linkedPage(at: point) {
             onOpenPage?(pageId)
             return

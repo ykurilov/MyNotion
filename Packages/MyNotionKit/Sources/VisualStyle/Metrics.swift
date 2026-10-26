@@ -121,6 +121,8 @@ public enum Metrics {
     /// Ручки «+» и «⋮⋮» слева от колонки у блока под мышью; смещения — от левого края колонки.
     public enum BlockHandles {
         public static let addButtonSize = CGSize(width: 24, height: 24)
+        /// Скругление подсветки строки блока-подстраницы под мышью.
+        public static let rowHighlightCornerRadius: CGFloat = 6
         public static let addButtonLeadingOffset: CGFloat = 52
         public static let dragHandleSize = CGSize(width: 18, height: 24)
         public static let dragHandleLeadingOffset: CGFloat = 28

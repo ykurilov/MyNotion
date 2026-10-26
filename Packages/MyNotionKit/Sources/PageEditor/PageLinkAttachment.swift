@@ -69,12 +69,6 @@ enum PageLinkPainter {
         let ellipsis = BlockDecorationPainter.textLine("…", font: titleFont)
         return CTLineCreateTruncatedLine(line, Double(width), .end, ellipsis) ?? line
     }
-
-    /// Ширина строки блока для щелчка: колонка значка и название.
-    static func clickWidth(_ shown: MentionDisplay, line: BlockLine) -> CGFloat {
-        let width = CTLineGetTypographicBounds(truncatedLine(shown.title, width: Metrics.Page.columnWidth), nil, nil, nil)
-        return line.textStart - line.markerColumn.minX + width
-    }
 }
 
 extension PageTextView {
@@ -85,7 +79,8 @@ extension PageTextView {
         guard block.kind == .pageLink, let pageId = block.linkedPageId else { return nil }
         let origin = textContainerOrigin
         let column = line.markerColumn.offsetBy(dx: origin.x, dy: origin.y)
-        let width = PageLinkPainter.clickWidth(pageLinkDisplay(of: pageId), line: line)
+        // Вся подсвеченная строка, а не только название: текста для ввода у блока нет.
+        let width = origin.x + (textContainer?.size.width ?? Metrics.Page.columnWidth) - column.minX
         let target = CGRect(x: column.minX, y: column.minY, width: width, height: column.height)
         return target.contains(point) ? pageId : nil
     }
