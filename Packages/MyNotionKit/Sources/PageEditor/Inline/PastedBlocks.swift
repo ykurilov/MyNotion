@@ -7,7 +7,9 @@ import NotesCore
 extension PageTextView {
     /// Блоки из простого текста и HTML буфера; `nil` — вставлять текстом в строку. Блоки потока страницы —
     /// без `containerId`, содержимое таблиц и колонок — с id своего контейнера из этого же списка; страница — `pageId`.
-    public typealias PastedTextReader = @MainActor (_ text: String, _ html: String?, _ pageId: UUID, _ hasRichText: Bool) -> [Block]?
+    /// `webCustomData` — буфер Chromium (`org.chromium.web-custom-data`): Notion кладёт в него места пустых блоков.
+    public typealias PastedTextReader = @MainActor (_ text: String, _ html: String?, _ pageId: UUID, _ hasRichText: Bool,
+                                                    _ webCustomData: Data?) -> [Block]?
 
     /// `false` — ставить блоки здесь нельзя (курсор у блока без текста): вставка идёт текстом. `keepsLook` — блоки
     /// скопированы в MyNotion: первый в пустое начало встаёт целиком, с отметкой, цветом и свойствами.

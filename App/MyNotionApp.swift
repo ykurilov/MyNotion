@@ -26,8 +26,8 @@ struct MyNotionApp: App {
         // настройку, оставшийся путь «открывает» как документ, и окно со страницей не появляется.
         UserDefaults.standard.register(defaults: ["NSTreatUnknownArgumentsAsOpen": "NO"])
         // ⌘V Markdown ответа ИИ и текста со списками — блоками: разбор тот же, что у `mynotion page write`.
-        PageTextView.defaultPastedTextReader = { text, html, pageId, hasRichText in
-            PastedText.blocks(from: text, html: html, pageId: pageId, hasRichText: hasRichText)
+        PageTextView.defaultPastedTextReader = { text, html, pageId, hasRichText, webCustomData in
+            PastedText.blocks(from: text, html: html, webCustomData: webCustomData, pageId: pageId, hasRichText: hasRichText)
         }
         // ⌘C нескольких блоков — для других программ ещё Markdown простым текстом и HTML.
         PageTextView.defaultCopiedBlocksWriter = { blocks, pageTitle in

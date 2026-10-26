@@ -10,7 +10,14 @@ public enum PastedText {
     /// рядом с текстом, таблица, разделитель); HTML-обёртка простого текста (редактор кода) уступает его Markdown.
     /// `hasRichText` — в буфере есть и оформленный текст (HTML, RTF). Тогда из простого текста блоками — только явный
     /// Markdown: простой текст страницы бывает со строками «1.», а оформление лучше возьмёт вставка с оформлением.
-    public static func blocks(from text: String, html: String? = nil, pageId: UUID, hasRichText: Bool) -> [Block]? {
+    /// `webCustomData` — буфер Chromium (`org.chromium.web-custom-data`): у Notion в нём места пустых блоков.
+    public static func blocks(from text: String, html: String? = nil, webCustomData: Data? = nil, pageId: UUID,
+                              hasRichText: Bool) -> [Block]? {
+        if let html, let webCustomData, let selection = NotionClipboard.selectedBlocks(fromWebCustomData: webCustomData),
+           let blocks = withNotionEmptyBlocks(selection, in: blocks(fromMarkdown: PastedHTML.markdown(from: html), pageId: pageId),
+                                              pageId: pageId) {
+            return blocks
+        }
         if let html, let blocks = structuredBlocks(fromHTML: html, pageId: pageId) { return blocks }
         let lines = text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
             .components(separatedBy: "\n")
@@ -34,6 +41,31 @@ public enum PastedText {
         let flow = blocks.filter { $0.containerId == nil }
         guard flow.count > 1, flow.contains(where: { $0.kind != .paragraph }) else { return nil }
         return blocks
+    }
+
+    /// Блоки HTML Notion с пустыми абзацами на местах пустых блоков выделения. Верхние блоки HTML — по одному на каждый
+    /// непустой верхний блок выделения, вложенные идут со своим верхним. `nil` — пустых блоков нет или блоки
+    /// не сходятся по числу: тогда вставка как без Notion.
+    private static func withNotionEmptyBlocks(_ selection: [String?], in blocks: [Block], pageId: UUID) -> [Block]? {
+        guard selection.contains(where: { $0 == nil }) else { return nil }
+        let flow = blocks.indices.filter { blocks[$0].containerId == nil }
+        let topIndent = flow.map { blocks[$0].indent }.min() ?? 0
+        let tops = flow.filter { blocks[$0].indent == topIndent }
+        guard tops.count == selection.count(where: { $0 != nil }) else { return nil }
+        // Куски вставки по верхним блокам: верхний со своими вложенными и содержимым таблиц.
+        let pieces = tops.enumerated().map { position, start in
+            Array(blocks[start..<(position + 1 < tops.count ? tops[position + 1] : blocks.endIndex)])
+        }
+        var result = Array(blocks[..<(tops.first ?? blocks.endIndex)])
+        var next = pieces.makeIterator()
+        for entry in selection {
+            if entry == nil {
+                result.append(Block(pageId: pageId, indent: topIndent, sortKey: .between(nil, nil)))
+            } else if let piece = next.next() {
+                result.append(contentsOf: piece)
+            }
+        }
+        return result
     }
 
     private static func blocks(fromMarkdown markdown: String, pageId: UUID) -> [Block] {
