@@ -37,7 +37,7 @@ extension PageTextView {
     /// Вернуть место: TextKit 2 ставит видимую область на абзац блока (`relocateViewport`) — раскладывается он
     /// и соседи, а не всё выше (проба вкладок, research R14: 1–2 мс). Высоты выше блока до раскладки — оценка,
     /// поэтому после первой прокрутки место уточняется по разложенному абзацу, а потом держится якорем
-    /// (`keepScrollAnchor`). Курсор — в начало блока, без прокрутки.
+    /// (`keepScrollAnchor`). Выделение — в начало блока, но курсор скрыт (`isCaretHiddenUntilUserAction`).
     func restoreScrollPlace(_ place: TabScroll) {
         guard let index = document.index(ofBlock: place.blockId), let scrollView = enclosingScrollView,
               let layoutManager = textLayoutManager, let storage = textContentStorage else { return }
@@ -61,6 +61,8 @@ extension PageTextView {
         scrollAnchor = ScrollAnchor(blockId: place.blockId, offset: place.offset, visibleTop: clip.bounds.minY)
         layoutSubtreeIfNeeded()
         keepScrollAnchor()
+        // Курсора на вернувшейся странице нет, пока человек сам не щёлкнет или не нажмёт клавишу.
+        isCaretHiddenUntilUserAction = true
         setSelectedRange(NSRange(location: start, length: 0))
     }
 

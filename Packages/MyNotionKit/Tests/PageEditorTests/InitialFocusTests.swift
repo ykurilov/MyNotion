@@ -31,4 +31,23 @@ struct InitialFocusTests {
             #expect(window.firstResponder === page, "щелчок по подстранице ставит курсор в текст")
         }
     }
+
+    @Test("Возврат «назад» с абзацем сверху: фокус в тексте, курсора нет до клавиши")
+    func returnWithoutCaret() async throws {
+        let editor = try EditorFixture([.paragraph("Текст"), .paragraph("Ещё")])
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800), styleMask: [.titled],
+                              backing: .buffered, defer: true)
+        let content = NSView(frame: window.contentLayoutRect)
+        window.contentView = content
+        let page = PageTextView(document: editor.document, initialFocus: .bodyWithoutCaret)
+        let ready = AsyncStream<Void> { continuation in page.onReady = { continuation.yield() } }
+        content.addSubview(page)
+        var readyEvents = ready.makeAsyncIterator()
+        _ = await readyEvents.next()
+
+        #expect(window.firstResponder === page)
+        #expect(page.isCaretHiddenUntilUserAction, "после возврата курсора на странице нет")
+        page.revealCaretAfterReturn()
+        #expect(!page.isCaretHiddenUntilUserAction)
+    }
 }

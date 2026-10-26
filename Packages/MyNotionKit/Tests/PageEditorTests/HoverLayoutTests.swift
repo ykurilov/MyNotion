@@ -188,8 +188,34 @@ struct PageLinkCaretTests {
         view.caret.update()
         #expect(!view.caret.isShown, "курсор в ссылке после возврата на страницу")
 
+        view.revealCaretAfterReturn()
         view.setSelectedRange(NSRange(location: view.mapper.paragraphStart(ofBlockAt: 1), length: 0))
         view.caret.update()
         #expect(view.caret.isShown, "в обычном абзаце курсор должен быть")
+    }
+}
+
+@MainActor
+@Suite("Возврат на страницу: курсора нет")
+struct ReturnWithoutCaretTests {
+    @Test("Абзац сверху, ссылка ниже: после возврата курсор не показан, после щелчка — виден")
+    func noCaretAfterReturnWithParagraphOnTop() throws {
+        let editor = try EditorFixture([.paragraph("до"), EditorFixture.Spec(kind: .pageLink, link: UUID()), .paragraph("после")])
+        let view = editor.textView
+        view.caret.showsWithoutKeyWindow = true
+        view.layoutSubtreeIfNeeded()
+        view.restoreScrollPlace(TabScroll(blockId: editor.document.blocks[0].id, offset: 0))
+        editor.window.makeFirstResponder(view)
+        view.caret.update()
+        #expect(!view.caret.isShown)
+        // Щелчок под последним блоком ставит курсор сам, без системного отслеживания мыши.
+        let line = try #require(view.markerLine(ofBlockAt: 2))
+        let point = NSPoint(x: view.textContainerOrigin.x + 20, y: view.textContainerOrigin.y + line.top + line.height + 40)
+        let click = try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: view.convert(point, to: nil),
+            modifierFlags: [], timestamp: 0, windowNumber: editor.window.windowNumber,
+            context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
+        editor.step { view.mouseDown(with: click) }
+        view.caret.update()
+        #expect(view.caret.isShown)
     }
 }
