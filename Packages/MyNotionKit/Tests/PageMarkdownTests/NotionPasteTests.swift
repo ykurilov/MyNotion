@@ -96,6 +96,21 @@ struct NotionPasteTests {
         #expect(pasted.map(\.text.string) == ["Первый абзац", "", "Второй", ""])
     }
 
+    @Test("Картинка среди блоков: в HTML её нет, со сверкой не считается — пустые абзацы на своих местах")
+    func emptyParagraphsAroundImage() throws {
+        let html = """
+        <meta charset='utf-8'><p>Первый</p><p><img src="attachment:1a2b:snimok.png" alt="snimok.png"></p>\
+        <p>Второй</p><!-- notionvc: 1a2b -->
+        """
+        let image = NotionBlock(type: "image")
+        let json = Self.notionJSON([.text("Первый"), .empty, image, .empty, .text("Второй")], blocksV3: true)
+        let data = Self.webCustomData([("text/_notion-blocks-v3-production", json)])
+
+        let pasted = try #require(blocks(html: html, text: "Первый\nВторой", webCustomData: data))
+
+        #expect(pasted.map(\.text.string) == ["Первый", "", "", "Второй"])
+    }
+
     @Test("Пустые абзацы между заголовком, списками с вложенностью и абзацем; оформление и ссылки — из HTML")
     func emptyBetweenLists() throws {
         let html = """
@@ -128,8 +143,8 @@ struct NotionPasteTests {
             // Пустых блоков нет: абзацы без строения, как раньше, — вставка с оформлением, а не блоками.
             (paragraphs, Self.notionData([.text("Первый"), .text("Второй")])),
             (withList, Self.notionData([.text("Первый"), NotionBlock(type: "bulleted_list", title: "Пункт")])),
-            // Блоков с текстом в Notion больше, чем в HTML (картинка, которой нет в HTML), — не гадать.
-            (withList, Self.notionData([.text("Первый"), .empty, NotionBlock(type: "image"), NotionBlock(type: "bulleted_list", title: "Пункт")])),
+            // Блоков с текстом в Notion больше, чем в HTML, — не гадать.
+            (withList, Self.notionData([.text("Первый"), .empty, .text("Лишний"), NotionBlock(type: "bulleted_list", title: "Пункт")])),
             (paragraphs, Self.notionData([.text("Первый"), .empty])),
             // Испорченный буфер, чужой JSON, другой сайт.
             (paragraphs, Data([1, 2, 3])),

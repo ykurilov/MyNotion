@@ -7,6 +7,9 @@ enum NotionClipboard {
     /// в `blockSelection.blocks`, выделение блоков (⌘A) — в `blocks` в корне.
     private static let selectionTypes = ["text/_notion-multi-text-production", "text/_notion-blocks-v3-production"]
 
+    /// Блоки Notion с картинкой, видео, звуком или файлом: в HTML буфера от них остаются только пропускаемые теги.
+    private static let attachmentTypes: Set = ["image", "video", "audio", "file", "pdf"]
+
     /// Верхние блоки выделения по порядку: `nil` — пустой текстовый блок, иначе текст блока.
     /// `nil` целиком — не Notion или данные не читаются.
     static func selectedBlocks(fromWebCustomData data: Data) -> [String?]? {
@@ -27,6 +30,8 @@ enum NotionClipboard {
             guard let subtree = block["blockSubtree"] as? [String: Any],
                   let records = subtree["block"] as? [String: [String: Any]],
                   let root = rootValue(of: records), let type = root["type"] as? String else { return nil }
+            // Вложений вставка из HTML не берёт (`PastedHTML` пропускает `img`, `video`…): со сверкой их не считаем.
+            guard !attachmentTypes.contains(type) else { continue }
             let title = text(ofTitle: (root["properties"] as? [String: Any])?["title"])
             result.append(type == "text" && title.isEmpty ? nil : title)
         }
