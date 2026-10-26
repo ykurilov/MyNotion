@@ -31,6 +31,12 @@ enum PastedLinkChoice: CaseIterable {
     }
 }
 
+/// Картинка вставки, которая скачивается следом: откуда и под каким занятым описанием.
+struct PastedDownload {
+    var url: URL
+    var ref: AttachmentRef
+}
+
 /// Состояние вставки медиа-блоков в странице.
 @MainActor
 final class MediaInsertionState {
@@ -46,6 +52,8 @@ final class MediaInsertionState {
     var insertionPopover: NSPopover?
     /// Последняя ошибка вставки (больше 100 МБ, нет доступа) — показана Юрию.
     var lastError: String?
+    /// Скачивание картинок последней вставки.
+    var pastedDownloads: Task<Void, Never>?
 
     func closePastedLinkMenu() {
         pastedLink = nil
@@ -56,6 +64,9 @@ final class MediaInsertionState {
 
 extension PageTextView {
     var lastAttachmentError: String? { mediaInsertion.lastError }
+
+    /// Скачивание картинок последней вставки (из Notion); тесты ждут его конца.
+    var pastedDownloads: Task<Void, Never>? { mediaInsertion.pastedDownloads }
 
     // MARK: Файлы из Finder и буфера
 
@@ -99,8 +110,52 @@ extension PageTextView {
         var draft = BlockDraft(document.blocks[index])
         var props = draft.props ?? BlockProps()
         props.attachment = ref
+        // Скачанная картинка: размер стал известен только теперь.
+        if document.blocks[index].kind == .image, props.pixelSize == nil,
+           let url = MediaBlocks.availability(of: ref).fileURL, let size = PixelSize(ofImageAt: url) {
+            props.pixelSize = size
+        }
         draft.props = props
         replaceBlockQuietly(at: index, with: draft)
+    }
+
+    // MARK: Картинки вставки, которые скачиваются следом
+
+    /// Картинки разбора вставки без файла, но со ссылкой (`url`) и именем (`title`) — из Notion: место под файл
+    /// занимается сразу, блок встаёт заглушкой, ссылка и имя в страницу не попадают. Без служб медиа такие
+    /// картинки не вставляются.
+    func reservingPastedDownloads(_ blocks: [Block]) -> (blocks: [Block], downloads: [PastedDownload]) {
+        var downloads: [PastedDownload] = []
+        let reserved = blocks.compactMap { block -> Block? in
+            guard block.kind == .image, block.props.attachment == nil, let url = block.props.url else { return block }
+            guard let ref = try? MediaBlocks.services?.reserveDownload(named: block.props.title ?? "Картинка") else { return nil }
+            var block = block
+            block.props.url = nil
+            block.props.title = nil
+            block.props.attachment = ref
+            downloads.append(PastedDownload(url: url, ref: ref))
+            return block
+        }
+        return (reserved, downloads)
+    }
+
+    /// Скачать картинки вставки по очереди, не держа окно: заглушка «Загружается…», потом картинка без шага ⌘Z.
+    /// Не вышло — причина остаётся на заглушке (её записывают службы); окна с ошибкой нет, текст уже вставлен.
+    func downloadPastedImages(_ downloads: [PastedDownload]) {
+        guard !downloads.isEmpty, let services = MediaBlocks.services else { return }
+        downloads.forEach { MediaBlocks.beginDownload($0.ref.id) }
+        mediaInsertion.pastedDownloads = Task { [weak self] in
+            for download in downloads {
+                do {
+                    let ref = try await services.download(from: download.url, into: download.ref)
+                    MediaBlocks.endDownload(ref.id)
+                    self?.completeCopy(ref)
+                } catch {
+                    MediaBlocks.endDownload(download.ref.id)
+                    self?.mediaInsertion.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                }
+            }
+        }
     }
 
     /// ⌘V: файлы, скопированные в Finder, или картинка из буфера (PNG). `false` — в буфере ни того ни другого.

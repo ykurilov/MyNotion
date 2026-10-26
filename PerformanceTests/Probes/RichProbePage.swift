@@ -297,6 +297,8 @@ final class ProbeMediaServices: MediaBlockServices {
     }
     func importData(_ data: Data, name: String, contentType: String) async throws -> AttachmentRef { throw CocoaError(.featureUnsupported) }
     func downloadFile(from url: URL) async throws -> AttachmentRef { throw CocoaError(.featureUnsupported) }
+    func reserveDownload(named name: String) throws -> AttachmentRef { throw CocoaError(.featureUnsupported) }
+    func download(from url: URL, into reserved: AttachmentRef) async throws -> AttachmentRef { throw CocoaError(.featureUnsupported) }
     func videoSource(for url: URL) -> VideoSource? { nil }
     func linkPreview(for url: URL) async -> MediaLinkPreview { MediaLinkPreview(title: nil, description: nil, image: nil, icon: nil) }
     func videoCover(for url: URL) async -> MediaLinkPreview? { nil }

@@ -91,6 +91,28 @@ import Testing
         #expect(try Data(contentsOf: try #require(mac.attachments.fileURL(for: ref.id))) == bytes)
     }
 
+    @Test func reservedDownloadKeepsIdAndEndsLocalOrWithReason() throws {
+        let mac = try AttachmentTestMac()
+        let reserved = try mac.attachments.reserveDownload(named: "snimok.png")
+        #expect(reserved.name == "snimok.png" && reserved.sha256.isEmpty && reserved.contentType == "public.png")
+        #expect(mac.attachments.availability(of: reserved.id) == .failed(AttachmentStore.copyingMessage))
+        try mac.insertBlock(attachment: reserved)
+        #expect(try !mac.attachments.hasPendingTransfers(), "Пока качается — не в очереди отправки и скачивания")
+
+        let bytes = sampleBytes(5_000)
+        let ref = try mac.attachments.importData(bytes, into: reserved, contentType: "public.jpeg")
+        #expect(ref.id == reserved.id && ref.byteCount == 5_000 && ref.contentType == "public.jpeg")
+        #expect(ref.sha256 == SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined())
+        #expect(try mac.record(ref.id)?.state == .local)
+        #expect(try mac.record(ref.id)?.orphanedAt == nil, "Блок уже ссылается — не сирота")
+        #expect(try Data(contentsOf: try #require(mac.attachments.fileURL(for: ref.id))) == bytes)
+
+        let failed = try mac.attachments.reserveDownload(named: "схема")
+        try mac.attachments.failReservation(failed.id, message: "Нет доступа к странице в Notion")
+        #expect(mac.attachments.availability(of: failed.id) == .failed("Нет доступа к странице в Notion"))
+        #expect(mac.attachments.fileURL(for: failed.id) == nil)
+    }
+
     @Test func blockSavedDuringCopyDoesNotQueueDownload() throws {
         let mac = try AttachmentTestMac()
         let original = try mac.folder.file("отчёт.pdf", sampleBytes(1_000))

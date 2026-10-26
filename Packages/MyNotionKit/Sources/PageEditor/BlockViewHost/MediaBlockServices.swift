@@ -18,6 +18,12 @@ public protocol MediaBlockServices: AnyObject {
     func importData(_ data: Data, name: String, contentType: String) async throws -> AttachmentRef
     /// Скачать файл по ссылке («Вставить ссылку» для картинки и файла).
     func downloadFile(from url: URL) async throws -> AttachmentRef
+    /// Занять место под картинку вставки, которая скачается следом (картинка из Notion): блок с этим описанием
+    /// появляется сразу.
+    func reserveDownload(named name: String) throws -> AttachmentRef
+    /// Скачать картинку вставки под занятым описанием; готовое описание — с SHA-256. Не вышло — ошибка с понятной
+    /// причиной, и та же причина остаётся на заглушке блока.
+    func download(from url: URL, into reserved: AttachmentRef) async throws -> AttachmentRef
     /// YouTube или Vimeo; `nil` — не видео.
     func videoSource(for url: URL) -> VideoSource?
     /// Данные карточки закладки: один запрос; картинка и значок — уже вложениями. Без сети — пусто.
@@ -98,6 +104,7 @@ public enum MediaBlocks {
     static func availability(of ref: AttachmentRef?) -> MediaAvailability {
         guard let ref else { return .failed("Файл не выбран") }
         if let fraction = copyProgress[ref.id] { return .copying(fraction) }
+        if downloads.contains(ref.id) { return .downloading }
         return services?.availability(of: ref) ?? .downloading
     }
 
@@ -114,6 +121,19 @@ public enum MediaBlocks {
     static func setCopyProgress(_ fraction: Double, of id: UUID) {
         guard let old = copyProgress[id], Int(old * 100) != Int(fraction * 100) else { return }
         copyProgress[id] = fraction
+        NotificationCenter.default.post(name: AttachmentRef.availabilityDidChange, object: id)
+    }
+
+    /// Картинки вставки, которые сейчас скачиваются.
+    private static var downloads: Set<UUID> = []
+
+    static func beginDownload(_ id: UUID) {
+        downloads.insert(id)
+        NotificationCenter.default.post(name: AttachmentRef.availabilityDidChange, object: id)
+    }
+
+    static func endDownload(_ id: UUID) {
+        downloads.remove(id)
         NotificationCenter.default.post(name: AttachmentRef.availabilityDidChange, object: id)
     }
 

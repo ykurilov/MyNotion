@@ -111,6 +111,36 @@ public final class AttachmentStore: Sendable {
         }
     }
 
+    /// Занять место под картинку, которая скачается следом (вставка из Notion): как `reserveFileImport`, только
+    /// размер и тип файла ещё не известны — тип по расширению имени, иначе картинка.
+    public func reserveDownload(named name: String) throws -> AttachmentRef {
+        let contentType = UTType(filenameExtension: (name as NSString).pathExtension)?.identifier ?? UTType.image.identifier
+        let ref = AttachmentRef(name: Self.safeFileName(name), byteCount: 0, contentType: contentType, sha256: "")
+        var record = AttachmentRecord(ref: ref, localPath: nil, state: .failed, orphanedAt: now())
+        record.lastError = Self.copyingMessage
+        try store.database.dbWriter.write { db in try record.save(in: db) }
+        return ref
+    }
+
+    /// Скачанное — под занятым `reserved` id. Не вышло — запись остаётся `failed` с причиной.
+    public func importData(_ data: Data, into reserved: AttachmentRef, contentType: String) throws -> AttachmentRef {
+        do {
+            guard data.count <= AttachmentRef.maximumByteCount else { throw AttachmentError.tooLarge(name: reserved.name) }
+            return try importCopy(name: reserved.name, contentType: contentType, id: reserved.id, origin: .outside) { destination in
+                try data.write(to: destination)
+                return (data.count, Self.hex(SHA256.hash(data: data)))
+            }
+        } catch {
+            try? failReservation(reserved.id, message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+            throw error
+        }
+    }
+
+    /// Причина, по которой файла под занятым местом не будет: её показывает заглушка блока.
+    public func failReservation(_ id: UUID, message: String) throws {
+        try update(id) { $0.lastError = message }
+    }
+
     /// После запуска: копирования, прерванные выходом из приложения, — с понятной надписью, недописанные копии стёрты.
     public func abandonInterruptedCopies() throws {
         let interrupted = try allRecords().filter { $0.state == .failed && $0.lastError == Self.copyingMessage }

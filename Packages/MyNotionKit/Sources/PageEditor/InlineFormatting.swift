@@ -306,9 +306,13 @@ extension PageTextView {
             if plain != nil || html != nil,
                let blocks = reader(InlineFormatting.normalizedNewlines(plain ?? ""), html, document.pageId,
                                    pasteboard.availableType(from: InlineFormatting.richPasteboardTypes) != nil,
-                                   pasteboard.data(forType: Self.webCustomDataPasteboardType)),
-               pasteBlocks(blocks, replacing: selection) {
-                return
+                                   pasteboard.data(forType: Self.webCustomDataPasteboardType)) {
+                // Картинки из Notion — заглушками сразу, файлы следом.
+                let reserved = reservingPastedDownloads(blocks)
+                if pasteBlocks(reserved.blocks, replacing: selection) {
+                    downloadPastedImages(reserved.downloads)
+                    return
+                }
             }
         }
         if let rich = Self.richText(from: pasteboard) {
