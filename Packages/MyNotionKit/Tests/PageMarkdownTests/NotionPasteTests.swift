@@ -18,7 +18,8 @@ struct NotionPasteTests {
     }
 
     /// JSON `text/_notion-multi-text-production`: `blockSelection.blocks` по порядку, у каждого — поддерево блоков.
-    static func notionJSON(_ blocks: [NotionBlock]) -> String {
+    /// `blocksV3` — JSON `text/_notion-blocks-v3-production` (⌘A, выделение блоков): `blocks` в корне.
+    static func notionJSON(_ blocks: [NotionBlock], blocksV3: Bool = false) -> String {
         func records(_ block: NotionBlock, id: String, into map: inout [String: Any]) {
             var value: [String: Any] = ["id": id, "type": block.type, "alive": true]
             if let title = block.title { value["properties"] = ["title": [[title]]] }
@@ -32,7 +33,9 @@ struct NotionPasteTests {
             records(block, id: "block-\(index)", into: &map)
             return ["blockSubtree": ["block": map]]
         }
-        let json: [String: Any] = ["blockSelection": ["blocks": selection], "multiTextSelection": [:] as [String: Any]]
+        let json: [String: Any] = blocksV3
+            ? ["action": "copy", "blocks": selection, "wasContiguousSelection": true]
+            : ["blockSelection": ["blocks": selection], "multiTextSelection": [:] as [String: Any]]
         let data = try! JSONSerialization.data(withJSONObject: json)
         return String(decoding: data, as: UTF8.self)
     }
@@ -79,6 +82,18 @@ struct NotionPasteTests {
         #expect(pasted.map(\.text.string) == ["", "Первый абзац", "", "", "Второй жирный", ""])
         #expect(pasted.map(\.indent) == [0, 0, 0, 0, 0, 0])
         #expect(pasted[4].text.runs.map(\.style) == [.bold])
+    }
+
+    @Test("⌘A в Notion: выделение блоков (`blocks` в корне JSON) — пустые абзацы тоже на своих местах")
+    func emptyParagraphsInBlockSelection() throws {
+        let html = "<meta charset='utf-8'><p>Первый абзац</p><p>Второй</p><!-- notionvc: 1a2b -->"
+        let json = Self.notionJSON([.text("Первый абзац"), .empty, .text("Второй"), .empty], blocksV3: true)
+        let data = Self.webCustomData([("text/_notion-page-source-production", "https://app.notion.com/p/test"),
+                                       ("text/_notion-blocks-v3-production", json)])
+
+        let pasted = try #require(blocks(html: html, text: "Первый абзац\nВторой", webCustomData: data))
+
+        #expect(pasted.map(\.text.string) == ["Первый абзац", "", "Второй", ""])
     }
 
     @Test("Пустые абзацы между заголовком, списками с вложенностью и абзацем; оформление и ссылки — из HTML")

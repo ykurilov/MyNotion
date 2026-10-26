@@ -3,7 +3,8 @@ import Foundation
 /// Буфер Notion в Chrome. Пустых блоков в HTML Notion нет вовсе; их места знает только буфер Chromium
 /// (`org.chromium.web-custom-data`), куда Notion кладёт выделенные блоки JSON.
 enum NotionClipboard {
-    /// Типы буфера Chromium с выделением Notion: `blockSelection.blocks` — блоки по порядку, у каждого — поддерево.
+    /// Типы буфера Chromium с выделением Notion: блоки по порядку, у каждого — поддерево. Выделение текста кладёт их
+    /// в `blockSelection.blocks`, выделение блоков (⌘A) — в `blocks` в корне.
     private static let selectionTypes = ["text/_notion-multi-text-production", "text/_notion-blocks-v3-production"]
 
     /// Верхние блоки выделения по порядку: `nil` — пустой текстовый блок, иначе текст блока.
@@ -19,8 +20,8 @@ enum NotionClipboard {
 
     private static func selectedBlocks(fromJSON json: String) -> [String?]? {
         guard let object = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
-              let selection = object["blockSelection"] as? [String: Any],
-              let blocks = selection["blocks"] as? [[String: Any]], !blocks.isEmpty else { return nil }
+              let blocks = ((object["blockSelection"] as? [String: Any])?["blocks"] ?? object["blocks"]) as? [[String: Any]],
+              !blocks.isEmpty else { return nil }
         var result: [String?] = []
         for block in blocks {
             guard let subtree = block["blockSubtree"] as? [String: Any],
