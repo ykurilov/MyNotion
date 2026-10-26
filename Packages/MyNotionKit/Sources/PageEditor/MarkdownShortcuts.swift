@@ -47,6 +47,12 @@ extension PageTextView {
         }
         switch block.kind {
         case .paragraph:
+            // Пустой первый абзац убирается, а курсор уходит в конец названия страницы (на странице остаётся хоть один блок).
+            if position.index == 0, block.text.string.isEmpty {
+                if document.blocks.count > 1 { removeBlocks(at: 0..<1) }
+                header.focusTitle()
+                return true
+            }
             // Блок-подстраницу текстом не склеиваем: у неё текста нет. Пустой абзац под ней просто убирается.
             guard position.index > 0, document.blocks[position.index - 1].kind == .pageLink else { return false }
             if block.text.string.isEmpty {
