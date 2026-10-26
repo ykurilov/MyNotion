@@ -22,6 +22,28 @@ struct SyncSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            // Окно приложения ниже настроек — разделы прокручиваются, «Готово» остаётся на виду.
+            ViewThatFits(in: .vertical) {
+                sections
+                ScrollView { sections }.scrollIndicators(.automatic)
+            }
+            HStack {
+                Spacer()
+                Button("Готово", action: close)
+                    .buttonStyle(ModalCardButtonStyle(isPrimary: controller.isEnabled))
+                    .keyboardShortcut(.cancelAction)
+                    .accessibilityIdentifier("sync-settings-done")
+            }
+        }
+        .disabled(controller.isBusy)
+        .focusEffectDisabled()
+        .task(id: controller.account?.deviceId) { if controller.isEnabled { await controller.refreshDevices() } }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("sync-settings")
+    }
+
+    private var sections: some View {
+        VStack(alignment: .leading, spacing: 16) {
             ModalCardTitle(text: "Одни записи на всех ваших Mac")
             Text("Правки с одного Mac сами появляются на других. Прочитать записи могут только ваши Mac.")
                 .foregroundStyle(Color(nsColor: Palette.textSecondary))
@@ -36,19 +58,9 @@ struct SyncSettingsView: View {
             Divider()
             ProofreadingSettingsSection(labelWidth: Self.labelWidth)
             MistakeUnderliningToggle()
-            HStack {
-                Spacer()
-                Button("Готово", action: close)
-                    .buttonStyle(ModalCardButtonStyle(isPrimary: controller.isEnabled))
-                    .keyboardShortcut(.cancelAction)
-                    .accessibilityIdentifier("sync-settings-done")
-            }
+            Divider()
+            NotionSettingsSection(labelWidth: Self.labelWidth)
         }
-        .disabled(controller.isBusy)
-        .focusEffectDisabled()
-        .task(id: controller.account?.deviceId) { if controller.isEnabled { await controller.refreshDevices() } }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("sync-settings")
     }
 
     // MARK: Этот Mac ещё не подключён

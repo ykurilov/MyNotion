@@ -303,7 +303,7 @@ final class FakeMediaServices: MediaBlockServices {
     let folder = FileManager.default.temporaryDirectory.appendingPathComponent("MediaBlocksTests-\(UUID().uuidString)")
 
     func availability(of ref: AttachmentRef) -> MediaAvailability {
-        copies[ref.id].map(MediaAvailability.ready) ?? availability
+        copies[ref.id].map(MediaAvailability.ready) ?? failures[ref.id].map(MediaAvailability.failed) ?? availability
     }
 
     /// Копии ждут `releaseCopies()`: так видно заглушку копирования.
@@ -355,6 +355,41 @@ final class FakeMediaServices: MediaBlockServices {
     }
 
     func downloadFile(from url: URL) async throws -> AttachmentRef { throw MediaImportError(message: "нет сети") }
+
+    /// Картинки вставки по ссылке: что отдаёт «сеть»; `holdsDownloads` — ждут `releaseDownloads()`.
+    var downloads: [URL: Result<Data, MediaImportError>] = [:]
+    var holdsDownloads = false
+    private(set) var downloaded: [URL] = []
+    private(set) var heldDownloads: [CheckedContinuation<Void, Never>] = []
+    private var failures: [UUID: String] = [:]
+
+    func reserveDownload(named name: String) throws -> AttachmentRef {
+        AttachmentRef(name: name, byteCount: 0, contentType: "public.png", sha256: "")
+    }
+
+    func download(from url: URL, into reserved: AttachmentRef) async throws -> AttachmentRef {
+        downloaded.append(url)
+        if holdsDownloads { await withCheckedContinuation { heldDownloads.append($0) } }
+        switch downloads[url] ?? .failure(MediaImportError(message: "нет сети")) {
+        case .success(let data):
+            let file = folder.appendingPathComponent(UUID().uuidString + "-" + reserved.name)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try data.write(to: file)
+            var ref = reserved
+            ref.byteCount = data.count
+            ref.sha256 = "скачано"
+            copies[ref.id] = file
+            return ref
+        case .failure(let error):
+            failures[reserved.id] = error.message
+            throw error
+        }
+    }
+
+    func releaseDownloads() {
+        heldDownloads.forEach { $0.resume() }
+        heldDownloads = []
+    }
 
     func videoSource(for url: URL) -> VideoSource? {
         let host = url.host ?? ""

@@ -65,7 +65,12 @@ final class ImageBlockView: MediaBlockView {
             placeholderLabel.font = .systemFont(ofSize: Metrics.Media.captionFontSize)
             placeholderLabel.textColor = Palette.textSecondary
             placeholderLabel.alignment = .center
-            placeholderLabel.lineBreakMode = .byTruncatingMiddle
+            // Причина, почему файла нет (картинка из Notion не скачалась), — до трёх строк.
+            placeholderLabel.lineBreakMode = .byWordWrapping
+            placeholderLabel.maximumNumberOfLines = 3
+            placeholderLabel.usesSingleLineMode = false
+            placeholderLabel.cell?.wraps = true
+            placeholderLabel.cell?.truncatesLastVisibleLine = true
             addSubview(placeholderLabel)
         }
         if !block.text.string.isEmpty { showCaptionField(focus: false) }
@@ -97,7 +102,10 @@ final class ImageBlockView: MediaBlockView {
         let imageFrame = NSRect(x: ((bounds.width - size.width) / 2).rounded(), y: Metrics.Media.verticalPadding,
                                 width: size.width, height: size.height)
         imageLayerView.frame = imageFrame
-        placeholderLabel.frame = NSRect(x: imageFrame.minX + 12, y: imageFrame.midY - 10, width: max(0, imageFrame.width - 24), height: 20)
+        let labelWidth = max(0, imageFrame.width - 24)
+        let labelHeight = min(max(20, placeholderLabel.sizeThatFits(NSSize(width: labelWidth, height: .greatestFiniteMagnitude)).height.rounded(.up)),
+                              max(20, imageFrame.height - 8))
+        placeholderLabel.frame = NSRect(x: imageFrame.minX + 12, y: (imageFrame.midY - labelHeight / 2).rounded(), width: labelWidth, height: labelHeight)
         let inset = Metrics.Media.resizeHandleInset
         for (index, handle) in handles.enumerated() {
             let x = index == 0 ? imageFrame.minX + inset : imageFrame.maxX - inset - Metrics.Media.resizeHandleWidth

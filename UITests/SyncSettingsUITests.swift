@@ -34,5 +34,18 @@ final class SyncSettingsUITests: XCTestCase {
             }
         }
         XCTAssertTrue(settings.buttons["Подключить Mac"].exists, "Нет кнопки «Подключить Mac»: \(texts)")
+
+        // Ключ Notion — скрытое поле на той же линии; пустой ключ не сохранить.
+        let notionKey = app.secureTextFields["notion-key"]
+        XCTAssertTrue(notionKey.waitForExistence(timeout: 5), "Нет поля «Ключ Notion»")
+        XCTAssertEqual(notionKey.frame.minX, name.frame.minX, accuracy: 0.5, "Поле ключа Notion не на общей линии")
+        XCTAssertFalse(app.buttons["notion-key-save"].isEnabled, "Пустой ключ можно сохранить")
+        let window = app.windows.firstMatch.frame
+        XCTAssertLessThanOrEqual(app.buttons["sync-settings-done"].frame.maxY, window.maxY, "«Готово» за краем окна")
+        XCTAssertGreaterThanOrEqual(settings.frame.minY, window.minY, "Настройки вылезли за верх окна")
+        let shot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        shot.name = "sync-settings"
+        shot.lifetime = .keepAlways
+        add(shot)
     }
 }
