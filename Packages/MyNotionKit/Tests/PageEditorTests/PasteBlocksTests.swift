@@ -10,7 +10,7 @@ import Testing
 struct PasteBlocksTests {
     /// Разбор, который на текст «markdown» отвечает этими блоками, а на прочий — «вставлять текстом».
     private static func reader(_ blocks: [Block]) -> PageTextView.PastedTextReader {
-        { text, _, _, _ in text == "markdown" ? blocks : nil }
+        { text, _, _, _, _ in text == "markdown" ? blocks : nil }
     }
 
     private static func block(_ kind: BlockKind, _ text: String = "", indent: Int = 0, runs: [StyledRun] = []) -> Block {
@@ -50,6 +50,27 @@ struct PasteBlocksTests {
         #expect(editor.texts == ["Выше", ""])
         editor.redo()
         #expect(editor.texts == ["Выше", "Заголовок", "жирный пункт", "вложенный", "Текст"])
+    }
+
+    @Test("Из Notion в Chrome: разбор получает буфер Chromium, пустые блоки вставки встают пустыми абзацами")
+    func notionEmptyBlocks() throws {
+        let editor = try EditorFixture([.paragraph("Выше"), .paragraph()])
+        let notionData = Data("данные Notion".utf8)
+        var received: Data?
+        editor.textView.pastedTextReader = { _, _, _, _, webCustomData in
+            received = webCustomData
+            return [Self.block(.paragraph), Self.block(.paragraph, "А"), Self.block(.paragraph), Self.block(.paragraph),
+                    Self.block(.bulletItem, "Б"), Self.block(.paragraph)]
+        }
+        let pasteboard = Self.pasteboard("А\nБ")
+        pasteboard.setData(notionData, forType: NSPasteboard.PasteboardType("org.chromium.web-custom-data"))
+        editor.placeCaret(inBlock: 1)
+
+        editor.step { editor.textView.paste(from: pasteboard) }
+
+        #expect(received == notionData)
+        #expect(editor.kinds == [.paragraph, .paragraph, .paragraph, .paragraph, .paragraph, .bulletItem, .paragraph])
+        #expect(editor.texts == ["Выше", "", "А", "", "", "Б", ""])
     }
 
     @Test("В середину абзаца: первая строка сливается с текстом до курсора, последняя — с хвостом, как в Notion")
@@ -151,7 +172,7 @@ struct PasteBlocksTests {
     func pasteAsPlainText() throws {
         let editor = try EditorFixture([.paragraph()])
         var asked = false
-        editor.textView.pastedTextReader = { _, _, _, _ in
+        editor.textView.pastedTextReader = { _, _, _, _, _ in
             asked = true
             return [Self.block(.heading1, "не должно")]
         }

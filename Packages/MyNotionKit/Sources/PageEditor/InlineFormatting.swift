@@ -305,7 +305,8 @@ extension PageTextView {
             let html = Self.html(from: pasteboard)
             if plain != nil || html != nil,
                let blocks = reader(InlineFormatting.normalizedNewlines(plain ?? ""), html, document.pageId,
-                                   pasteboard.availableType(from: InlineFormatting.richPasteboardTypes) != nil),
+                                   pasteboard.availableType(from: InlineFormatting.richPasteboardTypes) != nil,
+                                   pasteboard.data(forType: Self.webCustomDataPasteboardType)),
                pasteBlocks(blocks, replacing: selection) {
                 return
             }
@@ -323,6 +324,9 @@ extension PageTextView {
         // Адрес ролика в пустой строке — меню «Встроить видео / Закладка / Ссылка».
         if selection.length == 0 { offerPastedVideoLink(InlineFormatting.normalizedNewlines(plain), at: selection.location) }
     }
+
+    /// Буфер Chromium с данными страницы: Notion кладёт в него выделенные блоки.
+    private static let webCustomDataPasteboardType = NSPasteboard.PasteboardType("org.chromium.web-custom-data")
 
     /// HTML буфера: `public.html` браузеров и редакторов или главная страница веб-архива Safari.
     private static func html(from pasteboard: NSPasteboard) -> String? {
