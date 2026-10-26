@@ -36,6 +36,8 @@ struct SyncSettingsView: View {
             Divider()
             ProofreadingSettingsSection(labelWidth: Self.labelWidth)
             MistakeUnderliningToggle()
+            Divider()
+            NotionSettingsSection(labelWidth: Self.labelWidth)
             HStack {
                 Spacer()
                 Button("Готово", action: close)

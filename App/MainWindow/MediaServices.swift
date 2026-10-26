@@ -3,6 +3,7 @@ import Attachments
 import EmbeddedMedia
 import LinkPreview
 import NotesCore
+import NotionAPI
 import NotionImport
 import PageEditor
 import UniformTypeIdentifiers
@@ -71,6 +72,48 @@ final class AppMediaServices: MediaBlockServices {
         let type = page.contentType.flatMap { UTType(mimeType: $0) } ?? UTType(filenameExtension: url.pathExtension) ?? .data
         let fileName = (name as NSString).pathExtension.isEmpty ? name + "." + (type.preferredFilenameExtension ?? "bin") : name
         return try await importData(page.data, name: fileName, contentType: type.identifier)
+    }
+
+    func reserveDownload(named name: String) throws -> AttachmentRef {
+        try attachments.reserveDownload(named: name)
+    }
+
+    /// Картинка вставки из Notion: файл Notion (`notion-block:<id>`) — через API по ключу, картинка из сети — по адресу.
+    /// Скачивание и запись — не на главном потоке; причина неудачи остаётся у занятого места и видна на заглушке.
+    func download(from url: URL, into reserved: AttachmentRef) async throws -> AttachmentRef {
+        let attachments = attachments
+        do {
+            let image = try await pastedImage(at: url)
+            let type = image.contentType.flatMap { UTType(mimeType: $0) }
+                ?? UTType(filenameExtension: ((image.fileName ?? "") as NSString).pathExtension) ?? .image
+            guard type.conforms(to: .image) else { throw NotionAPIError.notImage }
+            var target = reserved
+            if (target.name as NSString).pathExtension.isEmpty, let ext = type.preferredFilenameExtension { target.name += "." + ext }
+            let ref = try await Task.detached(priority: .userInitiated) { [target] in
+                try attachments.importData(image.data, into: target, contentType: type.identifier)
+            }.value
+            // Страницу могли закрыть, пока картинка качалась.
+            let pageIds = (try? attachments.placeInBlocks(ref)) ?? []
+            openDocuments.applyExternalChanges(toPages: pageIds.intersection(openDocuments.openPageIds))
+            return ref
+        } catch {
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            try? attachments.failReservation(reserved.id, message: message)
+            throw error
+        }
+    }
+
+    private func pastedImage(at url: URL) async throws -> NotionImage {
+        if let blockId = NotionBlockLink.blockId(from: url) { return try await AppNotion.client.image(ofBlock: blockId) }
+        let fetcher = URLSessionLinkFetcher(timeout: 120, allowsLocalStart: false)
+        do {
+            let page = try await fetcher.fetchFile(url, byteLimit: AttachmentRef.maximumByteCount)
+            return NotionImage(data: page.data, contentType: page.contentType, fileName: url.lastPathComponent)
+        } catch URLError.dataLengthExceedsMaximum {
+            throw NotionAPIError.tooLarge
+        } catch {
+            throw NotionAPIError.downloadFailed
+        }
     }
 
     func videoSource(for url: URL) -> VideoSource? {
