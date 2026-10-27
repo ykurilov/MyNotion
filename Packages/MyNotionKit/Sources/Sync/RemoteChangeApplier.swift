@@ -22,12 +22,18 @@ public final class RemoteChangeApplier {
     public let store: NotesStore
     public let openDocuments: OpenDocuments?
     public let merger: ChangeMerger
+    /// Ключи сервисов: победившие при слиянии ложатся в связку ключей после транзакции; `nil` — ключи не синхронизируются.
+    public let serviceKeys: ServiceKeySync?
+    /// Цикл синхронизации принимает ключи из пачек после подготовки (`ServiceKeySync.prepare`): до неё ключ из связки
+    /// ключей без метки проиграл бы любому пришедшему. Пропущенные ключи устройство потом попросит у других.
+    var acceptsServiceKeys = true
     /// После применения: что поменялось и о чём сказать Юрию.
     public var onApplied: ((MergeReport) -> Void)?
 
-    public init(store: NotesStore, openDocuments: OpenDocuments?, localDeviceName: String) {
+    public init(store: NotesStore, openDocuments: OpenDocuments?, localDeviceName: String, serviceKeys: ServiceKeySync? = nil) {
         self.store = store
         self.openDocuments = openDocuments
+        self.serviceKeys = serviceKeys
         merger = ChangeMerger(localDeviceName: localDeviceName)
     }
 
@@ -36,11 +42,19 @@ public final class RemoteChangeApplier {
         guard !batches.isEmpty else { return MergeReport() }
         openDocuments?.saveAll()
         var report = MergeReport()
-        defer { deliver(report) }
+        var keys: [ServiceKeyChange] = []
+        defer {
+            writeServiceKeys(keys)
+            deliver(report)
+        }
         for received in batches {
             report += try store.write { transaction in
-                let merged = try merger.apply(received.batch, in: transaction)
+                var merged = try merger.apply(received.batch, in: transaction)
+                let won = try ServiceKeys.merge(received.batch.serviceKeys, requestedByOthers: received.batch.requestsServiceKeys == true,
+                                                names: acceptsServiceKeys ? serviceKeys?.keys.names : nil, in: transaction)
                 try SyncAccountStore.recordPulled(seq: received.seq, in: transaction.database)
+                keys += won
+                merged.changedServiceKeys = Set(won.map(\.name))
                 return merged
             }
         }
@@ -51,18 +65,33 @@ public final class RemoteChangeApplier {
     @discardableResult
     public func apply(_ snapshot: SyncSnapshot) throws -> MergeReport {
         openDocuments?.saveAll()
+        var keys: [ServiceKeyChange] = []
         let report = try store.write { transaction in
-            let merged = try merger.apply(snapshot, in: transaction)
+            var merged = try merger.apply(snapshot, in: transaction)
+            keys = try ServiceKeys.merge(snapshot.serviceKeys, requestedByOthers: false,
+                                         names: acceptsServiceKeys ? serviceKeys?.keys.names : nil, in: transaction)
+            merged.changedServiceKeys = Set(keys.map(\.name))
+            // Снимок старой версии без ключей: ключи из сжатой части журнала пропали — попросить другие устройства.
+            if snapshot.serviceKeys == nil, serviceKeys != nil {
+                try ServiceKeys.markForSending(requestingOthers: true, in: transaction.database)
+            }
             try SyncAccountStore.recordPulled(seq: snapshot.seq, in: transaction.database)
             return merged
         }
+        writeServiceKeys(keys)
         try SyncAccountStore(store: store).recordSnapshot(seq: snapshot.seq)
         deliver(report)
         return report
     }
 
+    /// Связка ключей — после коммита и не здесь: её отказ или вопрос macOS не держат ни пачку, ни окно.
+    private func writeServiceKeys(_ changes: [ServiceKeyChange]) {
+        guard let serviceKeys, !changes.isEmpty else { return }
+        Task { await serviceKeys.writeReceived(changes) }
+    }
+
     private func deliver(_ report: MergeReport) {
-        guard !report.touchedPageIds.isEmpty || !report.notices.isEmpty else { return }
+        guard !report.touchedPageIds.isEmpty || !report.notices.isEmpty || !report.changedServiceKeys.isEmpty else { return }
         if let openDocuments {
             openDocuments.applyExternalChanges(toPages: report.touchedPageIds.intersection(openDocuments.openPageIds))
         }

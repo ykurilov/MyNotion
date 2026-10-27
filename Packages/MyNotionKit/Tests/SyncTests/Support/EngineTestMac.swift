@@ -67,6 +67,13 @@ final class EngineTestMac {
     private(set) var account: SyncAccount!
     /// Самый новый формат пачек, который этот Mac умеет читать; меньше текущего — «старый» Mac. Задаётся до подключения.
     var supportedFormatVersion = SyncBatch.currentFormatVersion
+    /// Связка ключей сервисов; `nil` — MyNotion до синхронизации ключей: они ему не передаются. Задаётся до подключения.
+    var serviceKeys: InMemoryServiceKeys?
+    /// Пауза перед повтором записи ключа в связку ключей.
+    var keyRetryDelay: Duration = .milliseconds(50)
+    /// Ключи сервисов этого запуска MyNotion; перезапуск начинает с чистой памяти.
+    private var keySync: ServiceKeySync?
+    private var syncServer: (any SyncServer)?
 
     init(name: String, wallMillis: Int64) throws {
         self.name = name
@@ -98,12 +105,40 @@ final class EngineTestMac {
         try await SyncSetup.makeJoinCode(transport: connection, account: account, secrets: secrets)
     }
 
+    /// Ключи сервисов: ввели или удалили на этом Mac.
+    func saveServiceKey(_ value: String, for name: String) async throws {
+        if keySync == nil { keySync = ServiceKeySync(store: store, keys: try #require(serviceKeys), retryDelay: keyRetryDelay) }
+        try await try #require(keySync).save(value, for: name)
+    }
+
+    /// Обновили MyNotion до версии с синхронизацией ключей: старая не оставляла в базе ничего о ключах.
+    func updateToServiceKeys(_ keys: InMemoryServiceKeys) throws {
+        stop()
+        try store.database.dbWriter.write { db in
+            try db.execute(sql: "DELETE FROM app_meta WHERE key LIKE ?", arguments: [ServiceKeys.metaPrefix + "%"])
+        }
+        serviceKeys = keys
+        _ = try SyncSetup.resume(store: store)
+        try makeEngine(try #require(syncServer))
+        start()
+    }
+
+    /// MyNotion закрыли и открыли снова: в памяти ничего не осталось, база и связка ключей — прежние.
+    func restart() throws {
+        stop()
+        _ = try SyncSetup.resume(store: store)
+        try makeEngine(try #require(syncServer))
+        start()
+    }
+
     private func makeEngine(_ server: any SyncServer) throws {
+        syncServer = server
+        keySync = serviceKeys.map { ServiceKeySync(store: store, keys: $0, retryDelay: keyRetryDelay) }
         let secret = try #require(try secrets.load(for: account.deviceId))
         connection = SwitchableTransport(server.transport(deviceToken: secret.deviceToken))
         engine = SyncEngine(store: store, account: account, transport: connection,
                             cipher: BatchCipher(key: secret.encryptionKey, supportedFormatVersion: supportedFormatVersion),
-                            applier: RemoteChangeApplier(store: store, openDocuments: documents, localDeviceName: name),
+                            applier: RemoteChangeApplier(store: store, openDocuments: documents, localDeviceName: name, serviceKeys: keySync),
                             timing: .fastForTests)
     }
 

@@ -8,16 +8,21 @@ public struct SyncSnapshot: Sendable, Hashable, Codable {
     public var seq: Int
     public var changes: [SyncChange]
     public var knowledge: ClockKnowledge
+    /// Ключи сервисов с их метками; `nil` — снимок сделан MyNotion без синхронизации ключей.
+    public var serviceKeys: [ServiceKeyChange]?
 
-    public init(formatVersion: Int = SyncBatch.currentFormatVersion, seq: Int, changes: [SyncChange], knowledge: ClockKnowledge) {
+    public init(formatVersion: Int = SyncBatch.currentFormatVersion, seq: Int, changes: [SyncChange], knowledge: ClockKnowledge,
+                serviceKeys: [ServiceKeyChange]? = nil) {
         self.formatVersion = formatVersion
         self.seq = seq
         self.changes = changes
         self.knowledge = knowledge
+        self.serviceKeys = serviceKeys
     }
 
-    /// Снять снимок базы: страницы, блоки всех потоков (и пометки удалённых), отметки напоминаний, надгробия.
-    public static func make(seq: Int, from store: NotesStore) throws -> SyncSnapshot {
+    /// Снять снимок базы: страницы, блоки всех потоков (и пометки удалённых), отметки напоминаний, надгробия;
+    /// ключи сервисов — уже прочитанные из связки ключей.
+    public static func make(seq: Int, from store: NotesStore, serviceKeys: [ServiceKeyChange]? = nil) throws -> SyncSnapshot {
         try store.write { transaction in
             var changes: [SyncChange] = []
             var knowledge = ClockKnowledge()
@@ -47,7 +52,7 @@ public struct SyncSnapshot: Sendable, Hashable, Codable {
                 knowledge.record(tombstone.erasedAt)
             }
             knowledge = ClockKnowledge(knowledge.latestByDevice.filter { $0.key != HybridTimestamp.distantPast.deviceId })
-            return SyncSnapshot(seq: seq, changes: changes, knowledge: knowledge)
+            return SyncSnapshot(seq: seq, changes: changes, knowledge: knowledge, serviceKeys: serviceKeys)
         }
     }
 }

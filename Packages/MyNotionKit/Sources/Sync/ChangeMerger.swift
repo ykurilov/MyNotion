@@ -26,15 +26,19 @@ public enum SyncNotice: Sendable, Hashable {
 public struct MergeReport: Sendable {
     public var notices: [SyncNotice] = []
     public var touchedPageIds: Set<UUID> = []
+    /// Ключи сервисов, пришедшие с других устройств (`ServiceKeyName`): настройкам показать, что ключ есть.
+    public var changedServiceKeys: Set<String> = []
 
-    public init(notices: [SyncNotice] = [], touchedPageIds: Set<UUID> = []) {
+    public init(notices: [SyncNotice] = [], touchedPageIds: Set<UUID> = [], changedServiceKeys: Set<String> = []) {
         self.notices = notices
         self.touchedPageIds = touchedPageIds
+        self.changedServiceKeys = changedServiceKeys
     }
 
     public static func += (lhs: inout MergeReport, rhs: MergeReport) {
         lhs.notices += rhs.notices
         lhs.touchedPageIds.formUnion(rhs.touchedPageIds)
+        lhs.changedServiceKeys.formUnion(rhs.changedServiceKeys)
     }
 }
 
