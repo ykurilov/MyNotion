@@ -167,6 +167,13 @@ targets:
         DEVELOPMENT_TEAM: DC5QSJ54MB
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "Apple Development"
+      # Release — только для TestFlight: подпись вручную, сертификат и профиль выкладки лежат на iMac
+      # (scripts/imac/iphone-testflight.zsh).
+      configs:
+        Release:
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: "Apple Distribution"
+          PROVISIONING_PROFILE_SPECIFIER: "MyNotion iPhone App Store"
   # 005: команда `mynotion` для агентов (research R14). Цель не «mynotion»: на диске без учёта регистра её служебная папка совпала бы с папкой MyNotion.
   mynotion-cli:
     type: tool
