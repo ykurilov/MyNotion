@@ -170,6 +170,10 @@ targets:
       # Release — только для TestFlight: подпись вручную, сертификат и профиль выкладки лежат на iMac
       # (scripts/imac/iphone-testflight.zsh).
       configs:
+        # Флаги снимков и живой проверки (PhoneLaunchOptions) — только в отладочной сборке. Явно: xcodegen на iMac
+        # не находит своих стандартных настроек, и без этой строки DEBUG там не задан.
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
         Release:
           CODE_SIGN_STYLE: Manual
           CODE_SIGN_IDENTITY: "Apple Distribution"
