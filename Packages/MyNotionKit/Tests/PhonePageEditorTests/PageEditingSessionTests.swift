@@ -169,6 +169,21 @@ struct PageEditingSessionTests {
         #expect(reopened.collapsedBlockIds == [page.ids[0]])
     }
 
+    @Test func collapsedChangedOutsideEditorIsReloaded() throws {
+        let page = try PhonePageFixture([.block(.toggle, "Раздел"), .paragraph("внутри", indent: 1)])
+        var notified = 0
+        page.session.onCollapsedChange = { notified += 1 }
+
+        try BlockViewStateStore(database: page.store.database).setCollapsed(true, blockId: page.ids[0])
+        BlockViewStateStore.postChangedOutsideEditor(pageId: UUID())
+        #expect(notified == 0)
+        BlockViewStateStore.postChangedOutsideEditor(pageId: page.pageId)
+
+        #expect(notified == 1)
+        #expect(page.session.collapsedBlockIds == [page.ids[0]])
+        #expect(page.session.rows().map(\.block.id) == [page.ids[0]])
+    }
+
     @Test func returnInTitleGoesToFirstTextBlockOrAddsOne() throws {
         let page = try PhonePageFixture([.paragraph("первый")])
         #expect(page.session.returnFromTitle() == CaretTarget(blockId: page.ids[0], offset: 0))

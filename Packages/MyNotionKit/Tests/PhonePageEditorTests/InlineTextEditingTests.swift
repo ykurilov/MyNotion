@@ -64,6 +64,23 @@ struct InlineTextEditingTests {
         #expect(mapped == NSRange(location: 12, length: 0))
     }
 
+    @Test func caretInsideReplacedPartDoesNotSplitEmoji() {
+        let mapped = SelectionMapping.map(NSRange(location: 2, length: 0), from: "aXYb", to: "a😀b")
+        #expect(mapped == NSRange(location: 1, length: 0))
+    }
+
+    @Test func changedEmojiSharingHalfDoesNotSplitNextEmoji() {
+        // 😀 и 😁 начинаются одной половинкой UTF-16: общее начало — до смайлика, а не посреди него.
+        let mapped = SelectionMapping.map(NSRange(location: 4, length: 0), from: "x😀ABy", to: "x😁😂y")
+        #expect(mapped == NSRange(location: 3, length: 0))
+    }
+
+    @Test func caretAfterEmojiFamilyStaysAfterIt() {
+        let family = "👨‍👩‍👧"
+        let mapped = SelectionMapping.map(NSRange(location: 1 + family.utf16.count, length: 0), from: "a\(family)", to: "a👨‍👩‍👦")
+        #expect(mapped == NSRange(location: 1 + "👨‍👩‍👦".utf16.count, length: 0))
+    }
+
     @Test func caretBeforeChangedPartStays() {
         let mapped = SelectionMapping.map(NSRange(location: 2, length: 0), from: "один два", to: "один два три")
         #expect(mapped == NSRange(location: 2, length: 0))

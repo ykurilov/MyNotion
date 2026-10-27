@@ -138,6 +138,112 @@ struct PhonePageScreenTests {
         _ = screen
     }
 
+    /// Блоки, чьи строки сейчас на экране (ячейки в запасе для повторного использования не в счёт).
+    private func shownBlockIds(in window: UIWindow) -> [UUID] {
+        func collection(in view: UIView) -> UICollectionView? {
+            view as? UICollectionView ?? view.subviews.lazy.compactMap { collection(in: $0) }.first
+        }
+        return (collection(in: window)?.visibleCells ?? []).compactMap { ($0 as? TextBlockCell)?.textView.blockId }
+    }
+
+    private func labels(in view: UIView) -> [String] {
+        (((view as? UILabel)?.text).map { [$0] } ?? []) + view.subviews.flatMap { labels(in: $0) }
+    }
+
+    private func attachmentImages(in textView: UITextView) -> [UIImage] {
+        var images: [UIImage] = []
+        textView.attributedText.enumerateAttribute(.attachment, in: NSRange(location: 0, length: textView.attributedText.length)) { value, _, _ in
+            if let image = (value as? NSTextAttachment)?.image { images.append(image) }
+        }
+        return images
+    }
+
+    /// Подстраницу переименовали, пока человек был в ней: вернулся — у родителя новое название и в ссылке, и в упоминании.
+    @Test func renamedSubpageShowsNewTitleAfterReturn() throws {
+        let page = try PhonePageFixture([.paragraph()])
+        let subpage = try page.store.write { tx in
+            let subpage = try tx.createPage(title: "Планы", parentId: page.pageId)
+            var paragraph = try #require(try tx.block(page.ids[0]))
+            paragraph.text = InlineText("см. \u{FFFC}", runs: [StyledRun(start: 4, length: 1, style: .mention(subpage.id))])
+            _ = try tx.updateBlock(paragraph)
+            _ = try tx.insertBlock(Block(pageId: page.pageId, kind: .pageLink, linkedPageId: subpage.id,
+                                         sortKey: .between(paragraph.sortKey, nil)))
+            return subpage
+        }
+        _ = page.openDocuments.applyExternalChanges(toPages: [page.pageId])
+        let (screen, window) = try screen(page)
+        let mentionField = try #require(textView(of: page.ids[0], in: window))
+        let widthBefore = try #require(attachmentImages(in: mentionField).first).size.width
+        #expect(labels(in: window).contains("Планы"))
+
+        try page.store.write { tx in
+            var renamed = try #require(try tx.page(subpage.id))
+            renamed.title = "Планы на всю следующую неделю"
+            _ = try tx.updatePage(renamed)
+        }
+        screen.beginAppearanceTransition(true, animated: false)
+        screen.endAppearanceTransition()
+        window.layoutIfNeeded()
+
+        #expect(labels(in: window).contains("Планы на всю следующую неделю"))
+        #expect(try #require(attachmentImages(in: mentionField).first).size.width > widthBefore)
+        #expect(page.document.blocks[0].text.runs == [StyledRun(start: 4, length: 1, style: .mention(subpage.id))])
+    }
+
+    /// Японская клавиатура: фрагмент ещё выделен (не выбран), а приложение ушло в фон — фрагмент всё равно записан.
+    @Test func markedTextIsCommittedBeforeSave() throws {
+        let page = try PhonePageFixture([.paragraph("日本")])
+        let (screen, window) = try screen(page)
+        let field = try #require(textView(of: page.ids[0], in: window))
+        field.becomeFirstResponder()
+        field.selectedRange = NSRange(location: 2, length: 0)
+        field.setMarkedText("ご", selectedRange: NSRange(location: 1, length: 0))
+        try #require(field.markedTextRange != nil)
+
+        screen.saveNow()
+
+        #expect(page.texts == ["日本ご"])
+        #expect(try page.savedBlocks().map(\.text.string) == ["日本ご"])
+    }
+
+    /// Переключатель свернули командой `mynotion`: открытый экран прячет его содержимое сам.
+    @Test func toggleCollapsedOutsideEditorHidesChildrenOnScreen() throws {
+        let page = try PhonePageFixture([.block(.toggle, "Раздел"), .paragraph("внутри", indent: 1), .paragraph("после")])
+        let (screen, window) = try screen(page)
+        #expect(Set(shownBlockIds(in: window)) == Set(page.ids))
+
+        try BlockViewStateStore(database: page.store.database).setCollapsed(true, blockId: page.ids[0])
+        BlockViewStateStore.postChangedOutsideEditor(pageId: page.pageId)
+        window.layoutIfNeeded()
+
+        #expect(Set(shownBlockIds(in: window)) == [page.ids[0], page.ids[2]])
+        _ = screen
+    }
+
+    /// Тёмная тема с первого показа: подписи упоминаний, дат и формул нарисованы тёмными цветами, а не светлыми.
+    @Test func atomsAreDrawnForDarkThemeOnFirstShow() throws {
+        let page = try PhonePageFixture([.paragraph("\u{FFFC} \u{FFFC}", runs: [
+            StyledRun(start: 0, length: 1, style: .date(DateMention(start: "2026-10-20", includesTime: false, timeZone: "Europe/Moscow"))),
+            StyledRun(start: 2, length: 1, style: .equation("x^2")),
+        ])])
+        let screen = try PhonePageViewController(pageId: page.pageId, openDocuments: page.openDocuments) { _ in }
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 402, height: 874))
+        window.overrideUserInterfaceStyle = .dark
+        window.rootViewController = screen
+        window.makeKeyAndVisible()
+        window.layoutIfNeeded()
+        let field = try #require(textView(of: page.ids[0], in: window))
+
+        let dark = InlineTextRendering(look: .paragraph, traits: window.traitCollection) { _ in nil }
+        let expected = dark.attributedString(page.document.blocks[0].text)
+        var expectedImages: [UIImage] = []
+        expected.enumerateAttribute(.attachment, in: NSRange(location: 0, length: expected.length)) { value, _, _ in
+            if let image = (value as? NSTextAttachment)?.image { expectedImages.append(image) }
+        }
+        #expect(attachmentImages(in: field).map { $0.pngData() } == expectedImages.map { $0.pngData() })
+        _ = screen
+    }
+
     @Test func thousandBlocksOpenTypeAndSplitWithoutLag() throws {
         let page = try PhonePageFixture((0..<1000).map { .paragraph("Строка \($0): обычный текст абзаца") })
         let start = ContinuousClock.now

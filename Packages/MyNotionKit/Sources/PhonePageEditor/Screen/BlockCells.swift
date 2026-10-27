@@ -43,7 +43,8 @@ final class TextBlockCell: UICollectionViewCell {
     private var textLeading: NSLayoutConstraint!
     private var textTop: NSLayoutConstraint!
     /// Что сейчас показано: текст перерисовывается, только если поменялось одно из этого.
-    private var shown: (blockId: UUID, text: InlineText, look: TextLook, style: UIUserInterfaceStyle)?
+    /// `atomLabels` — подписи упоминаний и дат: подстраницу переименовали — подпись другая при том же тексте.
+    private var shown: (blockId: UUID, text: InlineText, look: TextLook, style: UIUserInterfaceStyle, atomLabels: [String])?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -118,12 +119,15 @@ final class TextBlockCell: UICollectionViewCell {
         colorBackground.isHidden = background == nil
 
         let text = block.text
-        let style = traitCollection.userInterfaceStyle
-        let isSame = shown.map { $0.blockId == block.id && $0.text == text && $0.look == look && $0.style == style } ?? false
+        let style = rendering.traits.userInterfaceStyle
+        let atomLabels = text.runs.filter(\.style.isAtom).map { rendering.atomLabel($0.style) }
+        let isSame = shown.map {
+            $0.blockId == block.id && $0.text == text && $0.look == look && $0.style == style && $0.atomLabels == atomLabels
+        } ?? false
         if !isSame, textView.markedTextRange == nil {
             let current = InlineTextRendering.inlineText(from: textView.attributedText)
             let keepsCaret = textView.isFirstResponder && shown?.blockId == block.id
-            if !keepsCaret || current != text || shown?.look != look || shown?.style != style {
+            if !keepsCaret || current != text || shown?.look != look || shown?.style != style || shown?.atomLabels != atomLabels {
                 let selection = keepsCaret ? SelectionMapping.map(textView.selectedRange, from: current.string, to: text.string) : nil
                 textView.attributedText = rendering.attributedString(text)
                 if let selection {
@@ -132,7 +136,7 @@ final class TextBlockCell: UICollectionViewCell {
                     if current.string != text.string { textView.undoManager?.removeAllActions() }
                 }
             }
-            shown = (block.id, text, look, style)
+            shown = (block.id, text, look, style, atomLabels)
         }
         textView.typingAttributes = rendering.typingAttributes(in: text, at: textView.isFirstResponder ? textView.selectedRange.location : 0)
         placeholder.font = look.font

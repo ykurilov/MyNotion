@@ -55,6 +55,7 @@ extension InlineStyle {
 /// Где оказаться курсору, когда текст блока поменялся не от набора (правка с другого устройства).
 /// Общее начало и общий конец старого и нового текста остаются на местах; курсор за изменённой частью сдвигается
 /// вместе с текстом, курсор внутри убранного — встаёт в её начало, внутри заменённого — не дальше нового текста.
+/// Границы — только между знаками: смайлик из двух половинок UTF-16 или из нескольких смайликов не разрезается.
 enum SelectionMapping {
     static func map(_ selection: NSRange, from old: String, to new: String) -> NSRange {
         let oldUnits = Array(old.utf16)
@@ -62,8 +63,11 @@ enum SelectionMapping {
         var prefix = 0
         let limit = min(oldUnits.count, newUnits.count)
         while prefix < limit, oldUnits[prefix] == newUnits[prefix] { prefix += 1 }
+        prefix = min(characterStart(prefix, in: old), characterStart(prefix, in: new))
         var suffix = 0
         while suffix < limit - prefix, oldUnits[oldUnits.count - 1 - suffix] == newUnits[newUnits.count - 1 - suffix] { suffix += 1 }
+        suffix = min(oldUnits.count - characterEnd(oldUnits.count - suffix, in: old),
+                     newUnits.count - characterEnd(newUnits.count - suffix, in: new))
         let oldChangedEnd = oldUnits.count - suffix
         let newChangedLength = newUnits.count - suffix - prefix
         let delta = newUnits.count - oldUnits.count
@@ -71,10 +75,25 @@ enum SelectionMapping {
         func position(_ location: Int) -> Int {
             if location < prefix { return location }
             if location >= oldChangedEnd { return location + delta }
-            return prefix + min(location - prefix, newChangedLength)
+            return characterStart(prefix + min(location - prefix, newChangedLength), in: new)
         }
         let start = position(selection.location)
         let end = max(start, position(selection.location + selection.length))
         return NSRange(location: start, length: end - start)
+    }
+
+    /// Начало знака, внутри которого `offset` (или сам `offset`, если он уже между знаками).
+    private static func characterStart(_ offset: Int, in string: String) -> Int {
+        let text = string as NSString
+        guard offset > 0, offset < text.length else { return offset }
+        return text.rangeOfComposedCharacterSequence(at: offset).location
+    }
+
+    /// Конец знака, внутри которого `offset` (или сам `offset`, если он уже между знаками).
+    private static func characterEnd(_ offset: Int, in string: String) -> Int {
+        let text = string as NSString
+        guard offset > 0, offset < text.length else { return offset }
+        let range = text.rangeOfComposedCharacterSequence(at: offset)
+        return range.location == offset ? offset : NSMaxRange(range)
     }
 }

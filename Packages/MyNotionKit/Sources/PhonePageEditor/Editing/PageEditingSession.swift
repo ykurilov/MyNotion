@@ -25,11 +25,30 @@ final class PageEditingSession {
     private let viewState: BlockViewStateStore?
     /// Свёрнутые переключатели страницы на этом устройстве (как на Mac — мимо синхронизации).
     private(set) var collapsedBlockIds: Set<UUID>
+    /// Свёрнутость сменили мимо редактора (команда `mynotion`): строки нужно перестроить.
+    var onCollapsedChange: (() -> Void)?
+    private var viewStateObserver: NSObjectProtocol?
 
     init(document: PageDocument, viewState: BlockViewStateStore?) {
         self.document = document
         self.viewState = viewState
         collapsedBlockIds = (try? viewState?.collapsedBlockIds(ofPage: document.pageId)) ?? []
+        guard viewState != nil else { return }
+        viewStateObserver = NotificationCenter.default.addObserver(forName: BlockViewStateStore.didChangeOutsideEditor, object: nil,
+                                                                   queue: .main) { [weak self] note in
+            guard let pageId = note.userInfo?[BlockViewStateStore.pageIdKey] as? UUID else { return }
+            MainActor.assumeIsolated { self?.reloadCollapsed(ofPage: pageId) }
+        }
+    }
+
+    isolated deinit {
+        if let viewStateObserver { NotificationCenter.default.removeObserver(viewStateObserver) }
+    }
+
+    private func reloadCollapsed(ofPage pageId: UUID) {
+        guard pageId == document.pageId, let collapsed = try? viewState?.collapsedBlockIds(ofPage: pageId) else { return }
+        collapsedBlockIds = collapsed
+        onCollapsedChange?()
     }
 
     func rows() -> [PageRow] {

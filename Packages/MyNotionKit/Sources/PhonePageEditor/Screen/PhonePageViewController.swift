@@ -55,7 +55,8 @@ public final class PhonePageViewController: UIViewController {
     /// Записать несохранённое сейчас. `false` — записать не удалось (автосохранение повторит).
     @discardableResult
     public func saveNow() -> Bool {
-        openDocuments.saveAll()
+        commitMarkedText()
+        return openDocuments.saveAll()
     }
 
     // MARK: Экран
@@ -86,6 +87,7 @@ public final class PhonePageViewController: UIViewController {
             collectionView.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor),
         ])
         registerCells()
+        session.onCollapsedChange = { [weak self] in self?.refresh() }
         refresh()
 
         let center = NotificationCenter.default
@@ -95,6 +97,12 @@ public final class PhonePageViewController: UIViewController {
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (screen: PhonePageViewController, _: UITraitCollection) in
             screen.redrawAll()
         }
+    }
+
+    override public func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        // Вернулись из подстраницы: её могли переименовать или удалить — ссылки и упоминания показывают её как есть.
+        redrawAll()
     }
 
     override public func viewDidLayoutSubviews() {
@@ -236,7 +244,8 @@ public final class PhonePageViewController: UIViewController {
             if let self, let textView, let blockId = textView.blockId { pressReturn(in: textView, blockId: blockId) }
         }
         cell.onMarkerTap = { [weak self] in self?.markerTapped(blockId) }
-        cell.show(row, kind: kind, rendering: rendering(for: row, kind: kind, traits: cell.traitCollection))
+        // Ячейку настраивают, пока она ещё не в окне: тема — от экрана (подписи упоминаний рисуются картинкой).
+        cell.show(row, kind: kind, rendering: rendering(for: row, kind: kind, traits: view.traitCollection))
     }
 
     private func configure(_ cell: PageHeaderCell) {
@@ -244,7 +253,7 @@ public final class PhonePageViewController: UIViewController {
         cell.titleView.blockId = nil
         cell.titleView.onBackspaceAtStart = nil
         cell.titleView.onReturn = { [weak self] in self?.returnFromTitle() }
-        cell.show(document.page, rendering: InlineTextRendering(look: .pageTitle, traits: cell.traitCollection, pageTitle: livePageTitle))
+        cell.show(document.page, rendering: InlineTextRendering(look: .pageTitle, traits: view.traitCollection, pageTitle: livePageTitle))
     }
 
     private func rendering(for row: PageRow, kind: TextBlockKind, traits: UITraitCollection) -> InlineTextRendering {
@@ -312,6 +321,22 @@ public final class PhonePageViewController: UIViewController {
     @objc private func appDidEnterBackground() {
         saveNow()
     }
+
+    /// Составной ввод (японская, китайская клавиатура): невыбранный фрагмент принимается как набранный, иначе
+    /// при записи его в документе ещё нет.
+    private func commitMarkedText() {
+        guard let textView = editingTextView, textView.markedTextRange != nil else { return }
+        textView.unmarkText()
+        storeText(of: textView)
+    }
+
+    private func storeText(of textView: BlockTextView) {
+        if let blockId = textView.blockId {
+            session.setText(InlineTextRendering.inlineText(from: textView.attributedText), ofBlock: blockId)
+        } else {
+            session.setTitle(textView.text)
+        }
+    }
 }
 
 // MARK: - Поля текста
@@ -338,15 +363,13 @@ extension PhonePageViewController: UITextViewDelegate {
 
     public func textViewDidChange(_ textView: UITextView) {
         guard let textView = textView as? BlockTextView else { return }
-        if let blockId = textView.blockId {
+        if textView.blockId != nil {
             (textView.enclosingCell as? TextBlockCell)?.updatePlaceholder()
-            guard textView.markedTextRange == nil else { return }
-            session.setText(InlineTextRendering.inlineText(from: textView.attributedText), ofBlock: blockId)
         } else {
             (textView.enclosingCell as? PageHeaderCell)?.updatePlaceholder()
-            guard textView.markedTextRange == nil else { return }
-            session.setTitle(textView.text)
         }
+        guard textView.markedTextRange == nil else { return }
+        storeText(of: textView)
         revealCaret(in: textView)
     }
 
