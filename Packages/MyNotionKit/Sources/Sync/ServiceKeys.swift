@@ -27,6 +27,8 @@ public final class InMemoryServiceKeys: ServiceKeyStore {
     public let names: [String]
     private let values: Mutex<[String: String]>
     private let refusing = Mutex(false)
+    private let refusingReads = Mutex(false)
+    private let reads = Mutex(0)
 
     public init(_ values: [String: String] = [:], names: [String] = ServiceKeyName.all) {
         self.names = names
@@ -39,8 +41,19 @@ public final class InMemoryServiceKeys: ServiceKeyStore {
         set { refusing.withLock { $0 = newValue } }
     }
 
+    /// Связка ключей не даёт читать — как после «Отказать» в вопросе macOS.
+    public var refusesReads: Bool {
+        get { refusingReads.withLock { $0 } }
+        set { refusingReads.withLock { $0 = newValue } }
+    }
+
+    /// Сколько раз связку ключей спросили о ключе.
+    public var readAttempts: Int { reads.withLock { $0 } }
+
     public func value(for name: String) throws -> String? {
-        values.withLock { $0[name] }
+        reads.withLock { $0 += 1 }
+        if refusesReads { throw CocoaError(.fileReadNoPermission) }
+        return values.withLock { $0[name] }
     }
 
     public func setValue(_ value: String?, for name: String) throws {
@@ -81,6 +94,9 @@ public actor ServiceKeySync {
     /// Победившие в базе версии, которые ещё не легли в связку ключей; по одной на ключ — самая новая.
     private var waiting: [String: ServiceKeyChange] = [:]
     private var retry: Task<Void, Never>?
+    /// Связка ключей отказала в чтении (заблокирована или «Отказать» в вопросе macOS): до перезапуска или ввода ключа
+    /// в настройках её не спрашивают — вопрос не всплывает на каждом круге синхронизации.
+    private var readRefused = false
 
     public init(store: NotesStore, keys: any ServiceKeyStore, retryDelay: Duration = .seconds(30)) {
         self.store = store
@@ -89,15 +105,28 @@ public actor ServiceKeySync {
     }
 
     /// Пустая строка удаляет ключ. Сначала метка в базе, потом связка ключей: не записалась база — ключ прежний;
-    /// отказала связка — метка откатывается, и на другие устройства ничего не уходит.
+    /// отказала связка — метка откатывается, и на другие устройства ничего не уходит. Ключ лёг, а база не сняла
+    /// отметку «ждёт записи» — ключ остаётся новым, отметка снимается повтором, и он уходит на другие.
     public func save(_ value: String, for name: String) async throws {
+        readRefused = false
         let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
         let local = try store.write { try ServiceKeys.recordLocalChange(of: name, value: value.isEmpty ? nil : value, in: $0) }
         do {
-            try write(local.change)
+            // Пришедшая версия уже обошла правку — её ключ ляжет своей записью.
+            if try ServiceKeys.isWaiting(local.change, in: store) { try keys.setValue(local.change.value, for: name) }
         } catch {
             try? ServiceKeys.revert(local, in: store)
+            if let previous = local.previousWaiting, waiting[name]?.hlc != previous {
+                // Ждавшую записи версию не знает память: другие пришлют её снова.
+                try? store.write { try ServiceKeys.markForSending(requestingOthers: true, in: $0.database) }
+            }
             throw error
+        }
+        do {
+            try ServiceKeys.didWrite(local.change, in: store)
+        } catch {
+            waiting[name] = local.change
+            scheduleRetry()
         }
         await MainActor.run { NotificationCenter.default.post(name: Outbox.didEnqueue, object: nil) }
     }
@@ -107,7 +136,7 @@ public actor ServiceKeySync {
     /// `requestingOthers` — пачки уже шли без ключей: попросить другие прислать свои.
     func prepare(requestingOthers: Bool) throws {
         if try ServiceKeys.needsLabels(in: store) {
-            let found = try ServiceKeys.unlabeled(keys.names, in: store).filter { try keys.value(for: $0) != nil }
+            let found = try ServiceKeys.unlabeled(keys.names, in: store).filter { try read($0) != nil }
             try store.write { try ServiceKeys.labelExisting(found, in: $0) }
         }
         let inMemory = Set(waiting.keys)
@@ -127,7 +156,7 @@ public actor ServiceKeySync {
 
     /// Ключи для пачки или снимка: с метками и уже лежащие в связке ключей.
     func current() throws -> [ServiceKeyChange] {
-        try ServiceKeys.current(keys: keys, in: store)
+        try ServiceKeys.current(names: keys.names, value: { try read($0) }, in: store)
     }
 
     /// Для снимка: `nil`, пока пришедший ключ не лёг в связку ключей, — тогда получатель снимка попросит ключи сам.
@@ -136,25 +165,32 @@ public actor ServiceKeySync {
     }
 
     private func flush() {
-        var written: Set<String> = []
+        var written: [ServiceKeyChange] = []
         var failed = false
         for (name, change) in waiting {
             do {
-                if try write(change) { written.insert(name) }
+                if try write(change) { written.append(change) }
                 waiting[name] = nil
             } catch {
                 failed = true
             }
         }
-        if failed, retry == nil {
-            let delay = retryDelay
-            retry = Task { [weak self] in
-                try? await Task.sleep(for: delay)
-                await self?.retryWaiting()
+        if failed { scheduleRetry() }
+        if !written.isEmpty {
+            let sendsOwn = written.contains { isOwn($0) }
+            Task { @MainActor in
+                NotificationCenter.default.post(name: Self.didWriteKeys, object: nil)
+                if sendsOwn { NotificationCenter.default.post(name: Outbox.didEnqueue, object: nil) }
             }
         }
-        if !written.isEmpty {
-            Task { @MainActor in NotificationCenter.default.post(name: Self.didWriteKeys, object: nil) }
+    }
+
+    private func scheduleRetry() {
+        guard retry == nil else { return }
+        let delay = retryDelay
+        retry = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            await self?.retryWaiting()
         }
     }
 
@@ -163,12 +199,27 @@ public actor ServiceKeySync {
         flush()
     }
 
-    /// `false` — эту версию уже обошла более новая: её ключ ляжет своей записью.
+    private func isOwn(_ change: ServiceKeyChange) -> Bool {
+        change.hlc.deviceId == store.clock.deviceId
+    }
+
+    private func read(_ name: String) throws -> String? {
+        if readRefused { throw CocoaError(.fileReadNoPermission) }
+        do {
+            return try keys.value(for: name)
+        } catch {
+            readRefused = true
+            throw error
+        }
+    }
+
+    /// `false` — эту версию уже обошла более новая: её ключ ляжет своей записью. Своя версия, дождавшаяся
+    /// повтора, после записи уходит на другие устройства.
     @discardableResult
     private func write(_ change: ServiceKeyChange) throws -> Bool {
         guard try ServiceKeys.isWaiting(change, in: store) else { return false }
         try keys.setValue(change.value, for: change.name)
-        try ServiceKeys.didWrite(change, in: store)
+        try ServiceKeys.didWrite(change, in: store, send: isOwn(change))
         return true
     }
 }
@@ -308,10 +359,12 @@ enum ServiceKeys {
         try store.database.dbWriter.read { try waiting(of: change.name, in: $0) == change.hlc }
     }
 
-    static func didWrite(_ change: ServiceKeyChange, in store: NotesStore) throws {
+    /// `send` — отправить ключ: своя версия легла не сразу, и отметку «отправить» могли уже снять.
+    static func didWrite(_ change: ServiceKeyChange, in store: NotesStore, send: Bool = false) throws {
         try store.database.dbWriter.write { db in
             try db.execute(sql: "DELETE FROM app_meta WHERE key = ? AND value = ?",
                            arguments: [waitingPrefix + change.name, change.hlc.description])
+            if send, try SyncAccountStore.isEnabled(in: db) { try markForSending(requestingOthers: false, in: db) }
         }
     }
 
@@ -324,13 +377,17 @@ enum ServiceKeys {
     /// Ключи этого устройства с их метками — для пачки или снимка. Без метки ключа здесь нет; версия, ещё не легшая
     /// в связку ключей, не уходит: под её меткой там пока прежний ключ.
     static func current(keys: any ServiceKeyStore, in store: NotesStore) throws -> [ServiceKeyChange] {
+        try current(names: keys.names, value: keys.value(for:), in: store)
+    }
+
+    static func current(names: [String], value: (String) throws -> String?, in store: NotesStore) throws -> [ServiceKeyChange] {
         let labels = try store.database.dbWriter.read { db in
-            try keys.names.compactMap { name -> (String, HybridTimestamp)? in
+            try names.compactMap { name -> (String, HybridTimestamp)? in
                 guard try waiting(of: name, in: db) == nil, let hlc = try clock(of: name, in: db) else { return nil }
                 return (name, hlc)
             }
         }
-        return try labels.map { ServiceKeyChange(name: $0.0, value: try keys.value(for: $0.0), hlc: $0.1) }
+        return try labels.map { ServiceKeyChange(name: $0.0, value: try value($0.0), hlc: $0.1) }
     }
 
     /// Пришедшие ключи: побеждает поздняя метка (или та же, что не легла в связку ключей до перезапуска).

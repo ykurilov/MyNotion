@@ -212,7 +212,7 @@ public final class SyncEngine {
         }
     }
 
-    /// Связка ключей не прочиталась — страницы идут без ключей, а ключи — со следующего круга.
+    /// Связка ключей не прочиталась — страницы идут без ключей, а ключи — когда её снова можно читать (`ServiceKeySync`).
     private func prepareServiceKeysIfNeeded() async {
         guard !serviceKeysPrepared, let keys = applier.serviceKeys else { return }
         do {
@@ -226,7 +226,7 @@ public final class SyncEngine {
 
     /// Ключи сервисов — своей пачкой без изменений записей, когда их отметили к отправке (ServiceKeys).
     /// Связка ключей читается не на главном потоке: вопрос macOS о доступе не останавливает окно, а её отказ —
-    /// страницы: ключи уйдут на следующем круге.
+    /// страницы: ключи уйдут, когда её снова можно читать.
     private func sendServiceKeys(account: SyncAccount) async throws {
         guard serviceKeysPrepared, let keys = applier.serviceKeys, let pending = try ServiceKeys.pending(in: store) else { return }
         guard let current = try? await keys.current() else { return }
