@@ -4,6 +4,7 @@ import SwiftUI
 /// MyNotion для iPhone: дерево страниц, страница и синхронизация с Mac (specs/007-iphone-app).
 @main
 struct MyNotionPhoneApp: App {
+    @UIApplicationDelegateAdaptor private var appDelegate: PhoneAppDelegate
     private let options: PhoneLaunchOptions
     private let library: Result<PhoneLibrary, any Error>
 
@@ -16,6 +17,8 @@ struct MyNotionPhoneApp: App {
         #endif
         self.options = options
         library = Result { try PhoneLibrary(options: options) }
+        PhoneAppDelegate.library = try? library.get()
+        PhoneAppDelegate.log = LiveCheckLog(url: options.syncLog)
     }
 
     var body: some Scene {

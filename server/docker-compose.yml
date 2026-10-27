@@ -12,6 +12,10 @@ services:
       FILES_LIMIT_GB: "50"
       # место под открытые копии страниц по ссылке (/data/shares), ГБ: их всегда можно опубликовать заново, в копии не входят
       SHARES_LIMIT_GB: "10"
+      # тихие пуши iPhone (Apple Push Notification service): ключ .p8 команды Apple — файлом на томе ./data/apns,
+      # без ключа сервер работает как прежде, только не будит iPhone. Секрет в образ и в git не кладётся.
+      APNS_KEY_FILE: ${APNS_KEY_FILE:-}
+      APNS_KEY_ID: ${APNS_KEY_ID:-}
     volumes:
       # база, файлы (/data/files) и ежедневные копии (/data/backups) лежат на хосте: видны и копируются без входа в контейнер.
       # Копия файлов — жёсткие ссылки, поэтому files и backups должны быть на одной файловой системе (один том ./data)

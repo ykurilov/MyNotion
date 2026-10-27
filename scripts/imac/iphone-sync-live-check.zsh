@@ -3,6 +3,8 @@
 # Mac-приложение подключается токеном bootstrap и выдаёт код, iPhone подключается кодом, получает страницу
 # «MyNotion — образец» с Mac, открывает её и печатает текст в редакторе — текст должен прийти в базу Mac. Затем Mac
 # командой `mynotion` вставляет блок под этим текстом — он должен появиться на открытой странице iPhone.
+# Затем тихий пуш: iPhone уходит в фон, Mac вставляет ещё блок, сервер шлёт пуш (через подменный APNs —
+# scripts/imac/apns-relay.mjs — в симулятор). Разбудить приложение тихим пушем симулятор не умеет: это — на iPhone.
 # Снимки: дерево, страница с клавиатурой, страница в тёмной теме. Боевой сервер не трогается.
 #
 #   scripts/imac/iphone-sync-live-check.zsh [--out <папка на этом Mac>]
@@ -27,18 +29,21 @@ source ${0:A:h}/lib.sh
 require_toolchain; require_gui_session
 
 PORT=39124
+APNS_PORT=39125
 LIVE=/tmp/mn-phone-live
 RESULTS=$WORK/build/imac-phone-live
 PAGE='MyNotion — образец'
 EDIT="Правка с iPhone $(date +%H:%M:%S)"
 MAC_EDIT="Правка с Mac $(date +%H:%M:%S)"
+PUSH_EDIT="Правка с Mac по пушу $(date +%H:%M:%S)"
 BUNDLE=cloud.kurilov.mynotion.ios
 
-server_pid=""; mac_pid=""
+server_pid=""; mac_pid=""; relay_pid=""
 cleanup() {
-  cp $LIVE/phone.log $LIVE/mac.log $LIVE/server.log $RESULTS/ 2>/dev/null || true
+  cp $LIVE/phone.log $LIVE/mac.log $LIVE/server.log $LIVE/apns.log $RESULTS/ 2>/dev/null || true
   [[ -n $mac_pid ]] && kill $mac_pid 2>/dev/null || true
   [[ -n $server_pid ]] && kill $server_pid 2>/dev/null || true
+  [[ -n $relay_pid ]] && kill $relay_pid 2>/dev/null || true
   [[ -n ${DEVICE:-} ]] && { xcrun simctl terminate $DEVICE $BUNDLE 2>/dev/null; xcrun simctl keychain $DEVICE reset 2>/dev/null; } || true
   forget_sync_secrets
 }
@@ -61,8 +66,18 @@ wait_for() {
 for pid in $(lsof -tiTCP:$PORT -sTCP:LISTEN 2>/dev/null || true); do
   [[ $(ps -o command= -p $pid) == "node $WORK/server/dist/main.js" ]] && kill $pid && sleep 1
 done
+for pid in $(lsof -tiTCP:$APNS_PORT -sTCP:LISTEN 2>/dev/null || true); do
+  [[ $(ps -o command= -p $pid) == "node $WORK/scripts/imac/apns-relay.mjs"* ]] && kill $pid && sleep 1
+done
 [[ -z $(lsof -tiTCP:$PORT -sTCP:LISTEN 2>/dev/null || true) ]] || fail "Порт $PORT занят: чужой сервер оставлен без изменений."
-DATA_DIR=$LIVE/server PORT=$PORT node $WORK/server/dist/main.js > $LIVE/server.log 2>&1 &
+[[ -z $(lsof -tiTCP:$APNS_PORT -sTCP:LISTEN 2>/dev/null || true) ]] || fail "Порт $APNS_PORT занят: чужой процесс оставлен без изменений."
+# Пуши — в подменный APNs с одноразовым ключом: настоящий ключ Apple здесь не нужен.
+openssl ecparam -name prime256v1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt -out $LIVE/apns-test.p8
+touch $LIVE/apns.log
+node $WORK/scripts/imac/apns-relay.mjs $APNS_PORT $LIVE/device $BUNDLE $LIVE/apns.log > $LIVE/apns-relay.out 2>&1 &
+relay_pid=$!
+DATA_DIR=$LIVE/server PORT=$PORT APNS_KEY_FILE=$LIVE/apns-test.p8 APNS_KEY_ID=LIVECHECK1 APNS_ORIGIN=http://127.0.0.1:$APNS_PORT \
+  node $WORK/server/dist/main.js > $LIVE/server.log 2>&1 &
 server_pid=$!
 wait_for 15 "сервер" curl -sf http://127.0.0.1:$PORT/health
 (cd server && DATA_DIR=$LIVE/server node dist/cli.js bootstrap --name 'Mac A' --token-only > $LIVE/token)
@@ -85,6 +100,7 @@ print -- "[MyNotion/iMac] Mac подключён и выдал код ($(( SECON
   || (unset XCODE_XCCONFIG_FILE; xcodebuild build -scheme MyNotionPhone -destination 'generic/platform=iOS Simulator' \
         -derivedDataPath build/iphone -jobs $JOBS -quiet) || fail "iPhone: MyNotionPhone не собрался"
 boot_iphone_simulator
+print -- $DEVICE > $LIVE/device
 xcrun simctl keychain $DEVICE reset
 xcrun simctl ui $DEVICE appearance light
 # Экранная клавиатура, а не клавиатура iMac: она должна выехать на снимке.
@@ -121,4 +137,33 @@ sleep 2
 xcrun simctl io $DEVICE screenshot $RESULTS/phone-page-dark.png >/dev/null 2>&1
 xcrun simctl ui $DEVICE appearance light
 screencapture -x $RESULTS/mac-screen.png 2>/dev/null || true
-print -- "[MyNotion/iMac] iPhone: живая проверка пройдена — Mac → iPhone → Mac → iPhone за $(( SECONDS - started )) с"
+
+# 7. Тихий пуш. Токен iPhone (песочница Apple) — на сервере; пока iPhone на экране, пушей нет: он и так на связи.
+push_token() { sqlite3 $LIVE/server/mynotion-sync.db "SELECT token FROM push_tokens WHERE environment = 'sandbox'"; }
+has_push_token() { [[ -n $(push_token) ]]; }
+wait_for 30 "токен пушей iPhone на сервере" has_push_token || { cat $LIVE/phone.log; fail "iPhone не сообщил токен пушей"; }
+[[ ! -s $LIVE/apns.log ]] || { cat $LIVE/apns.log; fail "Сервер слал пуши iPhone, который был на экране"; }
+print -- "[MyNotion/iMac] токен пушей iPhone — на сервере; пока iPhone на экране, пушей не было"
+
+# iPhone — в фон (открыть Настройки), Mac — новый блок. Сервер ждёт, пока iPhone пропадёт со связи, и шлёт пуш.
+xcrun simctl launch $DEVICE com.apple.Preferences >/dev/null
+sleep 3
+$APP/Contents/Helpers/mynotion block insert $page_id --kind paragraph --text $PUSH_EDIT \
+  --socket $LIVE/control.sock --no-launch --agent live-check >/dev/null || fail "Mac: mynotion block insert не прошёл"
+pushed_at=$SECONDS
+wait_for 120 "пуш с сервера" test -s $LIVE/apns.log || { cat $LIVE/server.log; fail "Сервер не прислал пуш"; }
+grep -q "/3/device/$(push_token) push-type=background priority=5 topic=$BUNDLE jwt=true" $LIVE/apns.log \
+  || { cat $LIVE/apns.log; fail "Пуш не тот: токен, тип, приоритет или тема"; }
+print -- "[MyNotion/iMac] пуш ушёл через $(( SECONDS - pushed_at )) с после правки"
+# Дальше iPhone пушем не разбудить: симулятор не будит приложения тихими пушами («Content-available push notifications
+# are only supported on-device»), это проверяется на настоящем iPhone. Здесь — что симулятор принял пуш и что,
+# открыв приложение, iPhone забирает правку, а сервер не шлёт лишнего.
+! grep -q simctl-error $LIVE/apns.log || { cat $LIVE/apns.log; fail "Симулятор не принял пуш"; }
+# Открыть iPhone: правка с Mac приходит, лишних пушей нет.
+xcrun simctl launch $DEVICE $BUNDLE >/dev/null
+phone_has_push_edit() { [[ -n $(sqlite3 $LIVE/phone.sqlite "SELECT id FROM block WHERE isDeleted = 0 AND text LIKE '%$PUSH_EDIT%' LIMIT 1") ]]; }
+wait_for 60 "правка с Mac после открытия" phone_has_push_edit || { cat $LIVE/phone.log; fail "Правка с Mac не пришла на iPhone"; }
+sleep 3
+xcrun simctl io $DEVICE screenshot $RESULTS/phone-after-push.png >/dev/null 2>&1
+[[ $(wc -l < $LIVE/apns.log) -eq 1 ]] || { cat $LIVE/apns.log; fail "Сервер прислал лишние пуши"; }
+print -- "[MyNotion/iMac] iPhone: живая проверка пройдена — Mac → iPhone → Mac → iPhone → пуш за $(( SECONDS - started )) с"

@@ -49,6 +49,9 @@ imac-run --no-fallback --no-setup --fetch build/iphone-shots -- 'zsh scripts/ima
 Живая проверка синхронизации «Mac + iPhone в симуляторе» на локальном сервере (боевой не трогается):
 `scripts/imac/iphone-sync-live-check.zsh` — Mac выдаёт код, iPhone подключается, страница с Mac приходит на iPhone,
 текст, напечатанный в редакторе iPhone, приходит на Mac, а блок, вставленный на Mac, появляется на открытой странице iPhone.
+Затем тихий пуш: iPhone уходит в фон, Mac вставляет ещё блок, сервер шлёт пуш в подменный APNs
+(`scripts/imac/apns-relay.mjs` отдаёт его в симулятор через `xcrun simctl push`); открытый iPhone забирает блок, лишних
+пушей нет. Будить приложение тихим пушем симулятор не умеет («only supported on-device»): это проверяется на iPhone.
 Снимки — дерево, страница с клавиатурой и в тёмной теме. Перед ней в копии на iMac должна лежать сборка `iphone-build.zsh`.
 
 Флаги запуска iPhone (для снимков и проверок, `xcrun simctl launch … <флаги>`): `--database <путь>`, `--sample-pages`,
@@ -88,7 +91,7 @@ iMac (пароль рядом, права 600) и профиль «MyNotion iPho
 | `Reminders` | даты в тексте и уведомления напоминаний |
 | `EmojiPicker` | окно выбора эмодзи для иконок страниц и выносок |
 | `Sync` | зашифрованные пачки правок между Mac через сервер |
-| `PhoneShell` | логика оболочки iPhone без UIKit: подключение кодом с Mac, синхронизация на переднем плане и досылка в фоне, дерево страниц |
+| `PhoneShell` | логика оболочки iPhone без UIKit: подключение кодом с Mac, синхронизация на переднем плане и досылка в фоне, круг по тихому пушу и токен пушей, дерево страниц |
 | `PhonePageEditor` | редактор страницы на iPhone (UIKit): блок — ячейка списка со своим текстом |
 | `MarkdownExport`, `NotionImport` | выгрузка в Markdown и импорт выгрузки Notion или своей выгрузки |
 | `Navigation` | вкладки окна, «назад/вперёд» с местом прокрутки, закрытые вкладки |
@@ -193,6 +196,18 @@ pnpm build && pnpm start   # http://localhost:3000/health → {"status":"ok"}
 Настройки — переменными окружения: `PORT` (3000), `DATA_DIR` (`./data`: база, резервные копии, файлы в `files/`),
 `BACKUP_KEEP` (14 копий), `FILES_LIMIT_GB` (50 ГБ на файлы), `SHARES_LIMIT_GB` (10 ГБ на страницы по ссылке).
 Развёртывание — `server/Dockerfile` и `docker-compose.yml`.
+
+**Тихие пуши iPhone (1П).** Пришла пачка с Mac — сервер будит iPhone тихим пушем Apple, iPhone забирает её сам
+(в пуше ничего из записей нет). Нужен ключ APNs команды `DC5QSJ54MB` (файл `.p8` из developer.apple.com → Keys):
+
+- положить ключ на сервер в том данных: `data/apns/AuthKey_<KEY_ID>.p8`, права `600`;
+- в `.env` рядом с `docker-compose.yml`: `APNS_KEY_FILE=/data/apns/AuthKey_<KEY_ID>.p8` и `APNS_KEY_ID=<KEY_ID>`;
+- необязательно: `APNS_TEAM_ID` (`DC5QSJ54MB`), `APNS_TOPIC` (`cloud.kurilov.mynotion.ios`),
+  `PUSH_MIN_INTERVAL_SECONDS` (300 — не чаще одного пуша устройству).
+
+Без ключа сервер пишет в журнал «Пуши iPhone выключены» и работает как прежде. Токены iPhone приходят через
+`PUT /devices/me/push-token` (контракт — в [sync-api.md](specs/001-core-pages-editor/contracts/sync-api.md)).
+Приложение, которое смахнули из переключателя программ, iOS тихими пушами не будит: правки придут при открытии.
 
 **Страницы по ссылке (006).** «•••» → «Поделиться» или `mynotion page share on <стр>`: Mac кладёт на сервер открытую
 копию страницы (снимок без закрытого), сервер показывает её по адресу `/s/<ссылка>` любому браузеру без входа.

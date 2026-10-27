@@ -88,7 +88,8 @@ enum LiveCheck {
     }
 }
 
-private struct LiveCheckLog {
+/// Строки хода живой проверки в файл `--sync-log`; без файла — молчит.
+struct LiveCheckLog {
     let url: URL?
 
     func write(_ line: String) {
