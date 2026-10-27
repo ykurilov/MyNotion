@@ -2,7 +2,8 @@ import Foundation
 import Testing
 @testable import Sync
 
-/// Клиент ссылок (contracts/share-api.md) против настоящего сервера из server/.
+#if os(macOS)
+/// Клиент ссылок (contracts/share-api.md) против настоящего сервера из server/. Сервер — процесс Node: только на Mac.
 @Suite("Ссылки на сервере")
 struct SyncShareTransportTests {
     @Test("Включить, положить снимок и файл, открыть без входа, сменить ссылку, выключить", .enabled(if: LocalNodeSyncServer.isAvailable))
@@ -60,3 +61,4 @@ struct SyncShareTransportTests {
         return (response as? HTTPURLResponse)?.statusCode
     }
 }
+#endif

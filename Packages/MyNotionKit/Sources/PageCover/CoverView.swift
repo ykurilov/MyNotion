@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 import ImageIO
 import NotesCore
@@ -467,3 +468,4 @@ final class CoverHintLabel: NSView {
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
+#endif

@@ -1,4 +1,4 @@
-import AppKit
+import CoreGraphics
 
 /// Размеры переключателя, цитаты, выноски и разделителя (contracts/blocks-and-keys.md; FR-119 — сверка с живым Notion
 /// в галерее `--only structural`).

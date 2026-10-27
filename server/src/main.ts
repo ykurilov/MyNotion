@@ -1,6 +1,7 @@
 import { serve } from '@hono/node-server';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import type { Server } from 'node:http';
+import { createApnsSender, type ApnsSender } from './apns.js';
 import { createApp } from './app.js';
 import { backupDatabase, backupFiles } from './backup.js';
 import { readConfig } from './config.js';
@@ -8,6 +9,7 @@ import { openDatabase } from './db.js';
 import { createDevices } from './devices.js';
 import { createFiles } from './files.js';
 import { createJournal } from './journal.js';
+import { createPush } from './push.js';
 import { createShares } from './shares.js';
 
 const DAY_MS = 24 * 3600_000;
@@ -20,7 +22,31 @@ const files = createFiles(db, { dir: config.filesDir, limitBytes: config.filesLi
 
 const shares = createShares(db, { dir: config.sharesDir, limitBytes: config.sharesLimitBytes });
 
-const server = serve({ fetch: createApp({ devices, journal, files, shares }).fetch, port: config.port }) as Server;
+function startApns(): ApnsSender | null {
+  if (!config.apns) {
+    console.log('Пуши iPhone выключены: не заданы APNS_KEY_FILE и APNS_KEY_ID');
+    return null;
+  }
+  const { keyFile, keyId, teamId, topic, origin } = config.apns;
+  try {
+    const sender = createApnsSender({
+      keyPem: readFileSync(keyFile, 'utf8'),
+      keyId,
+      teamId,
+      topic,
+      origins: origin ? { sandbox: origin, production: origin } : undefined,
+    });
+    console.log(`Пуши iPhone включены: ключ ${keyId}, приложение ${topic}${origin ? `, адрес ${origin}` : ''}`);
+    return sender;
+  } catch (error) {
+    console.error(`Пуши iPhone выключены: ключ ${keyFile} не прочитался:`, error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+const apns = startApns();
+const push = createPush(db, { devices, journal, sender: apns, timing: { minIntervalMs: config.pushMinIntervalMs } });
+
+const server = serve({ fetch: createApp({ devices, journal, files, shares, push }).fetch, port: config.port }) as Server;
 // долгое ожидание держит запрос до 25 с: сокеты не рвём раньше
 server.keepAliveTimeout = 65_000;
 server.requestTimeout = 0;
@@ -66,6 +92,8 @@ setInterval(() => void dailyRoutine(), DAY_MS).unref();
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.on(signal, () => {
     server.close();
+    push.close();
+    apns?.close();
     db.close();
     process.exit(0);
   });

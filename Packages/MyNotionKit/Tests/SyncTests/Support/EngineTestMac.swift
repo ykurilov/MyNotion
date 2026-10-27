@@ -22,13 +22,23 @@ enum SyncTestServerKind: String, CustomStringConvertible, Sendable {
 
     /// Настоящий сервер — когда он есть в этой ветке и собран.
     static var available: [SyncTestServerKind] {
+        #if os(macOS)
         LocalNodeSyncServer.isAvailable ? [.fake, .local] : [.fake]
+        #else
+        [.fake]
+        #endif
     }
 
     func start() async throws -> any SyncTestServer {
         switch self {
         case .fake: FakeTestServer()
-        case .local: try await LocalNodeSyncServer.start()
+        case .local:
+            #if os(macOS)
+            try await LocalNodeSyncServer.start()
+            #else
+            // В симуляторе iPhone нет процессов: настоящий сервер из `server/` запускается только на Mac.
+            throw URLError(.cannotConnectToHost)
+            #endif
         }
     }
 }
@@ -156,6 +166,7 @@ final class EngineTestMac {
     }
 }
 
+#if os(macOS)
 /// Сервер из `server/` этой ветки: свой порт, своя база во временной папке; первое устройство — командой bootstrap.
 final class LocalNodeSyncServer: SyncTestServer, @unchecked Sendable {
     static var serverFolder: URL {
@@ -264,3 +275,4 @@ final class LocalNodeSyncServer: SyncTestServer, @unchecked Sendable {
         return Int(UInt16(bigEndian: address.sin_port))
     }
 }
+#endif

@@ -1,6 +1,7 @@
 # MyNotion
 
-Личное приложение заметок для macOS: дерево страниц, блоки текста, автосохранение, синхронизация двух Mac.
+Личное приложение заметок для macOS и iPhone: дерево страниц, блоки текста, автосохранение, синхронизация между Mac и iPhone.
+План версии для iPhone — [specs/007-iphone-app/plan-draft.md](specs/007-iphone-app/plan-draft.md).
 Требования, план и задачи — в [specs/001-core-pages-editor/](specs/001-core-pages-editor/) (страницы и текст) и
 [specs/002-rich-blocks-text/](specs/002-rich-blocks-text/) (богатые блоки: переключатели, выноски, код, формулы,
 картинки и файлы, видео, закладки, таблицы, колонки, цвета, упоминания, даты и напоминания),
@@ -23,6 +24,55 @@ xcodegen generate
 xcodebuild build -scheme MyNotion -destination 'platform=macOS,arch=arm64'
 ```
 
+### iPhone
+
+Цель `MyNotionPhone` (папка `PhoneApp/`, iOS 26+, только iPhone) собирается из того же `project.yml`. Под iPhone
+собираются модули данных пакета, оболочка `PhoneShell` и редактор страницы `PhonePageEditor`; насквозь AppKit-модули
+(редактор Mac, дерево, сетка баз) — только для Mac.
+
+```sh
+xcodegen generate
+xcodebuild build -scheme MyNotionPhone -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath build/iphone
+xcrun simctl boot 'iPhone 17 Pro'; open -a Simulator
+xcrun simctl install booted build/iphone/Build/Products/Debug-iphonesimulator/MyNotion.app
+xcrun simctl launch booted cloud.kurilov.mynotion.ios
+```
+
+На iMac: `scripts/imac/iphone-build.zsh` собирает модули и приложение под симулятор и устройство и прогоняет
+`NotesCoreTests`, `SyncTests`, `PhoneShellTests` и `PhonePageEditorTests` в iPhone 17 Pro (iOS 26.5); `scripts/imac/iphone-sim-shot.zsh` запускает
+приложение и снимает экран, `scripts/imac/iphone-shots.zsh` — снимки основных экранов в `build/iphone-shots/`.
+
+```sh
+imac-run --no-fallback --no-setup --fetch build/iphone-shots -- 'zsh scripts/imac/iphone-build.zsh && zsh scripts/imac/iphone-shots.zsh'
+```
+
+Живая проверка синхронизации «Mac + iPhone в симуляторе» на локальном сервере (боевой не трогается):
+`scripts/imac/iphone-sync-live-check.zsh` — Mac выдаёт код, iPhone подключается, страница с Mac приходит на iPhone,
+текст, напечатанный в редакторе iPhone, приходит на Mac, а блок, вставленный на Mac, появляется на открытой странице iPhone.
+Затем тихий пуш: iPhone уходит в фон, Mac вставляет ещё блок, сервер шлёт пуш в подменный APNs
+(`scripts/imac/apns-relay.mjs` отдаёт его в симулятор через `xcrun simctl push`); открытый iPhone забирает блок, лишних
+пушей нет. Будить приложение тихим пушем симулятор не умеет («only supported on-device»): это проверяется на iPhone.
+Снимки — дерево, страница с клавиатурой и в тёмной теме. Перед ней в копии на iMac должна лежать сборка `iphone-build.zsh`.
+
+Флаги запуска iPhone (для снимков и проверок, `xcrun simctl launch … <флаги>`): `--database <путь>`, `--sample-pages`,
+`--screen connect|settings|page:<название>`, `--sync-server`, `--sync-device-name`, `--sync-join-code-file`, `--sync-log`,
+`--live-check-page`, `--live-check-edit`, `--live-check-mac-edit`. Работают только в отладочной сборке: сборка для
+TestFlight их не принимает.
+
+**TestFlight.** `ITSAppUsesNonExemptEncryption = NO` уже в `PhoneApp/Info.plist`: вопроса о шифровании не будет. Иконка —
+та же, что у Mac (`PhoneApp/Resources/Assets.xcassets`). Номер сборки (`CURRENT_PROJECT_VERSION`) у каждой выкладки
+должен расти; руками его не поднимать — скрипт подставляет время сборки. Выкладка одной командой с основного Mac:
+
+```sh
+zsh scripts/iphone-testflight.zsh   # TESTFLIGHT_ARCHIVE_ONLY=1 — только проверить подпись
+```
+
+Сборка идёт на iMac. Ключ App Store Connect (`~/.codex/secrets/asc-api-DC5QSJ54MB.*`) уходит туда только на время
+прогона. Подпись Release — вручную: сертификат Apple Distribution в отдельной связке `~/.config/mynotion-release/` на
+iMac (пароль рядом, права 600) и профиль «MyNotion iPhone App Store». Тестеры — внутренняя группа TestFlight «Юрий».
+
+Версию для людей (`MARKETING_VERSION` в `project.yml`, сейчас 0.1.0) поднимать только к новому выпуску.
+
 ## Модули
 
 Код приложения — в пакете `Packages/MyNotionKit`, у каждого модуля свои тесты в `Tests/<Модуль>Tests`.
@@ -41,6 +91,8 @@ xcodebuild build -scheme MyNotion -destination 'platform=macOS,arch=arm64'
 | `Reminders` | даты в тексте и уведомления напоминаний |
 | `EmojiPicker` | окно выбора эмодзи для иконок страниц и выносок |
 | `Sync` | зашифрованные пачки правок между Mac через сервер |
+| `PhoneShell` | логика оболочки iPhone без UIKit: подключение кодом с Mac, синхронизация на переднем плане и досылка в фоне, круг по тихому пушу и токен пушей, дерево страниц |
+| `PhonePageEditor` | редактор страницы на iPhone (UIKit): блок — ячейка списка со своим текстом |
 | `MarkdownExport`, `NotionImport` | выгрузка в Markdown и импорт выгрузки Notion или своей выгрузки |
 | `Navigation` | вкладки окна, «назад/вперёд» с местом прокрутки, закрытые вкладки |
 | `PageCover` | обложка страницы: галерея «Цвета и градиенты», своя картинка, сдвиг |
@@ -144,6 +196,18 @@ pnpm build && pnpm start   # http://localhost:3000/health → {"status":"ok"}
 Настройки — переменными окружения: `PORT` (3000), `DATA_DIR` (`./data`: база, резервные копии, файлы в `files/`),
 `BACKUP_KEEP` (14 копий), `FILES_LIMIT_GB` (50 ГБ на файлы), `SHARES_LIMIT_GB` (10 ГБ на страницы по ссылке).
 Развёртывание — `server/Dockerfile` и `docker-compose.yml`.
+
+**Тихие пуши iPhone (1П).** Пришла пачка с Mac — сервер будит iPhone тихим пушем Apple, iPhone забирает её сам
+(в пуше ничего из записей нет). Нужен ключ APNs команды `DC5QSJ54MB` (файл `.p8` из developer.apple.com → Keys):
+
+- положить ключ на сервер в том данных: `data/apns/AuthKey_<KEY_ID>.p8`, права `600`;
+- в `.env` рядом с `docker-compose.yml`: `APNS_KEY_FILE=/data/apns/AuthKey_<KEY_ID>.p8` и `APNS_KEY_ID=<KEY_ID>`;
+- необязательно: `APNS_TEAM_ID` (`DC5QSJ54MB`), `APNS_TOPIC` (`cloud.kurilov.mynotion.ios`),
+  `PUSH_MIN_INTERVAL_SECONDS` (300 — не чаще одного пуша устройству).
+
+Без ключа сервер пишет в журнал «Пуши iPhone выключены» и работает как прежде. Токены iPhone приходят через
+`PUT /devices/me/push-token` (контракт — в [sync-api.md](specs/001-core-pages-editor/contracts/sync-api.md)).
+Приложение, которое смахнули из переключателя программ, iOS тихими пушами не будит: правки придут при открытии.
 
 **Страницы по ссылке (006).** «•••» → «Поделиться» или `mynotion page share on <стр>`: Mac кладёт на сервер открытую
 копию страницы (снимок без закрытого), сервер показывает её по адресу `/s/<ссылка>` любому браузеру без входа.

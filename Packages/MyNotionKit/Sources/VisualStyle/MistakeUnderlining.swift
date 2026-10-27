@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 
 /// Поле ввода, которое само следит за «Подчёркивать ошибки» (`MistakeUnderlining.didChange`): текст страницы.
@@ -84,3 +85,4 @@ public enum MistakeUnderlining {
         view.subviews.forEach(applyInside)
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 
 /// Кнопки окна Mac (светофор) на месте Notion (contracts/visual-style.md, «Боковая панель»): середина красной —
@@ -48,3 +49,4 @@ public enum TrafficLights {
         }
     }
 }
+#endif

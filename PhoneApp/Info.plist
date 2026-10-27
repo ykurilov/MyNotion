@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- TestFlight: в приложении только стандартное шифрование системы — вопрос о шифровании при выкладке не задаётся. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<!-- Живая проверка синхронизации ходит к локальному серверу по http; в интернет — только https. -->
+	<!-- Тихие пуши сервера синхронизации будят приложение в фоне: забрать правки с Mac. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+</dict>
+</plist>

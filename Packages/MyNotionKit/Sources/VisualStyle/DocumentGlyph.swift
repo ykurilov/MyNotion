@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 
 /// Значок страницы без иконки, как в Notion для Mac: лист со скруглёнными углами, загнутым правым верхним углом
@@ -48,3 +49,4 @@ public enum DocumentGlyph {
         return image
     }
 }
+#endif

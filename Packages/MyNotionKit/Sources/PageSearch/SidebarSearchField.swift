@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 import SwiftUI
 import VisualStyle
@@ -121,3 +122,4 @@ final class SearchTextField: NSTextField {
         return became
     }
 }
+#endif

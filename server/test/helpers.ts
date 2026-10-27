@@ -7,6 +7,7 @@ import { openDatabase, type Db } from '../src/db.js';
 import { createDevices, type Devices } from '../src/devices.js';
 import { createFiles, type Files } from '../src/files.js';
 import { createJournal, type Journal } from '../src/journal.js';
+import { createPush, type Push, type PushEnvironment, type PushSender, type PushTiming } from '../src/push.js';
 import { createShares, type Shares } from '../src/shares.js';
 
 const tempDirs: string[] = [];
@@ -27,6 +28,9 @@ export interface TestServer {
   files: Files;
   filesDir: string;
   shares: Shares;
+  push: Push;
+  /** Пуши, которые сервер отправил бы Apple (подмена отправителя). */
+  pushes: SentPush[];
   app: ReturnType<typeof createApp>;
   firstDevice: { deviceId: string; token: string };
   call(method: string, path: string, options?: CallOptions): Promise<Response>;
@@ -45,6 +49,24 @@ export interface FilesOptions {
   limitBytes?: number;
   now?: () => number;
   sharesLimitBytes?: number;
+  /** `null` — пуши не настроены (нет ключа Apple). */
+  pushSender?: PushSender | null;
+  pushTiming?: Partial<PushTiming>;
+}
+
+export interface SentPush {
+  deviceToken: string;
+  environment: PushEnvironment;
+}
+
+/** Отправитель, который только записывает пуши и отвечает «доставлено». */
+export function recordingSender(pushes: SentPush[]): PushSender {
+  return {
+    async send(deviceToken, environment) {
+      pushes.push({ deviceToken, environment });
+      return { outcome: 'sent', status: 200 };
+    },
+  };
 }
 
 export function createTestServer(limits?: AppOptions['limits'], filesOptions: FilesOptions = {}): TestServer {
@@ -54,7 +76,10 @@ export function createTestServer(limits?: AppOptions['limits'], filesOptions: Fi
   const filesDir = makeTempDir('mynotion-files-');
   const files = createFiles(db, { dir: filesDir, limitBytes: filesOptions.limitBytes ?? 1024 ** 3, now: filesOptions.now });
   const shares = createShares(db, { dir: makeTempDir('mynotion-shares-'), limitBytes: filesOptions.sharesLimitBytes ?? 1024 ** 3 });
-  const app = createApp({ devices, journal, files, shares, limits });
+  const pushes: SentPush[] = [];
+  const pushSender = filesOptions.pushSender === undefined ? recordingSender(pushes) : filesOptions.pushSender;
+  const push = createPush(db, { devices, journal, sender: pushSender, timing: filesOptions.pushTiming, log: () => {} });
+  const app = createApp({ devices, journal, files, shares, push, limits });
   const firstDevice = devices.bootstrap('Первый Mac');
   return {
     db,
@@ -63,6 +88,8 @@ export function createTestServer(limits?: AppOptions['limits'], filesOptions: Fi
     files,
     filesDir,
     shares,
+    push,
+    pushes,
     app,
     firstDevice,
     call(method, path, options = {}) {

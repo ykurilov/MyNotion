@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 import NotesCore
 import UniformTypeIdentifiers
@@ -466,3 +467,4 @@ final class CoverPickerWindow: NSPanel {
 
     override var canBecomeKey: Bool { true }
 }
+#endif

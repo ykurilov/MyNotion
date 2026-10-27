@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 
 /// Значок базы без иконки, как у таблицы Notion: скруглённая рамка, строка шапки и столбец слева, тонкой линией.
@@ -24,3 +25,4 @@ public enum DatabaseGlyph {
         return image
     }
 }
+#endif

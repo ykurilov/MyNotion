@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 
 extension Palette {
@@ -24,3 +25,4 @@ extension Palette {
             : NSColor(srgbRed: 15 / 255, green: 15 / 255, blue: 15 / 255, alpha: 0.12)
     }
 }
+#endif

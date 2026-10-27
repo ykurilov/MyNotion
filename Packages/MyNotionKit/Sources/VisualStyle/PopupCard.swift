@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 
 /// Всплывающая карточка у элемента окна — тот же вид, что меню и окно корзины (`PopupSurface`): подробности
@@ -169,3 +170,4 @@ private final class PopupCardPanel: NSPanel {
         }
     }
 }
+#endif

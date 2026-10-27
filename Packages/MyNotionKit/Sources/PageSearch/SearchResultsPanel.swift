@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 import NotesCore
 import VisualStyle
@@ -269,3 +270,4 @@ final class SearchResultsView: NSView {
         needsDisplay = true
     }
 }
+#endif

@@ -64,6 +64,13 @@ CREATE TABLE IF NOT EXISTS share_files (
   created_at  INTEGER NOT NULL,
   PRIMARY KEY (page_id, file_id)
 );
+-- Токены тихих пушей iPhone (specs/007-iphone-app, этап 1П): APNs-токен и его среда, по одному на устройство
+CREATE TABLE IF NOT EXISTS push_tokens (
+  device_id    TEXT PRIMARY KEY,
+  token        TEXT NOT NULL UNIQUE,
+  environment  TEXT NOT NULL,
+  updated_at   INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS meta (
   key    TEXT PRIMARY KEY,
   value  INTEGER NOT NULL

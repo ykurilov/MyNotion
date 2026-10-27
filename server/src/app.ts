@@ -7,6 +7,7 @@ import { Readable } from 'node:stream';
 import { ApiError } from './errors.js';
 import type { Devices } from './devices.js';
 import { PART_MAX_BYTES, type Files } from './files.js';
+import { PUSH_ENVIRONMENTS, type Push, type PushEnvironment } from './push.js';
 import { MAX_DOCUMENT_BYTES } from './share-document.js';
 import { KATEX_ASSETS_PATH, renderNotFoundPage, renderSharedPage, STYLESHEET_PATH } from './share-render.js';
 import { SHARE_STYLESHEET } from './share-style.js';
@@ -24,6 +25,7 @@ export interface AppOptions {
   journal: Journal;
   files: Files;
   shares?: Shares;
+  push?: Push;
   limits?: { maxBatchBytes?: number; maxSnapshotBytes?: number };
 }
 
@@ -32,6 +34,8 @@ type Env = { Variables: { deviceId: string } };
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 const BATCH_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const DIGITS = /^\d{1,15}$/;
+/** Токен APNs — 32 байта в hex; длиннее Apple может сделать в будущем. */
+const APNS_TOKEN = /^[0-9a-f]{64,200}$/;
 const MAX_DEVICE_NAME = 100;
 
 const tooLarge = (what: string, megabytes: number) =>
@@ -81,7 +85,7 @@ function base64Chars(bytes: number): number {
   return Math.ceil(bytes / 3) * 4 + 4096;
 }
 
-export function createApp({ devices, journal, files, shares, limits = {} }: AppOptions): Hono<Env> {
+export function createApp({ devices, journal, files, shares, push, limits = {} }: AppOptions): Hono<Env> {
   const maxBatchBytes = limits.maxBatchBytes ?? MAX_BATCH_BYTES;
   const maxSnapshotBytes = limits.maxSnapshotBytes ?? MAX_SNAPSHOT_BYTES;
   const app = new Hono<Env>();
@@ -121,7 +125,13 @@ export function createApp({ devices, journal, files, shares, limits = {} }: AppO
     const device = token ? devices.authenticate(token) : null;
     if (!device) throw new ApiError(401, 'unauthorized', 'Нужен действующий токен устройства');
     c.set('deviceId', device.deviceId);
-    return next();
+    // устройство на связи, пока идёт его запрос (и долгое ожидание пачек): будить его пушем незачем
+    const done = push?.track(device.deviceId);
+    try {
+      await next();
+    } finally {
+      done?.();
+    }
   });
 
   app.post('/devices/invite', (c) => c.json(devices.createInvite(), 201));
@@ -134,10 +144,22 @@ export function createApp({ devices, journal, files, shares, limits = {} }: AppO
     return c.json(me);
   });
 
+  app.put('/devices/me/push-token', async (c) => {
+    const body = await readJson(c);
+    const token = typeof body.token === 'string' ? body.token.trim().toLowerCase() : '';
+    if (!APNS_TOKEN.test(token)) throw badRequest('Поле token должно быть токеном APNs в hex');
+    if (!PUSH_ENVIRONMENTS.includes(body.environment as PushEnvironment)) {
+      throw badRequest('Поле environment должно быть sandbox или production');
+    }
+    push?.register(c.get('deviceId'), token, body.environment as PushEnvironment);
+    return c.body(null, 204);
+  });
+
   app.delete('/devices/:deviceId', (c) => {
     const result = devices.disable(c.req.param('deviceId'));
     if (result === 'unknown') throw new ApiError(404, 'not_found', 'Такого устройства нет');
     if (result === 'disabled') journal.compact();
+    push?.forgetDevice(c.req.param('deviceId'));
     return c.body(null, 204);
   });
 
@@ -146,6 +168,7 @@ export function createApp({ devices, journal, files, shares, limits = {} }: AppO
     if (typeof body.batchId !== 'string' || !BATCH_ID.test(body.batchId)) throw badRequest('Поле batchId должно быть строкой до 64 символов');
     const ciphertext = readCiphertext(body.ciphertext, maxBatchBytes, 'Пачка');
     const { seq, created } = journal.append(c.get('deviceId'), body.batchId, ciphertext);
+    if (created) push?.batchArrived(c.get('deviceId'));
     return c.json({ seq }, created ? 201 : 200);
   });
 

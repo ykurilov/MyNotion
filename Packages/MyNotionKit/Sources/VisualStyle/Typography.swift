@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 
 /// Шрифты и строки по contracts/visual-style.md. Шрифт — системный (San Francisco), код — SF Mono.
@@ -37,6 +38,8 @@ public enum Typography {
     }
 }
 
+#endif
+
 /// Вид текста блока. Пункты списков и чекбоксы пишутся как абзац.
 public enum BlockTextStyle: Sendable, CaseIterable {
     case paragraph
@@ -48,6 +51,7 @@ public enum BlockTextStyle: Sendable, CaseIterable {
     case tableCell
 }
 
+#if canImport(AppKit)
 public struct TextLineStyle: Sendable, Hashable {
     public let fontSize: CGFloat
     public let lineHeight: CGFloat
@@ -63,3 +67,4 @@ public struct TextLineStyle: Sendable, Hashable {
         return style
     }
 }
+#endif
