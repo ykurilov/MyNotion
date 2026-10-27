@@ -1,6 +1,7 @@
 import Foundation
 import NotionAPI
 import SwiftUI
+import Sync
 import VisualStyle
 
 /// Картинки вставки из Notion: ключ интеграции — в Связке ключей, читается не на главном потоке
@@ -14,6 +15,8 @@ enum AppNotion {
 /// Раздел настроек «Картинки из Notion»: поле «Ключ Notion» со скрытым вводом, «Сохранить» и «Проверить».
 struct NotionSettingsSection: View {
     let labelWidth: CGFloat
+    /// Ключ уходит на другие устройства через синхронизацию; пришедший оттуда сразу виден здесь.
+    let sync: SyncController
     @State private var key = ""
     @State private var hasSavedKey = false
     @State private var status: Status?
@@ -75,12 +78,12 @@ struct NotionSettingsSection: View {
                 }
             }
         }
-        .task { hasSavedKey = ((try? await AppNotion.keychain.key()) ?? nil) != nil }
+        .task(id: sync.serviceKeysRevision) { hasSavedKey = ((try? await AppNotion.keychain.key()) ?? nil) != nil }
     }
 
     private func save() async {
         await run {
-            try await AppNotion.keychain.save(key.trimmingCharacters(in: .whitespacesAndNewlines))
+            try await sync.saveServiceKey(key, for: ServiceKeyName.notion)
             key = ""
             hasSavedKey = true
             return "Ключ сохранён в Связке ключей"
@@ -89,7 +92,7 @@ struct NotionSettingsSection: View {
 
     private func remove() async {
         await run {
-            try await AppNotion.keychain.save("")
+            try await sync.saveServiceKey("", for: ServiceKeyName.notion)
             hasSavedKey = false
             return "Ключ удалён"
         }

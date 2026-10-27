@@ -10,6 +10,11 @@ public struct SyncBatch: Sendable, Hashable, Codable {
     /// Имя Mac — для подписи «вторая версия с …».
     public var deviceName: String
     public var changes: [SyncChange]
+    /// Ключи сервисов этого устройства (DeepSeek, Notion) — только внутри зашифрованной пачки. Поле необязательное:
+    /// формат прежний, MyNotion без синхронизации ключей его пропускает и применяет остальное.
+    public var serviceKeys: [ServiceKeyChange]?
+    /// Устройство просит прислать текущие ключи: оно подключилось или обновилось и могло пропустить их в журнале.
+    public var requestsServiceKeys: Bool?
 
     /// 2 — блоки 002: поля `placement`, `color`, `props`, новые типы и оформления, сущность `reminder`
     /// (contracts/sync-and-files-api.md). 3 — поля страницы 003: обложка, вид, избранное, открытие, шаблон
@@ -18,11 +23,13 @@ public struct SyncBatch: Sendable, Hashable, Codable {
     public static let currentFormatVersion = 4
 
     public init(formatVersion: Int = SyncBatch.currentFormatVersion, deviceId: String, deviceName: String,
-                changes: [SyncChange]) {
+                changes: [SyncChange], serviceKeys: [ServiceKeyChange]? = nil, requestsServiceKeys: Bool? = nil) {
         self.formatVersion = formatVersion
         self.deviceId = deviceId
         self.deviceName = deviceName
         self.changes = changes
+        self.serviceKeys = serviceKeys
+        self.requestsServiceKeys = requestsServiceKeys
     }
 }
 
