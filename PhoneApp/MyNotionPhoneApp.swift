@@ -9,7 +9,12 @@ struct MyNotionPhoneApp: App {
 
     var body: some Scene {
         WindowGroup {
-            LibraryStatusView(library: library)
+            // Временно, до оболочки: `--editor-demo` — показ редактора страницы (EditorDemo.swift).
+            if EditorDemo.isRequested {
+                EditorDemoView().ignoresSafeArea()
+            } else {
+                LibraryStatusView(library: library)
+            }
         }
     }
 }

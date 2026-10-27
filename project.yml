@@ -136,6 +136,8 @@ targets:
     dependencies:
       - package: MyNotionKit
         product: NotesCore
+      - package: MyNotionKit
+        product: PhonePageEditor
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion.ios
@@ -303,6 +305,7 @@ schemes:
       targets:
         - package: MyNotionKit/NotesCoreTests
         - package: MyNotionKit/SyncTests
+        - package: MyNotionKit/PhonePageEditorTests
     archive:
       config: Release
   MyNotionPerformance:
