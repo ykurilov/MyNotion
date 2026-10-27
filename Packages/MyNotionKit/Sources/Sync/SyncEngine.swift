@@ -187,7 +187,7 @@ public final class SyncEngine {
         guard let account = try accounts.account() else { return }
         while true {
             let entries = try outbox.pendingEntries(limit: 20)
-            guard !entries.isEmpty else { return }
+            guard !entries.isEmpty else { return try await sendServiceKeys(account: account) }
             status = .sending
             for entry in entries {
                 let batchId = entry.id.uuidString.lowercased()
@@ -204,6 +204,24 @@ public final class SyncEngine {
                 try accounts.recordSent(seq: seq)
             }
         }
+    }
+
+    /// Ключи сервисов — своей пачкой без изменений записей, когда их отметили к отправке (ServiceKeys).
+    /// Связка ключей читается не на главном потоке: вопрос macOS о доступе не останавливает окно.
+    private func sendServiceKeys(account: SyncAccount) async throws {
+        guard let keys = applier.serviceKeys, let pending = try ServiceKeys.pending(in: store) else { return }
+        let store = store
+        let current = try await Task.detached(priority: .userInitiated) { try ServiceKeys.current(keys: keys, in: store) }.value
+        if !current.isEmpty || pending.request != nil {
+            status = .sending
+            let batchId = UUID.timeOrdered().uuidString.lowercased()
+            let batch = SyncBatch(formatVersion: formatVersionForTests ?? SyncBatch.currentFormatVersion,
+                                  deviceId: account.deviceId, deviceName: account.deviceName, changes: [],
+                                  serviceKeys: current.isEmpty ? nil : current, requestsServiceKeys: pending.request == nil ? nil : true)
+            let seq = try await transport.postChanges(batchId: batchId, ciphertext: try cipher.seal(batch, batchId: batchId))
+            try accounts.recordSent(seq: seq)
+        }
+        try ServiceKeys.didSend(pending, in: store)
     }
 
     /// Одна порция журнала: применить пачки других Mac по порядку и подтвердить. `true` — на сервере есть ещё.
@@ -264,7 +282,12 @@ public final class SyncEngine {
     public func uploadSnapshot() async throws {
         guard let account = try accounts.account(), try outbox.isEmpty(), account.lastPulledSeq >= account.lastSentSeq,
               account.lastPulledSeq > 0 else { return }
-        let snapshot = try SyncSnapshot.make(seq: account.lastPulledSeq, from: store)
+        var serviceKeys: [ServiceKeyChange]?
+        if let keys = applier.serviceKeys {
+            let store = store
+            serviceKeys = try await Task.detached(priority: .userInitiated) { try ServiceKeys.current(keys: keys, in: store) }.value
+        }
+        let snapshot = try SyncSnapshot.make(seq: account.lastPulledSeq, from: store, serviceKeys: serviceKeys)
         do {
             try await transport.putSnapshot(seq: snapshot.seq, ciphertext: try cipher.sealSnapshot(snapshot))
         } catch SyncServerError.badRequest {

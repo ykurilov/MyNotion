@@ -2,6 +2,7 @@ import Foundation
 import PageEditor
 import Proofreading
 import SwiftUI
+import Sync
 import VisualStyle
 
 /// «Исправить ошибки» в приложении: ключ DeepSeek — в Связке ключей, читается не на главном потоке
@@ -27,6 +28,8 @@ enum AppProofreading {
 /// Раздел настроек «Исправление ошибок»: поле «Ключ DeepSeek» со скрытым вводом, «Сохранить» и «Проверить».
 struct ProofreadingSettingsSection: View {
     let labelWidth: CGFloat
+    /// Ключ уходит на другие устройства через синхронизацию; пришедший оттуда сразу виден здесь.
+    let sync: SyncController
     @State private var key = ""
     @State private var hasSavedKey = false
     @State private var status: Status?
@@ -84,12 +87,12 @@ struct ProofreadingSettingsSection: View {
                 }
             }
         }
-        .task { hasSavedKey = ((try? await AppProofreading.keychain.key()) ?? nil) != nil }
+        .task(id: sync.serviceKeysRevision) { hasSavedKey = ((try? await AppProofreading.keychain.key()) ?? nil) != nil }
     }
 
     private func save() async {
         await run {
-            try await AppProofreading.keychain.save(key.trimmingCharacters(in: .whitespacesAndNewlines))
+            try await sync.saveServiceKey(key, for: ServiceKeyName.deepSeek)
             key = ""
             hasSavedKey = true
             return "Ключ сохранён в Связке ключей"
@@ -98,7 +101,7 @@ struct ProofreadingSettingsSection: View {
 
     private func remove() async {
         await run {
-            try await AppProofreading.keychain.save("")
+            try await sync.saveServiceKey("", for: ServiceKeyName.deepSeek)
             hasSavedKey = false
             return "Ключ удалён"
         }

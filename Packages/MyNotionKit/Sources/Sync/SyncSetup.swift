@@ -9,16 +9,19 @@ public enum SyncSetup {
     public static func resume(store: NotesStore) throws -> SyncAccount? {
         let account = try SyncAccountStore(store: store).account()
         store.keepsDeletionMarks = account != nil
+        if account != nil { try store.database.dbWriter.write { try ServiceKeys.introduceIfNeeded(in: $0) } }
         return account
     }
 
-    /// Записать подключение и положить в очередь все записи, что уже есть на этом Mac.
+    /// Записать подключение и положить в очередь все записи, что уже есть на этом Mac; ключи сервисов — отметкой
+    /// «отправить и попросить ключи других».
     public static func enable(store: NotesStore, account: SyncAccount) throws {
         try store.write { transaction in
             try SyncAccountStore.save(account, in: transaction.database)
             try transaction.database.execute(sql: "DELETE FROM outbox_entry; DELETE FROM app_meta WHERE key LIKE ?",
                                              arguments: [Outbox.setAsidePrefix + "%"])
             try Outbox.enqueueAllRecords(in: transaction)
+            try ServiceKeys.introduce(in: transaction.database)
         }
         store.keepsDeletionMarks = true
     }
@@ -30,6 +33,7 @@ public enum SyncSetup {
         try store.database.dbWriter.write { db in
             try db.execute(sql: "DELETE FROM sync_account; DELETE FROM outbox_entry; DELETE FROM app_meta WHERE key LIKE ?",
                            arguments: [Outbox.setAsidePrefix + "%"])
+            try ServiceKeys.forgetPending(in: db)
         }
         store.keepsDeletionMarks = false
         try TombstoneCollector(store: store).collect(deviceAcks: [])

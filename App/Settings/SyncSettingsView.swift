@@ -56,10 +56,10 @@ struct SyncSettingsView: View {
                     .accessibilityIdentifier("sync-settings-error")
             }
             Divider()
-            ProofreadingSettingsSection(labelWidth: Self.labelWidth)
+            ProofreadingSettingsSection(labelWidth: Self.labelWidth, sync: controller)
             MistakeUnderliningToggle()
             Divider()
-            NotionSettingsSection(labelWidth: Self.labelWidth)
+            NotionSettingsSection(labelWidth: Self.labelWidth, sync: controller)
         }
     }
 

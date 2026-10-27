@@ -22,12 +22,15 @@ public final class RemoteChangeApplier {
     public let store: NotesStore
     public let openDocuments: OpenDocuments?
     public let merger: ChangeMerger
+    /// Связка ключей для ключей сервисов; `nil` — ключи не синхронизируются.
+    public let serviceKeys: (any ServiceKeyStore)?
     /// После применения: что поменялось и о чём сказать Юрию.
     public var onApplied: ((MergeReport) -> Void)?
 
-    public init(store: NotesStore, openDocuments: OpenDocuments?, localDeviceName: String) {
+    public init(store: NotesStore, openDocuments: OpenDocuments?, localDeviceName: String, serviceKeys: (any ServiceKeyStore)? = nil) {
         self.store = store
         self.openDocuments = openDocuments
+        self.serviceKeys = serviceKeys
         merger = ChangeMerger(localDeviceName: localDeviceName)
     }
 
@@ -39,7 +42,10 @@ public final class RemoteChangeApplier {
         defer { deliver(report) }
         for received in batches {
             report += try store.write { transaction in
-                let merged = try merger.apply(received.batch, in: transaction)
+                var merged = try merger.apply(received.batch, in: transaction)
+                merged.changedServiceKeys = try ServiceKeys.merge(received.batch.serviceKeys,
+                                                                  requestedByOthers: received.batch.requestsServiceKeys == true,
+                                                                  keys: serviceKeys, in: transaction)
                 try SyncAccountStore.recordPulled(seq: received.seq, in: transaction.database)
                 return merged
             }
@@ -52,7 +58,13 @@ public final class RemoteChangeApplier {
     public func apply(_ snapshot: SyncSnapshot) throws -> MergeReport {
         openDocuments?.saveAll()
         let report = try store.write { transaction in
-            let merged = try merger.apply(snapshot, in: transaction)
+            var merged = try merger.apply(snapshot, in: transaction)
+            merged.changedServiceKeys = try ServiceKeys.merge(snapshot.serviceKeys, requestedByOthers: false, keys: serviceKeys,
+                                                              in: transaction)
+            // Снимок старой версии без ключей: ключи из сжатой части журнала пропали — попросить другие устройства.
+            if snapshot.serviceKeys == nil, serviceKeys != nil {
+                try ServiceKeys.markForSending(requestingOthers: true, in: transaction.database)
+            }
             try SyncAccountStore.recordPulled(seq: snapshot.seq, in: transaction.database)
             return merged
         }
@@ -62,7 +74,7 @@ public final class RemoteChangeApplier {
     }
 
     private func deliver(_ report: MergeReport) {
-        guard !report.touchedPageIds.isEmpty || !report.notices.isEmpty else { return }
+        guard !report.touchedPageIds.isEmpty || !report.notices.isEmpty || !report.changedServiceKeys.isEmpty else { return }
         if let openDocuments {
             openDocuments.applyExternalChanges(toPages: report.touchedPageIds.intersection(openDocuments.openPageIds))
         }
