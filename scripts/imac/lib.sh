@@ -130,3 +130,20 @@ osascript -e 'tell application \"Terminal\" to quit' &" > $results/run.command
   print -- "exit=$rc"
   return $rc
 }
+
+# Симулятор iPhone 17 Pro на iOS 26.5 для MyNotionPhone: загрузить и поставить сборку scripts/imac/iphone-build.zsh.
+# UDID — в DEVICE, путь к приложению — в PHONE_APP.
+boot_iphone_simulator() {
+  PHONE_APP=$WORK/build/iphone/Build/Products/Debug-iphonesimulator/MyNotion.app
+  [[ -d $PHONE_APP ]] || fail "Нет сборки $PHONE_APP: сначала scripts/imac/iphone-build.zsh"
+  DEVICE=$(xcrun simctl list devices available -j | python3 -c '
+import json, sys
+for runtime, devices in json.load(sys.stdin)["devices"].items():
+    if runtime.endswith("iOS-26-5"):
+        print(next(d["udid"] for d in devices if d["name"] == "iPhone 17 Pro")); break')
+  [[ -n $DEVICE ]] || fail "Нет симулятора iPhone 17 Pro на iOS 26.5"
+  xcrun simctl boot $DEVICE 2>/dev/null || true
+  xcrun simctl bootstatus $DEVICE -b >/dev/null
+  xcrun simctl status_bar $DEVICE override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
+  xcrun simctl install $DEVICE $PHONE_APP
+}

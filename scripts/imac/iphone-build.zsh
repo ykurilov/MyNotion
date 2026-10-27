@@ -8,7 +8,7 @@ unset XCODE_XCCONFIG_FILE
 # Модули, которые на iPhone общие с Mac (specs/007-iphone-app/plan-draft.md). Насквозь AppKit — только на Mac.
 PHONE_MODULES=(NotesCore Sync Attachments Databases Formulas MarkdownExport NotionImport PageMarkdown Proofreading NotionAPI
                PageVersions Backlinks LinkPreview CodeHighlighting Navigation Reminders PageSharing PageSearch VisualStyle PageCover
-               PhonePageEditor)
+               PhoneShell PhonePageEditor)
 DD=$WORK/build/iphone
 built=0
 
@@ -27,7 +27,7 @@ print -- "[MyNotion/iMac] iPhone: модулей собрано $built (симу
 
 # Тесты модулей данных под iPhone: собираются всегда, прогон — в iPhone 17 Pro на iOS 26.5 (IPHONE_RUN_TESTS=0 — без прогона).
 xcodebuild build-for-testing -scheme MyNotionPhone -destination 'generic/platform=iOS Simulator' -derivedDataPath $DD -jobs $JOBS -quiet
-print -- "[MyNotion/iMac] iPhone: тесты NotesCoreTests, SyncTests и PhonePageEditorTests собраны"
+print -- "[MyNotion/iMac] iPhone: тесты NotesCoreTests, SyncTests, PhoneShellTests и PhonePageEditorTests собраны"
 if [[ ${IPHONE_RUN_TESTS:-1} == 1 ]]; then
   rm -rf build/iphone-tests.xcresult
   xcodebuild test-without-building -scheme MyNotionPhone -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath $DD \

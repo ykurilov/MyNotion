@@ -42,6 +42,7 @@ let package = Package(
         .library(name: "PageSharing", targets: ["PageSharing"]),
         .library(name: "Proofreading", targets: ["Proofreading"]),
         .library(name: "NotionAPI", targets: ["NotionAPI"]),
+        .library(name: "PhoneShell", targets: ["PhoneShell"]),
         .library(name: "PhonePageEditor", targets: ["PhonePageEditor"]),
     ],
     dependencies: [
@@ -119,6 +120,8 @@ let package = Package(
         .target(name: "NotionAPI"),
         // 006. Ссылка на страницу только для чтения: снимок без закрытого, публикация после правок (contracts/share-api.md).
         .target(name: "PageSharing", dependencies: ["NotesCore", "MarkdownExport", "PageCover", "Sync", .product(name: "GRDB", package: "GRDB.swift")]),
+        // 007. Оболочка iPhone без UIKit: подключение кодом с Mac, цикл синхронизации в фоне и на переднем плане, дерево страниц.
+        .target(name: "PhoneShell", dependencies: ["NotesCore", "Sync"]),
         // 007. Редактор страницы для iPhone (UIKit): блок — ячейка списка со своим текстом. Правила правки — без UIKit,
         // их тесты идут и на Mac; на Mac сам экран не собирается.
         .target(name: "PhonePageEditor", dependencies: ["NotesCore", "VisualStyle"]),
@@ -163,6 +166,7 @@ let package = Package(
         .testTarget(name: "PageSharingTests", dependencies: ["PageSharing", "NotesCore", "Databases", "Sync", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "ProofreadingTests", dependencies: ["Proofreading", "NotesCore"]),
         .testTarget(name: "NotionAPITests", dependencies: ["NotionAPI"]),
+        .testTarget(name: "PhoneShellTests", dependencies: ["PhoneShell", "NotesCore", "Sync"]),
         .testTarget(name: "PhonePageEditorTests", dependencies: ["PhonePageEditor", "NotesCore"]),
     ],
     swiftLanguageModes: [.v6]

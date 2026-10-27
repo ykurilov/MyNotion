@@ -59,6 +59,8 @@ public final class SyncEngine {
     @ObservationIgnored private var loop: Task<Void, Never>?
     /// Прервать текущее ожидание (долгий запрос или паузу перед повтором) — так `wake()` будит цикл.
     @ObservationIgnored private var cancelWaiting: (() -> Void)?
+    /// Номер текущего ожидания: закончившееся ожидание старого цикла (после быстрых stop() и start()) не стирает ручку нового.
+    @ObservationIgnored private var waitingGeneration = 0
     @ObservationIgnored private var wakeRequested = false
     @ObservationIgnored private var enqueueObserver: (any NSObjectProtocol)?
     @ObservationIgnored private var lastTombstoneCheck: ContinuousClock.Instant?
@@ -183,8 +185,20 @@ public final class SyncEngine {
     private func pause(_ duration: Duration) async {
         guard !wakeRequested else { return }
         let task = Task { try? await Task.sleep(for: duration) }
-        cancelWaiting = { task.cancel() }
+        let generation = holdWaiting { task.cancel() }
         await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
+        releaseWaiting(generation)
+    }
+
+    /// Ожидание, которое прерывают `wake()` и `stop()`; номер — чтобы отпустить только свою ручку.
+    private func holdWaiting(_ cancel: @escaping () -> Void) -> Int {
+        waitingGeneration += 1
+        cancelWaiting = cancel
+        return waitingGeneration
+    }
+
+    private func releaseWaiting(_ generation: Int) {
+        guard waitingGeneration == generation else { return }
         cancelWaiting = nil
     }
 
@@ -330,8 +344,8 @@ public final class SyncEngine {
     /// Запрос, который можно прервать новой правкой: тогда цикл сразу идёт отправлять.
     private func interruptibly<T: Sendable>(_ request: @escaping @Sendable () async throws -> T) async throws -> T {
         let task = Task { try await request() }
-        cancelWaiting = { task.cancel() }
-        defer { cancelWaiting = nil }
+        let generation = holdWaiting { task.cancel() }
+        defer { releaseWaiting(generation) }
         return try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
     }
 

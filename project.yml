@@ -132,15 +132,24 @@ targets:
     type: application
     platform: iOS
     sources:
-      - PhoneApp
+      - path: PhoneApp
+        excludes:
+          - Info.plist
     dependencies:
       - package: MyNotionKit
         product: NotesCore
+      - package: MyNotionKit
+        product: Sync
+      - package: MyNotionKit
+        product: PhoneShell
       - package: MyNotionKit
         product: PhonePageEditor
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion.ios
+        # Поверх созданного Xcode: ITSAppUsesNonExemptEncryption для TestFlight и http к локальному серверу живой проверки.
+        INFOPLIST_FILE: PhoneApp/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         PRODUCT_NAME: MyNotion
         TARGETED_DEVICE_FAMILY: "1"
         SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
@@ -161,6 +170,10 @@ targets:
       # Release — только для TestFlight: подпись вручную, сертификат и профиль выкладки лежат на iMac
       # (scripts/imac/iphone-testflight.zsh).
       configs:
+        # Флаги снимков и живой проверки (PhoneLaunchOptions) — только в отладочной сборке. Явно: xcodegen на iMac
+        # не находит своих стандартных настроек, и без этой строки DEBUG там не задан.
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
         Release:
           CODE_SIGN_STYLE: Manual
           CODE_SIGN_IDENTITY: "Apple Distribution"
@@ -312,6 +325,7 @@ schemes:
       targets:
         - package: MyNotionKit/NotesCoreTests
         - package: MyNotionKit/SyncTests
+        - package: MyNotionKit/PhoneShellTests
         - package: MyNotionKit/PhonePageEditorTests
     archive:
       config: Release

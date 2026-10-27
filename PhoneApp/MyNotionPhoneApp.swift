@@ -1,56 +1,103 @@
-import NotesCore
+import PhoneShell
 import SwiftUI
 
-/// MyNotion для iPhone, этап 0: открывает базу записей в папке приложения и показывает число страниц —
-/// так видно, что общее ядро живёт на iOS (specs/007-iphone-app/plan-draft.md).
+/// MyNotion для iPhone: дерево страниц, страница и синхронизация с Mac (specs/007-iphone-app).
 @main
 struct MyNotionPhoneApp: App {
-    private let library = Result { try LibraryCheck.open() }
+    private let options: PhoneLaunchOptions
+    private let library: Result<PhoneLibrary, any Error>
+
+    init() {
+        #if DEBUG
+        let options = PhoneLaunchOptions.parse(CommandLine.arguments)
+        #else
+        // Сборка для TestFlight флагов снимков и живой проверки не принимает: ни чужой базы, ни кода из файла.
+        let options = PhoneLaunchOptions()
+        #endif
+        self.options = options
+        library = Result { try PhoneLibrary(options: options) }
+    }
 
     var body: some Scene {
         WindowGroup {
-            // Временно, до оболочки: `--editor-demo` — показ редактора страницы (EditorDemo.swift).
-            if EditorDemo.isRequested {
-                EditorDemoView().ignoresSafeArea()
-            } else {
-                LibraryStatusView(library: library)
+            switch library {
+            case .success(let library): PhoneRootView(library: library, options: options)
+            case .failure(let error): LibraryFailureView(error: error)
             }
         }
     }
 }
 
-/// Что удалось открыть: путь к базе и число страниц в ней.
-struct LibraryCheck {
-    let databaseURL: URL
-    let pageCount: Int
+/// Навигация приложения: дерево → страницы (назад кнопкой и жестом), листы подключения и настроек.
+/// Уход в фон и возвращение передаются синхронизации.
+struct PhoneRootView: View {
+    let library: PhoneLibrary
+    let options: PhoneLaunchOptions
+    @State private var path: [UUID] = []
+    @State private var sheet: Sheet?
+    @Environment(\.scenePhase) private var scenePhase
 
-    static func open() throws -> LibraryCheck {
-        let database = try AppDatabase.open(at: AppDatabase.defaultURL)
-        let store = NotesStore(database: database, clock: HybridLogicalClock(deviceId: DeviceIdentity.deviceId()))
-        return LibraryCheck(databaseURL: database.url, pageCount: try store.pageOutline().count)
+    enum Sheet: Identifiable {
+        case connect, settings
+        var id: Self { self }
     }
-}
-
-struct LibraryStatusView: View {
-    let library: Result<LibraryCheck, any Error>
 
     var body: some View {
-        VStack(spacing: 12) {
-            Text("MyNotion")
-                .font(.largeTitle.bold())
-            switch library {
-            case .success(let check):
-                Text("Страниц в базе: \(check.pageCount)")
-                    .font(.title3)
-                Text(check.databaseURL.lastPathComponent)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            case .failure(let error):
-                Text("База не открылась: \(error.localizedDescription)")
-                    .foregroundStyle(.red)
-                    .multilineTextAlignment(.center)
+        NavigationStack(path: $path) {
+            PageTreeScreen(library: library, openPage: open, showConnect: { sheet = .connect },
+                           showSettings: { sheet = .settings })
+                .navigationDestination(for: UUID.self) { pageId in
+                    PageContainer(pageId: pageId, library: library, openPage: open)
+                }
+        }
+        .tint(PhoneTheme.textPrimary)
+        .sheet(item: $sheet) { sheet in
+            NavigationStack {
+                switch sheet {
+                case .connect:
+                    ConnectScreen(sync: library.sync, close: { self.sheet = nil })
+                case .settings:
+                    SyncSettingsScreen(sync: library.sync, connect: { self.sheet = .connect }, close: { self.sheet = nil })
+                }
+            }
+            .tint(PhoneTheme.accent)
+        }
+        .onChange(of: library.browser.revision) {
+            // Страницу удалили на другом устройстве — уйти с неё.
+            path.removeAll { !library.browser.isAvailable($0) }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .background: library.sync.didEnterBackground()
+            case .active: library.sync.willEnterForeground()
+            default: break
             }
         }
-        .padding()
+        .task { openInitialScreen() }
+        .task { await LiveCheck.run(options: options, library: library, openPage: open) }
+    }
+
+    private func open(_ pageId: UUID) {
+        path.append(pageId)
+    }
+
+    private func openInitialScreen() {
+        switch options.initialScreen {
+        case .connect: sheet = .connect
+        case .settings: sheet = .settings
+        case .page(let title):
+            let page = (try? library.store.pageOutline())?.first { $0.title == title && library.browser.isAvailable($0.id) }
+            if let page { path = library.browser.ancestors(of: page.id).map(\.id) + [page.id] }
+        case nil: break
+        }
+    }
+}
+
+private struct LibraryFailureView: View {
+    let error: any Error
+
+    var body: some View {
+        ContentUnavailableView("База записей не открылась", systemImage: "exclamationmark.triangle",
+                               description: Text(error.localizedDescription))
     }
 }
