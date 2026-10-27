@@ -59,6 +59,10 @@ final class EngineTestMac {
     var supportedFormatVersion = SyncBatch.currentFormatVersion
     /// Связка ключей сервисов; `nil` — MyNotion до синхронизации ключей: они ему не передаются. Задаётся до подключения.
     var serviceKeys: InMemoryServiceKeys?
+    /// Пауза перед повтором записи ключа в связку ключей.
+    var keyRetryDelay: Duration = .milliseconds(50)
+    /// Ключи сервисов этого запуска MyNotion; перезапуск начинает с чистой памяти.
+    private var keySync: ServiceKeySync?
     private var syncServer: (any SyncServer)?
 
     init(name: String, wallMillis: Int64) throws {
@@ -93,7 +97,8 @@ final class EngineTestMac {
 
     /// Ключи сервисов: ввели или удалили на этом Mac.
     func saveServiceKey(_ value: String, for name: String) async throws {
-        try await ServiceKeySync(store: store, keys: try #require(serviceKeys)).save(value, for: name)
+        if keySync == nil { keySync = ServiceKeySync(store: store, keys: try #require(serviceKeys), retryDelay: keyRetryDelay) }
+        try await try #require(keySync).save(value, for: name)
     }
 
     /// Обновили MyNotion до версии с синхронизацией ключей: старая не оставляла в базе ничего о ключах.
@@ -108,13 +113,22 @@ final class EngineTestMac {
         start()
     }
 
+    /// MyNotion закрыли и открыли снова: в памяти ничего не осталось, база и связка ключей — прежние.
+    func restart() throws {
+        stop()
+        _ = try SyncSetup.resume(store: store)
+        try makeEngine(try #require(syncServer))
+        start()
+    }
+
     private func makeEngine(_ server: any SyncServer) throws {
         syncServer = server
+        keySync = serviceKeys.map { ServiceKeySync(store: store, keys: $0, retryDelay: keyRetryDelay) }
         let secret = try #require(try secrets.load(for: account.deviceId))
         connection = SwitchableTransport(server.transport(deviceToken: secret.deviceToken))
         engine = SyncEngine(store: store, account: account, transport: connection,
                             cipher: BatchCipher(key: secret.encryptionKey, supportedFormatVersion: supportedFormatVersion),
-                            applier: RemoteChangeApplier(store: store, openDocuments: documents, localDeviceName: name, serviceKeys: serviceKeys),
+                            applier: RemoteChangeApplier(store: store, openDocuments: documents, localDeviceName: name, serviceKeys: keySync),
                             timing: .fastForTests)
     }
 

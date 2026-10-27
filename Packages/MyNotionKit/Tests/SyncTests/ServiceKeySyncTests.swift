@@ -104,7 +104,8 @@ struct ServiceKeySyncTests {
 
         let b = try EngineTestMac(name: "Mac B", wallMillis: 20_000)
         let bKeys = InMemoryServiceKeys()
-        let applier = RemoteChangeApplier(store: b.store, openDocuments: nil, localDeviceName: "Mac B", serviceKeys: bKeys)
+        let applier = RemoteChangeApplier(store: b.store, openDocuments: nil, localDeviceName: "Mac B",
+                                          serviceKeys: ServiceKeySync(store: b.store, keys: bKeys))
         try b.store.write { tx in
             try SyncAccountStore.save(SyncAccount(serverURL: URL(string: "https://fake.sync.test")!, deviceId: "b", deviceName: "Mac B"),
                                       in: tx.database)
@@ -112,8 +113,10 @@ struct ServiceKeySyncTests {
         var changed: Set<String> = []
         applier.onApplied = { changed = $0.changedServiceKeys }
         let report = try applier.apply(snapshot)
-        #expect(try bKeys.value(for: deepSeek) == "sk-snap")
         #expect(report.changedServiceKeys == [deepSeek] && changed == [deepSeek])
+        try await eventually("ключ из снимка в связке ключей", within: .seconds(5)) {
+            try bKeys.value(for: deepSeek) == "sk-snap" && !ServiceKeys.hasWaiting(in: b.store)
+        }
 
         let again = try applier.apply(snapshot)
         #expect(again.changedServiceKeys.isEmpty, "Тот же снимок второй раз ничего не меняет")
@@ -179,10 +182,11 @@ struct ServiceKeySyncTests {
     }
 
     @Test("Ключ с незнакомым именем (из будущей версии) пропускается, остальное из пачки применяется")
-    func unknownKeyNameIsSkipped() throws {
+    func unknownKeyNameIsSkipped() async throws {
         let mac = try EngineTestMac(name: "Mac B", wallMillis: 20_000)
         let keys = InMemoryServiceKeys()
-        let applier = RemoteChangeApplier(store: mac.store, openDocuments: nil, localDeviceName: "Mac B", serviceKeys: keys)
+        let applier = RemoteChangeApplier(store: mac.store, openDocuments: nil, localDeviceName: "Mac B",
+                                          serviceKeys: ServiceKeySync(store: mac.store, keys: keys))
         let hlc = HybridTimestamp(wallMillis: 30_000, counter: 0, deviceId: UUID())
         let page = UUID()
         let changes = ChangeEncoding.fullPage(Page(id: page, title: "Из пачки", sortKey: .between(nil, nil),
@@ -193,7 +197,7 @@ struct ServiceKeySyncTests {
                                             ServiceKeyChange(name: deepSeek, value: "sk-known", hlc: hlc)])
         try applier.apply([ReceivedBatch(seq: 1, batchId: "x", batch: batch)])
         #expect(try mac.store.page(page)?.title == "Из пачки")
-        #expect(try keys.value(for: deepSeek) == "sk-known")
+        try await eventually("известный ключ в связке ключей", within: .seconds(5)) { try keys.value(for: deepSeek) == "sk-known" }
         #expect(try keys.value(for: "someFutureService") == nil)
     }
 
@@ -240,15 +244,123 @@ struct ServiceKeySyncTests {
         try await eventually("ключ дошёл до B", within: .seconds(10)) { try b.serviceKeys?.value(for: deepSeek) == "sk-before-sync" }
     }
 
+    @Test("Связка ключей отказывает в записи — страницы из той же пачки всё равно приходят; ключ ложится, когда связка оживёт")
+    func refusingKeychainDoesNotStopPages() async throws {
+        let server = try await SyncTestServerKind.fake.start()
+        defer { server.stop() }
+        let (a, b) = try await connectedPair(server)
+        defer { a.stop(); b.stop() }
+        let bKeys = try #require(b.serviceKeys)
+        bKeys.refusesWrites = true
+
+        try await a.saveServiceKey("sk-while-locked", for: deepSeek)
+        let page = try a.store.write { try $0.createPage(title: "Рядом с ключом") }
+        try await eventually("страница дошла до B", within: .seconds(10)) {
+            try b.store.pageOutline().contains { $0.id == page.id } && b.engine.status == .ready
+        }
+        #expect(try bKeys.value(for: deepSeek) == nil)
+
+        bKeys.refusesWrites = false
+        try await eventually("ключ лёг в связку ключей B после повтора", within: .seconds(10)) {
+            try bKeys.value(for: deepSeek) == "sk-while-locked"
+        }
+    }
+
+    @Test("Ключ не успел лечь в связку ключей до перезапуска — после перезапуска устройство получает его снова")
+    func keyNotWrittenBeforeRestartArrivesAfterRestart() async throws {
+        let server = try await SyncTestServerKind.fake.start()
+        defer { server.stop() }
+        // Повтор в этом запуске не успеет: ключ приходит только после перезапуска.
+        let (a, b) = try await connectedPair(server, keyRetryDelay: .seconds(600))
+        defer { a.stop(); b.stop() }
+        let bKeys = try #require(b.serviceKeys)
+        bKeys.refusesWrites = true
+
+        try await a.saveServiceKey("sk-before-restart", for: deepSeek)
+        let page = try a.store.write { try $0.createPage(title: "До перезапуска") }
+        try await eventually("пачка применена на B", within: .seconds(10)) {
+            try b.store.pageOutline().contains { $0.id == page.id } && b.engine.status == .ready
+        }
+        b.stop()
+        bKeys.refusesWrites = false
+        try b.restart()
+        try await eventually("ключ на B после перезапуска", within: .seconds(10)) {
+            try bKeys.value(for: deepSeek) == "sk-before-restart"
+        }
+    }
+
+    @Test("Ключ, введённый до обновления MyNotion, уступает правке после обновления, даже если его устройство обновилось позже")
+    func keyFromBeforeUpdateLosesToEditAfterUpdate() async throws {
+        let server = try await SyncTestServerKind.fake.start()
+        defer { server.stop() }
+        let (a, b) = try await connectedPair(server, aKeys: nil)
+        defer { a.stop(); b.stop() }
+
+        try await b.saveServiceKey("sk-edited-on-b", for: deepSeek)
+        try await eventually("B отправил ключ", within: .seconds(10)) { b.engine.status == .ready }
+        a.wall.set(90_000)
+        let aKeys = InMemoryServiceKeys([deepSeek: "sk-typed-before-update"])
+        try a.updateToServiceKeys(aKeys)
+        try await eventually("ключ сошёлся к правке B", within: .seconds(10)) {
+            try aKeys.value(for: deepSeek) == "sk-edited-on-b" && b.serviceKeys?.value(for: deepSeek) == "sk-edited-on-b"
+                && a.engine.status == .ready && b.engine.status == .ready
+        }
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(try aKeys.value(for: deepSeek) == "sk-edited-on-b" && b.serviceKeys?.value(for: deepSeek) == "sk-edited-on-b")
+    }
+
+    @Test("Ключ, удалённый после обновления, не воскресает от устройства, где он лежал с давних пор")
+    func removedKeyDoesNotComeBackFromOldDevice() async throws {
+        let server = try await SyncTestServerKind.fake.start()
+        defer { server.stop() }
+        let (a, b) = try await connectedPair(server, aKeys: nil, bKeys: InMemoryServiceKeys([deepSeek: "sk-shared"]))
+        defer { a.stop(); b.stop() }
+
+        try await b.saveServiceKey("", for: deepSeek)
+        try await eventually("B отправил удаление", within: .seconds(10)) { b.engine.status == .ready }
+        a.wall.set(90_000)
+        let aKeys = InMemoryServiceKeys([deepSeek: "sk-shared"])
+        try a.updateToServiceKeys(aKeys)
+        try await eventually("ключ удалён на обоих", within: .seconds(10)) {
+            try aKeys.value(for: deepSeek) == nil && b.serviceKeys?.value(for: deepSeek) == nil
+                && a.engine.status == .ready && b.engine.status == .ready
+        }
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(try aKeys.value(for: deepSeek) == nil && b.serviceKeys?.value(for: deepSeek) == nil)
+    }
+
+    @Test("База не записала метку — ключ в связке ключей прежний: локально новый ключ без метки не остаётся")
+    func failedDatabaseWriteKeepsOldKey() async throws {
+        let mac = try EngineTestMac(name: "Mac A", wallMillis: 10_000)
+        mac.serviceKeys = InMemoryServiceKeys()
+        try await mac.saveServiceKey("sk-first", for: deepSeek)
+        try mac.store.write { transaction in
+            for event in ["INSERT", "UPDATE"] {
+                try transaction.database.execute(sql: """
+                    CREATE TEMP TRIGGER refuse_service_key_\(event) BEFORE \(event) ON app_meta
+                    WHEN NEW.key LIKE 'sync.serviceKey%' BEGIN SELECT RAISE(ABORT, 'база не пишет'); END
+                    """)
+            }
+        }
+        do {
+            try await mac.saveServiceKey("sk-second", for: deepSeek)
+            Issue.record("Сохранение должно было сообщить об ошибке базы")
+        } catch {}
+        #expect(try mac.serviceKeys?.value(for: deepSeek) == "sk-first")
+    }
+
     // MARK: Помощники
 
     private func connectedPair(_ server: any SyncTestServer, aKeys: InMemoryServiceKeys? = InMemoryServiceKeys(),
-                               bKeys: InMemoryServiceKeys? = InMemoryServiceKeys()) async throws -> (EngineTestMac, EngineTestMac) {
+                               bKeys: InMemoryServiceKeys? = InMemoryServiceKeys(),
+                               keyRetryDelay: Duration = .milliseconds(50)) async throws -> (EngineTestMac, EngineTestMac) {
         let a = try EngineTestMac(name: "Mac A", wallMillis: 10_000)
         a.serviceKeys = aKeys
+        a.keyRetryDelay = keyRetryDelay
         try await a.connectFirst(server)
         let b = try EngineTestMac(name: "Mac B", wallMillis: 20_000)
         b.serviceKeys = bKeys
+        b.keyRetryDelay = keyRetryDelay
         try await b.join(server, code: a.makeJoinCode())
         a.start()
         b.start()

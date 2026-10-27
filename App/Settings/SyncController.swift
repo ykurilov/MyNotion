@@ -41,6 +41,7 @@ final class SyncController {
     @ObservationIgnored private let secrets: any SyncSecrets
     /// Ключи DeepSeek и Notion: ввод в настройках и пришедшие с других устройств.
     @ObservationIgnored let serviceKeys: ServiceKeySync
+    @ObservationIgnored private var serviceKeysObserver: (any NSObjectProtocol)?
     /// Пришедшие правки легли в базу: окну перечитать дерево.
     @ObservationIgnored var onRemoteChange: ((MergeReport) -> Void)?
 
@@ -50,7 +51,11 @@ final class SyncController {
         self.attachments = attachments
         self.openDocuments = openDocuments
         self.secrets = secrets
-        serviceKeys = ServiceKeySync(store: store, keys: AppServiceKeys(deepSeek: AppProofreading.keychain, notion: AppNotion.keychain))
+        serviceKeys = ServiceKeySync(store: store, keys: KeychainServiceKeys(deepSeek: AppProofreading.keychain, notion: AppNotion.keychain))
+        serviceKeysObserver = NotificationCenter.default.addObserver(forName: ServiceKeySync.didWriteKeys, object: nil,
+                                                                     queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.serviceKeysRevision += 1 }
+        }
         account = try? SyncSetup.resume(store: store)
         if let account {
             serverAddress = account.serverURL.absoluteString
@@ -243,9 +248,8 @@ final class SyncController {
 
     private func startEngine(for account: SyncAccount, secret: SyncSecretValues) {
         let applier = RemoteChangeApplier(store: store, openDocuments: openDocuments, localDeviceName: account.deviceName,
-                                          serviceKeys: serviceKeys.keys)
+                                          serviceKeys: serviceKeys)
         applier.onApplied = { [weak self] report in
-            if !report.changedServiceKeys.isEmpty { self?.serviceKeysRevision += 1 }
             self?.notices += report.notices.filter { notice in
                 if case .textConflict = notice { false } else { true }
             }

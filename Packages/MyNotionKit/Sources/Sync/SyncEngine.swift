@@ -71,6 +71,10 @@ public final class SyncEngine {
     @ObservationIgnored private var stoppedFileTask: Task<Void, Never>?
     /// Номер текущей очереди: закончившаяся старая не сбрасывает новую.
     @ObservationIgnored private var fileTaskGeneration = 0
+    /// Ключи сервисов готовы к приёму (`ServiceKeySync.prepare`); до того пачки применяются без ключей.
+    @ObservationIgnored private var serviceKeysPrepared = false
+    /// Подготовка не удалась, и пачки шли без ключей: после неё попросить ключи у других.
+    @ObservationIgnored private var serviceKeysSkipped = false
     /// Версия формата отправляемых пачек; меняют только тесты.
     @ObservationIgnored var formatVersionForTests: Int?
 
@@ -83,6 +87,7 @@ public final class SyncEngine {
         self.timing = timing
         accounts = SyncAccountStore(store: store)
         outbox = Outbox(store: store)
+        applier.acceptsServiceKeys = applier.serviceKeys == nil
         _ = account
     }
 
@@ -123,6 +128,7 @@ public final class SyncEngine {
         while !Task.isCancelled {
             wakeRequested = false
             do {
+                await prepareServiceKeysIfNeeded()
                 try await sendQueue()
                 let isQueueEmpty = try outbox.isEmpty()
                 if isQueueEmpty, !status.isError || failures == 0 { markReady() }
@@ -206,12 +212,24 @@ public final class SyncEngine {
         }
     }
 
+    /// Связка ключей не прочиталась — страницы идут без ключей, а ключи — со следующего круга.
+    private func prepareServiceKeysIfNeeded() async {
+        guard !serviceKeysPrepared, let keys = applier.serviceKeys else { return }
+        do {
+            try await keys.prepare(requestingOthers: serviceKeysSkipped)
+            serviceKeysPrepared = true
+            applier.acceptsServiceKeys = true
+        } catch {
+            serviceKeysSkipped = true
+        }
+    }
+
     /// Ключи сервисов — своей пачкой без изменений записей, когда их отметили к отправке (ServiceKeys).
-    /// Связка ключей читается не на главном потоке: вопрос macOS о доступе не останавливает окно.
+    /// Связка ключей читается не на главном потоке: вопрос macOS о доступе не останавливает окно, а её отказ —
+    /// страницы: ключи уйдут на следующем круге.
     private func sendServiceKeys(account: SyncAccount) async throws {
-        guard let keys = applier.serviceKeys, let pending = try ServiceKeys.pending(in: store) else { return }
-        let store = store
-        let current = try await Task.detached(priority: .userInitiated) { try ServiceKeys.current(keys: keys, in: store) }.value
+        guard serviceKeysPrepared, let keys = applier.serviceKeys, let pending = try ServiceKeys.pending(in: store) else { return }
+        guard let current = try? await keys.current() else { return }
         if !current.isEmpty || pending.request != nil {
             status = .sending
             let batchId = UUID.timeOrdered().uuidString.lowercased()
@@ -282,11 +300,9 @@ public final class SyncEngine {
     public func uploadSnapshot() async throws {
         guard let account = try accounts.account(), try outbox.isEmpty(), account.lastPulledSeq >= account.lastSentSeq,
               account.lastPulledSeq > 0 else { return }
+        // Без ключей (связка не ответила или пришедший ключ ещё не лёг) получатель снимка попросит их сам.
         var serviceKeys: [ServiceKeyChange]?
-        if let keys = applier.serviceKeys {
-            let store = store
-            serviceKeys = try await Task.detached(priority: .userInitiated) { try ServiceKeys.current(keys: keys, in: store) }.value
-        }
+        if serviceKeysPrepared, let keys = applier.serviceKeys { serviceKeys = (try? await keys.currentForSnapshot()) ?? nil }
         let snapshot = try SyncSnapshot.make(seq: account.lastPulledSeq, from: store, serviceKeys: serviceKeys)
         do {
             try await transport.putSnapshot(seq: snapshot.seq, ciphertext: try cipher.sealSnapshot(snapshot))

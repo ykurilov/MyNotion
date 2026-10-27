@@ -16,8 +16,9 @@ public final class NotionKeychain: Sendable {
     }
 
     private let storage: Storage
-    /// Прочитанный ключ: связка ключей спрашивается один раз за запуск.
-    private let cached = Mutex<String?>(nil)
+    /// Прочитанный ключ: связка ключей спрашивается один раз за запуск. Поколение растёт с каждой заменой ключа:
+    /// чтение, начатое до замены, старый ключ в память не вернёт.
+    private let cached = Mutex<(key: String?, generation: Int)>((nil, 0))
 
     public convenience init(service: String = NotionKeychain.service) {
         self.init(storage: Storage(read: { try NotionKeychain.read(service: service) }, write: { key in
@@ -30,27 +31,23 @@ public final class NotionKeychain: Sendable {
     }
 
     public func key() async throws -> String? {
-        if let key = cached.withLock({ $0 }) { return key }
+        if let key = cached.withLock({ $0.key }) { return key }
         return try await Task.detached(priority: .userInitiated) { [self] in try storedKey() }.value
     }
 
-    /// Пустая строка удаляет ключ.
-    public func save(_ key: String) async throws {
-        let key = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        try await Task.detached(priority: .userInitiated) { [self] in try replaceKey(key.isEmpty ? nil : key) }.value
-    }
-
     /// Ключ из связки ключей на вызывающем потоке, мимо памяти, — для синхронизации между устройствами.
-    public func storedKey() throws -> String? {
+    package func storedKey() throws -> String? {
+        let generation = cached.withLock { $0.generation }
         let key = try storage.read()
-        cached.withLock { $0 = key }
+        cached.withLock { if $0.generation == generation { $0.key = key } }
         return key
     }
 
-    /// Ключ, пришедший с другого устройства, — на вызывающем потоке; `nil` — удалить. Старый в памяти не остаётся.
-    public func replaceKey(_ key: String?) throws {
+    /// Новый ключ — только через синхронизацию ключей (`ServiceKeySync`), иначе устройства разойдутся.
+    /// На вызывающем потоке; `nil` — удалить. Старый в памяти не остаётся.
+    package func replaceKey(_ key: String?) throws {
         try storage.write(key)
-        cached.withLock { $0 = key }
+        cached.withLock { $0 = (key, $0.generation + 1) }
     }
 
     private static func query(service: String) -> [String: Any] {
