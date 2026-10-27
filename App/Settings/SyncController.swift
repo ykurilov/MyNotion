@@ -14,7 +14,7 @@ final class SyncController {
     private(set) var account: SyncAccount?
     private(set) var engine: SyncEngine?
     private(set) var devices: [SyncDevice] = []
-    /// Код для «Добавить Mac» и до какого времени он действует.
+    /// Код для «Добавить Mac или iPhone» и до какого времени он действует.
     private(set) var joinCode: JoinCode?
     private(set) var joinCodeExpiresAt: Date?
     private(set) var isBusy = false
@@ -115,7 +115,7 @@ final class SyncController {
         }
     }
 
-    /// «Добавить Mac»: одноразовый код на 15 минут.
+    /// «Добавить Mac или iPhone»: одноразовый код на 15 минут.
     func makeJoinCode() async {
         await perform {
             guard let account = self.account, let transport = try await self.transport() else { return }

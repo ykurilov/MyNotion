@@ -96,7 +96,7 @@ public enum SyncServerError: Error, Equatable, LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .unauthorized: "Этот Mac убрали из списка ваших Mac — подключите его заново в настройках"
-        case .inviteExpired: "Код устарел или им уже подключили другой Mac — нажмите «Добавить Mac» на другом Mac ещё раз"
+        case .inviteExpired: "Код устарел или им уже подключили другой Mac или iPhone — нажмите «Добавить Mac или iPhone» на Mac ещё раз"
         case .tooLarge: "Правка слишком большая, чтобы отправить её за раз"
         case .logCompacted: "Догоняю другие Mac — загружаю все записи целиком"
         case .notFound: "Не нашлось того, что нужно для связи с другими Mac — попробую ещё раз сам"
