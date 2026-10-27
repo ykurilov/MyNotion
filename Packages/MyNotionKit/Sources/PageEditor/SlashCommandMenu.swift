@@ -320,6 +320,8 @@ final class PopupMenuView: NSView {
     func setItems(_ items: [PopupMenuItem]) {
         guard items != self.items else { return }
         self.items = items
+        // Ничего не нашлось: остаётся одна строка «Закрыть меню».
+        if style == .slash { sectionTitle = items.isEmpty ? nil : style.sectionTitle }
         selectedIndex = 0
         scrollOffset = 0
         rows.forEach { $0.removeFromSuperview() }
@@ -741,6 +743,10 @@ final class EditorPopupController {
 
     weak var textView: PageTextView?
     private(set) var session: Session?
+    /// Сколько знаков запроса стоит в тексте сразу за «/»: запрос правится внутри, пока курсор в нём.
+    var slashQueryLength = 0
+    /// Длина всего текста на момент последнего пересчёта запроса: по её смене запрос растёт и сжимается.
+    var slashTrackedTextLength = 0
     private var window: PopupMenuWindow?
     /// Список типов подменю «Преобразовать в».
     private var kindWindow: PopupMenuWindow?
@@ -793,6 +799,8 @@ final class EditorPopupController {
         }
         self.session = session
         self.anchor = anchor
+        slashQueryLength = 0
+        slashTrackedTextLength = textView.textStorage?.length ?? 0
         guard let window else { return }
         window.menuView.onChoose = { [weak self] item in self?.choose(item) }
         window.menuView.onClose = { [weak self] in self?.close() }
@@ -803,6 +811,8 @@ final class EditorPopupController {
         if deactivationObserver == nil { deactivationObserver = PopupWindows.onAppDeactivation { [weak self] in self?.close() } }
         textView.popupSessionDidChange()
     }
+
+    var hasNoItems: Bool { window?.menuView.items.isEmpty ?? true }
 
     func update(items: [PopupMenuItem]) {
         guard let window, let parent = textView?.window, items != window.menuView.items else { return }
@@ -980,21 +990,43 @@ extension PageTextView {
         if popups.isOpen { popupSessionDidChange() }
     }
 
-    /// Меню «/» следует за набором: фильтрует по набранному после «/» и закрывается, если курсор ушёл
-    /// из абзаца, «/» стёрт или ничего не подходит.
+    /// Меню «/» следует за запросом: фильтрует по тексту сразу за «/», а правка внутри запроса (стрелки, щелчок, ⌫, ввод
+    /// в середине, выделение части) его не прерывает. Закрывается, если курсор вышел из запроса или из абзаца, «/» стёрт,
+    /// сразу за «/» пробел. Если ничего не нашлось, меню остаётся с одной строкой «Закрыть меню».
     private func refreshSlashMenu() {
         guard case .slash(let blockId, let slash)? = popups.session else { return }
-        let caret = selectedRange()
         let string = (textStorage?.string ?? "") as NSString
-        guard caret.length == 0, slash < string.length, caret.location > slash, string.character(at: slash) == 0x2F,
-              let position = mapper.blockPosition(at: caret.location), document.blocks[position.index].id == blockId,
-              position.offset >= caret.location - slash else {
+        popups.slashQueryLength += string.length - popups.slashTrackedTextLength
+        popups.slashTrackedTextLength = string.length
+        let length = popups.slashQueryLength
+        let queryStart = slash + 1, queryEnd = slash + 1 + length
+        let selection = selectedRange()
+        guard length >= 0, queryEnd <= string.length, slash < string.length, string.character(at: slash) == 0x2F,
+              selection.location >= queryStart, selection.upperBound <= queryEnd,
+              let position = mapper.blockPosition(at: selection.location), document.blocks[position.index].id == blockId,
+              position.offset >= selection.location - slash,
+              let end = mapper.blockPosition(at: queryEnd), end.index == position.index else {
             popups.close()
             return
         }
-        let query = string.substring(with: NSRange(location: slash + 1, length: caret.location - slash - 1))
-        let items = PopupMenuItem.slashItems(matching: query)
-        if items.isEmpty { popups.close() } else { popups.update(items: items) }
+        let query = string.substring(with: NSRange(location: queryStart, length: length))
+        if let first = query.unicodeScalars.first, CharacterSet.whitespaces.contains(first) {
+            popups.close()
+            return
+        }
+        popups.update(items: PopupMenuItem.slashItems(matching: query))
+    }
+
+    /// Где кончается запрос открытого меню «/»; `nil` — меню «/» закрыто.
+    var openSlashQueryEnd: Int? {
+        guard let slash = openSlashLocation else { return nil }
+        return min(slash + 1 + popups.slashQueryLength, textStorage?.length ?? 0)
+    }
+
+    /// «/» с запросом целиком: его убирает выбор пункта.
+    private func slashQueryRange(from slash: Int) -> NSRange {
+        let end = min(slash + 1 + popups.slashQueryLength, textStorage?.length ?? 0)
+        return NSRange(location: slash, length: max(0, end - slash))
     }
 
     /// Стрелки, Enter и Esc, пока открыто меню. В меню блока → входит в подменю, ← и Esc из подменю возвращают в меню;
@@ -1021,7 +1053,13 @@ extension PageTextView {
             if !popups.isSubmenuFocused { _ = popups.enterSubmenu() }
         case #selector(NSResponder.moveLeft(_:)) where isBlockMenu:
             if popups.isSubmenuFocused { popups.leaveSubmenu() }
-        case #selector(NSResponder.insertNewline(_:)), #selector(NSResponder.insertTab(_:)): popups.choose()
+        case #selector(NSResponder.insertNewline(_:)), #selector(NSResponder.insertTab(_:)):
+            // Ничего не нашлось: выбирать нечего, меню закрывается, а Enter работает как обычно.
+            if popups.hasNoItems {
+                popups.close()
+                return false
+            }
+            popups.choose()
         case #selector(NSResponder.cancelOperation(_:)):
             if popups.isSubmenuFocused { popups.leaveSubmenu() } else { popups.close() }
         default: return false
@@ -1042,8 +1080,8 @@ extension PageTextView {
             return requestSubpage(fromSlashIn: id, slashLocation: slash)
         case .slash(let id, let slash):
             blockId = id
-            let caret = selectedRange().location
-            if caret > slash { replaceText(in: NSRange(location: slash, length: caret - slash), with: "") }
+            let range = slashQueryRange(from: slash)
+            if range.length > 0 { replaceText(in: range, with: "") }
         case .block(let id):
             blockId = id
         }
@@ -1079,10 +1117,10 @@ extension PageTextView {
     /// «/База данных — …», как в Notion: «/» с поиском стирается; пустой блок база заменит, после блока с текстом —
     /// встанет следующим блоком. Базу создают операции `Databases` у владельца окна — одним шагом ⌘Z.
     private func requestDatabase(fromSlashIn blockId: UUID, slashLocation slash: Int, isInline: Bool) {
-        let caret = selectedRange().location
-        if caret > slash {
+        let range = slashQueryRange(from: slash)
+        if range.length > 0 {
             undoManager?.disableUndoRegistration()
-            replaceText(in: NSRange(location: slash, length: caret - slash), with: "")
+            replaceText(in: range, with: "")
             undoManager?.enableUndoRegistration()
         }
         guard let block = document.blocks.first(where: { $0.id == blockId }) else { return }
@@ -1090,10 +1128,10 @@ extension PageTextView {
     }
 
     private func requestSubpage(fromSlashIn blockId: UUID, slashLocation slash: Int) {
-        let caret = selectedRange().location
-        if caret > slash {
+        let range = slashQueryRange(from: slash)
+        if range.length > 0 {
             undoManager?.disableUndoRegistration()
-            replaceText(in: NSRange(location: slash, length: caret - slash), with: "")
+            replaceText(in: range, with: "")
             undoManager?.enableUndoRegistration()
         }
         guard let block = document.blocks.first(where: { $0.id == blockId }) else { return }
@@ -1124,12 +1162,11 @@ extension PageTextView {
 
     /// Подсветка hoverBackground под «/» с набранным поиском и подсказкой (contracts/visual-style.md, «Всплывающие меню»).
     private func updateSlashQueryHighlight() {
-        let caret = selectedRange()
-        guard let slash = openSlashLocation, let window, caret.location > slash else {
+        guard let slash = openSlashLocation, let queryEnd = openSlashQueryEnd, queryEnd > slash, let window else {
             slashQueryHighlight.isHidden = true
             return
         }
-        let typedOnScreen = firstRect(forCharacterRange: NSRange(location: slash, length: caret.location - slash), actualRange: nil)
+        let typedOnScreen = firstRect(forCharacterRange: NSRange(location: slash, length: queryEnd - slash), actualRange: nil)
         var frame = convert(window.convertFromScreen(typedOnScreen), from: nil)
         if !emptyParagraphHint.isHidden { frame = frame.union(NSRect(x: frame.minX, y: frame.minY, width: emptyParagraphHint.frame.maxX - frame.minX, height: frame.height)) }
         let padding = Metrics.PopupMenu.slashQueryHorizontalPadding
