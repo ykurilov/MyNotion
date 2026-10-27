@@ -19,6 +19,13 @@ public final class PhoneSyncController {
         case suspended
     }
 
+    /// Что ответить системе на тихий пуш (на iPhone — `UIBackgroundFetchResult`).
+    public enum BackgroundWakeResult: Sendable, Hashable {
+        case newData
+        case noData
+        case failed
+    }
+
     public typealias LoopFactory = @MainActor (SyncAccount, SyncSecretValues, RemoteChangeApplier) -> any PhoneSyncLoop
 
     public private(set) var account: SyncAccount?
@@ -44,6 +51,14 @@ public final class PhoneSyncController {
     @ObservationIgnored private let backgroundTime: any BackgroundTimeGrant
     @ObservationIgnored private let pause: @Sendable (Duration) async -> Void
     @ObservationIgnored private let backgroundFlushLimit: Duration
+    @ObservationIgnored private let makePushTransport: @Sendable (URL, String) -> any SyncPushTransport
+    @ObservationIgnored private let backgroundWakeLimit: Duration
+    /// Круг по тихому пушу, пока приложение в фоне; второй пуш ждёт этот же круг.
+    @ObservationIgnored private var pushRound: Task<Void, any Error>?
+    /// Токен пушей от системы и тот, что сервер уже принял от этого устройства.
+    @ObservationIgnored private var pushToken: PushTokenRegistration.Token?
+    @ObservationIgnored private var registeredPushToken: PushTokenRegistration?
+    @ObservationIgnored private var pushTokenRequest: Task<Void, Never>?
     @ObservationIgnored private var backgroundGrant: BackgroundTimeToken?
     @ObservationIgnored private var backgroundFlush: Task<Void, Never>?
     /// Действия экранов (подключить, выключить, список устройств) идут по одному, ни одно не теряется.
@@ -60,9 +75,11 @@ public final class PhoneSyncController {
     public init(store: NotesStore, openDocuments: OpenDocuments?, deviceName: String, secrets: any SyncSecrets,
                 makeServer: @escaping @Sendable (URL) -> any SyncServer = { HTTPSyncServer(url: $0) },
                 makeLoop: @escaping LoopFactory = PhoneSyncController.engineLoop,
+                makePushTransport: @escaping @Sendable (URL, String) -> any SyncPushTransport = { HTTPSyncServer(url: $0).pushTransport(deviceToken: $1) },
                 backgroundTime: any BackgroundTimeGrant = NoBackgroundTime(),
                 pause: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) },
-                backgroundFlushLimit: Duration = .seconds(25)) {
+                backgroundFlushLimit: Duration = .seconds(25),
+                backgroundWakeLimit: Duration = .seconds(25)) {
         self.store = store
         self.openDocuments = openDocuments
         self.deviceName = deviceName
@@ -72,6 +89,8 @@ public final class PhoneSyncController {
         self.backgroundTime = backgroundTime
         self.pause = pause
         self.backgroundFlushLimit = backgroundFlushLimit
+        self.makePushTransport = makePushTransport
+        self.backgroundWakeLimit = backgroundWakeLimit
         // Очередь исходящих подписывается на записи один раз; пока синхронизация выключена, она ничего не пишет.
         Outbox.install(on: store)
         do {
@@ -132,6 +151,7 @@ public final class PhoneSyncController {
             self.account = account
             self.deviceName = account.deviceName
             self.startLoop(for: account)
+            self.registerPushTokenIfNeeded()
         }
     }
 
@@ -150,6 +170,10 @@ public final class PhoneSyncController {
                 try? await transport.deleteDevice(account.deviceId)
             }
             self.stopLoop()
+            // Сервер стёр токен вместе с устройством; новое подключение сообщит его заново.
+            self.pushTokenRequest?.cancel()
+            self.pushTokenRequest = nil
+            self.registeredPushToken = nil
             do {
                 try SyncSetup.disable(store: self.store, secrets: self.secrets)
             } catch {
@@ -208,13 +232,86 @@ public final class PhoneSyncController {
         backgroundFlush = nil
         returnBackgroundTime()
         eraseLeftoverSecrets()
+        registerPushTokenIfNeeded()
         guard let loop else {
             // Цикл не запустился (например, при запуске до первой разблокировки ключи не читались) — ещё раз.
             if let account { startLoop(for: account) }
             return
         }
+        if previous == .suspended, let round = pushRound {
+            // Идёт круг по пушу: прервать и запустить цикл после него, чтобы они не слали одно и то же вдвоём.
+            round.cancel()
+            Task { [weak self] in
+                _ = await round.result
+                guard let self, self.phase == .foreground, self.loop === loop else { return }
+                loop.start()
+                loop.syncNow()
+            }
+            return
+        }
         if previous == .suspended { loop.start() }
         loop.syncNow()
+    }
+
+    /// Система запустила приложение в фоне (тихий пуш, приложения не было в памяти): цикл не крутить,
+    /// правки заберёт круг по пушу; цикл запустится, когда приложение откроют.
+    public func didLaunchInBackground() {
+        guard phase == .foreground else { return }
+        loop?.stop()
+        phase = .suspended
+    }
+
+    // MARK: Тихие пуши
+
+    /// Тихий пуш: на другом устройстве новая пачка. На экране — разбудить цикл; в фоне — один круг
+    /// в отпущенное системой время и честный итог. Повторный и пустой пуш безвредны.
+    public func handleBackgroundPush() async -> BackgroundWakeResult {
+        if phase == .flushingInBackground { finishBackgroundFlush() }
+        // Ключи не читались при запуске (iPhone ещё не разблокировали) — может, уже читаются.
+        if loop == nil, let account { startLoop(for: account) }
+        guard let loop else { return account == nil ? .noData : .failed }
+        guard phase == .suspended else {
+            loop.syncNow()
+            return .noData
+        }
+        let changesBefore = remoteChangeCount
+        let round = pushRound ?? Task { try await loop.catchUp() }
+        pushRound = round
+        let limit = backgroundWakeLimit
+        // Система ждёт около 30 секунд и потом гасит приложение: свой круг кончается раньше.
+        let deadline = Task {
+            try await Task.sleep(for: limit)
+            round.cancel()
+        }
+        let outcome = await round.result
+        deadline.cancel()
+        if pushRound == round { pushRound = nil }
+        if remoteChangeCount > changesBefore { return .newData }
+        if case .success = outcome { return .noData }
+        return .failed
+    }
+
+    /// Токен тихих пушей от системы: сервер узнаёт его от этого iPhone (если синхронизация включена).
+    /// `environment` — среда Apple: отладочная сборка или TestFlight и App Store.
+    public func didReceivePushToken(_ token: Data, environment: SyncPushEnvironment) {
+        pushToken = PushTokenRegistration.Token(value: token, environment: environment)
+        registerPushTokenIfNeeded()
+    }
+
+    /// Не принятый сервером токен сообщается снова при следующем случае: подключение, возвращение на экран.
+    private func registerPushTokenIfNeeded() {
+        guard pushTokenRequest == nil, let pushToken, let account else { return }
+        let wanted = PushTokenRegistration(deviceId: account.deviceId, token: pushToken)
+        guard registeredPushToken != wanted, let secret = try? secrets.load(for: account.deviceId) else { return }
+        let transport = makePushTransport(account.serverURL, secret.deviceToken)
+        pushTokenRequest = Task { [weak self] in
+            let accepted = (try? await transport.registerPushToken(pushToken.value, environment: pushToken.environment)) != nil
+            guard let self, !Task.isCancelled else { return }
+            self.pushTokenRequest = nil
+            if accepted { self.registeredPushToken = wanted }
+            // Пока шёл запрос, пришёл новый токен: сообщить и его.
+            if self.pushToken != pushToken || self.account?.deviceId != wanted.deviceId { self.registerPushTokenIfNeeded() }
+        }
     }
 
     private func finishBackgroundFlush() {
@@ -261,6 +358,7 @@ public final class PhoneSyncController {
     }
 
     private func stopLoop() {
+        pushRound?.cancel()
         backgroundFlush?.cancel()
         backgroundFlush = nil
         loop?.stop()
@@ -305,4 +403,15 @@ public final class PhoneSyncController {
         lastAction = task
         await task.value
     }
+}
+
+/// Токен пушей, который сервер принял от устройства.
+private struct PushTokenRegistration: Equatable {
+    struct Token: Equatable {
+        let value: Data
+        let environment: SyncPushEnvironment
+    }
+
+    let deviceId: String
+    let token: Token
 }

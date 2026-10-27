@@ -109,10 +109,25 @@ final class FakeSyncLoop: PhoneSyncLoop {
     private(set) var syncNowCount = 0
     /// Сколько раз ещё ответить «есть неотправленное»; `nil` — всегда.
     var unsentChecksLeft: Int? = 0
+    /// Круги по пушу: сколько было и не запускали ли цикл посреди круга.
+    private(set) var catchUpCount = 0
+    private(set) var isCatchingUp = false
+    private(set) var startedWhileCatchingUp = false
+    /// Что делает круг; по умолчанию ничего не приходит. Пришедшее — через `applier`, как у настоящего цикла.
+    var catchUpAction: (@MainActor (RemoteChangeApplier?) async throws -> Void)?
+    var applier: RemoteChangeApplier?
 
     func start() {
+        if isCatchingUp { startedWhileCatchingUp = true }
         isRunning = true
         startCount += 1
+    }
+
+    func catchUp() async throws {
+        catchUpCount += 1
+        isCatchingUp = true
+        defer { isCatchingUp = false }
+        try await catchUpAction?(applier)
     }
 
     func stop() {
@@ -205,4 +220,39 @@ final class UnreliableSecrets: SyncSecrets {
 
     /// Что лежит на самом деле, мимо сбоев.
     func storedValues(for deviceId: String) throws -> SyncSecretValues? { try stored.load(for: deviceId) }
+}
+
+/// Сервер, которому iPhone сообщает токен пушей: запоминает, что пришло; может не принять.
+final class FakePushServer: Sendable {
+    struct Registration: Hashable {
+        let deviceToken: String
+        let apnsToken: Data
+        let environment: SyncPushEnvironment
+    }
+
+    private let state = Mutex<(registrations: [Registration], fails: Bool)>(([], false))
+
+    var registrations: [Registration] { state.withLock { $0.registrations } }
+    var fails: Bool {
+        get { state.withLock { $0.fails } }
+        set { state.withLock { $0.fails = newValue } }
+    }
+
+    func transport(deviceToken: String) -> any SyncPushTransport { Bound(owner: self, deviceToken: deviceToken) }
+
+    fileprivate func register(_ registration: Registration) throws {
+        try state.withLock { state in
+            if state.fails { throw URLError(.notConnectedToInternet) }
+            state.registrations.append(registration)
+        }
+    }
+
+    private struct Bound: SyncPushTransport {
+        let owner: FakePushServer
+        let deviceToken: String
+
+        func registerPushToken(_ token: Data, environment: SyncPushEnvironment) async throws {
+            try owner.register(Registration(deviceToken: deviceToken, apnsToken: token, environment: environment))
+        }
+    }
 }
