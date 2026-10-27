@@ -249,6 +249,11 @@ private enum Inline {
         switch element.name {
         case "br": return element.classes.contains("Apple-interchange-newline") ? "" : lineBreak
         case "code", "kbd", "samp", "tt": return code(element.rawText)
+        case "math": return ""
+        case _ where element.classes.contains("katex"):
+            // KaTeX кладёт формулу трижды: MathML, исходная запись и вёрстка по кусочкам. Берём исходную запись.
+            guard let source = element.first("annotation")?.rawText, !source.isEmpty else { return "" }
+            return "$" + source + "$"
         case let name where ["script", "style", "svg", "button", "img", "input", "template", "noscript", "select", "textarea"].contains(name):
             return ""
         default: break

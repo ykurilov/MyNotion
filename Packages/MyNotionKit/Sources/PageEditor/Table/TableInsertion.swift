@@ -33,7 +33,7 @@ extension PageTextView {
     }
 
     /// Ширина колонки текста под блоком с отступом `indent`: без полей строки и вложенности.
-    private func availableTableWidth(indent: Int) -> Double {
+    func availableTableWidth(indent: Int) -> Double {
         let container = textContainer.map { $0.size.width - 2 * $0.lineFragmentPadding } ?? Metrics.Page.columnWidth
         return Double((container - CGFloat(indent) * Metrics.Page.indentPerLevel).rounded(.down))
     }
