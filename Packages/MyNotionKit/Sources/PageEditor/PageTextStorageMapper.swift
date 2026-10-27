@@ -322,7 +322,7 @@ public final class PageTextStorageMapper: NSObject {
     func renderBlocks(_ range: Range<Int>, replacing characters: NSRange) {
         let blocks = document.blocks
         let text = NSMutableAttributedString()
-        for index in range {
+        for index in range where blocks.indices.contains(index) {
             text.append(Self.paragraph(blocks[index], withNewline: true, after: previousKind(ofBlockAt: index)))
         }
         applying { textStorage.replaceCharacters(in: characters, with: PageFontScaling.scaled(text, to: fontScale)) }

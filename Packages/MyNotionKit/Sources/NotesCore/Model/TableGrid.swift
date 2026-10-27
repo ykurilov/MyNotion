@@ -80,6 +80,12 @@ public struct TableGrid: Sendable, Hashable {
         return [first, max(minimumColumnWidth, available - first)]
     }
 
+    /// Ширина каждого из `count` столбцов, когда они поровну делят строку шириной `available`: так вставленная таблица,
+    /// как у Notion, занимает всю ширину текста страницы.
+    public static func columnWidth(ofColumns count: Int, sharing available: Double) -> Double {
+        max(minimumColumnWidth, (available / Double(max(1, count))).rounded(.down))
+    }
+
     /// Столбцы и строки новой таблицы, без ячеек; `widths` — ширины столбцов по порядку.
     public static func contents(ofNewTable table: Block, columns: Int, rows: Int, widths: [Double] = []) -> [Block] {
         var key: FractionalSortKey?

@@ -142,6 +142,51 @@ struct PasteBlocksTests {
         #expect(editor.texts == [""])
     }
 
+    /// Таблица вставки из трёх столбцов; `widths` — ширины столбцов, `nil` — у столбца ширины нет, как у таблицы из чужого Markdown.
+    private static func table(widths: [Double?], in pageId: UUID) -> [Block] {
+        var table = Block(pageId: pageId, kind: .table, sortKey: .between(nil, nil))
+        table.props = .defaults(for: .table)
+        let cells = [["Показатель", "Что оценивает", "Формула"], ["ROI", "Весь проект или запуск", "Доход ÷ инвестиции"]].map { $0.map { InlineText($0) } }
+        var contents = TableGrid.contents(ofTable: table, cells: cells)
+        let columns = contents.indices.filter { contents[$0].kind == .tableColumn }
+        for (position, index) in columns.enumerated() { contents[index].props.width = widths[position] }
+        return [table] + contents
+    }
+
+    @Test("Таблица без ширин столбцов занимает ширину текста страницы: столбцы делят её поровну")
+    func tableWithoutWidthsFillsPage() throws {
+        let editor = try EditorFixture([.paragraph()])
+        editor.textView.pastedTextReader = Self.reader(Self.table(widths: [nil, nil, nil], in: editor.pageId))
+        editor.placeCaret(inBlock: 0)
+
+        editor.step { editor.textView.paste(from: Self.pasteboard("markdown")) }
+        editor.layoutViewport()
+
+        let table = try #require(editor.document.blocks.first { $0.kind == .table })
+        let grid = try #require(editor.document.tableGrid(table.id))
+        let container = try #require(editor.textView.textContainer)
+        let line = (container.size.width - 2 * container.lineFragmentPadding).rounded(.down)
+        let widths = (0..<grid.columnCount).map { grid.width(ofColumn: $0) }
+        #expect(widths.count == 3)
+        #expect(Set(widths).count == 1)
+        #expect(widths.reduce(0, +) <= Double(line) && widths.reduce(0, +) > Double(line) - 3, "\(widths) в строке \(line)")
+        let view = try #require(editor.textView.tableView(for: table.id))
+        #expect(view.tableLayout.columnWidths.map(Double.init) == widths)
+    }
+
+    @Test("Выставленные ширины столбцов вставка не меняет")
+    func tableWithWidthsKeepsThem() throws {
+        let editor = try EditorFixture([.paragraph()])
+        editor.textView.pastedTextReader = Self.reader(Self.table(widths: [80, 200, 90], in: editor.pageId))
+        editor.placeCaret(inBlock: 0)
+
+        editor.step { editor.textView.paste(from: Self.pasteboard("markdown")) }
+
+        let table = try #require(editor.document.blocks.first { $0.kind == .table })
+        let grid = try #require(editor.document.tableGrid(table.id))
+        #expect((0..<grid.columnCount).map { grid.width(ofColumn: $0) } == [80, 200, 90])
+    }
+
     @Test("Выделение через несколько блоков заменяется вставкой")
     func overSelection() throws {
         let editor = try EditorFixture([.paragraph("один два"), .paragraph("три"), .paragraph("четыре пять")])

@@ -10,6 +10,8 @@ import os
 final class ControlBootstrap {
     private static let logger = Logger(subsystem: "cloud.kurilov.mynotion", category: "control")
     private static var current: ControlBootstrap?
+    /// Исполнитель команд — и для щелчков по ссылкам `mynotion://`: он есть, даже если сокет занят другой копией.
+    private(set) static var executor: CommandExecutor?
 
     private let server: ControlSocketServer
     private let executor: CommandExecutor
@@ -26,6 +28,7 @@ final class ControlBootstrap {
         let host = AppControlHost(library: library, socketPath: socketPath,
                                   transferControl: importController.map { AppTransferControl(importController: $0, sync: library.sync) })
         let executor = CommandExecutor(host: host)
+        Self.executor = executor
         let server = ControlSocketServer(path: socketPath) { request, call in
             // Сервер читает запросы на своей очереди; выполнение — на главном потоке (research R2).
             let (stream, continuation) = AsyncStream<ControlResponseLine>.makeStream()

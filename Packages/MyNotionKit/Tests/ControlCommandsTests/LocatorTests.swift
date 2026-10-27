@@ -34,6 +34,13 @@ import Testing
         #expect(try locator.resolve(meeting.id.uuidString.lowercased()).id == meeting.id)
     }
 
+    /// Ссылка, скопированная в приложении («Копировать ссылку», ⌘L) или из поля `link`, — тоже указатель.
+    @Test func byPageLink() throws {
+        #expect(try locator.resolve(PageAddress(pageId: meeting.id).text).id == meeting.id)
+        #expect(try locator.resolve(" " + PageAddress(pageId: meeting.id, blockId: UUID()).text + "\n").id == meeting.id)
+        #expect(failure(PageAddress(pageId: UUID()).text)?.code == .pageNotFound)
+    }
+
     @Test func byIdPrefix() throws {
         // id v7 начинаются со времени: страницы одной миллисекунды делят первые знаки — берём кратчайшее отличающее начало.
         let ids = try host.store.pageOutline().map { $0.id.uuidString.lowercased() }

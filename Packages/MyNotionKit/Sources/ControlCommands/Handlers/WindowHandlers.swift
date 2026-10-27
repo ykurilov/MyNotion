@@ -1,5 +1,6 @@
 import ControlProtocol
 import Foundation
+import NotesCore
 
 /// Окна, вкладки, «назад/вперёд» (этап 6, US5). Номера окон и вкладок проверяются здесь по `windows()`, само действие
 /// делает `WindowControl` приложения. Окна на передний план сами не выходят: только `open --activate`.
@@ -57,7 +58,12 @@ public enum WindowHandlers {
     static let open: CommandHandler = { session in
         let page = try session.page()
         var blockId: UUID?
-        if session.string("block") != nil { blockId = try session.block(inPage: page.id).id }
+        if session.string("block") != nil {
+            blockId = try session.block(inPage: page.id).id
+        } else if let linked = session.string("page").flatMap(URL.init(string:)).flatMap(PageAddress.init(url:))?.blockId {
+            // Ссылка на блок `mynotion://page/<id>#<блок>`: прокрутка к нему; блока уже нет — просто страница.
+            blockId = try? session.blockLocator.resolve(linked.controlText, inPage: page.id).id
+        }
         let control = session.host.windowControl
         let windows = control.windows()
         // Окон нет (все закрыты) — страница открывается в новом окне, какие бы флаги ни были.

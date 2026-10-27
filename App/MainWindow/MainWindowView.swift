@@ -293,6 +293,7 @@ private struct PagesWindow: View {
         )
         actions.moveFavorite = { model.moveFavorite($0, toIndex: $1) }
         actions.rowMenuHandlers[.favorite] = { model.toggleFavorite($0) }
+        actions.rowMenuHandlers[.copyLink] = { model.copyLink($0) }
         actions.rowMenuHandlers[.openInNewTab] = { model.open(PageOpenRequest(pageId: $0, inNewTab: true)) }
         actions.rowMenuHandlers[.duplicate] = { model.duplicatePage($0) }
         actions.rowMenuHandlers[.template] = { model.toggleTemplate($0) }
@@ -420,8 +421,9 @@ private struct PagesWindow: View {
                 onReady: onEditorReady,
                 mentions: mentionSettings(pages: pages),
                 pageMenuItems: PageMenuItems.all(for: model, pageId: document.pageId),
-                topBarAccessory: AnyView(FavoriteStarButton(isFavorite: model.isFavorite(document.pageId)) {
-                    model.toggleFavorite(document.pageId)
+                topBarAccessory: AnyView(HStack(spacing: Metrics.Page.topBarButtonSpacing) {
+                    CopyLinkButton(isCopied: model.copiedLinkPageId == document.pageId) { model.copyLink(document.pageId) }
+                    FavoriteStarButton(isFavorite: model.isFavorite(document.pageId)) { model.toggleFavorite(document.pageId) }
                 }),
                 headerAddons: [PageCoverAddon.factory(model), model.rowPageAddonFactory(), BacklinksAddon.factory(model), DatabasePageAddon.factory()],
                 scrollPlace: model.scrollPlace,
@@ -433,6 +435,9 @@ private struct PagesWindow: View {
                 if model.showsRestoredBanner {
                     VersionRestoredBanner { model.restoredVersionPageId = nil }.padding(.top, Metrics.Page.topBarHeight)
                 }
+            }
+            .overlay(alignment: .bottom) {
+                if model.copiedLinkPageId != nil { LinkCopiedToast().padding(.bottom, 24) }
             }
         } else if let trashed = model.activeTabTrashedPage {
             TrashedPageView(page: trashed) { model.restoreActiveTabPage() }
