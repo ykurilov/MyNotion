@@ -29,6 +29,8 @@ export interface Journal {
   getSnapshot(): { seq: number; ciphertext: string } | null;
   latestSnapshotSeq(): number | null;
   lastSeq(): number;
+  /** Номер последней пачки от других устройств; 0 — таких нет. */
+  latestSeqNotFrom(deviceId: string): number;
   /** Удаляет пачки ≤ снимка, если все активные устройства подтвердили этот номер. */
   compact(): void;
 }
@@ -52,6 +54,7 @@ export function createJournal(db: Db, options: { devices: Devices; now?: () => n
   const insertBatch = db.prepare('INSERT INTO batches (batch_id, device_id, ciphertext, created_at) VALUES (?, ?, ?, ?)');
   const selectAfter = db.prepare('SELECT seq, batch_id, device_id, ciphertext FROM batches WHERE seq > ? ORDER BY seq LIMIT ?');
   const sequence = db.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'batches'");
+  const latestNotFrom = db.prepare('SELECT MAX(seq) AS seq FROM batches WHERE device_id != ?');
   const getSnapshotRow = db.prepare('SELECT seq, ciphertext FROM snapshot WHERE id = 1');
   const getSnapshotSeq = db.prepare('SELECT seq FROM snapshot WHERE id = 1');
   const putSnapshotRow = db.prepare(
@@ -155,6 +158,10 @@ export function createJournal(db: Db, options: { devices: Devices; now?: () => n
 
     latestSnapshotSeq: snapshotSeq,
     lastSeq,
+
+    latestSeqNotFrom(deviceId) {
+      return (latestNotFrom.get(deviceId) as { seq: number | null }).seq ?? 0;
+    },
 
     compact,
   };
