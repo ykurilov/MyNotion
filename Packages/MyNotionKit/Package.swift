@@ -42,6 +42,7 @@ let package = Package(
         .library(name: "PageSharing", targets: ["PageSharing"]),
         .library(name: "Proofreading", targets: ["Proofreading"]),
         .library(name: "NotionAPI", targets: ["NotionAPI"]),
+        .library(name: "PhoneShell", targets: ["PhoneShell"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.11.1"),
@@ -118,6 +119,8 @@ let package = Package(
         .target(name: "NotionAPI"),
         // 006. Ссылка на страницу только для чтения: снимок без закрытого, публикация после правок (contracts/share-api.md).
         .target(name: "PageSharing", dependencies: ["NotesCore", "MarkdownExport", "PageCover", "Sync", .product(name: "GRDB", package: "GRDB.swift")]),
+        // 007. Оболочка iPhone без UIKit: подключение кодом с Mac, цикл синхронизации в фоне и на переднем плане, дерево страниц.
+        .target(name: "PhoneShell", dependencies: ["NotesCore", "Sync"]),
 
         .testTarget(name: "VisualStyleTests", dependencies: ["VisualStyle"]),
         .testTarget(name: "NotesCoreTests", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
@@ -159,6 +162,7 @@ let package = Package(
         .testTarget(name: "PageSharingTests", dependencies: ["PageSharing", "NotesCore", "Databases", "Sync", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "ProofreadingTests", dependencies: ["Proofreading", "NotesCore"]),
         .testTarget(name: "NotionAPITests", dependencies: ["NotionAPI"]),
+        .testTarget(name: "PhoneShellTests", dependencies: ["PhoneShell", "NotesCore", "Sync"]),
     ],
     swiftLanguageModes: [.v6]
 )
