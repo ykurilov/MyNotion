@@ -17,9 +17,11 @@ struct PhoneLaunchOptions {
     var joinCodeFile: URL?
     /// `--sync-log <путь>`: ход синхронизации и живой проверки.
     var syncLog: URL?
-    /// `--live-check-page <название>` и `--live-check-edit <текст>`: дождаться страницы с Mac и дописать в неё абзац.
+    /// `--live-check-page <название>` и `--live-check-edit <текст>`: дождаться страницы с Mac, открыть и напечатать текст.
     var liveCheckPageTitle: String?
     var liveCheckEdit: String?
+    /// `--live-check-mac-edit <текст>`: затем дождаться этого текста с Mac на открытой странице.
+    var liveCheckMacEdit: String?
 
     enum InitialScreen: Equatable {
         case connect
@@ -47,6 +49,7 @@ struct PhoneLaunchOptions {
             case "--sync-log": options.syncLog = remaining.popFirst().map { URL(fileURLWithPath: $0) }
             case "--live-check-page": options.liveCheckPageTitle = remaining.popFirst()
             case "--live-check-edit": options.liveCheckEdit = remaining.popFirst()
+            case "--live-check-mac-edit": options.liveCheckMacEdit = remaining.popFirst()
             default: break
             }
         }

@@ -43,6 +43,7 @@ let package = Package(
         .library(name: "Proofreading", targets: ["Proofreading"]),
         .library(name: "NotionAPI", targets: ["NotionAPI"]),
         .library(name: "PhoneShell", targets: ["PhoneShell"]),
+        .library(name: "PhonePageEditor", targets: ["PhonePageEditor"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.11.1"),
@@ -121,6 +122,9 @@ let package = Package(
         .target(name: "PageSharing", dependencies: ["NotesCore", "MarkdownExport", "PageCover", "Sync", .product(name: "GRDB", package: "GRDB.swift")]),
         // 007. Оболочка iPhone без UIKit: подключение кодом с Mac, цикл синхронизации в фоне и на переднем плане, дерево страниц.
         .target(name: "PhoneShell", dependencies: ["NotesCore", "Sync"]),
+        // 007. Редактор страницы для iPhone (UIKit): блок — ячейка списка со своим текстом. Правила правки — без UIKit,
+        // их тесты идут и на Mac; на Mac сам экран не собирается.
+        .target(name: "PhonePageEditor", dependencies: ["NotesCore", "VisualStyle"]),
 
         .testTarget(name: "VisualStyleTests", dependencies: ["VisualStyle"]),
         .testTarget(name: "NotesCoreTests", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
@@ -163,6 +167,7 @@ let package = Package(
         .testTarget(name: "ProofreadingTests", dependencies: ["Proofreading", "NotesCore"]),
         .testTarget(name: "NotionAPITests", dependencies: ["NotionAPI"]),
         .testTarget(name: "PhoneShellTests", dependencies: ["PhoneShell", "NotesCore", "Sync"]),
+        .testTarget(name: "PhonePageEditorTests", dependencies: ["PhonePageEditor", "NotesCore"]),
     ],
     swiftLanguageModes: [.v6]
 )

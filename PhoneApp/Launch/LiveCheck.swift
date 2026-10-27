@@ -2,12 +2,14 @@ import Foundation
 import NotesCore
 import PhoneShell
 import Sync
+import UIKit
 
 /// Живая проверка «Mac + iPhone в симуляторе» (scripts/imac/iphone-sync-live-check.zsh): подключиться кодом из файла,
-/// дождаться страницы с Mac и дописать в неё абзац. Ход пишется строками в `--sync-log`.
+/// дождаться страницы с Mac, открыть её и напечатать текст в редакторе, затем дождаться на открытой странице правки с Mac.
+/// Ход пишется строками в `--sync-log`.
 @MainActor
 enum LiveCheck {
-    static func run(options: PhoneLaunchOptions, library: PhoneLibrary) async {
+    static func run(options: PhoneLaunchOptions, library: PhoneLibrary, openPage: (UUID) -> Void) async {
         guard options.joinCodeFile != nil || options.liveCheckPageTitle != nil || options.syncLog != nil else { return }
         let log = LiveCheckLog(url: options.syncLog)
         let sync = library.sync
@@ -39,23 +41,40 @@ enum LiveCheck {
         log.write("page-arrived: \(page.id.uuidString)")
 
         guard let edit = options.liveCheckEdit else { return }
-        do {
-            try library.store.write { transaction in
-                let last = try transaction.blocks(ofPage: page.id).filter { $0.containerId == nil }.last
-                try transaction.insertBlock(Block(pageId: page.id, kind: .paragraph, text: InlineText(edit),
-                                                  sortKey: FractionalSortKey.between(last?.sortKey, nil)))
-            }
-            library.browser.reload()
-            sync.syncNow()
-            log.write("edited")
-        } catch {
-            log.write("error: правка не записалась: \(error)")
+        // Пауза — снимок дерева со страницей, пришедшей с Mac.
+        try? await Task.sleep(for: .seconds(3))
+        openPage(page.id)
+        // Как пальцем: курсор в конец последнего блока на экране и набор с клавиатуры.
+        guard let field = await waitFor(seconds: 20, { lastEditableField() }) else {
+            return log.write("error: редактор страницы не показал блоков")
         }
+        field.becomeFirstResponder()
+        field.selectedRange = NSRange(location: field.text.utf16.count, length: 0)
+        field.insertText(" \(edit)")
+        library.openDocuments.saveAll()
+        sync.syncNow()
+        log.write("edited")
         let outbox = Outbox(store: library.store)
         let sent = await waitFor(seconds: 60) { (try? outbox.isEmpty()) == true ? true : nil }
         log.write(sent == nil ? "error: правка не ушла на сервер" : "sent")
-        try? await Task.sleep(for: .seconds(3))
+
+        guard let macEdit = options.liveCheckMacEdit else { return log.write("done") }
+        let shown = await waitFor(seconds: 90) { visibleFields().contains { $0.text.contains(macEdit) } ? true : nil }
+        log.write(shown == nil ? "error: правка с Mac не появилась на открытой странице" : "mac-edit-visible")
         log.write("done")
+    }
+
+    private static func visibleFields() -> [UITextView] {
+        let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows)
+        return windows.flatMap { textViews(in: $0) }.filter { $0.isEditable && $0.window != nil }
+    }
+
+    private static func lastEditableField() -> UITextView? {
+        visibleFields().filter { !$0.text.isEmpty }.max { $0.convert($0.bounds, to: nil).minY < $1.convert($1.bounds, to: nil).minY }
+    }
+
+    private static func textViews(in view: UIView) -> [UITextView] {
+        (view as? UITextView).map { [$0] } ?? view.subviews.flatMap(textViews)
     }
 
     /// Ждать, пока `value` не вернёт значение; проверка раз в полсекунды.

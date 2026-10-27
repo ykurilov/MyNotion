@@ -74,7 +74,7 @@ struct PhoneRootView: View {
             }
         }
         .task { openInitialScreen() }
-        .task { await LiveCheck.run(options: options, library: library) }
+        .task { await LiveCheck.run(options: options, library: library, openPage: open) }
     }
 
     private func open(_ pageId: UUID) {

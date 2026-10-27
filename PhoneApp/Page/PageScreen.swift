@@ -1,19 +1,37 @@
 import NotesCore
+import PhonePageEditor
 import PhoneShell
 import SwiftUI
+import UIKit
 
-/// Точка подключения экрана страницы. Оболочка показывает здесь страницу по `pageId`; сейчас — заглушка только
-/// для чтения, при слиянии сюда встаёт редактор страницы. Что оболочка даёт экрану страницы:
-/// - `library.openDocuments` — открытые страницы: синхронизация сама вызывает `applyExternalChanges` для них,
-///   а уход приложения в фон — `saveAll()` (`PhoneSyncController.didEnterBackground`);
-/// - `library.store` — база записей; `library.browser` — дерево (названия подстраниц, путь);
-/// - `library.sync.remoteChangeCount` — растёт, когда пришли правки с других устройств.
-/// Верхняя полоса («назад», «+» новой подстраницы) — у оболочки (`PageContainer`), не у экрана страницы.
+/// Страница — редактор `PhonePageViewController` на общих открытых страницах приложения (`library.openDocuments`).
+/// Правки с других устройств доходят до него через `OpenDocuments` (это делает синхронизация), «+» подстраницы —
+/// тоже (`PageBrowser`); при уходе в фон и закрытии экран сохраняется сам. Касание подстраницы — `openPage`.
 struct PageScreen: View {
     let pageId: UUID
     let library: PhoneLibrary
+    let openPage: (UUID) -> Void
 
     var body: some View {
-        PageStubView(pageId: pageId, library: library)
+        PageEditor(pageId: pageId, openDocuments: library.openDocuments, openPage: openPage)
+            .ignoresSafeArea(.keyboard)
+            .id(pageId)
     }
+}
+
+private struct PageEditor: UIViewControllerRepresentable {
+    let pageId: UUID
+    let openDocuments: OpenDocuments
+    let openPage: (UUID) -> Void
+
+    func makeUIViewController(context: Context) -> UIViewController {
+        do {
+            return try PhonePageViewController(pageId: pageId, openDocuments: openDocuments, onOpenPage: openPage)
+        } catch {
+            return UIHostingController(rootView: ContentUnavailableView(
+                "Страница не открылась", systemImage: "exclamationmark.triangle", description: Text(error.localizedDescription)))
+        }
+    }
+
+    func updateUIViewController(_ controller: UIViewController, context: Context) {}
 }

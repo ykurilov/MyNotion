@@ -142,6 +142,8 @@ targets:
         product: Sync
       - package: MyNotionKit
         product: PhoneShell
+      - package: MyNotionKit
+        product: PhonePageEditor
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion.ios
@@ -313,6 +315,7 @@ schemes:
         - package: MyNotionKit/NotesCoreTests
         - package: MyNotionKit/SyncTests
         - package: MyNotionKit/PhoneShellTests
+        - package: MyNotionKit/PhonePageEditorTests
     archive:
       config: Release
   MyNotionPerformance:

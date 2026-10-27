@@ -4,8 +4,8 @@ import AppKit
 /// Цвета светлой и тёмной темы по contracts/visual-style.md. Каждый цвет сам
 /// переключается вместе с темой Mac. Других мест с цветами в коде нет.
 public enum Palette {
-    public static let textPrimary = themed(light: .hex(0x2C2C2B), dark: .hex(0xF0EFED))
-    public static let textSecondary = themed(light: .hex(0x7D7A75), dark: .hex(0x9B9A97))
+    public static let textPrimary = themed(PaletteValues.textPrimary)
+    public static let textSecondary = themed(PaletteValues.textSecondary)
     /// Названия строк панели. Тёмная — по снимку Notion для Mac 15.10.2026; светлая — прежняя, снимка нет.
     public static let sidebarText = themed(light: .hex(0x5F5E59), dark: .hex(0xBCBAB7))
     /// Значок документа и «Корзины» в строках панели: тусклее названия, как у Notion.
@@ -16,24 +16,24 @@ public enum Palette {
     public static let windowToolbarIcon = themed(light: .hex(0x7D7A75), dark: .hex(0xACA9A4))
     /// Линия между панелью и страницей (тёмная — по снимку Notion).
     public static let sidebarEdge = themed(light: .hex(0xE6E5E3), dark: .hex(0x2C2C2B))
-    public static let pageBackground = themed(light: .hex(0xFFFFFF), dark: .hex(0x191919))
+    public static let pageBackground = themed(PaletteValues.pageBackground)
     /// «/» между страницами пути в верхней полосе: тусклый (≈ по снимку Notion 15.10.2026).
     public static let breadcrumbSeparator = themed(light: .rgba(55, 53, 47, 0.15), dark: .rgba(255, 255, 255, 0.1))
     public static let sidebarBackground = themed(light: .hex(0xF9F8F7), dark: .hex(0x202020))
-    public static let border = themed(light: .hex(0xE6E5E3), dark: .hex(0x2F2F2F))
+    public static let border = themed(PaletteValues.border)
     /// Линия разделителя на странице: в тёмной теме Notion 7.39 светлее рамок — ≈ rgb(55, 55, 53) по снимку 19.10.2026.
-    public static let dividerLine = themed(light: .hex(0xE6E5E3), dark: .hex(0x373735))
+    public static let dividerLine = themed(PaletteValues.dividerLine)
     /// Строка дерева под мышью или выбранная, кнопки при наведении.
     /// Закрашенная «★» избранной страницы в верхней полосе.
     public static let favoriteStar = themed(light: .hex(0xE8A600), dark: .hex(0xF0B72F))
     public static let hoverBackground = themed(light: .rgba(33, 27, 23, 0.05), dark: .rgba(255, 255, 255, 0.055))
-    public static let inlineCodeText = themed(light: .hex(0xCF5148), dark: .hex(0xCF5148))
-    public static let inlineCodeBackground = themed(light: .rgba(33, 27, 23, 0.05), dark: .rgba(255, 255, 255, 0.055))
-    public static let checkboxChecked = themed(light: .hex(0x2383E2), dark: .hex(0x2383E2))
+    public static let inlineCodeText = themed(PaletteValues.inlineCodeText)
+    public static let inlineCodeBackground = themed(PaletteValues.inlineCodeBackground)
+    public static let checkboxChecked = themed(PaletteValues.checkboxChecked)
     /// «+», «⋮⋮», стрелки раскрытия.
     /// Жёлтая полоса ошибки сохранения (желтый фон блока Notion, ≈).
     public static let saveErrorBannerBackground = themed(light: .hex(0xFBF3DB), dark: .hex(0x3F3622))
-    public static let handleIcon = themed(light: .rgba(55, 53, 47, 0.35), dark: .rgba(255, 255, 255, 0.3))
+    public static let handleIcon = themed(PaletteValues.handleIcon)
     /// Линия места сброса при перетаскивании блока: синий Notion в обеих темах (по снимку Notion).
     public static let dropIndicator = themed(light: .rgba(35, 131, 226, 0.43), dark: .rgba(35, 131, 226, 0.43))
     /// Выделение текста: синий Notion поверх страницы, текст в выделении своего цвета (по снимку Notion 15.10.2026).
@@ -41,12 +41,9 @@ public enum Palette {
     /// Выделение блоков целиком: тот же синий Notion, вдвое прозрачнее (по снимку Notion 15.10.2026).
     public static let blockSelection = themed(light: .rgba(35, 131, 226, 0.14), dark: .rgba(35, 131, 226, 0.14))
     /// Галочка в отмеченном чекбоксе.
-    public static let checkboxCheckmark = themed(light: .hex(0xFFFFFF), dark: .hex(0xFFFFFF))
+    public static let checkboxCheckmark = themed(PaletteValues.checkboxCheckmark)
     /// Подчёркивание ссылки: ≈ 40 % цвета текста.
-    public static let linkUnderline = themed(
-        light: .hex(0x2C2C2B).withAlphaComponent(0.4),
-        dark: .hex(0xF0EFED).withAlphaComponent(0.4)
-    )
+    public static let linkUnderline = themed(PaletteValues.linkUnderline)
 
     /// Метка «Две версии» у блока в конфликте (FR-021): оранжевая метка Notion (≈ по Notion: текст #D9730D / #FFA344,
     /// фон #FBECDD / #5C3B23).
@@ -81,11 +78,11 @@ public enum Palette {
     public static let emojiButtonBorder = themed(light: .hex(0xE6E5E3), dark: .hex(0x3B3B39))
     public static let emojiSectionBarDivider = themed(light: .hex(0xF0EFED), dark: .hex(0x2C2C2B))
     /// «Добавить иконку» в шапке страницы: серая надпись и значок (тёмная — по снимку Notion 16.10.2026, светлая ≈).
-    public static let pageHeaderButton = themed(light: .hex(0x9B9A97), dark: .hex(0x7D7A75))
+    public static let pageHeaderButton = themed(PaletteValues.pageHeaderButton)
     /// Выключенный переключатель подменю (≈ по Notion).
     public static let switchOff = themed(light: .rgba(135, 131, 120, 0.3), dark: .rgba(202, 196, 182, 0.3))
     /// Заглушка обложки, чья картинка ещё не пришла с другого Mac, и неизвестной обложки галереи (≈ по Notion).
-    public static let placeholder = themed(light: .hex(0xF1F1EF), dark: .hex(0x2F2F2F))
+    public static let placeholder = themed(PaletteValues.placeholder)
     /// Кнопки на обложке «Сменить», «Переместить»: тёмная полупрозрачная группа поверх картинки в обеих темах
     /// (снимок Notion 7.39 `notion-cover-hover-buttons.png`).
     public static let coverButtonBackground = NSColor.rgba(25, 25, 25, 0.88)
@@ -112,6 +109,10 @@ public enum Palette {
         ShadowLayer(offsetY: 0, blurRadius: 0, spread: 1, color: themed(light: .rgba(15, 15, 15, 0.05), dark: .rgba(255, 255, 255, 0.13))),
     ]
 
+    private static func themed(_ color: ThemedPaletteColor) -> NSColor {
+        themed(light: .palette(color.light), dark: .palette(color.dark))
+    }
+
     private static func themed(light: NSColor, dark: NSColor) -> NSColor {
         NSColor(name: nil) { appearance in
             appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
@@ -119,48 +120,27 @@ public enum Palette {
     }
 }
 
-/// Цвета Notion: девять оттенков (по умолчанию — отсутствие оттенка). Имена те же, что у `NotionColor` в модели.
-public enum NotionTone: String, Sendable, Hashable, CaseIterable {
-    case gray, brown, orange, yellow, green, blue, purple, pink, red
-}
-
 extension Palette {
-    /// Цвет текста Notion; `nil` — основной цвет текста страницы. Значения сняты с живого Notion 7.39.0 (пиксели
-    /// заголовков в обеих темах): текст у Notion в обеих темах один и тот же.
+    /// Цвет текста Notion; `nil` — основной цвет текста страницы (значения — `PaletteValues`, общие с iPhone).
     public static func notionText(_ tone: NotionTone?) -> NSColor {
         guard let tone else { return textPrimary }
         return notionTextColors[tone] ?? textPrimary
     }
 
-    /// Цвет подложки Notion (фон текста или блока); `nil` — без подложки. Фон слова и фон блока у Notion одного цвета.
+    /// Цвет подложки Notion (фон текста или блока); `nil` — без подложки.
     public static func notionBackground(_ tone: NotionTone?) -> NSColor? {
         guard let tone else { return nil }
         return notionBackgroundColors[tone]
     }
 
-    private static let notionTextColors: [NotionTone: NSColor] = [
-        .gray: .hex(0x7D7A75),
-        .brown: .hex(0x9F765A),
-        .orange: .hex(0xD27B2D),
-        .yellow: .hex(0xCB9434),
-        .green: .hex(0x50946E),
-        .blue: .hex(0x387DC9),
-        .purple: .hex(0x9A6BB4),
-        .pink: .hex(0xC14C8A),
-        .red: .hex(0xCF5148),
-    ]
+    private static let notionTextColors: [NotionTone: NSColor] = Dictionary(uniqueKeysWithValues: NotionTone.allCases.map {
+        // Один цвет на обе темы — обычный, не переключаемый.
+        ($0, .palette(PaletteValues.notionText($0).light))
+    })
 
-    private static let notionBackgroundColors: [NotionTone: NSColor] = [
-        .gray: themed(light: .hex(0xF0EFED), dark: .hex(0x383836)),
-        .brown: themed(light: .hex(0xF5EDE9), dark: .hex(0x45362D)),
-        .orange: themed(light: .hex(0xFBEBDE), dark: .hex(0x53361F)),
-        .yellow: themed(light: .hex(0xF9F3DC), dark: .hex(0x504425)),
-        .green: themed(light: .hex(0xE8F1EC), dark: .hex(0x263D30)),
-        .blue: themed(light: .hex(0xE5F2FC), dark: .hex(0x233850)),
-        .purple: themed(light: .hex(0xF3EBF9), dark: .hex(0x3C2D47)),
-        .pink: themed(light: .hex(0xFAE9F1), dark: .hex(0x4E2B3C)),
-        .red: themed(light: .hex(0xFCE9E7), dark: .hex(0x502C29)),
-    ]
+    private static let notionBackgroundColors: [NotionTone: NSColor] = Dictionary(uniqueKeysWithValues: NotionTone.allCases.map {
+        ($0, themed(PaletteValues.notionBackground($0)))
+    })
 }
 
 /// Один слой тени в духе CSS `box-shadow`.
@@ -179,6 +159,10 @@ extension NSColor {
             blue: CGFloat(value & 0xFF) / 255,
             alpha: 1
         )
+    }
+
+    fileprivate static func palette(_ color: PaletteRGBA) -> NSColor {
+        NSColor(srgbRed: color.red, green: color.green, blue: color.blue, alpha: color.alpha)
     }
 
     fileprivate static func rgba(_ red: Int, _ green: Int, _ blue: Int, _ alpha: CGFloat) -> NSColor {

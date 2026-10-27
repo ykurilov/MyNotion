@@ -1,7 +1,9 @@
 #!/bin/zsh
 # Живая проверка «Mac + iPhone в симуляторе» на iMac: локальный сервер из server/ со своей временной базой и портом,
 # Mac-приложение подключается токеном bootstrap и выдаёт код, iPhone подключается кодом, получает страницу
-# «MyNotion — образец» с Mac и дописывает в неё абзац — абзац должен прийти в базу Mac. Боевой сервер не трогается.
+# «MyNotion — образец» с Mac, открывает её и печатает текст в редакторе — текст должен прийти в базу Mac. Затем Mac
+# командой `mynotion` вставляет блок под этим текстом — он должен появиться на открытой странице iPhone.
+# Снимки: дерево, страница с клавиатурой, страница в тёмной теме. Боевой сервер не трогается.
 #
 #   scripts/imac/iphone-sync-live-check.zsh [--out <папка на этом Mac>]
 # Нужна сборка iPhone в копии на iMac: сначала scripts/imac/iphone-build.zsh.
@@ -29,6 +31,7 @@ LIVE=/tmp/mn-phone-live
 RESULTS=$WORK/build/imac-phone-live
 PAGE='MyNotion — образец'
 EDIT="Правка с iPhone $(date +%H:%M:%S)"
+MAC_EDIT="Правка с Mac $(date +%H:%M:%S)"
 BUNDLE=cloud.kurilov.mynotion.ios
 
 server_pid=""; mac_pid=""
@@ -76,16 +79,19 @@ mac_pid=$(pgrep -nf -- "--database $LIVE/mac.sqlite")
 wait_for 120 "код подключения с Mac" test -s $LIVE/join-code || { cat $LIVE/mac.log; fail "Mac не выдал код подключения"; }
 print -- "[MyNotion/iMac] Mac подключён и выдал код ($(( SECONDS - started )) с)"
 
-# 3. iPhone в симуляторе (сборка под симулятор, если её ещё нет в копии): подключиться кодом, дождаться страницы с Mac, дописать абзац.
+# 3. iPhone в симуляторе (сборка под симулятор, если её ещё нет в копии): подключиться кодом, дождаться страницы с Mac,
+# открыть её и напечатать текст в редакторе.
 [[ -d $WORK/build/iphone/Build/Products/Debug-iphonesimulator/MyNotion.app ]] \
   || (unset XCODE_XCCONFIG_FILE; xcodebuild build -scheme MyNotionPhone -destination 'generic/platform=iOS Simulator' \
         -derivedDataPath build/iphone -jobs $JOBS -quiet) || fail "iPhone: MyNotionPhone не собрался"
 boot_iphone_simulator
 xcrun simctl keychain $DEVICE reset
 xcrun simctl ui $DEVICE appearance light
+# Экранная клавиатура, а не клавиатура iMac: она должна выехать на снимке.
+defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false
 xcrun simctl launch --terminate-running-process $DEVICE $BUNDLE --database $LIVE/phone.sqlite \
   --sync-server http://127.0.0.1:$PORT --sync-device-name 'iPhone Юрия' --sync-join-code-file $LIVE/join-code \
-  --sync-log $LIVE/phone.log --live-check-page $PAGE --live-check-edit $EDIT >/dev/null
+  --sync-log $LIVE/phone.log --live-check-page $PAGE --live-check-edit $EDIT --live-check-mac-edit $MAC_EDIT >/dev/null
 wait_for 120 "страница с Mac на iPhone" grep -q page-arrived $LIVE/phone.log \
   || { cat $LIVE/phone.log; fail "Страница с Mac не появилась на iPhone"; }
 print -- "[MyNotion/iMac] страница с Mac — на iPhone ($(( SECONDS - started )) с)"
@@ -94,13 +100,25 @@ wait_for 90 "правка ушла с iPhone" grep -q '^.* sent$' $LIVE/phone.lo
   || { cat $LIVE/phone.log; fail "Правка с iPhone не ушла на сервер"; }
 
 # 4. Правка с iPhone — в базе Mac.
-mac_has_edit() { [[ $(sqlite3 $LIVE/mac.sqlite "SELECT count(*) FROM block WHERE isDeleted = 0 AND text LIKE '%$EDIT%'") -ge 1 ]]; }
+edited_block() { sqlite3 $LIVE/mac.sqlite "SELECT id FROM block WHERE isDeleted = 0 AND text LIKE '%$EDIT%' LIMIT 1"; }
+mac_has_edit() { [[ -n $(edited_block) ]]; }
 wait_for 90 "правка с iPhone на Mac" mac_has_edit || { cat $LIVE/mac.log; fail "Правка с iPhone не пришла на Mac"; }
 print -- "[MyNotion/iMac] правка с iPhone — на Mac ($(( SECONDS - started )) с)"
 
-# 5. Снимки: страница на iPhone с правкой и экран iMac с окном Mac.
-xcrun simctl launch --terminate-running-process $DEVICE $BUNDLE --database $LIVE/phone.sqlite --screen "page:$PAGE" >/dev/null
-sleep 4
-xcrun simctl io $DEVICE screenshot $RESULTS/phone-page.png >/dev/null 2>&1
+# 5. Правка с Mac — под напечатанным на iPhone; должна появиться на открытой странице iPhone.
+page_id=$(sed -n 's/.*page-arrived: //p' $LIVE/phone.log | head -1)
+$APP/Contents/Helpers/mynotion block insert $page_id --kind paragraph --text $MAC_EDIT --after $(edited_block) \
+  --socket $LIVE/control.sock --no-launch --agent live-check >/dev/null || fail "Mac: mynotion block insert не прошёл"
+wait_for 90 "правка с Mac на открытой странице iPhone" grep -q mac-edit-visible $LIVE/phone.log \
+  || { cat $LIVE/phone.log; fail "Правка с Mac не появилась на открытой странице iPhone"; }
+print -- "[MyNotion/iMac] правка с Mac — на открытой странице iPhone ($(( SECONDS - started )) с)"
+
+# 6. Снимки: страница с клавиатурой, она же в тёмной теме, экран iMac с окном Mac.
+sleep 1
+xcrun simctl io $DEVICE screenshot $RESULTS/phone-page-keyboard.png >/dev/null 2>&1
+xcrun simctl ui $DEVICE appearance dark
+sleep 2
+xcrun simctl io $DEVICE screenshot $RESULTS/phone-page-dark.png >/dev/null 2>&1
+xcrun simctl ui $DEVICE appearance light
 screencapture -x $RESULTS/mac-screen.png 2>/dev/null || true
-print -- "[MyNotion/iMac] iPhone: живая проверка пройдена — Mac → iPhone → Mac за $(( SECONDS - started )) с"
+print -- "[MyNotion/iMac] iPhone: живая проверка пройдена — Mac → iPhone → Mac → iPhone за $(( SECONDS - started )) с"

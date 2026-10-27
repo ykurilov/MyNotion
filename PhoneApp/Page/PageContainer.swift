@@ -8,7 +8,7 @@ struct PageContainer: View {
     let openPage: (UUID) -> Void
 
     var body: some View {
-        PageScreen(pageId: pageId, library: library)
+        PageScreen(pageId: pageId, library: library, openPage: openPage)
             .navigationTitle(parentPath)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
