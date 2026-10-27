@@ -45,14 +45,14 @@ struct PageStubView: View {
         content?.blocks.filter { $0.containerId == nil } ?? []
     }
 
-    /// Номер пункта нумерованного списка среди соседей подряд.
+    /// Номер пункта нумерованного списка среди соседей того же уровня; вложенные пункты между ними счёт не прерывают.
     private func number(at index: Int) -> Int {
+        let indent = flowBlocks[index].indent
         var number = 1
-        var current = index - 1
-        let block = flowBlocks[index]
-        while current >= 0, flowBlocks[current].kind == .numberedItem, flowBlocks[current].indent == block.indent {
+        for previous in flowBlocks[..<index].reversed() {
+            if previous.indent > indent { continue }
+            guard previous.kind == .numberedItem, previous.indent == indent else { break }
             number += 1
-            current -= 1
         }
         return number
     }

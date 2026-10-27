@@ -33,12 +33,13 @@ BUNDLE=cloud.kurilov.mynotion.ios
 
 server_pid=""; mac_pid=""
 cleanup() {
+  cp $LIVE/phone.log $LIVE/mac.log $LIVE/server.log $RESULTS/ 2>/dev/null || true
   [[ -n $mac_pid ]] && kill $mac_pid 2>/dev/null || true
   [[ -n $server_pid ]] && kill $server_pid 2>/dev/null || true
   [[ -n ${DEVICE:-} ]] && { xcrun simctl terminate $DEVICE $BUNDLE 2>/dev/null; xcrun simctl keychain $DEVICE reset 2>/dev/null; } || true
   forget_sync_secrets
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT INT TERM HUP
 rm -rf $LIVE $RESULTS; mkdir -p $LIVE $RESULTS
 
 # wait_for <секунды> <описание> <команда…>: ждать, пока команда не выполнится успешно.
@@ -53,6 +54,10 @@ wait_for() {
 
 # 1. Сервер на iMac.
 (cd server && pnpm install --frozen-lockfile --silent && pnpm --silent build)
+# Свой сервер, оставшийся от оборванного прогона (запущен из этой же копии), — погасить; чужой не трогать.
+for pid in $(lsof -tiTCP:$PORT -sTCP:LISTEN 2>/dev/null || true); do
+  [[ $(ps -o command= -p $pid) == "node $WORK/server/dist/main.js" ]] && kill $pid && sleep 1
+done
 [[ -z $(lsof -tiTCP:$PORT -sTCP:LISTEN 2>/dev/null || true) ]] || fail "Порт $PORT занят: чужой сервер оставлен без изменений."
 DATA_DIR=$LIVE/server PORT=$PORT node $WORK/server/dist/main.js > $LIVE/server.log 2>&1 &
 server_pid=$!
@@ -62,14 +67,19 @@ started=$SECONDS
 
 # 2. Mac: своя база с образцом, подключение токеном, код для iPhone — в файл.
 build_app Debug build/imac-phone-live-mac
-$APP/Contents/MacOS/MyNotion --database $LIVE/mac.sqlite --generate-visual-sample \
+# Через `open`, как из Dock: запущенное прямо из сеанса SSH приложение не видит связку ключей пользователя.
+open -n -a $APP --args --database $LIVE/mac.sqlite --generate-visual-sample --versions-quick \
   --sync-server http://127.0.0.1:$PORT --sync-device-name 'Mac A' --sync-connect-token-file $LIVE/token \
-  --sync-write-join-code $LIVE/join-code --sync-log $LIVE/mac.log > $LIVE/mac.out 2>&1 &
-mac_pid=$!
-wait_for 60 "код подключения с Mac" test -s $LIVE/join-code
+  --sync-write-join-code $LIVE/join-code --sync-log $LIVE/mac.log
+wait_for 30 "Mac-приложение" pgrep -nf -- "--database $LIVE/mac.sqlite"
+mac_pid=$(pgrep -nf -- "--database $LIVE/mac.sqlite")
+wait_for 120 "код подключения с Mac" test -s $LIVE/join-code || { cat $LIVE/mac.log; fail "Mac не выдал код подключения"; }
 print -- "[MyNotion/iMac] Mac подключён и выдал код ($(( SECONDS - started )) с)"
 
-# 3. iPhone в симуляторе: подключиться кодом, дождаться страницы с Mac, дописать абзац.
+# 3. iPhone в симуляторе (сборка под симулятор, если её ещё нет в копии): подключиться кодом, дождаться страницы с Mac, дописать абзац.
+[[ -d $WORK/build/iphone/Build/Products/Debug-iphonesimulator/MyNotion.app ]] \
+  || (unset XCODE_XCCONFIG_FILE; xcodebuild build -scheme MyNotionPhone -destination 'generic/platform=iOS Simulator' \
+        -derivedDataPath build/iphone -jobs $JOBS -quiet) || fail "iPhone: MyNotionPhone не собрался"
 boot_iphone_simulator
 xcrun simctl keychain $DEVICE reset
 xcrun simctl ui $DEVICE appearance light
@@ -93,5 +103,4 @@ xcrun simctl launch --terminate-running-process $DEVICE $BUNDLE --database $LIVE
 sleep 4
 xcrun simctl io $DEVICE screenshot $RESULTS/phone-page.png >/dev/null 2>&1
 screencapture -x $RESULTS/mac-screen.png 2>/dev/null || true
-cp $LIVE/phone.log $LIVE/mac.log $LIVE/server.log $RESULTS/ 2>/dev/null || true
 print -- "[MyNotion/iMac] iPhone: живая проверка пройдена — Mac → iPhone → Mac за $(( SECONDS - started )) с"
