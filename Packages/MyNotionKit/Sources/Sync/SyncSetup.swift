@@ -46,7 +46,7 @@ public enum SyncSetup {
         return account
     }
 
-    /// «Добавить Mac»: одноразовое приглашение сервера вместе с ключом шифрования.
+    /// «Добавить Mac или iPhone»: одноразовое приглашение сервера вместе с ключом шифрования.
     public static func makeJoinCode(transport: any SyncTransport, account: SyncAccount,
                                     secrets: any SyncSecrets) async throws -> JoinCode {
         guard let key = try secrets.load(for: account.deviceId)?.encryptionKey else { throw SyncSetupError.missingSecrets }

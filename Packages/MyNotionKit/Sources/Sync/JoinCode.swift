@@ -49,7 +49,7 @@ extension JoinCode {
     /// Сколько ещё действует код — минутами, а не временем суток («до 0:10» читалось как полночь).
     public static func lifetimeText(until expiresAt: Date, now: Date = Date()) -> String {
         let seconds = expiresAt.timeIntervalSince(now)
-        guard seconds > 0 else { return "Код больше не действует — нажмите «Добавить Mac» ещё раз" }
+        guard seconds > 0 else { return "Код больше не действует — нажмите «Добавить Mac или iPhone» ещё раз" }
         let minutes = Int((seconds / 60).rounded(.up))
         return "Код одноразовый и действует ещё \(minutes) \(minuteWord(minutes))"
     }
