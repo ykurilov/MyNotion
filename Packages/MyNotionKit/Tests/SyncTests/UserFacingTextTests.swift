@@ -82,7 +82,7 @@ struct UserFacingTextTests {
         #expect(JoinCode.lifetimeText(until: now.addingTimeInterval(15 * 60), now: now) == "Код одноразовый и действует ещё 15 минут")
         #expect(JoinCode.lifetimeText(until: now.addingTimeInterval(61), now: now) == "Код одноразовый и действует ещё 2 минуты")
         #expect(JoinCode.lifetimeText(until: now.addingTimeInterval(21 * 60), now: now) == "Код одноразовый и действует ещё 21 минуту")
-        #expect(JoinCode.lifetimeText(until: now.addingTimeInterval(-5), now: now) == "Код больше не действует — нажмите «Добавить Mac» ещё раз")
+        #expect(JoinCode.lifetimeText(until: now.addingTimeInterval(-5), now: now) == "Код больше не действует — нажмите «Добавить Mac или iPhone» ещё раз")
     }
 
     @Test("Ключ первого Mac читается из файла: адрес и ключ; простой файл с одним ключом тоже")

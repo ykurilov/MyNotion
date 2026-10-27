@@ -6,7 +6,7 @@ import Sync
 import VisualStyle
 
 /// «Настройки → Синхронизация» (T080, research R9; проверка интерфейса, раунд 4, № 2, 7, 8, 9): простыми словами,
-/// без слов разработчика. Глаголы договорены: «Подключить Mac» — этот Mac к остальным, «Добавить Mac» — показать код
+/// без слов разработчика. Глаголы договорены: «Подключить Mac» — этот Mac к остальным, «Добавить Mac или iPhone» — показать код
 /// для нового, «Убрать» — чужой Mac из списка, «Выключить на этом Mac» — остановить у себя.
 /// Показывается карточкой поверх окна (`modalCard`, contracts/visual-style.md, «Окна поверх страницы»): ширина,
 /// затемнение и кнопки — общие с окнами переноса из Notion.
@@ -83,7 +83,7 @@ struct SyncSettingsView: View {
                 GridRow {
                     Color.clear.frame(width: Self.labelWidth, height: 1)
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("На Mac, где записи уже есть, откройте эти настройки и нажмите «Добавить Mac» — появится код.")
+                        Text("На Mac, где записи уже есть, откройте эти настройки и нажмите «Добавить Mac или iPhone» — появится код.")
                             .font(.system(size: 12))
                             .foregroundStyle(Color(nsColor: Palette.textSecondary))
                             .fixedSize(horizontal: false, vertical: true)
@@ -185,7 +185,7 @@ struct SyncSettingsView: View {
         GroupBox {
             VStack(alignment: .leading, spacing: 10) {
                 if let code = controller.joinCode {
-                    Text("Введите этот код на новом Mac в «Настройки → Код с другого Mac»:")
+                    Text("Введите этот код на новом Mac или iPhone в «Настройки → Код с другого Mac»:")
                         .fixedSize(horizontal: false, vertical: true)
                     Text(code.text)
                         .font(.system(size: 17, weight: .medium, design: .monospaced))
@@ -206,16 +206,16 @@ struct SyncSettingsView: View {
                     Button("Скрыть код") { controller.hideJoinCode() }
                         .buttonStyle(ModalCardButtonStyle())
                 } else {
-                    Text("Чтобы подключить ещё один Mac, нажмите кнопку — здесь появится код. Его нужно ввести на новом Mac.")
+                    Text("Чтобы подключить ещё один Mac или iPhone, нажмите кнопку — здесь появится код. Его нужно ввести на новом Mac или iPhone.")
                         .fixedSize(horizontal: false, vertical: true)
-                    Button("Добавить Mac") { Task { await controller.makeJoinCode() } }
+                    Button("Добавить Mac или iPhone") { Task { await controller.makeJoinCode() } }
                         .buttonStyle(ModalCardButtonStyle())
                         .accessibilityIdentifier("sync-add-mac")
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(6)
-        } label: { Text("Добавить Mac").font(.system(size: 13, weight: .semibold)) }
+        } label: { Text("Добавить Mac или iPhone").font(.system(size: 13, weight: .semibold)) }
     }
 
     private var devicesSection: some View {
@@ -246,6 +246,6 @@ struct SyncSettingsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(6)
-        } label: { Text("Ваши Mac").font(.system(size: 13, weight: .semibold)) }
+        } label: { Text("Ваши Mac и iPhone").font(.system(size: 13, weight: .semibold)) }
     }
 }

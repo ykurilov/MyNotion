@@ -164,7 +164,7 @@ public enum GallerySync: String, Hashable, Sendable, CaseIterable {
     case conflictComparison
     /// Настройки: синхронизация не включена — подключить кодом или токеном.
     case settingsDisconnected
-    /// Настройки: «Добавить Mac» показал код с предупреждением, список устройств.
+    /// Настройки: «Добавить Mac или iPhone» показал код с предупреждением, список устройств.
     case settingsJoinCode
     /// Уведомление внизу окна: страница вернулась из корзины.
     case noticeReturnedFromTrash
@@ -651,7 +651,7 @@ public enum GalleryCatalog {
                      "Настройки синхронизации, не подключено: сервер, имя Mac, код со второго Mac или токен первого",
                      section: "Синхронизация"),
         GalleryState("sync-settings-join-code", .sync(.settingsJoinCode),
-                     "«Добавить Mac»: код подключения, предупреждение «не пересылайте в мессенджерах», устройства",
+                     "«Добавить Mac или iPhone»: код подключения, предупреждение «не пересылайте в мессенджерах», устройства",
                      section: "Синхронизация"),
         GalleryState("sync-notice-returned-from-trash", .sync(.noticeReturnedFromTrash),
                      "Уведомление внизу окна: страница возвращена из корзины, её правили на другом Mac", section: "Синхронизация"),
