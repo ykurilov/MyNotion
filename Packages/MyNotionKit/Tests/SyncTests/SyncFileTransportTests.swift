@@ -7,6 +7,7 @@ import Testing
 /// Клиент файлов сервера (contracts/sync-and-files-api.md, «Файлы на сервере») и запуск очереди файлов из цикла синхронизации.
 @Suite("Файлы на сервере")
 struct SyncFileTransportTests {
+    #if os(macOS)
     @Test("HTTP-клиент файлов по контракту настоящего сервера из server/", .enabled(if: LocalNodeSyncServer.isAvailable))
     func httpClientSpeaksTheServerContract() async throws {
         let server = try await LocalNodeSyncServer.start()
@@ -41,6 +42,7 @@ struct SyncFileTransportTests {
         #expect(try await files.fileStatus(fileId) == nil)
         await #expect(throws: SyncServerError.notFound) { _ = try await files.filePart(fileId, index: 0) }
     }
+    #endif
 
     @Test("Ошибки файлов понятны Юрию")
     func fileErrorsReadWell() {

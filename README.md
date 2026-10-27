@@ -37,7 +37,12 @@ xcrun simctl install booted build/iphone/Build/Products/Debug-iphonesimulator/My
 xcrun simctl launch booted cloud.kurilov.mynotion.ios
 ```
 
-Проверка сборки модулей и приложения под симулятор и устройство на iMac: `imac-run --no-fallback --no-setup -- zsh scripts/imac/iphone-build.zsh`.
+На iMac: `scripts/imac/iphone-build.zsh` собирает модули и приложение под симулятор и устройство и прогоняет
+`NotesCoreTests` и `SyncTests` в iPhone 17 Pro (iOS 26.5); `scripts/imac/iphone-sim-shot.zsh` запускает приложение и снимает экран.
+
+```sh
+imac-run --no-fallback --no-setup --fetch build/iphone-shot.png -- 'zsh scripts/imac/iphone-build.zsh && zsh scripts/imac/iphone-sim-shot.zsh'
+```
 
 ## Модули
 

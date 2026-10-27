@@ -24,11 +24,11 @@ xcodebuild build -scheme MyNotionPhone -destination 'generic/platform=iOS Simula
 xcodebuild build -scheme MyNotionPhone -destination 'generic/platform=iOS' -derivedDataPath $DD -jobs $JOBS -quiet CODE_SIGNING_ALLOWED=NO
 print -- "[MyNotion/iMac] iPhone: модулей собрано $built (симулятор и устройство), MyNotionPhone — симулятор и устройство"
 
-# Тесты модулей данных под iPhone: собираются всегда, прогон — если в симуляторе есть iPhone 17 Pro на iOS 26+.
+# Тесты модулей данных под iPhone: собираются всегда, прогон — в iPhone 17 Pro на iOS 26.5 (IPHONE_RUN_TESTS=0 — без прогона).
 xcodebuild build-for-testing -scheme MyNotionPhone -destination 'generic/platform=iOS Simulator' -derivedDataPath $DD -jobs $JOBS -quiet
 print -- "[MyNotion/iMac] iPhone: тесты NotesCoreTests и SyncTests собраны"
-if [[ ${IPHONE_RUN_TESTS:-0} == 1 ]]; then
+if [[ ${IPHONE_RUN_TESTS:-1} == 1 ]]; then
   rm -rf build/iphone-tests.xcresult
-  xcodebuild test-without-building -scheme MyNotionPhone -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath $DD \
+  xcodebuild test-without-building -scheme MyNotionPhone -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath $DD \
     -parallel-testing-worker-count 4 -resultBundlePath build/iphone-tests.xcresult 2>&1 | grep -E "Test run with|✘|error:|TEST (SUCCEEDED|FAILED)" || true
 fi
