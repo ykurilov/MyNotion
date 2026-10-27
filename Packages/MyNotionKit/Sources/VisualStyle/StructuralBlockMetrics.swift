@@ -1,5 +1,4 @@
-#if canImport(AppKit)
-import AppKit
+import CoreGraphics
 
 /// Размеры переключателя, цитаты, выноски и разделителя (contracts/blocks-and-keys.md; FR-119 — сверка с живым Notion
 /// в галерее `--only structural`).
@@ -48,4 +47,3 @@ extension Metrics {
         public static let verticalSpacing: CGFloat = 1
     }
 }
-#endif
