@@ -23,12 +23,6 @@ struct PageTreeScreen: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         if !sync.isEnabled { ConnectBanner(connect: showConnect).padding(.bottom, 8) }
-                        Text("Страницы")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(PhoneTheme.textSecondary)
-                            .padding(.horizontal, 16)
-                            .padding(.top, 4)
-                            .padding(.bottom, 2)
                         ForEach(rows) { row in
                             PageTreeRow(page: row.page, depth: row.depth, hasChildren: browser.hasChildren(row.page.id),
                                         isExpanded: expanded.contains(row.page.id),

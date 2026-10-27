@@ -54,7 +54,7 @@ struct ConnectScreen: View {
                 .foregroundStyle(PhoneTheme.textSecondary)
             }
         }
-        .navigationTitle("Подключить к Mac")
+        .navigationTitle("Подключение")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
