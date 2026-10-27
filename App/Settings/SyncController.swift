@@ -30,6 +30,8 @@ final class SyncController {
     private(set) var fileNotice: String?
     /// Место файлов на сервере (`GET /files/usage`) — для настроек.
     private(set) var serverFilesUsage: SyncFilesUsage?
+    /// Растёт, когда ключ DeepSeek или Notion пришёл с другого устройства: настройкам перечитать, есть ли ключ.
+    private(set) var serviceKeysRevision = 0
 
     @ObservationIgnored let store: NotesStore
     @ObservationIgnored let attachments: AttachmentStore?
@@ -37,6 +39,9 @@ final class SyncController {
     @ObservationIgnored private var fileWork: AttachmentSyncWork?
     @ObservationIgnored private let openDocuments: OpenDocuments
     @ObservationIgnored private let secrets: any SyncSecrets
+    /// Ключи DeepSeek и Notion: ввод в настройках и пришедшие с других устройств.
+    @ObservationIgnored let serviceKeys: ServiceKeySync
+    @ObservationIgnored private var serviceKeysObserver: (any NSObjectProtocol)?
     /// Пришедшие правки легли в базу: окну перечитать дерево.
     @ObservationIgnored var onRemoteChange: ((MergeReport) -> Void)?
 
@@ -46,6 +51,11 @@ final class SyncController {
         self.attachments = attachments
         self.openDocuments = openDocuments
         self.secrets = secrets
+        serviceKeys = ServiceKeySync(store: store, keys: KeychainServiceKeys(deepSeek: AppProofreading.keychain, notion: AppNotion.keychain))
+        serviceKeysObserver = NotificationCenter.default.addObserver(forName: ServiceKeySync.didWriteKeys, object: nil,
+                                                                     queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.serviceKeysRevision += 1 }
+        }
         account = try? SyncSetup.resume(store: store)
         if let account {
             serverAddress = account.serverURL.absoluteString
@@ -165,6 +175,11 @@ final class SyncController {
         engine?.syncNow()
     }
 
+    /// Ключ DeepSeek или Notion из настроек (`ServiceKeyName`); пустая строка удаляет. Уходит на другие устройства.
+    func saveServiceKey(_ value: String, for name: String) async throws {
+        try await serviceKeys.save(value, for: name)
+    }
+
     /// Адрес сервера и ключ этого Mac — для ссылок на страницы (006); `nil` — синхронизация выключена.
     func shareConnection() -> (serverURL: URL, deviceToken: String)? {
         guard let account, let secret = try? secrets.load(for: account.deviceId) else { return nil }
@@ -232,7 +247,8 @@ final class SyncController {
     }
 
     private func startEngine(for account: SyncAccount, secret: SyncSecretValues) {
-        let applier = RemoteChangeApplier(store: store, openDocuments: openDocuments, localDeviceName: account.deviceName)
+        let applier = RemoteChangeApplier(store: store, openDocuments: openDocuments, localDeviceName: account.deviceName,
+                                          serviceKeys: serviceKeys)
         applier.onApplied = { [weak self] report in
             self?.notices += report.notices.filter { notice in
                 if case .textConflict = notice { false } else { true }
