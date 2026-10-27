@@ -90,6 +90,7 @@ import Testing
         #expect(try id(got["page"]) == page.id)
         #expect(got["page"]?["path"] == ["Проекты", "Встреча"])
         #expect(got["page"]?["kind"] == "page")
+        #expect(got["page"]?["link"]?.string == "mynotion://page/\(page.id.uuidString.lowercased())")
 
         let markdown = try await ok("page.read", ["page": .string(page.id.controlText)])
         #expect(markdown["markdown"]?.string == "Первый\n\nВторой\n")

@@ -6,7 +6,7 @@ import PageEditor
 @MainActor
 enum PageMenuItems {
     static func all(for model: MainWindowModel, pageId: UUID) -> [PageMenuItem] {
-        [findAction, footer, trash(model, pageId), duplicate(model, pageId), moveTo(model, pageId), versionHistory(model, pageId), share(model, pageId),
+        [findAction, footer, trash(model, pageId), copyLink(model, pageId), duplicate(model, pageId), moveTo(model, pageId), versionHistory(model, pageId), share(model, pageId),
          appearance(model, pageId), template(model, pageId), exportDatabase(model, pageId)].compactMap { $0 }
     }
 }

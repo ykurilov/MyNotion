@@ -136,6 +136,14 @@ final class WindowTestHost: ControlHost {
         #expect(response.data?["window"]?["index"] == 2)
     }
 
+    @Test func openByLinkWithBlock() async throws {
+        let block = try #require(try host.store.pageContent(page.id)?.blocks.last)
+        // Ссылка на блок без --block: прокрутка к блоку из ссылки.
+        let (response, control) = await run("open", ["page": .string(PageAddress(pageId: page.id, blockId: block.id).text)], windows: one)
+        #expect(response.ok, "\(String(describing: response.error))")
+        #expect(control.calls == [.open(page: page.id, placement: .current, block: block.id, window: 1, activate: false)])
+    }
+
     @Test func openByPath() async {
         let (response, control) = await run("open", ["page": "Встреча"], windows: one)
         #expect(response.ok)

@@ -5,15 +5,12 @@ import NotesCore
 /// Страница в Markdown — ссылка `mynotion://page/<id>`: подстраница строкой `[Название](…)`, упоминание —
 /// `[🚀 Название](…)` внутри строки.
 public enum PageMarkdown {
-    public static let pageScheme = "mynotion"
+    public static let pageScheme = PageAddress.scheme
 
-    public static func pageLink(_ id: UUID) -> String { "\(pageScheme)://page/\(id.uuidString.lowercased())" }
+    public static func pageLink(_ id: UUID) -> String { PageAddress(pageId: id).text }
 
     /// Id страницы из `mynotion://page/<id>`.
-    public static func pageId(from url: URL) -> UUID? {
-        guard url.scheme?.lowercased() == pageScheme, url.host?.lowercased() == "page" else { return nil }
-        return UUID(uuidString: url.lastPathComponent)
-    }
+    public static func pageId(from url: URL) -> UUID? { PageAddress(url: url)?.pageId }
 
     /// Ссылки `mynotion://page/<id>` → упоминания: текст ссылки сворачивается в знак U+FFFC.
     public static func foldingPageLinks(in text: InlineText) -> InlineText {

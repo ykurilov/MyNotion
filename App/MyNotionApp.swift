@@ -229,6 +229,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var sidebarShortcutMonitor: Any?
 
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // Служебные запуски (галерея, замеры) ссылок не открывают.
+        if Self.presence != .background { PageAddressLinks.install() }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // ⌘⌥S — по клавише S, а не по букве: с ⌥ и на русской раскладке буква другая, и меню сочетание не узнаёт.
         // ⌥⌘N — «Новое окно» — так же.
@@ -300,6 +305,9 @@ private struct PageCommands: Commands {
                 .disabled(model?.openPageId == nil)
             Button("Переместить страницу в…") { model?.openPageId.map { model?.showMovePagePicker($0) } }
                 .keyboardShortcut("p", modifiers: [.command, .shift])
+                .disabled(model?.openPageId == nil)
+            Button(PageLinkCopy.title) { model?.openPageId.map { model?.copyLink($0) } }
+                .keyboardShortcut("l")
                 .disabled(model?.openPageId == nil)
             // Сочетание ловит и `AppDelegate`: с ⌥ буква на русской раскладке другая.
             Button("Новое окно") { openWindow(id: MainWindowView.sceneId) }

@@ -112,6 +112,8 @@ targets:
         PRODUCT_NAME: MyNotion
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: YES
+        # Остальное Xcode дописывает сам; в файле — только схема ссылок `mynotion://page/<id>`.
+        INFOPLIST_FILE: App/Info.plist
         INFOPLIST_KEY_CFBundleDisplayName: MyNotion
         INFOPLIST_KEY_CFBundleDevelopmentRegion: ru
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity

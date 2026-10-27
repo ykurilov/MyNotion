@@ -5,14 +5,16 @@
 ## Страница
 
 ```json
-{ "id": "…", "title": "Встреча 24.10", "icon": "🚀", "kind": "page|database|row",
+{ "id": "…", "title": "Встреча 24.10", "icon": "🚀", "link": "mynotion://page/…", "kind": "page|database|row",
   "parentId": "…|null", "path": ["Проекты", "Встреча 24.10"], "hasChildren": true,
   "cover": { "gallery": "gradient-3", "offset": 0.5 } | { "attachmentId": "…", "offset": 0.3 } | null,
   "fullWidth": false, "smallText": false, "isFavorite": false, "isTemplate": false, "inTrash": false,
   "createdAt": "…", "updatedAt": "…" }
 ```
 
-`page tree` — те же объекты без `cover`/дат, с `children: […]` до `--depth`.
+`link` — адрес страницы: щелчок по нему открывает её в приложении. Блок — `mynotion://page/<id>#<id блока>`.
+
+`page tree` — те же объекты без `link`/`cover`/дат, с `children: […]` до `--depth`.
 
 ## Блок
 

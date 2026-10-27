@@ -4,7 +4,7 @@ import VisualStyle
 
 /// Место пункта в меню строки страницы панели (contracts/pages-ui.md, «Боковая панель»), по порядку.
 public enum PageRowMenuSlot: Int, CaseIterable, Comparable, Sendable {
-    case newFromTemplate, favorite, duplicate, moveTo, rename, addSubpage, openInNewTab, template, trash
+    case newFromTemplate, favorite, copyLink, duplicate, moveTo, rename, addSubpage, openInNewTab, template, trash
 
     public static func < (lhs: PageRowMenuSlot, rhs: PageRowMenuSlot) -> Bool { lhs.rawValue < rhs.rawValue }
 }
@@ -36,7 +36,7 @@ public struct PageRowMenuItem: Sendable {
 
     /// Все пункты по местам.
     public static var all: [PageRowMenuItem] {
-        [newFromTemplate, favorite, duplicate, moveTo, rename, addSubpage, openInNewTab, template, trash].compactMap { $0 }
+        [newFromTemplate, favorite, copyLink, duplicate, moveTo, rename, addSubpage, openInNewTab, template, trash].compactMap { $0 }
     }
 }
 
@@ -69,6 +69,7 @@ extension PageRowMenuSlot {
         switch self {
         case .newFromTemplate: "doc.badge.plus"
         case .favorite: context.isFavorite ? "star.slash" : "star"
+        case .copyLink: "link"
         case .duplicate: "square.on.square"
         case .moveTo: "arrow.turn.up.right"
         case .rename: "square.and.pencil"
@@ -82,6 +83,7 @@ extension PageRowMenuSlot {
     /// Подсказка клавиш справа — те же, что у пунктов меню «•••» страницы.
     var hint: String? {
         switch self {
+        case .copyLink: "⌘L"
         case .duplicate: "⌘D"
         case .moveTo: "⌘⇧P"
         default: nil
