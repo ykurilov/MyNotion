@@ -58,12 +58,15 @@ TestFlight их не принимает.
 
 **TestFlight.** `ITSAppUsesNonExemptEncryption = NO` уже в `PhoneApp/Info.plist`: вопроса о шифровании не будет. Иконка —
 та же, что у Mac (`PhoneApp/Resources/Assets.xcassets`). Номер сборки (`CURRENT_PROJECT_VERSION`) у каждой выкладки
-должен расти; руками его не поднимать — передавать при архиве время сборки, оно растёт само:
+должен расти; руками его не поднимать — скрипт подставляет время сборки. Выкладка одной командой с основного Mac:
 
 ```sh
-xcodebuild archive -scheme MyNotionPhone -destination 'generic/platform=iOS' -archivePath build/MyNotionPhone.xcarchive \
-  CURRENT_PROJECT_VERSION=$(date -u +%Y%m%d.%H%M)
+zsh scripts/iphone-testflight.zsh   # TESTFLIGHT_ARCHIVE_ONLY=1 — только проверить подпись
 ```
+
+Сборка идёт на iMac. Ключ App Store Connect (`~/.codex/secrets/asc-api-DC5QSJ54MB.*`) уходит туда только на время
+прогона. Подпись Release — вручную: сертификат Apple Distribution в отдельной связке `~/.config/mynotion-release/` на
+iMac (пароль рядом, права 600) и профиль «MyNotion iPhone App Store». Тестеры — внутренняя группа TestFlight «Юрий».
 
 Версию для людей (`MARKETING_VERSION` в `project.yml`, сейчас 0.1.0) поднимать только к новому выпуску.
 
