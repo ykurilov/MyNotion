@@ -38,11 +38,31 @@ xcrun simctl launch booted cloud.kurilov.mynotion.ios
 ```
 
 На iMac: `scripts/imac/iphone-build.zsh` собирает модули и приложение под симулятор и устройство и прогоняет
-`NotesCoreTests` и `SyncTests` в iPhone 17 Pro (iOS 26.5); `scripts/imac/iphone-sim-shot.zsh` запускает приложение и снимает экран.
+`NotesCoreTests`, `SyncTests` и `PhoneShellTests` в iPhone 17 Pro (iOS 26.5); `scripts/imac/iphone-sim-shot.zsh` запускает
+приложение и снимает экран, `scripts/imac/iphone-shots.zsh` — снимки основных экранов в `build/iphone-shots/`.
 
 ```sh
-imac-run --no-fallback --no-setup --fetch build/iphone-shot.png -- 'zsh scripts/imac/iphone-build.zsh && zsh scripts/imac/iphone-sim-shot.zsh'
+imac-run --no-fallback --no-setup --fetch build/iphone-shots -- 'zsh scripts/imac/iphone-build.zsh && zsh scripts/imac/iphone-shots.zsh'
 ```
+
+Живая проверка синхронизации «Mac + iPhone в симуляторе» на локальном сервере (боевой не трогается):
+`scripts/imac/iphone-sync-live-check.zsh` — Mac выдаёт код, iPhone подключается, страница с Mac приходит на iPhone,
+правка с iPhone возвращается на Mac. Перед ней в копии на iMac должна лежать сборка `iphone-build.zsh`.
+
+Флаги запуска iPhone (для снимков и проверок, `xcrun simctl launch … <флаги>`): `--database <путь>`, `--sample-pages`,
+`--screen connect|settings|page:<название>`, `--sync-server`, `--sync-device-name`, `--sync-join-code-file`, `--sync-log`,
+`--live-check-page`, `--live-check-edit`.
+
+**TestFlight.** `ITSAppUsesNonExemptEncryption = NO` уже в `PhoneApp/Info.plist`: вопроса о шифровании не будет. Иконка —
+та же, что у Mac (`PhoneApp/Resources/Assets.xcassets`). Номер сборки (`CURRENT_PROJECT_VERSION`) у каждой выкладки
+должен расти; руками его не поднимать — передавать при архиве время сборки, оно растёт само:
+
+```sh
+xcodebuild archive -scheme MyNotionPhone -destination 'generic/platform=iOS' -archivePath build/MyNotionPhone.xcarchive \
+  CURRENT_PROJECT_VERSION=$(date -u +%Y%m%d.%H%M)
+```
+
+Версию для людей (`MARKETING_VERSION` в `project.yml`, сейчас 0.1.0) поднимать только к новому выпуску.
 
 ## Модули
 
@@ -62,6 +82,7 @@ imac-run --no-fallback --no-setup --fetch build/iphone-shot.png -- 'zsh scripts/
 | `Reminders` | даты в тексте и уведомления напоминаний |
 | `EmojiPicker` | окно выбора эмодзи для иконок страниц и выносок |
 | `Sync` | зашифрованные пачки правок между Mac через сервер |
+| `PhoneShell` | логика оболочки iPhone без UIKit: подключение кодом с Mac, синхронизация на переднем плане и досылка в фоне, дерево страниц |
 | `MarkdownExport`, `NotionImport` | выгрузка в Markdown и импорт выгрузки Notion или своей выгрузки |
 | `Navigation` | вкладки окна, «назад/вперёд» с местом прокрутки, закрытые вкладки |
 | `PageCover` | обложка страницы: галерея «Цвета и градиенты», своя картинка, сдвиг |

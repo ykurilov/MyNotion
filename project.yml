@@ -132,13 +132,22 @@ targets:
     type: application
     platform: iOS
     sources:
-      - PhoneApp
+      - path: PhoneApp
+        excludes:
+          - Info.plist
     dependencies:
       - package: MyNotionKit
         product: NotesCore
+      - package: MyNotionKit
+        product: Sync
+      - package: MyNotionKit
+        product: PhoneShell
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion.ios
+        # Поверх созданного Xcode: ITSAppUsesNonExemptEncryption для TestFlight и http к локальному серверу живой проверки.
+        INFOPLIST_FILE: PhoneApp/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         PRODUCT_NAME: MyNotion
         TARGETED_DEVICE_FAMILY: "1"
         SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
@@ -303,6 +312,7 @@ schemes:
       targets:
         - package: MyNotionKit/NotesCoreTests
         - package: MyNotionKit/SyncTests
+        - package: MyNotionKit/PhoneShellTests
     archive:
       config: Release
   MyNotionPerformance:
