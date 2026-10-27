@@ -80,7 +80,10 @@ struct SyncSettingsScreen: View {
         Section {
             Button("Подключить кодом с Mac", systemImage: "macbook.and.iphone", action: connect)
         } footer: {
-            Text("Пока iPhone не подключён, записи хранятся только на нём.")
+            VStack(alignment: .leading, spacing: 6) {
+                if let error = sync.errorMessage { Text(error).foregroundStyle(PhoneTheme.destructive) }
+                Text("Пока iPhone не подключён, записи хранятся только на нём.")
+            }
         }
     }
 }

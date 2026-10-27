@@ -46,7 +46,13 @@ public final class PhoneSyncController {
     @ObservationIgnored private let backgroundFlushLimit: Duration
     @ObservationIgnored private var backgroundGrant: BackgroundTimeToken?
     @ObservationIgnored private var backgroundFlush: Task<Void, Never>?
+    /// Действия экранов (подключить, выключить, список устройств) идут по одному, ни одно не теряется.
+    @ObservationIgnored private var lastAction: Task<Void, Never>?
+    /// Устройство, чьи токен и ключ не стёрлись при выключении: стереть при следующей возможности.
+    @ObservationIgnored private var secretsToErase: String?
     private var loop: (any PhoneSyncLoop)?
+    /// Почему цикл не идёт при подключении: ключи не прочитались, их нет, подключение не прочиталось из базы.
+    private var startProblem: String?
 
     /// Шаг проверки очереди, пока она досылается в фоне.
     static let flushCheckInterval: Duration = .milliseconds(250)
@@ -68,7 +74,11 @@ public final class PhoneSyncController {
         self.backgroundFlushLimit = backgroundFlushLimit
         // Очередь исходящих подписывается на записи один раз; пока синхронизация выключена, она ничего не пишет.
         Outbox.install(on: store)
-        account = try? SyncSetup.resume(store: store)
+        do {
+            account = try SyncSetup.resume(store: store)
+        } catch {
+            startProblem = PhoneSyncMessages.unreadableConnection
+        }
         if let account {
             serverAddress = account.serverURL.absoluteString
             self.deviceName = account.deviceName
@@ -87,8 +97,9 @@ public final class PhoneSyncController {
 
     /// Значок состояния; `nil` — синхронизация выключена.
     public var badge: PhoneSyncBadge? {
+        if account == nil, let startProblem { return PhoneSyncBadge(kind: .error, detail: startProblem) }
         guard account != nil else { return nil }
-        guard let loop else { return PhoneSyncBadge(kind: .error, detail: PhoneSyncMessages.missingSecrets) }
+        guard let loop else { return PhoneSyncBadge(kind: .error, detail: startProblem ?? PhoneSyncMessages.missingSecrets) }
         switch loop.status {
         case .ready:
             return PhoneSyncBadge(kind: .ready, detail: "На этом iPhone и ваших Mac одни и те же записи.", lastSyncedAt: loop.lastSyncedAt)
@@ -114,6 +125,7 @@ public final class PhoneSyncController {
             }
             let code = try JoinCode(parsing: codeText)
             let url = try self.serverURL()
+            self.eraseLeftoverSecrets()
             let name = self.deviceName.trimmingCharacters(in: .whitespacesAndNewlines)
             let account = try await SyncSetup.join(store: self.store, serverURL: url, code: code, deviceName: name.isEmpty ? "iPhone" : name,
                                                    secrets: self.secrets, server: self.makeServer(url))
@@ -138,9 +150,19 @@ public final class PhoneSyncController {
                 try? await transport.deleteDevice(account.deviceId)
             }
             self.stopLoop()
-            try SyncSetup.disable(store: self.store, secrets: self.secrets)
+            do {
+                try SyncSetup.disable(store: self.store, secrets: self.secrets)
+            } catch {
+                // Подключение из базы уже стёрто — iPhone выключен; не стёрлись только токен и ключ: добить позже.
+                guard (try? SyncAccountStore(store: self.store).account()) == nil else { throw error }
+                if let account = self.account, (try? self.secrets.delete(for: account.deviceId)) == nil {
+                    self.secretsToErase = account.deviceId
+                }
+            }
             self.account = nil
+            self.startProblem = nil
             self.devices = []
+            if self.secretsToErase != nil { self.errorMessage = PhoneSyncMessages.secretsNotErased }
         }
     }
 
@@ -160,12 +182,16 @@ public final class PhoneSyncController {
         }
         phase = .flushingInBackground
         backgroundGrant = backgroundTime.begin { [weak self] in self?.finishBackgroundFlush() }
+        // Система времени не дала — приложение вот-вот замрёт: остановиться сразу, очередь уйдёт при возвращении.
+        guard backgroundGrant != nil else { return finishBackgroundFlush() }
         loop.syncNow()
         let pause = pause
         let limit = backgroundFlushLimit
         backgroundFlush = Task { [weak self] in
             var waited: Duration = .zero
-            while !Task.isCancelled, waited < limit, let self, self.phase == .flushingInBackground, self.loop?.hasUnsentChanges() == true {
+            // Без сети или при отказе сервера ждать нечего: фоновое время возвращается сразу.
+            while !Task.isCancelled, waited < limit, let self, self.phase == .flushingInBackground,
+                  self.loop?.hasUnsentChanges() == true, self.loop?.status.isError == false {
                 await pause(Self.flushCheckInterval)
                 waited += Self.flushCheckInterval
             }
@@ -181,7 +207,12 @@ public final class PhoneSyncController {
         backgroundFlush?.cancel()
         backgroundFlush = nil
         returnBackgroundTime()
-        guard let loop else { return }
+        eraseLeftoverSecrets()
+        guard let loop else {
+            // Цикл не запустился (например, при запуске до первой разблокировки ключи не читались) — ещё раз.
+            if let account { startLoop(for: account) }
+            return
+        }
         if previous == .suspended { loop.start() }
         loop.syncNow()
     }
@@ -205,10 +236,19 @@ public final class PhoneSyncController {
 
     private func startLoop(for account: SyncAccount) {
         guard loop == nil else { return }
-        guard let secret = try? secrets.load(for: account.deviceId) else {
-            errorMessage = PhoneSyncMessages.missingSecrets
+        let stored: SyncSecretValues?
+        do {
+            stored = try secrets.load(for: account.deviceId)
+        } catch {
+            // Хранилище не ответило (iPhone ещё не разблокировали после включения) — ключи на месте, ждём возвращения.
+            startProblem = PhoneSyncMessages.secretsLocked
             return
         }
+        guard let secret = stored else {
+            startProblem = PhoneSyncMessages.missingSecrets
+            return
+        }
+        startProblem = nil
         let applier = RemoteChangeApplier(store: store, openDocuments: openDocuments, localDeviceName: account.deviceName)
         applier.onApplied = { [weak self] report in
             guard let self else { return }
@@ -242,15 +282,27 @@ public final class PhoneSyncController {
         return makeServer(account.serverURL).transport(deviceToken: secret.deviceToken)
     }
 
+    private func eraseLeftoverSecrets() {
+        guard let deviceId = secretsToErase, (try? secrets.delete(for: deviceId)) != nil else { return }
+        secretsToErase = nil
+    }
+
+    /// Действие ждёт конца предыдущего: «Выключить» во время обновления списка устройств не теряется.
     private func perform(_ action: @escaping @MainActor () async throws -> Void) async {
-        guard !isBusy else { return }
-        isBusy = true
-        errorMessage = nil
-        defer { isBusy = false }
-        do {
-            try await action()
-        } catch {
-            errorMessage = PhoneSyncMessages.message(for: error)
+        let previous = lastAction
+        let task = Task { @MainActor [weak self] in
+            await previous?.value
+            guard let self else { return }
+            self.isBusy = true
+            self.errorMessage = nil
+            do {
+                try await action()
+            } catch {
+                self.errorMessage = PhoneSyncMessages.message(for: error)
+            }
+            self.isBusy = false
         }
+        lastAction = task
+        await task.value
     }
 }

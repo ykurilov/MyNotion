@@ -8,7 +8,12 @@ struct MyNotionPhoneApp: App {
     private let library: Result<PhoneLibrary, any Error>
 
     init() {
+        #if DEBUG
         let options = PhoneLaunchOptions.parse(CommandLine.arguments)
+        #else
+        // Сборка для TestFlight флагов снимков и живой проверки не принимает: ни чужой базы, ни кода из файла.
+        let options = PhoneLaunchOptions()
+        #endif
         self.options = options
         library = Result { try PhoneLibrary(options: options) }
     }

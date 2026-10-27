@@ -13,9 +13,13 @@ public final class PageBrowser {
 
     @ObservationIgnored public let store: NotesStore
     @ObservationIgnored private let operations: PageTreeOperations
+    @ObservationIgnored private let openDocuments: OpenDocuments?
 
-    public init(store: NotesStore) {
+    /// `openDocuments` — открытые страницы: операция с деревом пишет в базу мимо них (ссылка на подстраницу
+    /// в родителе), и открытый родитель должен принять её, а не затереть своим сохранением.
+    public init(store: NotesStore, openDocuments: OpenDocuments? = nil) {
         self.store = store
+        self.openDocuments = openDocuments
         operations = PageTreeOperations(store: store)
         reload()
     }
@@ -53,7 +57,12 @@ public final class PageBrowser {
     /// «+»: пустая страница последней на верхнем уровне или подстраница со ссылкой в конце родителя.
     @discardableResult
     public func createPage(in parentId: UUID?) throws -> Page {
+        // Несохранённое в открытых страницах — в базу до операции: дальше они примут её запись поверх своей.
+        openDocuments?.saveAll()
         let page = if let parentId { try operations.createSubpage(in: parentId) } else { try operations.createRootPage() }
+        if let openDocuments, let parentId {
+            _ = openDocuments.applyExternalChanges(toPages: openDocuments.openPageIds.intersection([parentId, page.id]))
+        }
         reload()
         return page
     }

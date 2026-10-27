@@ -85,4 +85,23 @@ struct PageBrowserTests {
         let browser = PageBrowser(store: library.store)
         #expect(browser.ancestors(of: leaf.id).map(\.title) == ["Корень", "Середина"])
     }
+
+    @Test("«+» в открытой странице: открытый родитель принимает ссылку на подстраницу и не затирает её своим сохранением")
+    func openParentAdoptsSubpageLink() throws {
+        let parent = try PageTreeOperations(store: library.store).createRootPage(title: "Родитель")
+        let openDocuments = OpenDocuments(store: library.store)
+        let document = try openDocuments.open(parent.id)
+        let browser = PageBrowser(store: library.store, openDocuments: openDocuments)
+        let firstBlock = try #require(document.blocks.first)
+        document.setText(InlineText("набрано до «+»"), ofBlock: firstBlock.id)
+
+        let child = try browser.createPage(in: parent.id)
+
+        #expect(document.blocks.contains { $0.kind == .pageLink && $0.linkedPageId == child.id })
+        document.setText(InlineText("набрано после «+»"), ofBlock: firstBlock.id)
+        #expect(openDocuments.saveAll())
+        let stored = try #require(try library.store.pageContent(parent.id))
+        #expect(stored.blocks.contains { $0.kind == .pageLink && $0.linkedPageId == child.id })
+        #expect(stored.blocks.contains { $0.text.string == "набрано после «+»" })
+    }
 }

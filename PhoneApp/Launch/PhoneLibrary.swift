@@ -22,7 +22,7 @@ final class PhoneLibrary {
                                    backgroundTime: UIKitBackgroundTime())
         if let server = options.syncServer, !sync.isEnabled { sync.serverAddress = server }
         if options.addsSamplePages { try SamplePages.addIfEmpty(to: store) }
-        browser = PageBrowser(store: store)
+        browser = PageBrowser(store: store, openDocuments: openDocuments)
         sync.onRemoteChange = { [browser] _ in browser.reload() }
     }
 }

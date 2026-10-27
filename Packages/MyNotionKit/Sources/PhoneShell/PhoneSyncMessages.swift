@@ -9,6 +9,9 @@ public enum PhoneSyncMessages {
     public static let noNetwork = "Нет связи с сервером — проверьте интернет и попробуйте ещё раз"
     public static let unauthorized = "Сервер не принял этот iPhone — выключите синхронизацию на нём и подключите заново кодом с Mac"
     public static let missingSecrets = "iPhone забыл код подключения — выключите синхронизацию на нём и подключите заново кодом с Mac"
+    public static let secretsLocked = "Синхронизация ждёт, пока вы разблокируете iPhone: код подключения лежит в защищённом хранилище"
+    public static let unreadableConnection = "Не удалось прочитать подключение к синхронизации — закройте приложение и откройте снова"
+    public static let secretsNotErased = "Синхронизация выключена, но код подключения не стёрся с iPhone — сотру его, когда приложение снова откроется"
 
     /// Ошибка подключения, списка устройств или выключения.
     public static func message(for error: any Error) -> String {

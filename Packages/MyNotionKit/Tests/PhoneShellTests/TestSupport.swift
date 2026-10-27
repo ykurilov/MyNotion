@@ -33,9 +33,21 @@ final class FakeSyncServer: SyncServer {
     }
 
     private let state: Mutex<(outcome: JoinOutcome, joinedNames: [String], deletedDevices: [String], devices: [SyncDevice])>
+    /// Список устройств не отвечает, пока тест не отпустит (`releaseDevices()`).
+    private let heldDevices = Mutex<(holds: Bool, waiting: [CheckedContinuation<Void, Never>])>((false, []))
 
-    init(outcome: JoinOutcome = .joined(deviceId: "phone-1"), devices: [SyncDevice] = []) {
+    init(outcome: JoinOutcome = .joined(deviceId: "phone-1"), devices: [SyncDevice] = [], holdsDevices: Bool = false) {
         state = Mutex((outcome, [], [], devices))
+        heldDevices.withLock { $0.holds = holdsDevices }
+    }
+
+    func releaseDevices() {
+        let waiting = heldDevices.withLock { held in
+            held.holds = false
+            defer { held.waiting = [] }
+            return held.waiting
+        }
+        waiting.forEach { $0.resume() }
     }
 
     var joinedNames: [String] { state.withLock { $0.joinedNames } }
@@ -54,7 +66,16 @@ final class FakeSyncServer: SyncServer {
 
     func transport(deviceToken: String) -> any SyncTransport { FakeTransport(server: self) }
 
-    fileprivate func devices() -> [SyncDevice] { state.withLock { $0.devices } }
+    fileprivate func devices() async -> [SyncDevice] {
+        await withCheckedContinuation { continuation in
+            let holds = heldDevices.withLock { held in
+                if held.holds { held.waiting.append(continuation) }
+                return held.holds
+            }
+            if !holds { continuation.resume() }
+        }
+        return state.withLock { $0.devices }
+    }
     fileprivate func delete(_ deviceId: String) {
         state.withLock { state in
             state.deletedDevices.append(deviceId)
@@ -71,7 +92,7 @@ private struct FakeTransport: SyncTransport {
     func ack(_ seq: Int) async throws {}
     func putSnapshot(seq: Int, ciphertext: String) async throws {}
     func snapshot() async throws -> SyncSnapshotEnvelope? { nil }
-    func devices() async throws -> [SyncDevice] { server.devices() }
+    func devices() async throws -> [SyncDevice] { await server.devices() }
     func currentDevice() async throws -> SyncDevice { throw SyncServerError.notFound }
     func invite() async throws -> SyncInvite { throw SyncServerError.notFound }
     func deleteDevice(_ deviceId: String) async throws { server.delete(deviceId) }
@@ -109,14 +130,16 @@ final class FakeSyncLoop: PhoneSyncLoop {
     }
 }
 
-/// Фоновое время системы: тест сам решает, когда оно кончится.
+/// Фоновое время системы: тест сам решает, когда оно кончится и даётся ли вообще.
 @MainActor
 final class FakeBackgroundTime: BackgroundTimeGrant {
     private(set) var begun = 0
     private(set) var ended: [BackgroundTimeToken] = []
     private var expiration: (@MainActor () -> Void)?
+    var grants = true
 
     func begin(expiration: @escaping @MainActor () -> Void) -> BackgroundTimeToken? {
+        guard grants else { return nil }
         begun += 1
         self.expiration = expiration
         return BackgroundTimeToken(rawValue: begun)
@@ -151,4 +174,35 @@ func eventually(_ condition: @MainActor () -> Bool) async -> Bool {
         await Task.yield()
     }
     return condition()
+}
+
+/// Связка ключей, которая может не ответить: до первой разблокировки iPhone или при сбое удаления.
+final class UnreliableSecrets: SyncSecrets {
+    struct Unavailable: Error {}
+    private let stored = InMemorySyncSecrets()
+    private let failures = Mutex<(load: Bool, delete: Bool)>((false, false))
+
+    var loadFails: Bool {
+        get { failures.withLock { $0.load } }
+        set { failures.withLock { $0.load = newValue } }
+    }
+    var deleteFails: Bool {
+        get { failures.withLock { $0.delete } }
+        set { failures.withLock { $0.delete = newValue } }
+    }
+
+    func save(_ values: SyncSecretValues, for deviceId: String) throws { try stored.save(values, for: deviceId) }
+
+    func load(for deviceId: String) throws -> SyncSecretValues? {
+        if loadFails { throw Unavailable() }
+        return try stored.load(for: deviceId)
+    }
+
+    func delete(for deviceId: String) throws {
+        if deleteFails { throw Unavailable() }
+        try stored.delete(for: deviceId)
+    }
+
+    /// Что лежит на самом деле, мимо сбоев.
+    func storedValues(for deviceId: String) throws -> SyncSecretValues? { try stored.load(for: deviceId) }
 }
