@@ -53,6 +53,13 @@ struct TableModelTests {
         #expect(TableGrid.columnWidths(ofNewTableFitting: 40) == [TableGrid.minimumColumnWidth, TableGrid.minimumColumnWidth])
     }
 
+    @Test("Вставленная таблица: столбцы делят строку поровну, ширина округляется вниз и не уже наименьшей")
+    func sharedColumnWidth() {
+        #expect(TableGrid.columnWidth(ofColumns: 3, sharing: 716) == 238)
+        #expect(TableGrid.columnWidth(ofColumns: 1, sharing: 716) == 716)
+        #expect(TableGrid.columnWidth(ofColumns: 40, sharing: 300) == TableGrid.minimumColumnWidth)
+    }
+
     @Test("Таблица — table + tableColumn + tableRow + tableCell: столбцы и строки в потоке таблицы, ячейки — в потоке строки")
     func structure() throws {
         let document = try openDocument()

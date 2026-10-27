@@ -72,7 +72,7 @@ extension PageTextView {
         let undoManager = undoManager
         undoManager?.beginUndoGrouping()
         changeBlocks(start.index..<end.index + 1, to: drafts, actionName: "Вставить")
-        insertContents(of: pasted, origins: origins, at: start.index)
+        insertContents(of: pasted, origins: origins, at: start.index, fitsTablesToPage: !keepsLook)
         undoManager?.endUndoGrouping()
         undoManager?.setActionName("Вставить")
 
@@ -82,19 +82,33 @@ extension PageTextView {
         return true
     }
 
+    /// Таблица из чужого Markdown или HTML ширин столбцов не знает (у разбора это обычные 120): как у Notion, её столбцы
+    /// делят строку страницы поровну. Ширины, выставленные руками, остаются.
+    private func fitColumnsToPage(of tableIds: Set<UUID>, in upserts: inout [Block]) {
+        for tableId in tableIds {
+            guard let table = document.block(tableId), table.kind == .table else { continue }
+            let columns = upserts.indices.filter { upserts[$0].kind == .tableColumn && upserts[$0].containerId == tableId }
+            let isUnset = columns.allSatisfy { (upserts[$0].props.width ?? TableGrid.defaultColumnWidth) == TableGrid.defaultColumnWidth }
+            guard !columns.isEmpty, isUnset else { continue }
+            let width = TableGrid.columnWidth(ofColumns: columns.count, sharing: availableTableWidth(indent: table.indent))
+            for index in columns { upserts[index].props.width = width }
+        }
+    }
+
     /// Ячейки таблиц и блоки колонок вставки — в потоки своих новых контейнеров.
-    private func insertContents(of pasted: [Block], origins: [UUID?], at startIndex: Int) {
+    private func insertContents(of pasted: [Block], origins: [UUID?], at startIndex: Int, fitsTablesToPage: Bool) {
         let contents = pasted.filter { $0.containerId != nil }
         guard !contents.isEmpty else { return }
         var newIds: [UUID: UUID] = [:]
         for (position, origin) in origins.enumerated() where startIndex + position < document.blocks.count {
             if let origin { newIds[origin] = document.blocks[startIndex + position].id }
         }
-        let upserts = contents.map { block in
+        var upserts = contents.map { block in
             var block = block
             if let containerId = block.containerId, let newId = newIds[containerId] { block.containerId = newId }
             return block
         }
+        if fitsTablesToPage { fitColumnsToPage(of: Set(newIds.values), in: &upserts) }
         applyStructuralChanges(BlockChanges(upserts: upserts), actionName: "Вставить")
         textLayoutManager?.textViewportLayoutController.layoutViewport()
         blockViews.update()

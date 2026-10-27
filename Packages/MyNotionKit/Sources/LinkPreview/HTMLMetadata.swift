@@ -104,7 +104,11 @@ public enum HTMLMetadata {
     public static func decodeEntities(_ text: String) -> String {
         guard text.contains("&") else { return text }
         let named = ["amp": "&", "lt": "<", "gt": ">", "quot": "\"", "apos": "'", "nbsp": " ", "laquo": "«", "raquo": "»",
-                     "mdash": "—", "ndash": "–", "hellip": "…"]
+                     "mdash": "—", "ndash": "–", "hellip": "…",
+                     "minus": "−", "divide": "÷", "times": "×", "plusmn": "±", "middot": "·", "bull": "•", "deg": "°",
+                     "le": "≤", "ge": "≥", "ne": "≠", "asymp": "≈", "rarr": "→", "larr": "←", "harr": "↔",
+                     "copy": "©", "reg": "®", "trade": "™", "euro": "€", "sect": "§", "para": "¶",
+                     "lsquo": "‘", "rsquo": "’", "ldquo": "“", "rdquo": "”", "thinsp": "\u{2009}", "ensp": "\u{2002}", "emsp": "\u{2003}"]
         return text.replacing(/&(#[xX]?[0-9A-Fa-f]+|[A-Za-z]+);/) { match in
             let entity = String(match.output.1)
             if entity.hasPrefix("#") {
