@@ -16,6 +16,10 @@ services:
       # без ключа сервер работает как прежде, только не будит iPhone. Секрет в образ и в git не кладётся.
       APNS_KEY_FILE: ${APNS_KEY_FILE:-}
       APNS_KEY_ID: ${APNS_KEY_ID:-}
+      # необязательные: пусто — команда DC5QSJ54MB, приложение cloud.kurilov.mynotion.ios, не чаще пуша в 300 с
+      APNS_TEAM_ID: ${APNS_TEAM_ID:-}
+      APNS_TOPIC: ${APNS_TOPIC:-}
+      PUSH_MIN_INTERVAL_SECONDS: ${PUSH_MIN_INTERVAL_SECONDS:-}
     volumes:
       # база, файлы (/data/files) и ежедневные копии (/data/backups) лежат на хосте: видны и копируются без входа в контейнер.
       # Копия файлов — жёсткие ссылки, поэтому files и backups должны быть на одной файловой системе (один том ./data)

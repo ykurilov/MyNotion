@@ -16,6 +16,7 @@ struct PhoneSyncPushTests {
     let secrets = UnreliableSecrets()
     let pushServer = FakePushServer()
     let apnsToken = Data(repeating: 0x5A, count: 32)
+    let clock = FakeDate()
 
     init() throws {
         library = try TemporaryLibrary()
@@ -29,7 +30,8 @@ struct PhoneSyncPushTests {
                                 return loop
                             },
                             makePushTransport: { [pushServer] _, deviceToken in pushServer.transport(deviceToken: deviceToken) },
-                            backgroundTime: backgroundTime, pause: pauses.pause, backgroundWakeLimit: wakeLimit)
+                            backgroundTime: backgroundTime, pause: pauses.pause, backgroundWakeLimit: wakeLimit,
+                            now: { [clock] in clock.now })
     }
 
     func connected(wakeLimit: Duration = .seconds(25)) async -> PhoneSyncController {
@@ -258,6 +260,25 @@ struct PhoneSyncPushTests {
         #expect(await eventually { pushServer.registrations.count == 1 })
     }
 
+    @Test("Принятый токен сообщается заново раз в сутки при выходе на экран: сервер мог его забыть")
+    func acceptedTokenRefreshedDaily() async {
+        let sync = await connected()
+        sync.didReceivePushToken(apnsToken, environment: .production)
+        #expect(await eventually { pushServer.registrations.count == 1 })
+
+        clock.advance(by: 23 * 60 * 60)
+        sync.didEnterBackground()
+        sync.willEnterForeground()
+        for _ in 0..<50 { await Task.yield() }
+        #expect(pushServer.registrations.count == 1)
+
+        clock.advance(by: 2 * 60 * 60)
+        sync.didEnterBackground()
+        sync.willEnterForeground()
+        #expect(await eventually { pushServer.registrations.count == 2 })
+        #expect(pushServer.registrations.map(\.apnsToken) == [apnsToken, apnsToken])
+    }
+
     @Test("Синхронизацию выключили и подключили заново: токен уходит снова — уже от нового устройства")
     func tokenRegisteredAgainAfterRejoin() async {
         let sync = await connected()
@@ -269,6 +290,18 @@ struct PhoneSyncPushTests {
 
         await sync.join(codeText: sampleJoinCode().text)
         #expect(await eventually { pushServer.registrations.count == 2 })
+    }
+}
+
+/// Подменённые часы для суточного повтора токена.
+final class FakeDate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current = Date(timeIntervalSince1970: 1_800_000_000)
+
+    var now: Date { lock.withLock { current } }
+
+    func advance(by seconds: TimeInterval) {
+        lock.withLock { current += seconds }
     }
 }
 

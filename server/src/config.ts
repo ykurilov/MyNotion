@@ -42,12 +42,13 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
         ? {
             keyFile: env.APNS_KEY_FILE,
             keyId: env.APNS_KEY_ID.trim(),
-            teamId: (env.APNS_TEAM_ID ?? 'DC5QSJ54MB').trim(),
-            topic: env.APNS_TOPIC ?? 'cloud.kurilov.mynotion.ios',
+            // пустая переменная из docker-compose (`${APNS_TEAM_ID:-}`) — значение по умолчанию
+            teamId: env.APNS_TEAM_ID?.trim() || 'DC5QSJ54MB',
+            topic: env.APNS_TOPIC?.trim() || 'cloud.kurilov.mynotion.ios',
             origin: env.APNS_ORIGIN || undefined,
           }
         : null,
-    pushMinIntervalMs: env.PUSH_MIN_INTERVAL_SECONDS
+    pushMinIntervalMs: Number(env.PUSH_MIN_INTERVAL_SECONDS) > 0
       ? Number(env.PUSH_MIN_INTERVAL_SECONDS) * 1000
       : DEFAULT_PUSH_TIMING.minIntervalMs,
   };

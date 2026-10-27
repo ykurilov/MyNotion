@@ -25,8 +25,12 @@ export interface PushTiming {
   minIntervalMs: number;
   /** Устройство считается на связи, пока идёт его запрос и ещё столько после: оно само заберёт пачки. */
   onlineGraceMs: number;
-  /** Устройство было на связи, но пачки не подтвердило — проверить снова через этот срок. */
+  /** Запрос устройства всё ещё открыт — проверить не позже этого срока (обычно раньше: когда запрос кончится). */
   recheckMs: number;
+  /** Пуш не ушёл (Apple не ответил, 5xx, 429) — повтор через этот срок, дальше вдвое дольше. */
+  failedRetryMs: number;
+  /** Сколько пушей подряд слать устройству, которое не забирает пачки; новая пачка начинает счёт заново. */
+  maxAttempts: number;
 }
 
 export const DEFAULT_PUSH_TIMING: PushTiming = {
@@ -34,7 +38,12 @@ export const DEFAULT_PUSH_TIMING: PushTiming = {
   minIntervalMs: 5 * 60_000,
   onlineGraceMs: 15_000,
   recheckMs: 45_000,
+  failedRetryMs: 30_000,
+  maxAttempts: 4,
 };
+
+/** Запас после окна «на связи»: проверка не попадает на его границу. */
+const ONLINE_MARGIN_MS = 1_000;
 
 /**
  * Тихие пуши iPhone (specs/007-iphone-app, этап 1П): пришла пачка с другого устройства — разбудить спящие iPhone,
@@ -55,7 +64,15 @@ export interface Push {
 interface DeviceState {
   timer?: ReturnType<typeof setTimeout>;
   dueAt?: number;
-  lastAttemptAt?: number;
+  /** Когда Apple принял последний пуш: от него считается `minIntervalMs`. */
+  lastSentAt?: number;
+  /** Пуши с последней новой пачки (ушедшие и нет). */
+  attempts: number;
+  /** Пуши подряд, которые не ушли: от них растёт пауза до повтора. */
+  failures: number;
+  sending: boolean;
+  /** Проверка ждёт конца открытого запроса устройства. */
+  waitsForRequestEnd: boolean;
   openRequests: number;
   lastSeenAt?: number;
 }
@@ -97,7 +114,7 @@ export function createPush(
 
   const state = (deviceId: string) => {
     let found = states.get(deviceId);
-    if (!found) states.set(deviceId, (found = { openRequests: 0 }));
+    if (!found) states.set(deviceId, (found = { attempts: 0, failures: 0, sending: false, waitsForRequestEnd: false, openRequests: 0 }));
     return found;
   };
 
@@ -128,17 +145,30 @@ export function createPush(
     const deviceState = state(deviceId);
     deviceState.timer = undefined;
     deviceState.dueAt = undefined;
+    deviceState.waitsForRequestEnd = false;
     try {
       const row = tokenOf.get(deviceId) as TokenRow | undefined;
       const device = devices.get(deviceId);
-      if (!row || !device || !sender) return;
+      // Пуш в пути: что дальше, решит его итог.
+      if (!row || !device || !sender || deviceState.sending) return;
       // Всё до последней чужой пачки уже подтверждено: будить незачем.
-      if (journal.latestSeqNotFrom(deviceId) <= device.lastAckSeq) return;
+      if (journal.latestSeqNotFrom(deviceId) <= device.lastAckSeq) {
+        deviceState.attempts = 0;
+        deviceState.failures = 0;
+        return;
+      }
+      if (deviceState.attempts >= timing.maxAttempts) return;
       const now = Date.now();
-      if (isOnline(deviceState, now)) return schedule(deviceId, now + timing.recheckMs);
-      const allowedAt = (deviceState.lastAttemptAt ?? -Infinity) + timing.minIntervalMs;
+      if (deviceState.openRequests > 0) {
+        // Устройство сейчас на связи и, может быть, забирает пачки: решить, когда запрос кончится.
+        deviceState.waitsForRequestEnd = true;
+        return schedule(deviceId, now + timing.recheckMs);
+      }
+      if (isOnline(deviceState, now)) return schedule(deviceId, deviceState.lastSeenAt! + timing.onlineGraceMs + ONLINE_MARGIN_MS);
+      const allowedAt = (deviceState.lastSentAt ?? -Infinity) + timing.minIntervalMs;
       if (now < allowedAt) return schedule(deviceId, allowedAt);
-      deviceState.lastAttemptAt = now;
+      deviceState.attempts += 1;
+      deviceState.sending = true;
       void send(device.deviceName, row);
     } catch (error) {
       log(`Пуш устройству ${deviceId} не собран: ${error instanceof Error ? error.message : error}`);
@@ -146,16 +176,46 @@ export function createPush(
   }
 
   async function send(deviceName: string, row: TokenRow): Promise<void> {
+    let result: PushResult;
     try {
-      const result = await sender!.send(row.token, row.environment);
+      result = await sender!.send(row.token, row.environment);
+    } catch (error) {
+      result = { outcome: 'failed', reason: error instanceof Error ? error.message : String(error) };
+    }
+    const deviceState = states.get(row.device_id);
+    // Устройство удалили, пока пуш был в пути.
+    if (!deviceState) return;
+    deviceState.sending = false;
+    try {
       if (result.outcome === 'unregistered') {
         deleteExact.run(row.device_id, row.token);
         log(`Пуш «${deviceName}»: Apple отверг токен (${describeResult(result)}) — токен забыт`);
-      } else if (result.outcome === 'failed') {
+        return;
+      }
+      const now = Date.now();
+      if (result.outcome === 'sent') {
+        deviceState.lastSentAt = now;
+        deviceState.failures = 0;
+        // iOS может и не разбудить приложение: не забрало пачки до конца интервала — ещё пуш.
+        schedule(row.device_id, now + timing.minIntervalMs);
+      } else {
+        deviceState.failures += 1;
         log(`Пуш «${deviceName}» не ушёл: ${describeResult(result)}`);
+        schedule(row.device_id, now + timing.failedRetryMs * 2 ** (deviceState.failures - 1));
       }
     } catch (error) {
-      log(`Пуш «${deviceName}» не ушёл: ${error instanceof Error ? error.message : error}`);
+      log(`Пуш «${deviceName}»: итог не записан: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
+  // Сроки — только в памяти: после перезапуска проверить всех, у кого остались неподтверждённые пачки.
+  // Пауза — чтобы устройства на экране успели вернуться на связь и не получили лишний пуш.
+  if (sender) {
+    try {
+      const resumeAt = Date.now() + timing.onlineGraceMs + ONLINE_MARGIN_MS;
+      for (const row of allTokens.all() as TokenRow[]) schedule(row.device_id, resumeAt);
+    } catch (error) {
+      log(`Пуши после запуска не назначены: ${error instanceof Error ? error.message : error}`);
     }
   }
 
@@ -183,6 +243,9 @@ export function createPush(
         open = false;
         deviceState.openRequests -= 1;
         deviceState.lastSeenAt = Date.now();
+        if (deviceState.openRequests === 0 && deviceState.waitsForRequestEnd && states.get(deviceId) === deviceState) {
+          schedule(deviceId, deviceState.lastSeenAt + timing.onlineGraceMs + ONLINE_MARGIN_MS);
+        }
       };
     },
 
@@ -192,8 +255,9 @@ export function createPush(
         const now = Date.now();
         for (const row of allTokens.all() as TokenRow[]) {
           if (row.device_id === senderDeviceId) continue;
-          const lastAttemptAt = states.get(row.device_id)?.lastAttemptAt ?? -Infinity;
-          schedule(row.device_id, Math.max(now + timing.debounceMs, lastAttemptAt + timing.minIntervalMs));
+          const deviceState = state(row.device_id);
+          deviceState.attempts = 0;
+          schedule(row.device_id, Math.max(now + timing.debounceMs, (deviceState.lastSentAt ?? -Infinity) + timing.minIntervalMs));
         }
       } catch (error) {
         log(`Пуши не назначены: ${error instanceof Error ? error.message : error}`);

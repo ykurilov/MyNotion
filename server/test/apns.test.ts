@@ -140,13 +140,37 @@ describe('отправка тихих пушей в Apple (APNs)', () => {
     ]);
   });
 
-  it('Apple молчит — «не вышло» по таймауту, следующая отправка работает', async () => {
+  it('Apple молчит — соединение сбрасывается и один повтор на новом: ответил — «доставлено»', async () => {
     const apple = await fakeApns(['silence', { status: 200 }]);
+    let connections = 0;
+    apple.server.on('session', () => (connections += 1));
+    const apns = sender({ sandbox: apple.origin, production: apple.origin }, { timeoutMs: 300 });
+    expect((await apns.send(TOKEN, 'sandbox')).outcome).toBe('sent');
+    expect(apple.received).toHaveLength(2);
+    expect(connections).toBe(2);
+  });
+
+  it('Apple молчит и при повторе — «не вышло» по таймауту, следующая отправка идёт по новому соединению', async () => {
+    const apple = await fakeApns(['silence', 'silence', { status: 200 }]);
+    let connections = 0;
+    apple.server.on('session', () => (connections += 1));
     const apns = sender({ sandbox: apple.origin, production: apple.origin }, { timeoutMs: 300 });
     const started = Date.now();
     expect((await apns.send(TOKEN, 'sandbox')).outcome).toBe('failed');
     expect(Date.now() - started).toBeLessThan(3_000);
     expect((await apns.send(TOKEN, 'sandbox')).outcome).toBe('sent');
+    expect(connections).toBe(3);
+  });
+
+  it('ответ Apple (даже ошибка) соединение не сбрасывает и не повторяется', async () => {
+    const apple = await fakeApns([{ status: 500, body: { reason: 'InternalServerError' } }, { status: 200 }]);
+    let connections = 0;
+    apple.server.on('session', () => (connections += 1));
+    const apns = sender({ sandbox: apple.origin, production: apple.origin });
+    expect((await apns.send(TOKEN, 'sandbox')).outcome).toBe('failed');
+    expect((await apns.send(TOKEN, 'sandbox')).outcome).toBe('sent');
+    expect(apple.received).toHaveLength(2);
+    expect(connections).toBe(1);
   });
 
   it('Apple недоступен — «не вышло», без исключения; связь вернулась — отправка идёт', async () => {

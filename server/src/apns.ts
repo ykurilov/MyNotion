@@ -70,14 +70,31 @@ export function createApnsSender(options: ApnsOptions): ApnsSender {
     return created;
   }
 
-  function send(deviceToken: string, environment: PushEnvironment): Promise<PushResult> {
+  /** Соединение сломалось (запрос без ответа): закрыть, следующая отправка подключится заново. */
+  function dropSession(origin: string, broken: ClientHttp2Session | undefined): void {
+    if (!broken) return;
+    if (sessions.get(origin) === broken) sessions.delete(origin);
+    broken.destroy();
+  }
+
+  /** Ответа нет совсем (таймаут, поток закрылся, соединение упало) — соединение сбрасывается и один повтор на новом. */
+  async function send(deviceToken: string, environment: PushEnvironment): Promise<PushResult> {
+    const first = await attempt(deviceToken, environment);
+    if (first.status !== undefined || first.outcome !== 'failed') return first;
+    return attempt(deviceToken, environment);
+  }
+
+  function attempt(deviceToken: string, environment: PushEnvironment): Promise<PushResult> {
+    const origin = origins[environment];
     return new Promise<PushResult>((resolve) => {
       let settled = false;
+      let client: ClientHttp2Session | undefined;
       const finish = (result: PushResult) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
         if (result.status !== undefined && STALE_JWT_REASONS.has(result.reason ?? '')) jwt = null;
+        if (result.status === undefined) dropSession(origin, client);
         resolve(result);
       };
       const timer = setTimeout(() => {
@@ -86,7 +103,8 @@ export function createApnsSender(options: ApnsOptions): ApnsSender {
       }, timeoutMs);
       let request: ReturnType<ClientHttp2Session['request']> | undefined;
       try {
-        request = session(origins[environment]).request({
+        client = session(origin);
+        request = client.request({
           ':method': 'POST',
           ':path': `/3/device/${deviceToken}`,
           authorization: `bearer ${providerToken()}`,
@@ -112,7 +130,7 @@ export function createApnsSender(options: ApnsOptions): ApnsSender {
           const dead = status === 410 || (status === 400 && DEAD_TOKEN_REASONS.has(reason ?? ''));
           finish({ outcome: dead ? 'unregistered' : 'failed', status, reason });
         });
-        request.on('error', (error) => finish({ outcome: 'failed', reason: error.message }));
+        request.on('error', (error) => finish({ outcome: 'failed', status: status || undefined, reason: error.message }));
         // соединение оборвалось до ответа
         request.on('close', () => finish({ outcome: 'failed', status: status || undefined, reason: 'StreamClosed' }));
         request.end(BODY);

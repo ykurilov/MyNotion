@@ -58,6 +58,8 @@ public final class PhoneSyncController {
     /// Токен пушей от системы и тот, что сервер уже принял от этого устройства.
     @ObservationIgnored private var pushToken: PushTokenRegistration.Token?
     @ObservationIgnored private var registeredPushToken: PushTokenRegistration?
+    @ObservationIgnored private var registeredPushTokenAt: Date?
+    @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private var pushTokenRequest: Task<Void, Never>?
     @ObservationIgnored private var backgroundGrant: BackgroundTimeToken?
     @ObservationIgnored private var backgroundFlush: Task<Void, Never>?
@@ -71,6 +73,8 @@ public final class PhoneSyncController {
 
     /// Шаг проверки очереди, пока она досылается в фоне.
     static let flushCheckInterval: Duration = .milliseconds(250)
+    /// Принятый токен сообщается заново раз в сутки: сервер мог его забыть (Apple отверг), а процесс живёт днями.
+    static let pushTokenRefreshInterval: TimeInterval = 24 * 60 * 60
 
     public init(store: NotesStore, openDocuments: OpenDocuments?, deviceName: String, secrets: any SyncSecrets,
                 makeServer: @escaping @Sendable (URL) -> any SyncServer = { HTTPSyncServer(url: $0) },
@@ -79,7 +83,8 @@ public final class PhoneSyncController {
                 backgroundTime: any BackgroundTimeGrant = NoBackgroundTime(),
                 pause: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) },
                 backgroundFlushLimit: Duration = .seconds(25),
-                backgroundWakeLimit: Duration = .seconds(25)) {
+                backgroundWakeLimit: Duration = .seconds(25),
+                now: @escaping @Sendable () -> Date = { Date() }) {
         self.store = store
         self.openDocuments = openDocuments
         self.deviceName = deviceName
@@ -91,6 +96,7 @@ public final class PhoneSyncController {
         self.backgroundFlushLimit = backgroundFlushLimit
         self.makePushTransport = makePushTransport
         self.backgroundWakeLimit = backgroundWakeLimit
+        self.now = now
         // Очередь исходящих подписывается на записи один раз; пока синхронизация выключена, она ничего не пишет.
         Outbox.install(on: store)
         do {
@@ -174,6 +180,7 @@ public final class PhoneSyncController {
             self.pushTokenRequest?.cancel()
             self.pushTokenRequest = nil
             self.registeredPushToken = nil
+            self.registeredPushTokenAt = nil
             do {
                 try SyncSetup.disable(store: self.store, secrets: self.secrets)
             } catch {
@@ -298,17 +305,23 @@ public final class PhoneSyncController {
         registerPushTokenIfNeeded()
     }
 
-    /// Не принятый сервером токен сообщается снова при следующем случае: подключение, возвращение на экран.
+    /// Не принятый сервером токен сообщается снова при следующем случае: подключение, возвращение на экран;
+    /// принятый — раз в сутки.
     private func registerPushTokenIfNeeded() {
         guard pushTokenRequest == nil, let pushToken, let account else { return }
         let wanted = PushTokenRegistration(deviceId: account.deviceId, token: pushToken)
-        guard registeredPushToken != wanted, let secret = try? secrets.load(for: account.deviceId) else { return }
+        let isFresh = registeredPushTokenAt.map { now().timeIntervalSince($0) < Self.pushTokenRefreshInterval } ?? false
+        guard registeredPushToken != wanted || !isFresh, let secret = try? secrets.load(for: account.deviceId) else { return }
         let transport = makePushTransport(account.serverURL, secret.deviceToken)
+        let requestedAt = now()
         pushTokenRequest = Task { [weak self] in
             let accepted = (try? await transport.registerPushToken(pushToken.value, environment: pushToken.environment)) != nil
             guard let self, !Task.isCancelled else { return }
             self.pushTokenRequest = nil
-            if accepted { self.registeredPushToken = wanted }
+            if accepted {
+                self.registeredPushToken = wanted
+                self.registeredPushTokenAt = requestedAt
+            }
             // Пока шёл запрос, пришёл новый токен: сообщить и его.
             if self.pushToken != pushToken || self.account?.deviceId != wanted.deviceId { self.registerPushTokenIfNeeded() }
         }

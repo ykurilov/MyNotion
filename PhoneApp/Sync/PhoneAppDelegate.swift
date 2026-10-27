@@ -8,7 +8,9 @@ import UIKit
 @MainActor
 final class PhoneAppDelegate: NSObject, UIApplicationDelegate {
     /// Задаётся при запуске приложения, до первого вызова делегата.
-    static var library: PhoneLibrary?
+    static var opener: PhoneLibraryOpener?
+    /// Токен от системы: если база ещё не открылась, он передаётся синхронизации, когда откроется.
+    private static var pushToken: Data?
     /// Журнал живой проверки (`--sync-log`).
     static var log = LiveCheckLog(url: nil)
 
@@ -28,8 +30,15 @@ final class PhoneAppDelegate: NSObject, UIApplicationDelegate {
     }
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
-        Self.library?.sync.didReceivePushToken(deviceToken, environment: Self.pushEnvironment)
+        Self.pushToken = deviceToken
+        Self.deliverPushToken()
         Self.log.write("push-token: \(Self.pushEnvironment.rawValue)")
+    }
+
+    /// Токен — синхронизации, если база открыта; тот же токен повторно на сервер не уходит.
+    static func deliverPushToken() {
+        guard let pushToken, let library = opener?.library else { return }
+        library.sync.didReceivePushToken(pushToken, environment: pushEnvironment)
     }
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: any Error) {
@@ -38,7 +47,9 @@ final class PhoneAppDelegate: NSObject, UIApplicationDelegate {
 
     func application(_ application: UIApplication,
                      didReceiveRemoteNotification userInfo: [AnyHashable: Any]) async -> UIBackgroundFetchResult {
-        guard let sync = Self.library?.sync else { return .noData }
+        // База не открылась (iPhone ещё не разблокировали после перезагрузки) — честное «не вышло»; откроется в следующий раз.
+        guard let sync = Self.opener?.library?.sync else { return .failed }
+        Self.deliverPushToken()
         // Система запустила приложение ради пуша и на экран оно не выходило: цикл, запущенный при старте, — остановить.
         // При запуске со сценами приложение всегда стартует «в фоне», поэтому проверка здесь, а не при запуске.
         if application.applicationState == .background { sync.didLaunchInBackground() }

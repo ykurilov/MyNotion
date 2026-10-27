@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_PUSH_TIMING, type PushSender } from '../src/push.js';
-import { createTestServer, expectRussianError, joinDevice, type SentPush, type TestServer } from './helpers.js';
+import { createPush, DEFAULT_PUSH_TIMING, type PushResult, type PushSender } from '../src/push.js';
+import { createTestServer, expectRussianError, joinDevice, recordingSender, type SentPush, type TestServer } from './helpers.js';
 
 const PHONE_TOKEN = 'a1'.repeat(32);
 const OTHER_TOKEN = 'b2'.repeat(32);
-const { debounceMs, minIntervalMs, onlineGraceMs, recheckMs } = DEFAULT_PUSH_TIMING;
+const { debounceMs, minIntervalMs, onlineGraceMs, recheckMs, failedRetryMs, maxAttempts } = DEFAULT_PUSH_TIMING;
 
 let batchNumber = 0;
 const postBatch = (server: TestServer, token?: string) =>
@@ -168,6 +168,137 @@ describe('тихие пуши iPhone', () => {
       await server.call('POST', '/ack', { token: phone.token, body: { seq } });
       await vi.advanceTimersByTimeAsync(minIntervalMs * 2);
       expect(server.pushes).toEqual([]);
+    });
+  });
+
+  describe('окно «на связи»', () => {
+    it('iPhone ушёл в фон сразу после запроса — пуш через окно «на связи», а не через фиксированную перепроверку', async () => {
+      await phoneRegisteredAndAsleep();
+      // приложение на экране: долгое ожидание, потом его свернули — запрос оборвался
+      const polling = server.call('GET', '/changes?after=0&wait=25', { token: phone.token });
+      await vi.advanceTimersByTimeAsync(1_000);
+      await postBatch(server);
+      await polling;
+      const leftAt = Date.now();
+      await vi.advanceTimersByTimeAsync(onlineGraceMs - 1_000);
+      expect(server.pushes).toEqual([]);
+      await vi.advanceTimersByTimeAsync(2_001);
+      expect(server.pushes).toHaveLength(1);
+    });
+
+    it('пока запрос iPhone открыт — не будить; кончился, не подтвердив, — пуш через окно после его конца', async () => {
+      await phoneRegisteredAndAsleep();
+      await postBatch(server);
+      // пачку iPhone забрал, но не подтвердил и ждёт следующих — запрос висит 25 с
+      await vi.advanceTimersByTimeAsync(1_000);
+      const polling = server.call('GET', '/changes?after=1&wait=25', { token: phone.token });
+      await vi.advanceTimersByTimeAsync(debounceMs + 10_000);
+      expect(server.pushes).toEqual([]);
+      await vi.advanceTimersByTimeAsync(12_000);
+      await polling; // ожидание кончилось само
+      const endedAt = Date.now();
+      await vi.advanceTimersByTimeAsync(onlineGraceMs + 1_001);
+      expect(server.pushes).toHaveLength(1);
+      expect(Date.now() - endedAt).toBeLessThan(recheckMs);
+    });
+  });
+
+  describe('повторы', () => {
+    it('iOS не разбудила iPhone — повтор через интервал, не больше заданного числа пушей; новая пачка — счёт заново', async () => {
+      await phoneRegisteredAndAsleep();
+      await postBatch(server);
+      await vi.advanceTimersByTimeAsync(debounceMs);
+      expect(server.pushes).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(minIntervalMs - 1_000);
+      expect(server.pushes).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(server.pushes).toHaveLength(2);
+      await vi.advanceTimersByTimeAsync(minIntervalMs * 10);
+      expect(server.pushes).toHaveLength(maxAttempts);
+
+      await postBatch(server);
+      await vi.advanceTimersByTimeAsync(debounceMs);
+      expect(server.pushes).toHaveLength(maxAttempts + 1);
+    });
+
+    it('iPhone проснулся и подтвердил — повторов нет', async () => {
+      await phoneRegisteredAndAsleep();
+      const { seq } = (await (await postBatch(server)).json()) as { seq: number };
+      await vi.advanceTimersByTimeAsync(debounceMs);
+      await server.call('POST', '/ack', { token: phone.token, body: { seq } });
+      await vi.advanceTimersByTimeAsync(minIntervalMs * 10);
+      expect(server.pushes).toHaveLength(1);
+    });
+
+    it('Apple не принял пуш (5xx, 429, таймаут) — повтор через паузу, дальше вдвое дольше, не больше заданного числа', async () => {
+      const answers: PushResult[] = [
+        { outcome: 'failed', status: 500, reason: 'InternalServerError' },
+        { outcome: 'failed', status: 429, reason: 'TooManyRequests' },
+      ];
+      const sent: number[] = [];
+      server = createTestServer(undefined, {
+        pushSender: {
+          async send() {
+            sent.push(Date.now());
+            return answers.shift() ?? { outcome: 'failed', reason: 'Timeout' };
+          },
+        },
+      });
+      phone = await joinDevice(server, 'iPhone');
+      await phoneRegisteredAndAsleep();
+      await postBatch(server);
+      await vi.advanceTimersByTimeAsync(debounceMs);
+      expect(sent).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(failedRetryMs);
+      expect(sent).toHaveLength(2);
+      await vi.advanceTimersByTimeAsync(failedRetryMs * 2 - 1);
+      expect(sent).toHaveLength(2);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(sent).toHaveLength(3);
+      await vi.advanceTimersByTimeAsync(minIntervalMs * 100);
+      expect(sent).toHaveLength(maxAttempts);
+    });
+
+    it('сбой, потом Apple принял — дальше обычный интервал', async () => {
+      const answers: PushResult[] = [{ outcome: 'failed', status: 503 }];
+      const sent: number[] = [];
+      server = createTestServer(undefined, {
+        pushSender: {
+          async send() {
+            sent.push(Date.now());
+            return answers.shift() ?? { outcome: 'sent', status: 200 };
+          },
+        },
+      });
+      phone = await joinDevice(server, 'iPhone');
+      await phoneRegisteredAndAsleep();
+      await postBatch(server);
+      await vi.advanceTimersByTimeAsync(debounceMs + failedRetryMs);
+      expect(sent).toHaveLength(2);
+      await vi.advanceTimersByTimeAsync(minIntervalMs - 1);
+      expect(sent).toHaveLength(2);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(sent).toHaveLength(3);
+    });
+
+    it('сервер перезапустили — тем, у кого остались неподтверждённые пачки, пуш после запуска; остальным — нет', async () => {
+      server = createTestServer(undefined, { pushSender: null });
+      phone = await joinDevice(server, 'iPhone');
+      const calm = await joinDevice(server, 'iPhone 2');
+      await phoneRegisteredAndAsleep();
+      await registerToken(server, calm.token, { token: OTHER_TOKEN, environment: 'production' });
+      const { seq } = (await (await postBatch(server)).json()) as { seq: number };
+      await server.call('POST', '/ack', { token: calm.token, body: { seq } });
+      server.push.close();
+
+      // новый процесс на той же базе; таймеры прежнего пропали
+      const pushes: SentPush[] = [];
+      const restarted = createPush(server.db, { devices: server.devices, journal: server.journal, sender: recordingSender(pushes), log: () => {} });
+      await vi.advanceTimersByTimeAsync(onlineGraceMs);
+      expect(pushes).toEqual([]);
+      await vi.advanceTimersByTimeAsync(1_001);
+      expect(pushes).toEqual<SentPush[]>([{ deviceToken: PHONE_TOKEN, environment: 'sandbox' }]);
+      restarted.close();
     });
   });
 
