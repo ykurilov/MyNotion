@@ -4,7 +4,7 @@ import PackageDescription
 /// Модули MyNotion. Ядро `NotesCore` ни от кого из добавок не зависит (конституция, принцип V).
 let package = Package(
     name: "MyNotionKit",
-    platforms: [.macOS(.v26)],
+    platforms: [.macOS(.v26), .iOS(.v26)],
     products: [
         .library(name: "VisualStyle", targets: ["VisualStyle"]),
         .library(name: "NotesCore", targets: ["NotesCore"]),

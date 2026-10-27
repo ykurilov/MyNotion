@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 
 extension Palette {
@@ -6,3 +7,4 @@ extension Palette {
     /// Фон строки и столбца заголовков таблицы — серый фон Notion.
     public static var tableHeaderBackground: NSColor { notionBackground(.gray) ?? hoverBackground }
 }
+#endif

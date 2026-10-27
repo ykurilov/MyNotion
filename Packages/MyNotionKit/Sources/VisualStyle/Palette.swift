@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 
 /// Цвета светлой и тёмной темы по contracts/visual-style.md. Каждый цвет сам
@@ -184,3 +185,4 @@ extension NSColor {
         NSColor(srgbRed: CGFloat(red) / 255, green: CGFloat(green) / 255, blue: CGFloat(blue) / 255, alpha: alpha)
     }
 }
+#endif

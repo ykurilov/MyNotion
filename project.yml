@@ -3,6 +3,7 @@ options:
   bundleIdPrefix: cloud.kurilov
   deploymentTarget:
     macOS: "26.0"
+    iOS: "26.0"
   createIntermediateGroups: true
   # Приложение русское: системные пункты меню («Файл», «Правка», «Окно») — тоже по-русски.
   developmentLanguage: ru
@@ -126,6 +127,35 @@ targets:
         Release:
           CODE_SIGN_IDENTITY: "Developer ID Application"
           DEVELOPMENT_TEAM: DC5QSJ54MB
+  # 007: MyNotion для iPhone на тех же модулях пакета (specs/007-iphone-app/plan-draft.md). Только iPhone, без iPad.
+  MyNotionPhone:
+    type: application
+    platform: iOS
+    sources:
+      - PhoneApp
+    dependencies:
+      - package: MyNotionKit
+        product: NotesCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cloud.kurilov.mynotion.ios
+        PRODUCT_NAME: MyNotion
+        TARGETED_DEVICE_FAMILY: "1"
+        SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+        SUPPORTS_MACCATALYST: NO
+        IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: MyNotion
+        INFOPLIST_KEY_CFBundleDevelopmentRegion: ru
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        DEVELOPMENT_TEAM: DC5QSJ54MB
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "Apple Development"
   # 005: команда `mynotion` для агентов (research R14). Цель не «mynotion»: на диске без учёта регистра её служебная папка совпала бы с папкой MyNotion.
   mynotion-cli:
     type: tool
@@ -258,6 +288,21 @@ schemes:
         - UITests
     profile:
       config: Release
+    archive:
+      config: Release
+  MyNotionPhone:
+    build:
+      targets:
+        MyNotionPhone: all
+    run:
+      config: Debug
+    # Модули данных — те же тесты, что на Mac, в симуляторе iPhone.
+    test:
+      config: Debug
+      gatherCoverageData: false
+      targets:
+        - package: MyNotionKit/NotesCoreTests
+        - package: MyNotionKit/SyncTests
     archive:
       config: Release
   MyNotionPerformance:

@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 
 /// Размеры картинки, файла, видео и закладки (contracts/blocks-and-keys.md; FR-119 — сверка с живым Notion
@@ -55,3 +56,4 @@ extension Metrics {
         public static let bookmarkLineSpacing: CGFloat = 6
     }
 }
+#endif

@@ -1,4 +1,6 @@
+#if canImport(AppKit)
 import AppKit
+#endif
 import Foundation
 import NotesCore
 import UserNotifications
@@ -130,10 +132,12 @@ public final class ReminderScheduler {
     /// Пробуждение Mac и смена пояса — переставить: пропущенное во сне показывается сразу (SC-104).
     public func observeWakeAndTimeZone() {
         guard wakeObservers.isEmpty else { return }
+        #if canImport(AppKit)
         let workspace = NSWorkspace.shared.notificationCenter
         wakeObservers.append(workspace.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in await self?.reschedule() }
         })
+        #endif
         wakeObservers.append(NotificationCenter.default.addObserver(forName: .NSSystemTimeZoneDidChange, object: nil, queue: .main) {
             [weak self] _ in Task { @MainActor in await self?.reschedule() }
         })

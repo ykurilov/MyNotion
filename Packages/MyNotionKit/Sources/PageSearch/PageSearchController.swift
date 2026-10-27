@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 import NotesCore
 import VisualStyle
@@ -176,3 +177,4 @@ enum SearchResultsPlacement {
         return NSRect(x: field.minX, y: top - cardHeight, width: width, height: cardHeight)
     }
 }
+#endif

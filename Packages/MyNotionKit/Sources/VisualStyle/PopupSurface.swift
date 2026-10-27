@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 
 /// Карточка всплывающей панели — меню «/», меню блока, окно корзины (contracts/visual-style.md, «Всплывающие меню»):
@@ -30,3 +31,4 @@ public enum PopupSurface {
         path.fill()
     }
 }
+#endif

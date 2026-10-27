@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 
 /// Строка меню действий — меню «•••» страницы и меню строки боковой панели (contracts/visual-style.md,
@@ -422,3 +423,4 @@ public enum ActionMenuIcon {
                       width: CGFloat(maxX - minX + 1) / scale, height: CGFloat(maxY - minY + 1) / scale)
     }
 }
+#endif

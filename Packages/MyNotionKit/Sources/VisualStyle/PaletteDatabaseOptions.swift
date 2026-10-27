@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 
 extension Palette {
@@ -38,3 +39,4 @@ extension Palette {
         NSColor(name: nil) { $0.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light }
     }
 }
+#endif

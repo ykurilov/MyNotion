@@ -1,6 +1,7 @@
 # MyNotion
 
-Личное приложение заметок для macOS: дерево страниц, блоки текста, автосохранение, синхронизация двух Mac.
+Личное приложение заметок для macOS и iPhone: дерево страниц, блоки текста, автосохранение, синхронизация между Mac и iPhone.
+План версии для iPhone — [specs/007-iphone-app/plan-draft.md](specs/007-iphone-app/plan-draft.md).
 Требования, план и задачи — в [specs/001-core-pages-editor/](specs/001-core-pages-editor/) (страницы и текст) и
 [specs/002-rich-blocks-text/](specs/002-rich-blocks-text/) (богатые блоки: переключатели, выноски, код, формулы,
 картинки и файлы, видео, закладки, таблицы, колонки, цвета, упоминания, даты и напоминания),
@@ -22,6 +23,21 @@
 xcodegen generate
 xcodebuild build -scheme MyNotion -destination 'platform=macOS,arch=arm64'
 ```
+
+### iPhone
+
+Цель `MyNotionPhone` (папка `PhoneApp/`, iOS 26+, только iPhone) собирается из того же `project.yml`. Под iPhone
+собираются модули данных пакета; насквозь AppKit-модули (редактор, дерево, сетка баз) — только для Mac.
+
+```sh
+xcodegen generate
+xcodebuild build -scheme MyNotionPhone -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath build/iphone
+xcrun simctl boot 'iPhone 17 Pro'; open -a Simulator
+xcrun simctl install booted build/iphone/Build/Products/Debug-iphonesimulator/MyNotion.app
+xcrun simctl launch booted cloud.kurilov.mynotion.ios
+```
+
+Проверка сборки модулей и приложения под симулятор и устройство на iMac: `imac-run --no-fallback --no-setup -- zsh scripts/imac/iphone-build.zsh`.
 
 ## Модули
 

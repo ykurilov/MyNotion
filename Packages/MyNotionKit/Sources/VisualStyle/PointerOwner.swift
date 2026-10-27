@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 
 /// Вид со своим указателем мыши: рука у нажимаемого (⋮⋮, +, иконка страницы, кнопки обложки).
@@ -19,3 +20,4 @@ extension NSView {
         return nil
     }
 }
+#endif

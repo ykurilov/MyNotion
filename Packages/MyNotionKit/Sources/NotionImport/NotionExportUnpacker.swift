@@ -70,6 +70,7 @@ public struct NotionExportUnpacker: Sendable {
     }
 
     private static func unzip(_ archive: URL, into folder: URL) throws {
+        #if os(macOS)
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
         process.arguments = ["-x", "-k", archive.path, folder.path]
@@ -83,6 +84,10 @@ public struct NotionExportUnpacker: Sendable {
             let reason = String(decoding: message, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
             throw NotionImportError.cannotUnpack(reason.isEmpty ? "архив повреждён или это не ZIP" : reason)
         }
+        #else
+        // На iPhone нет `ditto` и процессов: ZIP из Notion импортируется на Mac.
+        throw NotionImportError.cannotUnpack("ZIP из Notion открывается только на Mac")
+        #endif
     }
 
     /// Содержимое папки без служебного: `.DS_Store`, `__MACOSX`, скрытые файлы.
