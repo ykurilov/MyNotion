@@ -57,6 +57,8 @@ public final class SyncEngine {
     @ObservationIgnored private let accounts: SyncAccountStore
     @ObservationIgnored private let outbox: Outbox
     @ObservationIgnored private var loop: Task<Void, Never>?
+    /// Цикл, остановленный `stop()`, но, может быть, ещё не вышедший: круг `catchUp()` ждёт его конца.
+    @ObservationIgnored private var stoppedLoop: Task<Void, Never>?
     /// Прервать текущее ожидание (долгий запрос или паузу перед повтором) — так `wake()` будит цикл.
     @ObservationIgnored private var cancelWaiting: (() -> Void)?
     /// Номер текущего ожидания: закончившееся ожидание старого цикла (после быстрых stop() и start()) не стирает ручку нового.
@@ -103,6 +105,7 @@ public final class SyncEngine {
 
     public func stop() {
         loop?.cancel()
+        if let loop { stoppedLoop = loop }
         loop = nil
         fileTask?.cancel()
         if let fileTask { stoppedFileTask = fileTask }
@@ -121,6 +124,24 @@ public final class SyncEngine {
     private func wake() {
         wakeRequested = true
         cancelWaiting?()
+    }
+
+    /// Один круг без долгого ожидания — цикл остановлен, а iPhone разбудил тихий пуш: отправить очередь, забрать и
+    /// применить все новые пачки, подтвердить. Пока цикл идёт, только будит его. Отмена задачи прерывает круг.
+    public func catchUp() async throws {
+        guard loop == nil else { return wake() }
+        // Два круга разом не идут: остановленный цикл мог ещё не выйти.
+        await stoppedLoop?.value
+        guard loop == nil else { return wake() }
+        do {
+            await prepareServiceKeysIfNeeded()
+            try await sendQueue()
+            while try await receive(wait: 0) {}
+            if try outbox.isEmpty() { markReady() } else { status = .sending }
+        } catch {
+            if !Self.isCancellation(error) { status = .error(Self.message(for: error)) }
+            throw error
+        }
     }
 
     // MARK: Цикл

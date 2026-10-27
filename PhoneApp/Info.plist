@@ -6,6 +6,11 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<!-- Живая проверка синхронизации ходит к локальному серверу по http; в интернет — только https. -->
+	<!-- Тихие пуши сервера синхронизации будят приложение в фоне: забрать правки с Mac. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

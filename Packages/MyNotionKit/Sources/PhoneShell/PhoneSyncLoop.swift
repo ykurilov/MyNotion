@@ -11,6 +11,8 @@ public protocol PhoneSyncLoop: AnyObject {
     func start()
     func stop()
     func syncNow()
+    /// Один круг без долгого ожидания, пока цикл остановлен: отправить своё, забрать и применить новое (тихий пуш).
+    func catchUp() async throws
     /// В очереди исходящих есть правки, которые ещё не ушли на сервер.
     func hasUnsentChanges() -> Bool
 }

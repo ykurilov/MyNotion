@@ -137,6 +137,7 @@ targets:
       - path: PhoneApp
         excludes:
           - Info.plist
+          - "*.entitlements"
     dependencies:
       - package: MyNotionKit
         product: NotesCore
@@ -174,9 +175,12 @@ targets:
       configs:
         # Флаги снимков и живой проверки (PhoneLaunchOptions) — только в отладочной сборке. Явно: xcodegen на iMac
         # не находит своих стандартных настроек, и без этой строки DEBUG там не задан.
+        # Тихие пуши: отладочная сборка — песочница Apple, TestFlight — боевые пуши (профиль выкладки должен их включать).
         Debug:
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+          CODE_SIGN_ENTITLEMENTS: PhoneApp/MyNotionPhone-Debug.entitlements
         Release:
+          CODE_SIGN_ENTITLEMENTS: PhoneApp/MyNotionPhone-Release.entitlements
           CODE_SIGN_STYLE: Manual
           CODE_SIGN_IDENTITY: "Apple Distribution"
           PROVISIONING_PROFILE_SPECIFIER: "MyNotion iPhone App Store"

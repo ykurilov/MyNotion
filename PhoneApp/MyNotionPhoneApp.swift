@@ -4,8 +4,10 @@ import SwiftUI
 /// MyNotion для iPhone: дерево страниц, страница и синхронизация с Mac (specs/007-iphone-app).
 @main
 struct MyNotionPhoneApp: App {
+    @UIApplicationDelegateAdaptor private var appDelegate: PhoneAppDelegate
     private let options: PhoneLaunchOptions
-    private let library: Result<PhoneLibrary, any Error>
+    @State private var opener: PhoneLibraryOpener
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         #if DEBUG
@@ -15,14 +17,22 @@ struct MyNotionPhoneApp: App {
         let options = PhoneLaunchOptions()
         #endif
         self.options = options
-        library = Result { try PhoneLibrary(options: options) }
+        let opener = PhoneLibraryOpener { try PhoneLibrary(options: options) }
+        _opener = State(initialValue: opener)
+        PhoneAppDelegate.opener = opener
+        PhoneAppDelegate.log = LiveCheckLog(url: options.syncLog)
     }
 
     var body: some Scene {
         WindowGroup {
-            switch library {
+            switch opener.result {
             case .success(let library): PhoneRootView(library: library, options: options)
-            case .failure(let error): LibraryFailureView(error: error)
+            case .failure(let error):
+                LibraryFailureView(error: error)
+                    // Запустились до первой разблокировки — база откроется, когда приложение выйдет на экран.
+                    .onChange(of: scenePhase, initial: true) { _, phase in
+                        if phase == .active, opener.library != nil { PhoneAppDelegate.deliverPushToken() }
+                    }
             }
         }
     }

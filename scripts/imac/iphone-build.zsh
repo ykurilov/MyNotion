@@ -30,6 +30,10 @@ xcodebuild build-for-testing -scheme MyNotionPhone -destination 'generic/platfor
 print -- "[MyNotion/iMac] iPhone: тесты NotesCoreTests, SyncTests, PhoneShellTests и PhonePageEditorTests собраны"
 if [[ ${IPHONE_RUN_TESTS:-1} == 1 ]]; then
   rm -rf build/iphone-tests.xcresult
+  # Итог прогона — по коду xcodebuild, а не по фильтру вывода: упавший тест роняет сборку.
+  rc=0
   xcodebuild test-without-building -scheme MyNotionPhone -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath $DD \
-    -parallel-testing-worker-count 4 -resultBundlePath build/iphone-tests.xcresult 2>&1 | grep -E "Test run with|✘|error:|TEST (SUCCEEDED|FAILED)" || true
+    -parallel-testing-worker-count 4 -resultBundlePath build/iphone-tests.xcresult > build/iphone-tests.log 2>&1 || rc=$?
+  grep -E "Test run with|✘|error:|TEST (SUCCEEDED|FAILED)" build/iphone-tests.log || true
+  (( rc == 0 )) || { print -- "[MyNotion/iMac] iPhone: тесты в симуляторе упали (код $rc), журнал: build/iphone-tests.log"; exit $rc; }
 fi
