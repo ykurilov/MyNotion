@@ -64,6 +64,9 @@ final class MainWindowModel {
     var versionHistory: VersionHistoryModel?
     /// Страница, которую только что восстановили из версии: над ней полоса «Страница восстановлена» (US6).
     var restoredVersionPageId: UUID?
+    /// Только что скопировали ссылку на эту страницу: внизу окна «Ссылка скопирована», на кнопке-цепочке — галочка.
+    private(set) var copiedLinkPageId: UUID?
+    @ObservationIgnored private var copiedLinkReset: Task<Void, Never>?
     /// Вкладки хранит только первое окно: вид окна в базе один (`WindowState.mainWindowId`).
     @ObservationIgnored private let restoresTabs: Bool
     /// Страницу перечитали после операции с деревом: встать на прежнее место.
@@ -296,6 +299,18 @@ final class MainWindowModel {
     func isFavorite(_ pageId: UUID) -> Bool { tree.page(pageId)?.favorite != nil }
 
     /// ☆ и «Добавить в избранное / Убрать из избранного».
+    /// «Копировать ссылку» (значок цепочки, «•••», меню строки панели, ⌘L).
+    func copyLink(_ pageId: UUID) {
+        PageLinkCopy.copy(pageId)
+        copiedLinkPageId = pageId
+        copiedLinkReset?.cancel()
+        copiedLinkReset = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(1.5))
+            guard !Task.isCancelled else { return }
+            self?.copiedLinkPageId = nil
+        }
+    }
+
     func toggleFavorite(_ pageId: UUID) {
         performTreeOperation {
             if isFavorite(pageId) { try treeOperations.removeFromFavorites(pageId) } else { try treeOperations.addToFavorites(pageId) }

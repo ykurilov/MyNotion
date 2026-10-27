@@ -94,10 +94,12 @@ extension PageMenuSlot {
     var icon: String? {
         switch self {
         case .findAction, .footer: nil
+        case .copyLink: "link"
         case .duplicate: "square.on.square"
         case .moveTo: "arrow.turn.up.right"
         case .versionHistory: "clock.arrow.circlepath"
-        case .share: "link"
+        // Цепочка — у «Копировать ссылку»; ссылка для чтения в браузере — глобус, как «Опубликовать» у Notion.
+        case .share: "globe"
         case .exportDatabase: "square.and.arrow.up"
         case .appearance: "textformat"
         case .template: "doc.on.doc"

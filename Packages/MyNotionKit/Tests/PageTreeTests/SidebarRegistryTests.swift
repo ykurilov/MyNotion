@@ -38,12 +38,13 @@ struct SidebarRegistryTests {
         }
         let items = [fake(.trash, "Удалить в корзину"), fake(.template, "Сделать шаблоном"), fake(.openInNewTab, "Открыть в новой вкладке"),
                      fake(.addSubpage, "Добавить подстраницу"), fake(.rename, "Переименовать"), fake(.moveTo, "Переместить в"),
-                     fake(.duplicate, "Дублировать"), fake(.favorite, "Добавить в избранное"), fake(.newFromTemplate, "Новая страница по шаблону")]
+                     fake(.duplicate, "Дублировать"), fake(.favorite, "Добавить в избранное"), fake(.newFromTemplate, "Новая страница по шаблону"),
+                     fake(.copyLink, "Копировать ссылку")]
         var handlers: [PageRowMenuSlot: (UUID) -> Void] = [:]
         for slot in PageRowMenuSlot.allCases { handlers[slot] = { _ in } }
         let context = PageRowMenuContext(pageId: pageId, isTemplate: true, isFavorite: false)
         #expect(titles(PageRowMenu.make(items: items, context: context, handlers: handlers)) == [
-            "Новая страница по шаблону", "Добавить в избранное", "Дублировать", "Переместить в", "Переименовать", "Добавить подстраницу",
+            "Новая страница по шаблону", "Добавить в избранное", "Копировать ссылку", "Дублировать", "Переместить в", "Переименовать", "Добавить подстраницу",
             "Открыть в новой вкладке", "Сделать шаблоном", "—", "Удалить в корзину",
         ])
         handlers[.duplicate] = nil

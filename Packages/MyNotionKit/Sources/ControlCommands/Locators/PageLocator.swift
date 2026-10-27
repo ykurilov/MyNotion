@@ -2,7 +2,7 @@ import ControlProtocol
 import Foundation
 import NotesCore
 
-/// Указатель страницы (research R10): id (регистр не важен, префикс от 8 знаков), `current` — страница передней
+/// Указатель страницы (research R10): id (регистр не важен, префикс от 8 знаков), ссылка `mynotion://page/<id>`, `current` — страница передней
 /// вкладки, путь из названий через `/` (без учёта регистра и `ё/е`, `\/` — косая черта в названии). Путь с `/` в
 /// начале — от корня, без — где угодно (последние названия пути). Корзина видна только с `includeTrashed`.
 @MainActor
@@ -28,7 +28,7 @@ public struct PageLocator {
             }
             return try byId(id, pointer: pointer, includeTrashed: includeTrashed)
         }
-        if let id = UUID(uuidString: pointer) {
+        if let id = UUID(uuidString: pointer) ?? URL(string: pointer).flatMap(PageAddress.init(url:))?.pageId {
             return try byId(id, pointer: pointer, includeTrashed: includeTrashed)
         }
 

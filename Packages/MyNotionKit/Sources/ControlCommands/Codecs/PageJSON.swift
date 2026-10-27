@@ -30,6 +30,7 @@ public enum PageJSON {
     public static func encode(_ page: Page, kind: PageKind, path: [String], hasChildren: Bool, inTrash: Bool? = nil) -> ControlJSON {
         [
             "id": .string(page.id.controlText), "title": .string(page.title), "icon": page.icon.map(ControlJSON.string) ?? .null,
+            "link": .string(PageAddress(pageId: page.id).text),
             "kind": .string(kind.rawValue), "parentId": page.parentId.map { .string($0.controlText) } ?? .null,
             "path": .array(path.map(ControlJSON.string)), "hasChildren": .bool(hasChildren),
             "cover": page.cover.map(encode) ?? .null, "fullWidth": .bool(page.isFullWidth), "smallText": .bool(page.isSmallText),

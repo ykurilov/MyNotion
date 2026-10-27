@@ -30,9 +30,9 @@ struct PageMenusRegistryTests {
         let all: [PageMenuItem] = [
             Self.item(.footer, "Изменено"), Self.item(.trash, "Удалить в корзину"), Self.item(.appearance, "Вид страницы"),
             Self.item(.versionHistory, "История версий"), Self.item(.template, "Сделать шаблоном"), Self.item(.moveTo, "Переместить в"),
-            Self.item(.findAction, "Найти действие…"), Self.item(.duplicate, "Дублировать"),
+            Self.item(.findAction, "Найти действие…"), Self.item(.duplicate, "Дублировать"), Self.item(.copyLink, "Копировать ссылку"),
         ]
-        #expect(layout(all) == ["Найти действие…", "Дублировать", "Переместить в", "История версий", "—", "Вид страницы", "—",
+        #expect(layout(all) == ["Найти действие…", "Копировать ссылку", "Дублировать", "Переместить в", "История версий", "—", "Вид страницы", "—",
                                 "Сделать шаблоном", "Удалить в корзину", "—", "Изменено"])
     }
 
@@ -234,5 +234,17 @@ struct BacklinksListPlaceTests {
         row.frame = NSRect(x: 0, y: 0, width: 720, height: BacklinksRow.height)
         #expect(row.listAnchor == NSPoint(x: 0, y: BacklinksRow.height + 4))
         #expect(row.listAnchor.x < row.fittingWidth, "якорь левее конца текста строки")
+    }
+
+    @Test("«Копировать ссылку»: в буфере обмена адрес страницы mynotion://page/<id>, его понимают и щелчок, и команды")
+    func copyLinkPutsPageAddress() {
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("mynotion-copy-link-test-\(UUID().uuidString)"))
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.setString("прежнее", forType: .string)
+        let pageId = UUID()
+        PageLinkCopy.copy(pageId, to: pasteboard)
+        #expect(pasteboard.string(forType: .string) == "mynotion://page/\(pageId.uuidString.lowercased())")
+        #expect(PageLinkCopy.title == "Копировать ссылку")
+        #expect(PageLinkCopy.confirmation == "Ссылка скопирована")
     }
 }
