@@ -146,7 +146,35 @@ import Testing
         #expect(try view("Таблица").sortSpecs.isEmpty)
     }
 
-    @Test func pagesThroughTenThousandRows() async throws {
+    /// Те же ветки, что на 10 000 строк (курсор, последняя неполная часть, конец списка), — на 25 строках частями по 10.
+    @Test func pagesThroughRowsWithCursor() async throws {
+        let big = try await fixture.createDatabase("Большая")
+        let operations = DatabaseOperations(store: fixture.store)
+        let title = try #require(try fixture.catalog(big).titleProperty)
+        let total = 25
+        let writes = (0..<total).map { CellWrite(row: .appended($0), propertyId: title.id, value: .string(String(format: "Р%05d", $0))) }
+        try operations.writeCells(writes, appendingRows: total, to: big, in: nil)
+        var seen: [String] = []
+        var sizes: [Int] = []
+        var cursor: ControlJSON?
+        repeat {
+            var args: [String: ControlJSON] = ["database": "Проекты/Большая", "limit": 10]
+            if let cursor { args["cursor"] = cursor }
+            let data = try await fixture.ok("db.rows", args)
+            let titles = DatabaseCommandFixture.rowTitles(data)
+            seen += titles
+            sizes.append(titles.count)
+            cursor = data["nextCursor"]?.string.map(ControlJSON.string)
+        } while cursor != nil && sizes.count < 20
+        #expect(sizes == [10, 10, 5])
+        #expect(seen.first == "Р00000")
+        #expect(seen.last == "Р00024")
+        #expect(seen == (0..<total).map { String(format: "Р%05d", $0) })
+    }
+
+    /// Полный объём — медленная группа (`MYNOTION_PERF=1`, scripts/imac/perf-tests.zsh).
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["MYNOTION_PERF"] != nil))
+    func pagesThroughTenThousandRowsFullScale() async throws {
         let big = try await fixture.createDatabase("Большая")
         let operations = DatabaseOperations(store: fixture.store)
         let title = try #require(try fixture.catalog(big).titleProperty)

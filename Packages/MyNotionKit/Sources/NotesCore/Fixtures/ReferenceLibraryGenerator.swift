@@ -3,11 +3,32 @@ import Foundation
 /// Эталонная база для замеров (research R13): 1 000 страниц до 10 уровней, 100 000 блоков
 /// всех типов, одна страница на 1 000 блоков, текст на кириллице и латинице.
 /// Содержимое одинаково при каждом запуске: случайность идёт от постоянного зерна.
+/// Обычные тесты берут уменьшенный эталон той же формы (`Shape.compact`), полный — замеры и медленная группа.
 public struct ReferenceLibraryGenerator: Sendable {
-    public static let pageCount = 1_000
-    public static let blockCount = 100_000
-    public static let maxLevels = 10
-    public static let largePageBlockCount = 1_000
+    /// Размеры эталона: страниц, блоков всего, глубина дерева и блоков на самой большой странице.
+    public struct Shape: Sendable, Equatable {
+        public let pageCount: Int
+        public let blockCount: Int
+        public let maxLevels: Int
+        public let largePageBlockCount: Int
+
+        public init(pageCount: Int, blockCount: Int, maxLevels: Int, largePageBlockCount: Int) {
+            self.pageCount = pageCount
+            self.blockCount = blockCount
+            self.maxLevels = maxLevels
+            self.largePageBlockCount = largePageBlockCount
+        }
+
+        /// Эталон замеров (research R13).
+        public static let full = Shape(pageCount: 1_000, blockCount: 100_000, maxLevels: 10, largePageBlockCount: 1_000)
+        /// Та же форма в двадцать раз меньше: все уровни и виды блоков, страница-великан крупнее остальных.
+        public static let compact = Shape(pageCount: 100, blockCount: 5_000, maxLevels: 10, largePageBlockCount: 250)
+    }
+
+    public static let pageCount = Shape.full.pageCount
+    public static let blockCount = Shape.full.blockCount
+    public static let maxLevels = Shape.full.maxLevels
+    public static let largePageBlockCount = Shape.full.largePageBlockCount
 
     public enum GenerationError: Error, LocalizedError {
         case fileExists(URL)
@@ -20,9 +41,11 @@ public struct ReferenceLibraryGenerator: Sendable {
     }
 
     private let seed: UInt64
+    public let shape: Shape
 
-    public init(seed: UInt64 = 20_261_015) {
+    public init(seed: UInt64 = 20_261_015, shape: Shape = .full) {
         self.seed = seed
+        self.shape = shape
     }
 
     /// Создать эталонную базу в новом файле. Существующий файл не трогается.
@@ -49,7 +72,8 @@ public struct ReferenceLibraryGenerator: Sendable {
     /// Записать эталон в хранилище одной транзакцией.
     public func generate(into store: NotesStore) throws {
         var random = SeededRandom(seed: seed)
-        let plan = TreePlan(random: &random)
+        let plan = TreePlan(shape: shape, random: &random)
+        let pageCount = shape.pageCount
 
         let largePageId = try store.write { transaction in
             let now = Date()
@@ -57,7 +81,7 @@ public struct ReferenceLibraryGenerator: Sendable {
             var lastChildKey: [Int: FractionalSortKey] = [:]
             var lastRootKey: FractionalSortKey?
 
-            for index in 0..<Self.pageCount {
+            for index in 0..<pageCount {
                 let parentIndex = plan.parents[index]
                 let sortKey: FractionalSortKey
                 if let parentIndex {
@@ -68,7 +92,7 @@ public struct ReferenceLibraryGenerator: Sendable {
                     lastRootKey = sortKey
                 }
                 let page = Page(
-                    title: SampleText.pageTitle(index, random: &random),
+                    title: SampleText.pageTitle(index, isLarge: index == pageCount - 1, largeBlockCount: shape.largePageBlockCount, random: &random),
                     icon: random.chance(0.3) ? SampleText.icons.randomElement(using: &random) : nil,
                     parentId: parentIndex.map { pageIds[$0] },
                     sortKey: sortKey,
@@ -79,7 +103,7 @@ public struct ReferenceLibraryGenerator: Sendable {
                 pageIds.append(page.id)
             }
 
-            for index in 0..<Self.pageCount {
+            for index in 0..<pageCount {
                 let pageId = pageIds[index]
                 var sortKey: FractionalSortKey?
                 var listIndent = 0
@@ -93,9 +117,9 @@ public struct ReferenceLibraryGenerator: Sendable {
                     try transaction.insertBlock(Block(pageId: pageId, kind: .pageLink, linkedPageId: pageIds[childIndex], sortKey: sortKey!))
                 }
             }
-            return pageIds[Self.pageCount - 1]
+            return pageIds[pageCount - 1]
         }
-        // Условие замеров (research R13): при запуске открыта страница на 1 000 блоков.
+        // Условие замеров (research R13): при запуске открыта самая большая страница.
         try store.saveWindowState(WindowState(windowId: WindowState.mainWindowId, openPageId: largePageId))
     }
 }
@@ -106,9 +130,9 @@ private struct TreePlan {
     var children: [[Int]]
     var contentBlockCounts: [Int]
 
-    init(random: inout SeededRandom) {
-        let pageCount = ReferenceLibraryGenerator.pageCount
-        let maxLevels = ReferenceLibraryGenerator.maxLevels
+    init(shape: ReferenceLibraryGenerator.Shape, random: inout SeededRandom) {
+        let pageCount = shape.pageCount
+        let maxLevels = shape.maxLevels
         var levels: [Int] = []
         children = Array(repeating: [], count: pageCount)
 
@@ -132,11 +156,11 @@ private struct TreePlan {
 
         let largePage = pageCount - 1
         let pageLinkCount = children.reduce(0) { $0 + $1.count }
-        let regularContent = ReferenceLibraryGenerator.blockCount - ReferenceLibraryGenerator.largePageBlockCount - pageLinkCount
+        let regularContent = shape.blockCount - shape.largePageBlockCount - pageLinkCount
         let regularPages = pageCount - 1
         contentBlockCounts = (0..<pageCount).map { index in
             index == largePage
-                ? ReferenceLibraryGenerator.largePageBlockCount
+                ? shape.largePageBlockCount
                 : regularContent / regularPages + (index < regularContent % regularPages ? 1 : 0)
         }
     }
@@ -154,8 +178,8 @@ private enum SampleText {
         "SQLite", "TextKit", "keyboard", "outline", "weekly", "summary", "budget", "travel", "inbox", "archive",
     ]
 
-    static func pageTitle(_ index: Int, random: inout SeededRandom) -> String {
-        if index == ReferenceLibraryGenerator.pageCount - 1 { return "Большая страница — 1 000 блоков" }
+    static func pageTitle(_ index: Int, isLarge: Bool, largeBlockCount: Int, random: inout SeededRandom) -> String {
+        if isLarge { return largeBlockCount == 1_000 ? "Большая страница — 1 000 блоков" : "Большая страница — \(largeBlockCount) блоков" }
         let count = Int.random(in: 1...4, using: &random)
         let phrase = (0..<count).map { _ in words.randomElement(using: &random)! }.joined(separator: " ")
         return "\(phrase.prefix(1).uppercased())\(phrase.dropFirst()) \(index + 1)"

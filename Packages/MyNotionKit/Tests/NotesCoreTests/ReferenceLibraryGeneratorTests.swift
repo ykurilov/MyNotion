@@ -5,15 +5,20 @@ import Testing
 
 @Suite("Эталонная база и страница-образец")
 struct ReferenceLibraryGeneratorTests {
-    @Test("Эталон: 1 000 страниц до 10 уровней, 100 000 блоков всех типов, одна страница на 1 000 блоков")
-    func referenceLibraryShape() throws {
+    @Test("Эталон в обычном прогоне: та же форма в двадцать раз меньше — все уровни, все виды блоков, страница-великан")
+    func compactReferenceLibraryShape() throws {
+        try Self.checkShape(.compact)
+    }
+
+    /// Эталон: страницы до `maxLevels` уровней, ровно `blockCount` блоков всех типов, одна страница-великан.
+    static func checkShape(_ shape: ReferenceLibraryGenerator.Shape) throws {
         let folder = try TemporaryFolder()
-        try ReferenceLibraryGenerator().generate(at: folder.databaseURL)
+        try ReferenceLibraryGenerator(shape: shape).generate(at: folder.databaseURL)
 
         let database = try AppDatabase.open(at: folder.databaseURL)
         let store = NotesStore(database: database, clock: HybridLogicalClock(deviceId: UUID()))
         let pages = try store.pageOutline()
-        #expect(pages.count == 1_000)
+        #expect(pages.count == shape.pageCount)
 
         let parents = Dictionary(uniqueKeysWithValues: pages.map { ($0.id, $0.parentId) })
         func levels(_ id: UUID) -> Int {
@@ -25,7 +30,7 @@ struct ReferenceLibraryGeneratorTests {
             }
             return count
         }
-        #expect(pages.map { levels($0.id) }.max() == 10)
+        #expect(pages.map { levels($0.id) }.max() == shape.maxLevels)
 
         let stats = try database.dbWriter.read { db in
             (
@@ -40,12 +45,12 @@ struct ReferenceLibraryGeneratorTests {
                 sampleText: try String.fetchAll(db, sql: "SELECT text FROM block LIMIT 2000").joined(separator: " ")
             )
         }
-        #expect(stats.blocks == 100_000)
+        #expect(stats.blocks == shape.blockCount)
         // Эталон 001 — блоки 001; блоки 002 — на «богатой» странице (RichPageGenerator).
         #expect(stats.kinds == ["paragraph", "heading1", "heading2", "heading3", "bulletItem", "numberedItem", "checkbox", "pageLink"])
-        #expect(stats.blocksPerPage.first == 1_000)
-        #expect(stats.blocksPerPage.dropFirst().allSatisfy { $0 < 1_000 })
-        #expect(stats.blocksPerPage.count == 1_000)
+        #expect(stats.blocksPerPage.first == shape.largePageBlockCount)
+        #expect(stats.blocksPerPage.dropFirst().allSatisfy { $0 < shape.largePageBlockCount })
+        #expect(stats.blocksPerPage.count == shape.pageCount)
 
         // Подстраница — пара «страница с родителем + блок-ссылка в родителе».
         let childPages = pages.filter { $0.parentId != nil }.count
@@ -55,9 +60,9 @@ struct ReferenceLibraryGeneratorTests {
         #expect(stats.sampleText.contains { ("а"..."я").contains($0) })
         #expect(stats.sampleText.contains { ("a"..."z").contains($0) })
 
-        // Условие замеров (research R13): при запуске открыта страница на 1 000 блоков.
+        // Условие замеров (research R13): при запуске открыта самая большая страница.
         let openPageId = try #require(try store.windowState(WindowState.mainWindowId)?.openPageId)
-        #expect(try store.pageContent(openPageId)?.blocks.count == 1_000)
+        #expect(try store.pageContent(openPageId)?.blocks.count == shape.largePageBlockCount)
     }
 
     @Test("Генератор не трогает уже существующий файл")
@@ -108,5 +113,14 @@ struct ReferenceLibraryGeneratorTests {
         #expect(subpages.map(\.title) == ["Подстраница первая", "Подстраница без иконки"])
         #expect(subpages.map(\.icon) == ["📝", nil])
         #expect(try store.pageOutline().count == 4)
+    }
+}
+
+/// Полный эталон замеров — медленная группа (`MYNOTION_PERF=1`, scripts/imac/perf-tests.zsh).
+@Suite("Эталонная база: полный объём", .enabled(if: ProcessInfo.processInfo.environment["MYNOTION_PERF"] != nil))
+struct ReferenceLibraryPerformanceTests {
+    @Test("Эталон: 1 000 страниц до 10 уровней, 100 000 блоков всех типов, одна страница на 1 000 блоков")
+    func referenceLibraryShape() throws {
+        try ReferenceLibraryGeneratorTests.checkShape(.full)
     }
 }
