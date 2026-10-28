@@ -7,16 +7,20 @@ public struct PageContext: Sendable, Hashable, Codable {
     public var pageID: String
     public var title: String
     public var path: String
+    /// Родитель открытой страницы: «создай рядом» — без поиска по названиям. Пусто — страница в корне.
+    public var parentID: String?
     public var markdown: String
     /// Текст страницы длиннее предела и обрезан.
     public var truncated: Bool
     /// Та же страница с тем же текстом, что у прошлого сообщения: текст не повторяется.
     public var unchanged: Bool
 
-    public init(pageID: String, title: String, path: String, markdown: String, truncated: Bool, unchanged: Bool = false) {
+    public init(pageID: String, title: String, path: String, parentID: String? = nil, markdown: String, truncated: Bool,
+                unchanged: Bool = false) {
         self.pageID = pageID
         self.title = title
         self.path = path
+        self.parentID = parentID
         self.markdown = markdown
         self.truncated = truncated
         self.unchanged = unchanged

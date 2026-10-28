@@ -88,6 +88,24 @@ import Testing
         #expect(try locator.resolve("Встреча/Протокол").id == deep.id)
     }
 
+    /// Путь, как его показывает полоса над страницей: иконка перед названием. С иконкой и без — та же страница.
+    @Test func segmentWithIcon() throws {
+        let launches = try host.page("Запуски")
+        let seller = try host.page("Нейропродавец", parent: launches.id)
+        try host.store.write { tx in
+            for (id, icon) in [(launches.id, "🚀"), (seller.id, "🤖")] {
+                var page = try #require(try tx.page(id))
+                page.icon = icon
+                try tx.updatePage(page)
+            }
+        }
+        #expect(try locator.resolve("🚀 Запуски/Нейропродавец").id == seller.id)
+        #expect(try locator.resolve("Запуски/🤖 Нейропродавец").id == seller.id)
+        #expect(try locator.resolve("/🚀 Запуски/🤖 Нейропродавец").id == seller.id)
+        #expect(try locator.resolve("🤖 Нейропродавец").id == seller.id)
+        #expect(failure("🎯 Запуски/Нейропродавец")?.code == .pageNotFound)
+    }
+
     @Test func missingPage() {
         let error = failure("Проекты/Встрча")
         #expect(error?.code == .pageNotFound)

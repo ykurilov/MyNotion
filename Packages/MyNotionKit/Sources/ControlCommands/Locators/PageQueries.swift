@@ -12,9 +12,10 @@ enum PageQueries {
         return PagePath.normalized(title.isEmpty ? Page.untitledTitle : title)
     }
 
-    /// Страницы с названием `title` (по ключу) и все их предки — для сверки пути, корзины и пути в ответе.
-    static func titled(_ title: String, in store: NotesStore) throws -> PageIndex {
-        try withAncestors(in: store, seed: "mynotion_title_key(title) = ?", [PagePath.normalized(title)])
+    /// Страницы с одним из названий `titles` (по ключу) и все их предки — для сверки пути, корзины и пути в ответе.
+    static func titled(_ titles: [String], in store: NotesStore) throws -> PageIndex {
+        let marks = Array(repeating: "?", count: titles.count).joined(separator: ", ")
+        return try withAncestors(in: store, seed: "mynotion_title_key(title) IN (\(marks))", StatementArguments(titles.map(PagePath.normalized)))
     }
 
     /// Страница и её предки.

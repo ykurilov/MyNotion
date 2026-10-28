@@ -11,7 +11,7 @@ public struct AIChatToggleButton: View {
 
     public var body: some View {
         Button { controller.isOpen.toggle() } label: {
-            Image(systemName: controller.isOpen ? "xmark" : "face.smiling")
+            Image(systemName: controller.isOpen ? "xmark" : "sparkles")
                 .font(.system(size: controller.isOpen ? 14 : 19, weight: .regular))
                 .foregroundStyle(AIChatStyle.text)
                 .frame(width: AIChatStyle.toggleSize, height: AIChatStyle.toggleSize)
@@ -101,7 +101,7 @@ struct AIChatEmptyState: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Spacer()
-            Image(systemName: "face.smiling")
+            Image(systemName: "sparkles")
                 .font(.system(size: 26))
                 .foregroundStyle(AIChatStyle.text)
                 .frame(width: 48, height: 48)

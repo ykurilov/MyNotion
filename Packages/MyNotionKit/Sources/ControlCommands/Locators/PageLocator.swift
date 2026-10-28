@@ -3,8 +3,9 @@ import Foundation
 import NotesCore
 
 /// Указатель страницы (research R10): id (регистр не важен, префикс от 8 знаков), ссылка `mynotion://page/<id>`, `current` — страница передней
-/// вкладки, путь из названий через `/` (без учёта регистра и `ё/е`, `\/` — косая черта в названии). Путь с `/` в
-/// начале — от корня, без — где угодно (последние названия пути). Корзина видна только с `includeTrashed`.
+/// вкладки, путь из названий через `/` (без учёта регистра и `ё/е`, `\/` — косая черта в названии; название можно дать
+/// с иконкой впереди, как в полосе над страницей). Путь с `/` в начале — от корня, без — где угодно (последние названия
+/// пути). Корзина видна только с `includeTrashed`.
 @MainActor
 public struct PageLocator {
     public static let currentKeyword = "current"
@@ -44,7 +45,8 @@ public struct PageLocator {
             throw ControlError(.invalidValue, "Пустой указатель страницы", hint: "id, путь «Проекты/Встреча» или current")
         }
         // Только страницы с последним названием пути и их предки: полное дерево большой базы читается долго.
-        let index = try read { try PageQueries.titled(last, in: store) }
+        let titles = [last] + (PagePath.withoutIcon(last).map { [$0] } ?? [])
+        let index = try read { try PageQueries.titled(titles, in: store) }
         let matches = index.pages.filter { index.matches($0, path) }
         return try pick(matches, pointer: pointer, index: index, includeTrashed: includeTrashed)
     }
@@ -132,6 +134,18 @@ struct PagePath {
         self.segments = segments.map(Self.normalized).filter { !$0.isEmpty }
     }
 
+    /// Названия, под которыми страницу узнаёт путь: само название и оно же с иконкой впереди («🚀 Запуски»).
+    static func names(of page: Page) -> [String] {
+        [normalized(page.displayTitle), normalized(page.pathTitle)]
+    }
+
+    /// Название без первого знака и пробела за ним — на случай, если впереди иконка: «🚀 запуски» → «запуски».
+    static func withoutIcon(_ segment: String) -> String? {
+        guard segment.dropFirst().first?.isWhitespace == true else { return nil }
+        let rest = normalized(String(segment.dropFirst()))
+        return rest.isEmpty ? nil : rest
+    }
+
     /// Сравнение названий: без регистра, `ё` = `е`, без пробелов по краям.
     static func normalized(_ title: String) -> String {
         title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased().replacingOccurrences(of: "ё", with: "е")
@@ -156,7 +170,7 @@ struct PageIndex {
     func matches(_ page: Page, _ path: PagePath) -> Bool {
         var current: Page? = page
         for segment in path.segments.reversed() {
-            guard let candidate = current, PagePath.normalized(candidate.displayTitle) == segment else { return false }
+            guard let candidate = current, PagePath.names(of: candidate).contains(segment) else { return false }
             current = candidate.parentId.flatMap { byId[$0] }
         }
         return !path.fromRoot || current == nil
