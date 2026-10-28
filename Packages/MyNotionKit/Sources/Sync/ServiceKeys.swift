@@ -9,7 +9,9 @@ public enum ServiceKeyName {
     public static let deepSeek = "deepseek"
     /// Картинки вставки из Notion (модуль NotionAPI).
     public static let notion = "notion"
-    public static let all = [deepSeek, notion]
+    /// Модели ИИ-агента через OpenRouter и запасной путь DeepSeek (модуль AIModels).
+    public static let openRouter = "openrouter"
+    public static let all = [deepSeek, notion, openRouter]
 }
 
 /// Ключи сервисов на этом устройстве — связка ключей. Синхронизация читает их только для зашифрованной пачки

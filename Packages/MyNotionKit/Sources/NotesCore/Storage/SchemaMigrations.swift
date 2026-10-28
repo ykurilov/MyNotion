@@ -23,6 +23,7 @@ public struct SchemaMigrations: Sendable {
         Step(version: "v9", migrate: addDatabases),
         Step(version: "v10", migrate: indexLiveRowsOfParent),
         Step(version: "v11", migrate: addPageShares),
+        Step(version: "v12", migrate: addAIChats),
     ])
 
     /// Та же схема плюс ещё один шаг — для проверки миграций.
@@ -473,6 +474,33 @@ private func addPageShares(_ db: Database) throws {
             publishedDigest TEXT,
             updatedAt DATETIME NOT NULL
         );
+        """)
+}
+
+/// Чаты ИИ-агента (008): заголовок с меткой часов для названия и удаления, сообщения — непрозрачный JSON записи чата.
+/// `sendMark` у чата — отметка «отправить» (`NULL` — отправлено); `syncPending` у сообщения — не отправлено.
+private func addAIChats(_ db: Database) throws {
+    try db.execute(sql: """
+        CREATE TABLE ai_chat (
+            id TEXT PRIMARY KEY NOT NULL,
+            title TEXT NOT NULL,
+            createdAt DATETIME NOT NULL,
+            updatedAt DATETIME NOT NULL,
+            deletedAt DATETIME,
+            clock TEXT NOT NULL,
+            sendMark INTEGER
+        );
+        CREATE INDEX ai_chat_updated ON ai_chat (updatedAt);
+        CREATE TABLE ai_chat_message (
+            id TEXT PRIMARY KEY NOT NULL,
+            chatId TEXT NOT NULL REFERENCES ai_chat (id) ON DELETE CASCADE,
+            position INTEGER NOT NULL,
+            createdAt DATETIME NOT NULL,
+            body TEXT NOT NULL,
+            syncPending BOOLEAN NOT NULL DEFAULT 1
+        );
+        CREATE INDEX ai_chat_message_order ON ai_chat_message (chatId, position);
+        CREATE INDEX ai_chat_message_pending ON ai_chat_message (syncPending) WHERE syncPending = 1;
         """)
 }
 

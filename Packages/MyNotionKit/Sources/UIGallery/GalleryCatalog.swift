@@ -97,6 +97,24 @@ public enum GalleryScene: Hashable, Sendable {
     case backlinks(GalleryBacklinks)
     /// Базы (004): пустая новая база и таблица эталона; истории 004 добавляют свои состояния.
     case databases(GalleryDatabases)
+    /// Панель ИИ-агента (008).
+    case aiChat(GalleryAIChat)
+}
+
+/// Панель ИИ-агента справа (008; сверка — `ai-ref-27..30.png`).
+public enum GalleryAIChat: CaseIterable, Sendable {
+    /// Пустой чат: «Чем помочь?» и просьбы про открытую страницу.
+    case empty
+    /// Ответ с рассуждениями и вызовом инструмента.
+    case toolReply
+    /// Открытый список моделей над полем ввода.
+    case modelMenu
+    /// Открытый список уровней рассуждений.
+    case levelMenu
+    /// Прошлые чаты под заголовком, по срокам.
+    case pastChats
+    /// Меню строки прошлого чата с «Удалить».
+    case deleteMenu
 }
 
 /// Базы данных (004, contracts/database-ui.md).
@@ -300,7 +318,16 @@ public enum GalleryCatalog {
     /// Все состояния по порядку съёмки.
     public static let states: [GalleryState] = pageStates + blockStates + kindSampleStates + inlineAtomStates + editingStates + sidebarStates
         + trashStates + importStates + exportStates + syncStates + tabsStates + copiesStates + versionHistoryStates + templatesStates + backlinksStates
-        + databaseStates
+        + databaseStates + aiChatStates
+
+    static let aiChatStates: [GalleryState] = [
+        GalleryState("ai-chat-empty", .aiChat(.empty), "Панель ИИ-агента: пустой чат и просьбы про страницу", section: "ИИ-агент"),
+        GalleryState("ai-chat-tool-reply", .aiChat(.toolReply), "Ответ: рассуждения свёрнуты, вызовы инструментов строками", section: "ИИ-агент"),
+        GalleryState("ai-chat-model-menu", .aiChat(.modelMenu), "Список моделей над полем ввода", section: "ИИ-агент"),
+        GalleryState("ai-chat-level-menu", .aiChat(.levelMenu), "Список уровней рассуждений", section: "ИИ-агент"),
+        GalleryState("ai-chat-past-chats", .aiChat(.pastChats), "Прошлые чаты по срокам с поиском", section: "ИИ-агент"),
+        GalleryState("ai-chat-delete-menu", .aiChat(.deleteMenu), "Меню строки прошлого чата: удалить на всех устройствах", section: "ИИ-агент"),
+    ]
 
     /// Базы (004): этап 0 — пустая база и таблица эталона; истории добавляют свои строки в конец списка.
     static let databaseStates: [GalleryState] = [

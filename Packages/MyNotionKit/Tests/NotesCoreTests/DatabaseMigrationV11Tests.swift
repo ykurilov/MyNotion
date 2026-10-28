@@ -8,6 +8,7 @@ import Testing
 @Suite("Миграция v10 → v11")
 struct DatabaseMigrationV11Tests {
     static let upToV10 = SchemaMigrations(steps: Array(SchemaMigrations.current.steps.prefix { $0.version != "v11" }))
+    static let upToV11 = SchemaMigrations(steps: Array(SchemaMigrations.current.steps.prefix { $0.version != "v12" }))
 
     @Test("База v10 → v11: страницы те же, старые таблицы те же, добавилась page_share; копия v10 рядом")
     func addsPageShareTable() throws {
@@ -23,7 +24,7 @@ struct DatabaseMigrationV11Tests {
         let pagesBefore = try v10.dbWriter.read { try Row.fetchAll($0, sql: "SELECT * FROM page") }
         v10.close()
 
-        let database = try AppDatabase.open(at: folder.databaseURL)
+        let database = try AppDatabase.open(at: folder.databaseURL, migrations: Self.upToV11)
         defer { database.close() }
         #expect(try database.appliedSchemaVersion() == "v11")
         let after = try Self.tables(database)

@@ -1,3 +1,4 @@
+import AIChatHistory
 import Foundation
 import NotesCore
 import Observation
@@ -65,6 +66,7 @@ public final class SyncEngine {
     @ObservationIgnored private var waitingGeneration = 0
     @ObservationIgnored private var wakeRequested = false
     @ObservationIgnored private var enqueueObserver: (any NSObjectProtocol)?
+    @ObservationIgnored private var chatsObserver: (any NSObjectProtocol)?
     @ObservationIgnored private var lastTombstoneCheck: ContinuousClock.Instant?
     /// До какого номера сервер уже знает о применённом; `nil` — после запуска ещё не подтверждали.
     @ObservationIgnored private var ackedSeq: Int?
@@ -100,6 +102,9 @@ public final class SyncEngine {
         enqueueObserver = NotificationCenter.default.addObserver(forName: Outbox.didEnqueue, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.wake() }
         }
+        chatsObserver = NotificationCenter.default.addObserver(forName: AIChatStore.didChange, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.wakeForChats() }
+        }
         loop = Task { [weak self] in await self?.run() }
     }
 
@@ -114,11 +119,18 @@ public final class SyncEngine {
         cancelWaiting = nil
         if let enqueueObserver { NotificationCenter.default.removeObserver(enqueueObserver) }
         enqueueObserver = nil
+        if let chatsObserver { NotificationCenter.default.removeObserver(chatsObserver) }
+        chatsObserver = nil
     }
 
     /// Отправить и получить сейчас, не дожидаясь паузы.
     public func syncNow() {
         wake()
+    }
+
+    /// Чаты поменялись: будить, только если есть что отправить, — пришедшие с других устройств не будят цикл зря.
+    private func wakeForChats() {
+        if (try? AIChatSync.hasPending(in: store)) == true { wake() }
     }
 
     private func wake() {
@@ -228,7 +240,10 @@ public final class SyncEngine {
         guard let account = try accounts.account() else { return }
         while true {
             let entries = try outbox.pendingEntries(limit: 20)
-            guard !entries.isEmpty else { return try await sendServiceKeys(account: account) }
+            guard !entries.isEmpty else {
+                try await sendServiceKeys(account: account)
+                return try await sendAIChats(account: account)
+            }
             status = .sending
             for entry in entries {
                 let batchId = entry.id.uuidString.lowercased()
@@ -275,6 +290,25 @@ public final class SyncEngine {
             try accounts.recordSent(seq: seq)
         }
         try ServiceKeys.didSend(pending, in: store)
+    }
+
+    /// Чаты ИИ-агента — своими пачками без изменений записей, порциями, пока есть отмеченное (AIChatSync).
+    private func sendAIChats(account: SyncAccount) async throws {
+        while let pending = try AIChatSync.pending(in: store) {
+            status = .sending
+            let batchId = UUID.timeOrdered().uuidString.lowercased()
+            let batch = SyncBatch(formatVersion: formatVersionForTests ?? SyncBatch.currentFormatVersion,
+                                  deviceId: account.deviceId, deviceName: account.deviceName, changes: [],
+                                  aiChats: pending.records.isEmpty ? nil : pending.records,
+                                  requestsAIChats: pending.request == nil ? nil : true)
+            do {
+                let seq = try await transport.postChanges(batchId: batchId, ciphertext: try cipher.seal(batch, batchId: batchId))
+                try accounts.recordSent(seq: seq)
+            } catch SyncServerError.tooLarge {
+                // Одно сообщение больше предела сервера: оно не уходит, остальные чаты — уходят.
+            }
+            try AIChatSync.didSend(pending, in: store)
+        }
     }
 
     /// Одна порция журнала: применить пачки других Mac по порядку и подтвердить. `true` — на сервере есть ещё.

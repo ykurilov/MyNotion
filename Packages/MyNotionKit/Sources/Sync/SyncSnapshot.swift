@@ -1,3 +1,4 @@
+import AIChatHistory
 import Foundation
 import NotesCore
 
@@ -10,18 +11,24 @@ public struct SyncSnapshot: Sendable, Hashable, Codable {
     public var knowledge: ClockKnowledge
     /// Ключи сервисов с их метками; `nil` — снимок сделан MyNotion без синхронизации ключей.
     public var serviceKeys: [ServiceKeyChange]?
+    /// Чаты ИИ-агента; `nil` — снимок сделан MyNotion без чатов.
+    public var aiChats: [AIChatSyncRecord]?
+    /// `true` — в снимок влезли не все чаты (`AIChatSync.snapshot`); `nil` — все.
+    public var aiChatsPartial: Bool?
 
     public init(formatVersion: Int = SyncBatch.currentFormatVersion, seq: Int, changes: [SyncChange], knowledge: ClockKnowledge,
-                serviceKeys: [ServiceKeyChange]? = nil) {
+                serviceKeys: [ServiceKeyChange]? = nil, aiChats: [AIChatSyncRecord]? = nil, aiChatsPartial: Bool? = nil) {
         self.formatVersion = formatVersion
         self.seq = seq
         self.changes = changes
         self.knowledge = knowledge
         self.serviceKeys = serviceKeys
+        self.aiChats = aiChats
+        self.aiChatsPartial = aiChatsPartial
     }
 
     /// Снять снимок базы: страницы, блоки всех потоков (и пометки удалённых), отметки напоминаний, надгробия;
-    /// ключи сервисов — уже прочитанные из связки ключей.
+    /// ключи сервисов — уже прочитанные из связки ключей; свежие чаты ИИ-агента.
     public static func make(seq: Int, from store: NotesStore, serviceKeys: [ServiceKeyChange]? = nil) throws -> SyncSnapshot {
         try store.write { transaction in
             var changes: [SyncChange] = []
@@ -52,7 +59,9 @@ public struct SyncSnapshot: Sendable, Hashable, Codable {
                 knowledge.record(tombstone.erasedAt)
             }
             knowledge = ClockKnowledge(knowledge.latestByDevice.filter { $0.key != HybridTimestamp.distantPast.deviceId })
-            return SyncSnapshot(seq: seq, changes: changes, knowledge: knowledge, serviceKeys: serviceKeys)
+            let chats = try AIChatSync.snapshot(in: transaction.database)
+            return SyncSnapshot(seq: seq, changes: changes, knowledge: knowledge, serviceKeys: serviceKeys,
+                                aiChats: chats.records, aiChatsPartial: chats.isComplete ? nil : true)
         }
     }
 }

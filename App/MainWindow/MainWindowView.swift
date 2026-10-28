@@ -1,3 +1,4 @@
+import AIChatPanel
 import EmojiPicker
 import Navigation
 import NotesCore
@@ -200,9 +201,16 @@ private struct PagesWindow: View {
                         RowPeekHost(model: model, mode: .sidePeek, sidebarWidth: model.isSidebarCollapsed ? 0 : model.sidebarWidth + 1,
                                     mentions: mentionSettings(pages: linkedPages), linkedPages: linkedPages)
                     }
+                    // Кнопка ИИ-агента — в углу страницы: открытая панель её не закрывает.
+                    .overlay(alignment: .bottomTrailing) { AIChatToggleButton(controller: model.aiChat).padding(16) }
             }
             .frame(maxWidth: .infinity)
+            if model.aiChat.isOpen {
+                AIChatPanelView(controller: model.aiChat)
+                    .transition(.move(edge: .trailing))
+            }
         }
+        .animation(.easeInOut(duration: Metrics.Window.sidebarToggleDuration), value: model.aiChat.isOpen)
         // Шторка — у светофора и не двигается, когда панель уезжает.
         .overlay(alignment: .topLeading) { sidebarToggle }
         .overlay(alignment: .bottom) {

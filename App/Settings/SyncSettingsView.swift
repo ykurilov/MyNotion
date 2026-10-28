@@ -59,6 +59,8 @@ struct SyncSettingsView: View {
             ProofreadingSettingsSection(labelWidth: Self.labelWidth, sync: controller)
             MistakeUnderliningToggle()
             Divider()
+            AIChatSettingsSection(labelWidth: Self.labelWidth, sync: controller)
+            Divider()
             NotionSettingsSection(labelWidth: Self.labelWidth, sync: controller)
         }
     }

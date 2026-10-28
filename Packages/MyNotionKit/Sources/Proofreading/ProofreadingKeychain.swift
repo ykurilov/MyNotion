@@ -3,7 +3,8 @@ import Security
 import Synchronization
 
 /// Ключ DeepSeek в связке ключей Mac: не в базе, не в файлах и не в журналах. Читается при первой проверке текста,
-/// не на главном потоке: если macOS спросит доступ, окно не замрёт.
+/// не на главном потоке: если macOS спросит доступ, окно не замрёт. Тем же способом хранится ключ OpenRouter
+/// ИИ-агента — своя запись связки ключей (`service`, `label`).
 public final class ProofreadingKeychain: Sendable {
     public static let service = "cloud.kurilov.mynotion.deepseek"
     public static let account = "api-key"
@@ -20,9 +21,13 @@ public final class ProofreadingKeychain: Sendable {
     /// чтение, начатое до замены, старый ключ в память не вернёт.
     private let cached = Mutex<(key: String?, generation: Int)>((nil, 0))
 
-    public convenience init(service: String = ProofreadingKeychain.service) {
+    public convenience init(service: String = ProofreadingKeychain.service, label: String = "MyNotion — ключ DeepSeek") {
         self.init(storage: Storage(read: { try ProofreadingKeychain.read(service: service) }, write: { key in
-            if let key { try ProofreadingKeychain.write(Data(key.utf8), service: service) } else { try ProofreadingKeychain.delete(service: service) }
+            if let key {
+                try ProofreadingKeychain.write(Data(key.utf8), service: service, label: label)
+            } else {
+                try ProofreadingKeychain.delete(service: service)
+            }
         }))
     }
 
@@ -68,14 +73,14 @@ public final class ProofreadingKeychain: Sendable {
         return key.isEmpty ? nil : key
     }
 
-    private static func write(_ data: Data, service: String) throws {
+    private static func write(_ data: Data, service: String, label: String) throws {
         let base = query(service: service)
         let update = SecItemUpdate(base as CFDictionary, [kSecValueData as String: data] as CFDictionary)
         if update == errSecSuccess { return }
         guard update == errSecItemNotFound else { throw ProofreadingKeychainError(status: update) }
         var item = base
         item[kSecValueData as String] = data
-        item[kSecAttrLabel as String] = "MyNotion — ключ DeepSeek"
+        item[kSecAttrLabel as String] = label
         let added = SecItemAdd(item as CFDictionary, nil)
         guard added == errSecSuccess else { throw ProofreadingKeychainError(status: added) }
     }
