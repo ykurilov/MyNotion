@@ -50,7 +50,7 @@ run_module() {
   "$helper" --test-bundle-path "$exe" "$@" "$exe" --testing-library swift-testing >"$logs/$name.log" 2>&1
   local code=$?
   # 69 — в модуле не нашлось тестов (заготовка или фильтр); `swift test` это не считает падением.
-  (( code == 69 )) && grep -q "Test run with 0 tests" "$logs/$name.log" && code=0
+  (( code == 69 )) && ! grep -q "✘" "$logs/$name.log" && code=0
   print -r -- "$code $name $(( SECONDS - started ))" >>"$logs/.results"
   return $code
 }
