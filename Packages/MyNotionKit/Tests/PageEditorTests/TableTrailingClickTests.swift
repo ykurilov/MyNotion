@@ -19,6 +19,8 @@ struct TableTrailingClickTests {
             editor.step { editor.textView.removeBlocks(at: last..<last + 1) }
         }
         editor.layoutViewport()
+        // Подготовка — не шаг проверки: ⌘Z после щелчка ниже отменил бы и её (пустой абзац от щелчка — не свой шаг).
+        editor.undoManager.removeAllActions()
         #expect(editor.document.blocks.last?.kind == .table)
         return (editor, table)
     }
