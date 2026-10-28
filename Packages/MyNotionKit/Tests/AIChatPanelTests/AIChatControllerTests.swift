@@ -153,6 +153,28 @@ struct AIChatControllerTests {
         #expect(controller.reply == nil)
     }
 
+    /// Путь к открытой странице — в том же виде, что принимает инструмент: без иконок, «Без названия» у пустых,
+    /// `/` в названии экранирована. Иначе модель передаёт «🚀 Запуски/…» и получает «Страница не найдена».
+    @Test("Открытая страница из ответа page read: путь как у указателя страницы и id родителя")
+    func openPageFromRead() async throws {
+        let read: ControlJSON = [
+            "markdown": "# Пересказ",
+            "page": ["id": "p3", "title": "Пересказ", "icon": "📝", "parentId": "p2", "path": ["Запуски", "", "Q1/Q2", "Пересказ"]],
+        ]
+        let open = AIChatController.OpenPage(pageID: "p3", title: "Пересказ", read: read)
+        #expect(open.path == #"Запуски/Без названия/Q1\/Q2/Пересказ"#)
+        #expect(open.parentID == "p2")
+        #expect(open.markdown == "# Пересказ")
+
+        page.page = open
+        let controller = controller(ScriptedModel([.events([.text("Готово"), .finished("stop")])]))
+        controller.draft = "Создай рядом"
+        controller.send()
+        try await finish(controller)
+        #expect(controller.entries[0].page?.parentID == "p2")
+        #expect(controller.entries[0].page?.path == open.path)
+    }
+
     @Test("Та же страница без правок — текст не повторяется; правка или другая страница — повторяется")
     func unchangedPage() async throws {
         let controller = controller(ScriptedModel([]))

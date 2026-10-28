@@ -39,17 +39,12 @@ enum AppAIChat {
         return await executor.run(request)
     }
 
-    /// Открытая страница окна: название, путь от корня и текст, как его видит `page read`.
+    /// Открытая страница окна: название, путь от корня, родитель и текст — как их видит `page read`.
     private static func openPage(_ model: MainWindowModel) async -> AIChatController.OpenPage? {
         guard let pageId = model.openPageId else { return nil }
         let title = model.liveTitleOfOpenPage ?? ""
-        let path = (model.breadcrumbAncestors(of: pageId).map(\.title) + [title]).joined(separator: "/")
         let id = pageId.uuidString.lowercased()
-        var markdown = ""
-        if let executor = ControlBootstrap.executor {
-            let response = await executor.run(ControlRequest(command: "page.read", args: ["page": .string(id)], agent: NoteToolbox.agentName))
-            markdown = response.data?["markdown"]?.string ?? ""
-        }
-        return AIChatController.OpenPage(pageID: id, title: title, path: path, markdown: markdown)
+        let read = await ControlBootstrap.executor?.run(ControlRequest(command: "page.read", args: ["page": .string(id)], agent: NoteToolbox.agentName))
+        return AIChatController.OpenPage(pageID: id, title: title, read: read?.data)
     }
 }

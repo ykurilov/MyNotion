@@ -58,7 +58,8 @@ public enum AgentPrompt {
 
     static func userContent(_ entry: ChatEntry) -> String {
         guard let page = entry.page else { return entry.text }
-        let attributes = "id=\"\(page.pageID)\" путь=\"\(page.path)\" название=\"\(page.title)\""
+        let parent = page.parentID.map { " родитель_id=\"\($0)\"" } ?? ""
+        let attributes = "id=\"\(page.pageID)\"\(parent) путь=\"\(page.path)\" название=\"\(page.title)\""
         let body: String
         if page.unchanged {
             body = "Та же страница, текст не менялся с прошлого сообщения."

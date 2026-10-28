@@ -1,6 +1,7 @@
 import AIAgent
 import AIChatHistory
 import AIModels
+import ControlProtocol
 import Foundation
 import Observation
 
@@ -13,15 +14,31 @@ public final class AIChatController {
     public struct OpenPage: Sendable, Hashable {
         public var pageID: String
         public var title: String
+        /// Путь от корня в виде указателя страницы: его можно передать инструменту как есть.
         public var path: String
+        public var parentID: String?
         public var markdown: String
 
-        public init(pageID: String, title: String, path: String, markdown: String) {
+        public init(pageID: String, title: String, path: String, parentID: String? = nil, markdown: String) {
             self.pageID = pageID
             self.title = title
             self.path = path
+            self.parentID = parentID
             self.markdown = markdown
         }
+
+        /// Из ответа `page read`. Путь — как его принимает указатель страницы: названия без иконок, «Без названия»
+        /// у пустых, `/` внутри названия экранирована.
+        public init(pageID: String, title: String, read data: ControlJSON?) {
+            let page = data?["page"]
+            let titles = page?["path"]?.array?.compactMap(\.string) ?? [title]
+            let path = titles.map { ($0.isEmpty ? Self.untitled : $0).replacingOccurrences(of: "/", with: "\\/") }.joined(separator: "/")
+            self.init(pageID: pageID, title: title, path: path, parentID: page?["parentId"]?.string,
+                      markdown: data?["markdown"]?.string ?? "")
+        }
+
+        /// Как `Page.untitledTitle`: под этим названием указатель находит страницу без названия.
+        static let untitled = "Без названия"
     }
 
     /// Ответ, который приходит сейчас.
@@ -332,9 +349,11 @@ public final class AIChatController {
         let truncated = page.markdown.count > Self.pageTextLimit
         let markdown = truncated ? String(page.markdown.prefix(Self.pageTextLimit)) : page.markdown
         if let previous = Self.lastPageText(in: history), previous.pageID == page.pageID, previous.markdown == markdown {
-            return PageContext(pageID: page.pageID, title: page.title, path: page.path, markdown: "", truncated: truncated, unchanged: true)
+            return PageContext(pageID: page.pageID, title: page.title, path: page.path, parentID: page.parentID, markdown: "",
+                               truncated: truncated, unchanged: true)
         }
-        return PageContext(pageID: page.pageID, title: page.title, path: page.path, markdown: markdown, truncated: truncated)
+        return PageContext(pageID: page.pageID, title: page.title, path: page.path, parentID: page.parentID, markdown: markdown,
+                           truncated: truncated)
     }
 
     /// Страница прошлого сообщения и её текст — из последней записи, где он был целиком.

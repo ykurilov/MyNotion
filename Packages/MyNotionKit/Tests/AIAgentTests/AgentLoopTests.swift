@@ -53,6 +53,14 @@ struct AgentPromptTests {
         #expect(pageText.lowerBound < request.lowerBound)
     }
 
+    @Test("У открытой страницы — id родителя: «рядом» создаётся без поиска по названиям")
+    func parentOfPage() {
+        var child = page
+        child.parentID = "parent-1"
+        #expect(AgentPrompt.messages(for: [.user("Создай рядом", page: child)])[1].content.contains(#"родитель_id="parent-1""#))
+        #expect(!AgentPrompt.messages(for: [.user("Создай рядом", page: page)])[1].content.contains("родитель_id"))
+    }
+
     @Test("Та же страница без изменений не повторяется целиком")
     func unchangedPage() {
         var same = page
