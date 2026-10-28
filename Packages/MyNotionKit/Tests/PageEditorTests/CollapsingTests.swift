@@ -226,17 +226,27 @@ struct CollapsingTests {
     /// Открытие страницы ставит отступы детям цитат, выносок и переключателей (T085, профиль переключения вкладок):
     /// абзацы перебираются по порядку блоков, и поиск начала абзаца идёт от прошлого, а не с начала текста.
     /// Вразнобой (порядок множества) 3 000 детей стоили 0,42 с, по порядку — 0,03 с (iMac, отладочная сборка).
-    @Test("3 000 детей цитаты: отступы ставятся одним проходом по тексту")
-    func nestedAdjustmentsInOnePass() throws {
-        let children = (0..<3_000).map { Spec(kind: .paragraph, text: "Строка \($0)", indent: 1) }
+    @Test("300 детей цитаты: отступы у всех одинаковые")
+    func nestedAdjustmentsForManyChildren() throws {
+        try Self.checkNestedAdjustments(childCount: 300, budget: nil)
+    }
+
+    /// Бюджет времени на 3 000 детях — группа замеров (`MYNOTION_PERF=1`, scripts/imac/perf-tests.zsh).
+    @Test("3 000 детей цитаты: отступы ставятся одним проходом по тексту", .enabled(if: ProcessInfo.processInfo.environment["MYNOTION_PERF"] != nil))
+    func nestedAdjustmentsInOnePassPerformance() throws {
+        try Self.checkNestedAdjustments(childCount: 3_000, budget: .milliseconds(150))
+    }
+
+    private static func checkNestedAdjustments(childCount: Int, budget: Duration?) throws {
+        let children = (0..<childCount).map { Spec(kind: .paragraph, text: "Строка \($0)", indent: 1) }
         let editor = try EditorFixture([Spec(kind: .quote, text: "Цитата")] + children)
         let textView = editor.textView
         let clock = ContinuousClock()
         let elapsed = clock.measure { textView.refreshBlockStructure() }
-        #expect(elapsed < .milliseconds(150), "отступы 3 000 детей: \(elapsed)")
+        if let budget { #expect(elapsed < budget, "отступы \(childCount) детей: \(elapsed)") }
         let storage = try #require(textView.textStorage)
         let first = try #require(storage.attribute(.paragraphStyle, at: editor.textLocation(ofBlock: 1), effectiveRange: nil) as? NSParagraphStyle)
-        let last = try #require(storage.attribute(.paragraphStyle, at: editor.textLocation(ofBlock: 3_000), effectiveRange: nil) as? NSParagraphStyle)
+        let last = try #require(storage.attribute(.paragraphStyle, at: editor.textLocation(ofBlock: childCount), effectiveRange: nil) as? NSParagraphStyle)
         #expect(last.headIndent == first.headIndent && first.headIndent > 0, "дети цитаты сдвинуты одинаково")
     }
 }

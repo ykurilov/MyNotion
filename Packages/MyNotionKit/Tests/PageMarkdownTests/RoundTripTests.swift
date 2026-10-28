@@ -29,15 +29,25 @@ struct RoundTripTests {
         #expect(second == first)
     }
 
-    @Test("001: страницы эталонной базы, включая страницу на 1 000 блоков")
+    @Test("001: страницы уменьшенной эталонной базы, включая самую большую")
     func referenceLibrary() throws {
+        try Self.roundTripReferenceLibrary(.compact, every: 10)
+    }
+
+    /// Полный эталон — медленная группа (`MYNOTION_PERF=1`, scripts/imac/perf-tests.zsh).
+    @Test("001: страницы эталонной базы, включая страницу на 1 000 блоков", .enabled(if: ProcessInfo.processInfo.environment["MYNOTION_PERF"] != nil))
+    func referenceLibraryFullScale() throws {
+        try Self.roundTripReferenceLibrary(.full, every: 97)
+    }
+
+    static func roundTripReferenceLibrary(_ shape: ReferenceLibraryGenerator.Shape, every step: Int) throws {
         let fixture = try PageMarkdownFixture()
-        try ReferenceLibraryGenerator().generate(into: fixture.store)
+        try ReferenceLibraryGenerator(shape: shape).generate(into: fixture.store)
         let outline = try fixture.store.pageOutline()
         var counts: [UUID: Int] = [:]
         for page in outline { counts[page.id] = try fixture.blocks(of: page.id).count }
         let largest = try #require(counts.max { $0.value < $1.value }?.key)
-        let sample = [largest] + outline.enumerated().filter { $0.offset % 97 == 0 }.map(\.element.id)
+        let sample = [largest] + outline.enumerated().filter { $0.offset % step == 0 }.map(\.element.id)
         for pageId in sample {
             let (first, second) = try fixture.roundTrip(pageId)
             #expect(second == first, "страница \(pageId)")

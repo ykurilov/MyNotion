@@ -1,6 +1,12 @@
+import AppKit
 import XCTest
 
 /// Сверка с образцом Notion (FR-031, SC-012): страница «MyNotion — образец» в окне 1440×900 в обеих темах.
+/// Светлая и тёмная тема (FR-028): окно, дерево и редактор снимаются в обеих темах (вложения прогона);
+/// по снимкам проверяется, что фон дерева и редактора светлый в светлой теме и тёмный в тёмной.
+/// Геометрия от темы не зависит и проверяется один раз, в светлой; тёмная — только снимки.
+/// Полосы («Изменения не сохранены», синхронизация, импорт) и окно «Две версии» в обеих темах снимает
+/// галерея состояний (`scripts/vm/run-in-vm.sh gallery`).
 /// Снимки окна — `mynotion-<тема>-page.png` во временной папке исполнителя (путь в журнале, «Снимок образца:»)
 /// и во вложениях; их кладут рядом со снимками Notion в `specs/001-core-pages-editor/visual-reference/`.
 /// По рамкам элементов — цифры contracts/visual-style.md с допуском 1 pt. Точная геометрия блоков — в модульных
@@ -15,11 +21,11 @@ final class VisualReferenceTests: XCTestCase {
         library = try UITestLibrary.make(for: self)
     }
 
-    @MainActor func testLightThemeMatchesVisualStyle() throws { try checkSamplePage(appearance: "light") }
-    @MainActor func testDarkThemeMatchesVisualStyle() throws { try checkSamplePage(appearance: "dark") }
+    @MainActor func testLightThemeMatchesVisualStyle() throws { try checkSamplePage(appearance: "light", measuresGeometry: true) }
+    @MainActor func testDarkThemeSnapshots() throws { try checkSamplePage(appearance: "dark", measuresGeometry: false) }
 
     @MainActor
-    private func checkSamplePage(appearance: String) throws {
+    private func checkSamplePage(appearance: String, measuresGeometry: Bool) throws {
         let app = XCUIApplication()
         app.launchArguments = ["--database", library.databaseURL.path, "--generate-visual-sample", "--appearance", appearance,
                                "-NSWindow Frame pages-AppWindow-1", UITestLibrary.startWindowFrame]
@@ -30,7 +36,24 @@ final class VisualReferenceTests: XCTestCase {
         XCTAssertTrue(title.waitForExistence(timeout: 10))
         XCTAssertEqual(title.value as? String, "MyNotion — образец")
         try resize(window, to: Self.windowSize)
+        if measuresGeometry { try checkGeometry(of: app, title: title) }
 
+        // Снимок окна для пары «Notion / MyNotion»: мышь уводим с текста, чтобы ручек не было.
+        window.coordinate(withNormalizedOffset: CGVector(dx: 0.99, dy: 0.99)).hover()
+        let screenshot = window.screenshot()
+        attach(screenshot, named: "mynotion-\(appearance)-page")
+        // Исполнитель UI-тестов в «песочнице»: пишет только в свою временную папку.
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("mynotion-visual-reference", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let file = folder.appendingPathComponent("mynotion-\(appearance)-page.png")
+        try screenshot.pngRepresentation.write(to: file)
+        print("Снимок образца: \(file.path)")
+
+        try checkBrightness(of: app, appearance: appearance)
+    }
+
+    @MainActor
+    private func checkGeometry(of app: XCUIApplication, title: XCUIElement) throws {
         // Колонка текста 720 по центру области страницы вместе с полосой прокрутки. Поле названия занимает колонку
         // целиком, а XCUITest отдаёт рамку его ячейки (`page-title` стоит и на ячейке) — на 1 pt внутри с каждой стороны.
         let page = app.scrollViews.containing(.textView, identifier: "page-body").firstMatch
@@ -61,20 +84,47 @@ final class VisualReferenceTests: XCTestCase {
         } else {
             XCTFail("Ручки блока не появились под мышью")
         }
+    }
 
-        // Снимок окна для пары «Notion / MyNotion»: мышь уводим с текста, чтобы ручек не было.
-        window.coordinate(withNormalizedOffset: CGVector(dx: 0.99, dy: 0.99)).hover()
-        let screenshot = window.screenshot()
+    /// Дерево и редактор: снимки и яркость фона — светлый в светлой теме, тёмный в тёмной. Окно снято выше.
+    @MainActor
+    private func checkBrightness(of app: XCUIApplication, appearance: String) throws {
+        let parts: [(String, XCUIElement)] = [
+            ("tree", app.outlines["page-tree"]),
+            ("editor", app.textViews["page-body"]),
+        ]
+        for (name, element) in parts {
+            let screenshot = element.screenshot()
+            attach(screenshot, named: "\(name)-\(appearance)")
+            let brightness = try XCTUnwrap(Self.medianBrightness(of: screenshot.image), "Снимок \(name) не читается")
+            if appearance == "dark" {
+                XCTAssertLessThan(brightness, 0.35, "\(name): фон не тёмный в тёмной теме (\(brightness))")
+            } else {
+                XCTAssertGreaterThan(brightness, 0.85, "\(name): фон не светлый в светлой теме (\(brightness))")
+            }
+        }
+    }
+
+    private func attach(_ screenshot: XCUIScreenshot, named name: String) {
         let attachment = XCTAttachment(screenshot: screenshot)
-        attachment.name = "mynotion-\(appearance)-page"
+        attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
-        // Исполнитель UI-тестов в «песочнице»: пишет только в свою временную папку.
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("mynotion-visual-reference", isDirectory: true)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let file = folder.appendingPathComponent("mynotion-\(appearance)-page.png")
-        try screenshot.pngRepresentation.write(to: file)
-        print("Снимок образца: \(file.path)")
+    }
+
+    /// Медиана яркости точек снимка: фон занимает большую часть, текст её не сдвигает.
+    private static func medianBrightness(of image: NSImage) -> CGFloat? {
+        guard let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff) else { return nil }
+        var values: [CGFloat] = []
+        let step = max(1, min(bitmap.pixelsWide, bitmap.pixelsHigh) / 40)
+        for x in stride(from: 0, to: bitmap.pixelsWide, by: step) {
+            for y in stride(from: 0, to: bitmap.pixelsHigh, by: step) {
+                guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
+                values.append(0.299 * color.redComponent + 0.587 * color.greenComponent + 0.114 * color.blueComponent)
+            }
+        }
+        guard !values.isEmpty else { return nil }
+        return values.sorted()[values.count / 2]
     }
 
     /// Окно 1440×900: левый верхний угол тянется к углу экрана под строкой меню, затем правый нижний — до размера.

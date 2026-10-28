@@ -437,19 +437,31 @@ struct MarkdownExporterTests {
 
     // MARK: Эталонная база
 
-    @Test("Эталонная база: все 1 000 страниц, все ссылки между файлами ведут на существующие файлы")
+    @Test("Эталонная база (уменьшенная): все страницы, все ссылки между файлами ведут на существующие файлы")
     func referenceLibrary() throws {
-        try ReferenceLibraryGenerator().generate(into: store)
+        try exportReferenceLibrary(.compact)
+    }
+
+    /// Полный эталон и бюджет времени — медленная группа (`MYNOTION_PERF=1`, scripts/imac/perf-tests.zsh).
+    @Test("Эталонная база: все 1 000 страниц, все ссылки между файлами ведут на существующие файлы",
+          .enabled(if: ProcessInfo.processInfo.environment["MYNOTION_PERF"] != nil))
+    func referenceLibraryFullScale() throws {
+        let elapsed = try exportReferenceLibrary(.full)
+        // 100 000 блоков: в быстрой сборке около 10 с, в тестовой (без оптимизаций) втрое дольше.
+        #expect(elapsed < .seconds(60))
+    }
+
+    @discardableResult
+    private func exportReferenceLibrary(_ shape: ReferenceLibraryGenerator.Shape) throws -> Duration {
+        try ReferenceLibraryGenerator(shape: shape).generate(into: store)
 
         let started = ContinuousClock.now
         let result = try runExport()
         let elapsed = ContinuousClock.now - started
-        print("Выгрузка эталонной базы: \(elapsed)")
+        print("Выгрузка эталонной базы (\(shape.blockCount) блоков): \(elapsed)")
 
-        #expect(result.pageCount == ReferenceLibraryGenerator.pageCount)
-        #expect(result.blockCount >= ReferenceLibraryGenerator.blockCount)
-        // 100 000 блоков: в быстрой сборке около 10 с, в тестовой (без оптимизаций) втрое дольше.
-        #expect(elapsed < .seconds(60))
+        #expect(result.pageCount == shape.pageCount)
+        #expect(result.blockCount >= shape.blockCount)
 
         let root = exportFolder
         var files = 0
@@ -466,7 +478,8 @@ struct MarkdownExporterTests {
                 if !FileManager.default.fileExists(atPath: target.path) { brokenLinks.append("\(url.lastPathComponent) → \(path)") }
             }
         }
-        #expect(files == ReferenceLibraryGenerator.pageCount)
+        #expect(files == shape.pageCount)
         #expect(brokenLinks.isEmpty, "Битые ссылки: \(brokenLinks.prefix(5))")
+        return elapsed
     }
 }
