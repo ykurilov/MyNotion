@@ -36,16 +36,27 @@ import Testing
         #expect(try host.texts(page.id) == ["набрал человек", "позвонить"])
     }
 
-    @Test func thousandAlternationsLoseNothing() async throws {
+    /// Человек и агент по очереди правят открытую страницу: ни одна правка не теряется.
+    @Test func hundredAlternationsLoseNothing() async throws {
+        try await alternate(steps: 100)
+    }
+
+    /// Тот же сценарий на 1 000 шагов — медленная группа (`MYNOTION_PERF=1`, scripts/imac/perf-tests.zsh).
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["MYNOTION_PERF"] != nil))
+    func thousandAlternationsLoseNothingFullScale() async throws {
+        try await alternate(steps: 1000)
+    }
+
+    private func alternate(steps: Int) async throws {
         let page = try host.page("Журнал", texts: ["0"])
         let document = try host.openDocuments.open(page.id)
         defer { host.openDocuments.release(page.id) }
         let draft = try #require(document.blocks.first)
-        for step in 1...1000 {
+        for step in 1...steps {
             document.setText(InlineText("человек \(step)"), ofBlock: draft.id)
             try await append("агент \(step)", to: page.id)
         }
-        let expected = ["человек 1000"] + (1...1000).map { "агент \($0)" }
+        let expected = ["человек \(steps)"] + (1...steps).map { "агент \($0)" }
         #expect(document.blocks.map(\.text.string) == expected)
         host.openDocuments.saveAll()
         #expect(try host.texts(page.id) == expected)

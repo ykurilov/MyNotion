@@ -160,17 +160,27 @@ struct PageFlowsTests {
     /// не сортирует их заново — только проверяет порядок. Общий `sortKey` (бывает после слияния правок) — худший
     /// случай: порядок решают id, и открытие 20 000 блоков с сортировкой стоило 0,35 с, с проверкой — 0,09 с
     /// (iMac, отладочная сборка).
-    @Test("20 000 блоков из базы по порядку — поток страницы без пересортировки")
-    func storedOrderIsNotResorted() throws {
+    @Test("2 000 блоков из базы с общим sortKey — поток страницы в порядке базы")
+    func storedOrderIsKept() throws {
+        try checkStoredOrder(blockCount: 2_000, budget: nil)
+    }
+
+    /// Бюджет времени на 20 000 блоках — группа замеров (`MYNOTION_PERF=1`, scripts/imac/perf-tests.zsh).
+    @Test("20 000 блоков из базы по порядку — поток страницы без пересортировки", .enabled(if: ProcessInfo.processInfo.environment["MYNOTION_PERF"] != nil))
+    func storedOrderIsNotResortedPerformance() throws {
+        try checkStoredOrder(blockCount: 20_000, budget: .milliseconds(200))
+    }
+
+    private func checkStoredOrder(blockCount: Int, budget: Duration?) throws {
         var content = try #require(try store.pageContent(pageId))
         let key = FractionalSortKey.between(nil, nil)
-        content.blocks = (0..<20_000).map { (number: Int) -> Block in
+        content.blocks = (0..<blockCount).map { (number: Int) -> Block in
             Block(pageId: pageId, text: InlineText("Абзац \(number)"), sortKey: key)
         }.sorted { $0.id.uuidString < $1.id.uuidString }
         let clock = ContinuousClock()
         var document: PageDocument?
         let elapsed = clock.measure { document = PageDocument(content: content) }
-        #expect(elapsed < .milliseconds(200), "открытие 20 000 блоков: \(elapsed)")
+        if let budget { #expect(elapsed < budget, "открытие \(blockCount) блоков: \(elapsed)") }
         #expect(document?.blocks.map(\.id) == content.blocks.map(\.id))
     }
 
