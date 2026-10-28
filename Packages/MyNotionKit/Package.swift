@@ -47,6 +47,7 @@ let package = Package(
         .library(name: "AIModels", targets: ["AIModels"]),
         .library(name: "AIChatHistory", targets: ["AIChatHistory"]),
         .library(name: "AIAgent", targets: ["AIAgent"]),
+        .library(name: "AIChatPanel", targets: ["AIChatPanel"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.11.1"),
@@ -134,6 +135,8 @@ let package = Package(
         .target(name: "AIChatHistory", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
         // 008. Агент чата: записи, запрос под кэш, цикл «модель → инструменты», инструменты из каталога команд 005.
         .target(name: "AIAgent", dependencies: ["AIModels", "ControlProtocol"]),
+        // 008. Панель чата справа в окне: контроллер и виды SwiftUI.
+        .target(name: "AIChatPanel", dependencies: ["AIAgent", "AIModels", "AIChatHistory", "ControlProtocol", "VisualStyle"]),
 
         .testTarget(name: "VisualStyleTests", dependencies: ["VisualStyle"]),
         .testTarget(name: "NotesCoreTests", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
@@ -179,6 +182,7 @@ let package = Package(
         .testTarget(name: "PhonePageEditorTests", dependencies: ["PhonePageEditor", "NotesCore"]),
         .testTarget(name: "AIModelsTests", dependencies: ["AIModels", "ControlProtocol"]),
         .testTarget(name: "AIAgentTests", dependencies: ["AIAgent", "AIModels", "ControlProtocol"]),
+        .testTarget(name: "AIChatPanelTests", dependencies: ["AIChatPanel", "AIAgent", "AIModels", "AIChatHistory", "NotesCore", "ControlProtocol"]),
         .testTarget(name: "AIChatHistoryTests", dependencies: ["AIChatHistory", "NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
     ],
     swiftLanguageModes: [.v6]

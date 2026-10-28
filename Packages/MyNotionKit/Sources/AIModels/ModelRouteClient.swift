@@ -85,7 +85,7 @@ public struct ModelRouteClient: Sendable {
         return URLSession(configuration: configuration)
     }()
 
-    private static let urlSession: Transport = { request in
+    static let urlSession: Transport = { request in
         let (bytes, response) = try await session.bytes(for: request)
         guard let http = response as? HTTPURLResponse else { throw ModelError.badResponse }
         let lines = AsyncThrowingStream<String, Error> { continuation in

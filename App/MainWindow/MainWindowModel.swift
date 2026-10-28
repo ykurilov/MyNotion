@@ -1,3 +1,4 @@
+import AIChatPanel
 import AppKit
 import DatabaseGrid
 import Databases
@@ -77,6 +78,8 @@ final class MainWindowModel {
     @ObservationIgnored private var linkedPagesCache: (revision: Int, pages: [UUID: LinkedPage])?
     /// Запись открытий для «Недавних»: страница, пробывшая в активной вкладке 2 секунды или с правкой.
     @ObservationIgnored private var visits: VisitRecorder!
+    /// Панель ИИ-агента справа (008): у каждого окна свой открытый чат, список чатов общий.
+    @ObservationIgnored private(set) lazy var aiChat: AIChatController = AppAIChat.makeController(for: self)
     /// Галерея снимков не засоряет «Недавние» открытиями, которых никто не делал.
     @ObservationIgnored var recordsVisits = true
     @ObservationIgnored private var editObserver: (any NSObjectProtocol)?
