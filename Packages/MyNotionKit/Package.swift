@@ -45,6 +45,7 @@ let package = Package(
         .library(name: "PhoneShell", targets: ["PhoneShell"]),
         .library(name: "PhonePageEditor", targets: ["PhonePageEditor"]),
         .library(name: "AIModels", targets: ["AIModels"]),
+        .library(name: "AIAgent", targets: ["AIAgent"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.11.1"),
@@ -128,6 +129,8 @@ let package = Package(
         .target(name: "PhonePageEditor", dependencies: ["NotesCore", "VisualStyle"]),
         // 008. Модели чата: каталог, запрос, поток, запасной путь DeepSeek → OpenRouter — только Foundation.
         .target(name: "AIModels", dependencies: ["ControlProtocol"]),
+        // 008. Агент чата: записи, запрос под кэш, цикл «модель → инструменты», инструменты из каталога команд 005.
+        .target(name: "AIAgent", dependencies: ["AIModels", "ControlProtocol"]),
 
         .testTarget(name: "VisualStyleTests", dependencies: ["VisualStyle"]),
         .testTarget(name: "NotesCoreTests", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
@@ -172,6 +175,7 @@ let package = Package(
         .testTarget(name: "PhoneShellTests", dependencies: ["PhoneShell", "NotesCore", "Sync"]),
         .testTarget(name: "PhonePageEditorTests", dependencies: ["PhonePageEditor", "NotesCore"]),
         .testTarget(name: "AIModelsTests", dependencies: ["AIModels", "ControlProtocol"]),
+        .testTarget(name: "AIAgentTests", dependencies: ["AIAgent", "AIModels", "ControlProtocol"]),
     ],
     swiftLanguageModes: [.v6]
 )
