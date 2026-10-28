@@ -88,6 +88,20 @@ struct AIChatSyncEngineTests {
         #expect(try AIChatSync.pending(in: b.store)?.request != nil)
     }
 
+    @Test("Снимок с частью чатов: устройство просит другие прислать остальные; полный снимок — не просит")
+    func partialSnapshotRequestsChats() throws {
+        for partial in [true, false] {
+            let b = try EngineTestMac(name: "Mac B", wallMillis: 20_000)
+            try b.store.write { tx in
+                try SyncAccountStore.save(SyncAccount(serverURL: URL(string: "https://fake.sync.test")!, deviceId: "b", deviceName: "Mac B"),
+                                          in: tx.database)
+            }
+            let applier = RemoteChangeApplier(store: b.store, openDocuments: nil, localDeviceName: "Mac B")
+            try applier.apply(SyncSnapshot(seq: 3, changes: [], knowledge: ClockKnowledge(), aiChats: [], aiChatsPartial: partial ? true : nil))
+            #expect((try AIChatSync.pending(in: b.store)?.request != nil) == partial)
+        }
+    }
+
     @Test("Снимок новой версии несёт чаты, даже пустой список")
     func snapshotAlwaysHasChats() throws {
         let a = try EngineTestMac(name: "Mac A", wallMillis: 10_000)

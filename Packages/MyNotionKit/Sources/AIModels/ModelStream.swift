@@ -55,7 +55,14 @@ public enum StreamChunkDecoder {
     }
 
     public static func decode(line: String, provider: ModelProvider = .deepSeek) throws -> Line {
-        guard line.hasPrefix("data:") else { return .events([]) }
+        guard line.hasPrefix("data:") else {
+            // Ошибка бывает и голым JSON при ответе 200 — без неё ход кончился бы пустым ответом.
+            let bare = line.trimmingCharacters(in: .whitespaces)
+            if bare.hasPrefix("{"), let error = (try? ControlJSON(parsing: bare))?["error"], error.object != nil {
+                throw ModelError.streamError(error, provider: provider)
+            }
+            return .events([])
+        }
         let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
         if payload == "[DONE]" { return .done }
         guard let chunk = try? ControlJSON(parsing: payload), chunk.object != nil else { throw ModelError.badResponse }
@@ -94,14 +101,17 @@ public struct ModelTurn: Sendable, Hashable {
 
     private var calls: [ModelToolCall] = []
     private var callPositions: [Int: Int] = [:]
+    /// Основа своих id для вызовов, которым поставщик id не дал: одинаковых от чтения к чтению.
+    private let callIDSeed = UUID().uuidString.prefix(8).lowercased()
 
     public init() {}
 
-    /// Вызовы с пустыми аргументами — как `{}`: так их понимают все поставщики.
+    /// Вызовы с пустыми аргументами — как `{}`: так их понимают все поставщики. Вызов без id — со своим.
     public var toolCalls: [ModelToolCall] {
-        calls.map { call in
+        calls.enumerated().map { position, call in
             var call = call
             if call.arguments.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { call.arguments = "{}" }
+            if call.id.isEmpty { call.id = "call_\(callIDSeed)_\(position)" }
             return call
         }
     }
@@ -117,18 +127,19 @@ public struct ModelTurn: Sendable, Hashable {
         }
     }
 
+    /// Части вызова склеиваются по `index`. Часть поставщиков шлёт параллельные вызовы под одним `index` с разными id,
+    /// а имя — целиком в каждой части: новый id начинает новый вызов, полное имя не дописывается к себе же.
     private mutating func applyToolCall(_ delta: ToolCallDelta) {
-        let position: Int
-        if let known = callPositions[delta.index] {
-            position = known
-            if let id = delta.id, !id.isEmpty { calls[position].id = id }
-            if let name = delta.name, !name.isEmpty { calls[position].name += name }
-            calls[position].arguments += delta.arguments
-        } else {
-            position = calls.count
-            callPositions[delta.index] = position
-            calls.append(ModelToolCall(id: delta.id ?? "", name: delta.name ?? "", arguments: delta.arguments))
+        let id = delta.id ?? ""
+        guard let position = callPositions[delta.index], id.isEmpty || calls[position].id.isEmpty || calls[position].id == id else {
+            callPositions[delta.index] = calls.count
+            calls.append(ModelToolCall(id: id, name: delta.name ?? "", arguments: delta.arguments))
+            return
         }
-        if calls[position].id.isEmpty { calls[position].id = "call_\(UUID().uuidString.prefix(8).lowercased())" }
+        if !id.isEmpty { calls[position].id = id }
+        if let name = delta.name, !name.isEmpty {
+            calls[position].name = name.hasPrefix(calls[position].name) ? name : calls[position].name + name
+        }
+        calls[position].arguments += delta.arguments
     }
 }

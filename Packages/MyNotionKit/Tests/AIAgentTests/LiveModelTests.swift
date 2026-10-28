@@ -73,6 +73,21 @@ struct LiveModelTests {
         #expect(turn.text.contains("42"))
     }
 
+    @Test("DeepSeek с рассуждениями: в истории ход с инструментом без рассуждений (был «Без рассуждений» или OpenRouter) — не 400")
+    func deepSeekToolHistoryWithoutReasoning() async throws {
+        let routes = ModelRouteClient(keys: keys.provider)
+        let call = ModelToolCall(id: "call_live_1", name: "page_read", arguments: #"{"page":"current"}"#)
+        let messages: [ModelMessage] = [.system(AgentPrompt.systemInstruction), .user("Что за сыр на странице?"),
+                                        .assistant(text: "", reasoning: nil, toolCalls: [call]),
+                                        .tool(callID: call.id, content: ##"{"markdown":"# Покупки\n- сыр «Маасдам»"}"##)]
+        for level in [ReasoningLevel.low, .high] {
+            var turn = ModelTurn()
+            let request = ModelRequest(messages: messages, tools: NoteToolbox.tools, level: level)
+            for try await event in routes.stream(request, route: ModelCatalog.deepSeekFlash.routes[0]) { turn.apply(event) }
+            #expect(turn.text.contains("Маасдам"), "\(level): \(turn.text)")
+        }
+    }
+
     @Test("Агент вызывает инструмент и отвечает по его результату — каждой моделью")
     func agentTools() async throws {
         let client = FallbackModelClient(routes: ModelRouteClient(keys: keys.provider))

@@ -122,19 +122,48 @@ package enum AIChatSync {
         }
     }
 
-    /// Все чаты с сообщениями — для снимка.
-    package static func all(in db: Database) throws -> [AIChatSyncRecord] {
-        var byId: [UUID: AIChatSyncRecord] = [:]
-        var order: [UUID] = []
-        for row in try Row.fetchAll(db, sql: "SELECT * FROM ai_chat ORDER BY updatedAt, id") {
-            let record = try header(row)
-            byId[record.id] = record
-            order.append(record.id)
+    /// Чаты для снимка. Снимок уходит на сервер одним куском, а чатов за годы набирается много: в него идут самые
+    /// свежие чаты целиком, пока влезают в `maxBytes`. Остальные устройство, начавшее со снимка, попросит у других пачками.
+    package struct SnapshotChats: Sendable {
+        package let records: [AIChatSyncRecord]
+        package let isComplete: Bool
+    }
+
+    package static let snapshotMaxBytes = 8_000_000
+
+    package static func snapshot(in db: Database, maxBytes: Int = snapshotMaxBytes) throws -> SnapshotChats {
+        var sizes: [UUID: Int] = [:]
+        for row in try Row.fetchAll(db, sql: "SELECT chatId, SUM(length(CAST(body AS BLOB)) + 200) AS size FROM ai_chat_message GROUP BY chatId") {
+            sizes[try AIChatRows.uuid(row, "chatId")] = row["size"]
         }
-        for row in try Row.fetchAll(db, sql: "SELECT * FROM ai_chat_message \(AIChatRows.messageOrder)") {
-            byId[try AIChatRows.uuid(row, "chatId")]?.messages.append(try message(row))
+        var records: [AIChatSyncRecord] = []
+        var bytes = 0
+        var isComplete = true
+        for row in try Row.fetchAll(db, sql: "SELECT * FROM ai_chat ORDER BY updatedAt DESC, id DESC") {
+            var record = try header(row)
+            let size = record.title.utf8.count + 300 + (sizes[record.id] ?? 0)
+            guard bytes + size <= maxBytes else {
+                isComplete = false
+                continue
+            }
+            bytes += size
+            record.messages = try Row.fetchAll(db, sql: "SELECT * FROM ai_chat_message WHERE chatId = ? \(AIChatRows.messageOrder)",
+                                               arguments: [record.id.databaseText]).map(message)
+            records.append(record)
         }
-        return order.compactMap { byId[$0] }
+        return SnapshotChats(records: records.reversed(), isComplete: isComplete)
+    }
+
+    /// Чаты из снимка. Снимок старой версии (без чатов) или с частью чатов — недостающие попросить у других устройств.
+    @discardableResult
+    package static func mergeSnapshot(_ records: [AIChatSyncRecord]?, isComplete: Bool, in transaction: NotesTransaction) throws -> Bool {
+        let changed = try merge(records, requestedByOthers: false, in: transaction)
+        if records == nil {
+            try markAllForSending(requestingOthers: true, in: transaction.database)
+        } else if !isComplete {
+            try setMeta(requestMark, UUID().uuidString, in: transaction.database)
+        }
+        return changed
     }
 
     /// Пришедшие чаты. `true` — что-то поменялось: списку чатов перечитать.

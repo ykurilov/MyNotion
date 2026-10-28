@@ -18,10 +18,13 @@ final class ScriptedModel: ChatModelClient {
 
     private let replies: Mutex<[Reply]>
     private let seen = Mutex<[ModelRequest]>([])
+    private let terminations = Mutex(0)
 
     init(_ replies: [Reply]) { self.replies = Mutex(replies) }
 
     var requests: [ModelRequest] { seen.withLock { $0 } }
+    /// Сколько ответов закрыто — дочитанных или остановленных.
+    var closed: Int { terminations.withLock { $0 } }
 
     func stream(_ request: ModelRequest, model: ChatModel) -> AsyncThrowingStream<ModelStreamEvent, Error> {
         seen.withLock { $0.append(request) }
@@ -40,8 +43,40 @@ final class ScriptedModel: ChatModelClient {
                     continuation.finish()
                 }
             }
-            continuation.onTermination = { _ in task.cancel() }
+            continuation.onTermination = { _ in
+                task.cancel()
+                self.terminations.withLock { $0 += 1 }
+            }
         }
+    }
+}
+
+/// Задвижка: тот, кто ждёт, стоит, пока тест не откроет. Отмена ожидания не прерывает.
+final class Gate: Sendable {
+    private let state = Mutex<(isOpen: Bool, waiters: [CheckedContinuation<Void, Never>])>((false, []))
+    private let arrivals = Mutex(0)
+
+    var waiting: Int { arrivals.withLock { $0 } }
+
+    func wait() async {
+        arrivals.withLock { $0 += 1 }
+        await withCheckedContinuation { continuation in
+            let resumeNow = state.withLock { state -> Bool in
+                if state.isOpen { return true }
+                state.waiters.append(continuation)
+                return false
+            }
+            if resumeNow { continuation.resume() }
+        }
+    }
+
+    func open() {
+        let waiters = state.withLock { state -> [CheckedContinuation<Void, Never>] in
+            state.isOpen = true
+            defer { state.waiters = [] }
+            return state.waiters
+        }
+        waiters.forEach { $0.resume() }
     }
 }
 
@@ -83,6 +118,13 @@ struct AIChatControllerTests {
     private func controller(_ model: ScriptedModel, commands: @escaping NoteToolbox.Runner = { .success($0.id, ["ok": true]) }) -> AIChatController {
         let holder = page
         return AIChatController(chats: chats, model: model, runner: commands, openPage: { holder.page }, defaults: defaults)
+    }
+
+    private func wait(until condition: () throws -> Bool) async throws {
+        for _ in 0..<300 {
+            if try condition() { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
     }
 
     private func finish(_ controller: AIChatController) async throws {
@@ -201,6 +243,98 @@ struct AIChatControllerTests {
         #expect(stopped.text == "Начинаю")
         #expect(stopped.error == nil)
         #expect(try chats.messages(in: #require(controller.chatID)).count == 2)
+    }
+
+    @Test("«Стоп» посреди инструмента: начатое действие доводится, его итог в чате и в базе — модель не повторит его вслепую")
+    func stopDuringTool() async throws {
+        let model = ScriptedModel([
+            .events([.toolCall(ToolCallDelta(index: 0, id: "c1", name: "page_append", arguments: #"{"page":"current","markdown":"- пункт"}"#)),
+                     .finished("tool_calls")]),
+            .events([.text("лишнее")]),
+        ])
+        let gate = Gate()
+        let controller = controller(model) { request in
+            await gate.wait()
+            return .success(request.id, ["ok": true])
+        }
+        controller.draft = "Допиши пункт"
+        controller.send()
+        try await wait { gate.waiting > 0 && controller.reply?.runningTool != nil }
+        #expect(controller.reply?.runningTool != nil)
+        controller.stop()
+        try await Task.sleep(for: .milliseconds(50))
+        gate.open()
+        try await finish(controller)
+
+        try #require(controller.entries.map(\.kind) == [.user, .assistant, .tool, .assistant])
+        #expect(controller.entries[2].ok == true)
+        #expect(controller.entries[3].stopped == true)
+        #expect(model.requests.count == 1, "После «Стоп» модель больше не спрашивают")
+        #expect(try chats.messages(in: #require(controller.chatID)).count == 4)
+    }
+
+    @Test("Панель закрыли вместе с окном — ответ модели останавливается, а не идёт дальше без хозяина")
+    func droppedControllerStops() async throws {
+        let model = ScriptedModel([.hang([.text("Начинаю")])])
+        var panel: AIChatController? = controller(model)
+        panel?.draft = "Наведи порядок"
+        panel?.send()
+        for _ in 0..<200 where panel?.reply?.text != "Начинаю" { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(panel?.reply?.text == "Начинаю")
+        let chatID = try #require(panel?.chatID)
+        panel = nil
+        for _ in 0..<200 where model.closed == 0 { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(model.closed == 1)
+        try await wait { try chats.messages(in: chatID).count >= 2 }
+        let last = try #require(try chats.messages(in: chatID).last)
+        #expect(try ChatEntryCoding.decode(last.body).stopped == true, "Пришедшее сохранено с пометкой «остановлено»")
+    }
+
+    @Test("Чат сменили, пока ход только начинался — сообщение остаётся в своём чате, в другой не попадает")
+    func switchWhileStarting() async throws {
+        let first = try chats.createChat(title: "Первый")
+        let second = try chats.createChat(title: "Второй")
+        let gate = Gate()
+        let holder = page
+        let model = ScriptedModel([])
+        let controller = AIChatController(chats: chats, model: model, runner: { .success($0.id, [:]) },
+                                          openPage: { await gate.wait(); return holder.page }, defaults: defaults)
+        controller.openChat(first.id)
+        controller.draft = "В первый"
+        controller.send()
+        for _ in 0..<200 where gate.waiting == 0 { try await Task.sleep(for: .milliseconds(10)) }
+        controller.openChat(second.id)
+        gate.open()
+        try await wait { try chats.messages(in: first.id).count >= 2 }
+
+        #expect(try chats.messages(in: second.id).isEmpty)
+        let saved = try chats.messages(in: first.id).map { try ChatEntryCoding.decode($0.body) }
+        #expect(saved.map(\.kind) == [.user, .assistant])
+        #expect(saved.first?.text == "В первый")
+        #expect(saved.last?.stopped == true)
+        #expect(model.requests.isEmpty)
+        #expect(controller.chatID == second.id)
+        #expect(controller.entries.isEmpty)
+    }
+
+    @Test("Новый чат во время ответа: живой ответ не переезжает, новое сообщение уходит сразу")
+    func newChatDuringReply() async throws {
+        let model = ScriptedModel([.hang([.text("Старый ответ")]), .events([.text("Новый ответ")])])
+        let controller = controller(model)
+        controller.draft = "первый"
+        controller.send()
+        for _ in 0..<200 where controller.reply?.text != "Старый ответ" { try await Task.sleep(for: .milliseconds(10)) }
+        let first = try #require(controller.chatID)
+        controller.newChat()
+        #expect(controller.reply == nil)
+        #expect(!controller.isRunning)
+        controller.draft = "второй"
+        controller.send()
+        #expect(controller.draft.isEmpty)
+        try await finish(controller)
+        #expect(controller.entries.map(\.text) == ["второй", "Новый ответ"])
+        try await wait { try chats.messages(in: first).count >= 2 }
+        #expect(try chats.messages(in: first).count == 2, "Старый ход дописал в свой чат пометку «остановлено»")
     }
 
     @Test("Пока идёт ответ, второе сообщение не уходит; пустое — тоже")

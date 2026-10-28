@@ -76,18 +76,26 @@ public final class FallbackModelClient: ChatModelClient {
         let started: Bool
     }
 
+    /// Попытка пути: ждёт первого кусочка, начала ответа или срыва по сроку. Переход из ожидания — один раз и под одним
+    /// замком: кусочек, пришедший к самому сроку, либо начинает ответ, либо отбрасывается, но не то и другое сразу.
+    private enum Phase { case waiting, started, timedOut }
+
     /// События до первого кусочка ответа копятся: если путь сорвётся, чат их не увидит.
     private func attempt(_ request: ModelRequest, route: ModelRoute,
                          continuation: AsyncThrowingStream<ModelStreamEvent, Error>.Continuation) async throws {
-        let started = Mutex(false)
-        let timedOut = Mutex(false)
+        let phase = Mutex(Phase.waiting)
+        /// Ожидание → ответ; `false` — сторож успел раньше, и этот путь чату больше не пишет.
+        let startAnswer = { phase.withLock { phase -> Bool in
+            if phase == .waiting { phase = .started }
+            return phase == .started
+        } }
         let reader = Task {
             var pending: [ModelStreamEvent] = []
             for try await event in routes.stream(request, route: route) {
-                if started.withLock({ $0 }) {
+                if phase.withLock({ $0 == .started }) {
                     continuation.yield(event)
                 } else if event.isContent {
-                    started.withLock { $0 = true }
+                    guard startAnswer() else { return }
                     pending.forEach { continuation.yield($0) }
                     pending = []
                     continuation.yield(event)
@@ -95,16 +103,18 @@ public final class FallbackModelClient: ChatModelClient {
                     pending.append(event)
                 }
             }
-            // Поток, отменённый сторожем, просто кончается: его начало чату не нужно.
-            if !Task.isCancelled { pending.forEach { continuation.yield($0) } }
+            // Ответ без единого кусочка (пустой) — тоже ответ, если сторож не успел раньше.
+            if !Task.isCancelled, !pending.isEmpty, startAnswer() { pending.forEach { continuation.yield($0) } }
         }
         let timeout = firstTokenTimeout
         let watchdog = Task {
             try await Task.sleep(for: timeout)
-            if !started.withLock({ $0 }) {
-                timedOut.withLock { $0 = true }
-                reader.cancel()
+            let fired = phase.withLock { phase -> Bool in
+                guard phase == .waiting else { return false }
+                phase = .timedOut
+                return true
             }
+            if fired { reader.cancel() }
         }
         defer { watchdog.cancel() }
         do {
@@ -114,9 +124,10 @@ public final class FallbackModelClient: ChatModelClient {
                 reader.cancel()
             }
         } catch {
-            if timedOut.withLock({ $0 }) { throw AttemptFailure(error: ModelError.timeout, started: false) }
-            throw AttemptFailure(error: error, started: started.withLock { $0 })
+            let final = phase.withLock { $0 }
+            if final == .timedOut { throw AttemptFailure(error: ModelError.timeout, started: false) }
+            throw AttemptFailure(error: error, started: final == .started)
         }
-        if timedOut.withLock({ $0 }) { throw AttemptFailure(error: ModelError.timeout, started: false) }
+        if phase.withLock({ $0 == .timedOut }) { throw AttemptFailure(error: ModelError.timeout, started: false) }
     }
 }

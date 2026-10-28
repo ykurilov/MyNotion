@@ -50,6 +50,21 @@ struct ChatCompletionBodyTests {
         #expect(body["messages"]?[2] == ["role": "tool", "tool_call_id": "call_1", "content": "текст"])
     }
 
+    @Test("DeepSeek с рассуждениями: ход с инструментами без рассуждений уходит с пустым reasoning_content, иначе 400")
+    func deepSeekEmptyReasoningPassback() {
+        let call = ModelToolCall(id: "call_1", name: "page_read", arguments: "{}")
+        let messages: [ModelMessage] = [.user("Что там?"), .assistant(text: "", reasoning: nil, toolCalls: [call]),
+                                        .tool(callID: "call_1", content: "текст"), .assistant(text: "Готово", reasoning: nil, toolCalls: [])]
+        let thinking = ChatCompletionBody.json(for: request(level: .high, messages: messages), route: deepSeek)
+        #expect(thinking["messages"]?[1]?["reasoning_content"] == "")
+        #expect(thinking["messages"]?[3]?["reasoning_content"] == nil, "Готовому ответу рассуждения не нужны")
+        let plain = ChatCompletionBody.json(for: request(level: .none, messages: messages), route: deepSeek)
+        #expect(plain["messages"]?[1]?["reasoning_content"] == nil)
+        let reserve = ChatCompletionBody.json(for: request(level: .high, messages: messages), route: deepSeekReserve)
+        #expect(reserve["messages"]?[1]?["reasoning"] == nil)
+        #expect(reserve["messages"]?[1]?["reasoning_content"] == nil)
+    }
+
     @Test("OpenRouter: сила рассуждений в reasoning.effort, рассуждения ответа — в reasoning")
     func openRouterEffort() {
         let messages: [ModelMessage] = [.user("Привет"), .assistant(text: "Здравствуйте", reasoning: "думаю", toolCalls: [])]

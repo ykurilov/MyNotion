@@ -168,4 +168,14 @@ struct AgentLoopTests {
         #expect(model.seen.count == 3)
         #expect(!AgentError.tooManySteps.message.isEmpty)
     }
+
+    @Test("Ответ оборвался по длине посреди вызова — вызов не выполняется, понятная ошибка")
+    func truncatedToolCall() async throws {
+        let model = ScriptedModel([[toolCall("c1", "page_append", ##"{"page":"current","markdown":"# Нача"}"##), .finished("length")]])
+        let commands = FakeCommands()
+        let loop = AgentLoop(model: model, toolbox: NoteToolbox(runner: commands.runner))
+        await #expect(throws: AgentError.truncatedToolCall) { _ = try await run(loop, [.user("Допиши", page: nil)]) }
+        #expect(commands.seen.isEmpty)
+        #expect(!AgentError.truncatedToolCall.message.isEmpty)
+    }
 }

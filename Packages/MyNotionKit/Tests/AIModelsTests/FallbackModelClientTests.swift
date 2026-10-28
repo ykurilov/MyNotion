@@ -13,6 +13,8 @@ final class FakeModelNetwork: Sendable {
         case silence
         /// Часть потока, затем обрыв связи.
         case linesThenFailure([String], URLError.Code)
+        /// Строки после паузы.
+        case delayed(Duration, [String])
     }
 
     private let replies: Mutex<[ModelProvider: [Reply]]>
@@ -58,6 +60,15 @@ final class FakeModelNetwork: Sendable {
             case .silence:
                 try await Task.sleep(for: .seconds(60))
                 throw URLError(.timedOut)
+            case .delayed(let pause, let lines):
+                return (ok, AsyncThrowingStream { continuation in
+                    let task = Task {
+                        try? await Task.sleep(for: pause)
+                        for line in lines { continuation.yield(line) }
+                        continuation.finish()
+                    }
+                    continuation.onTermination = { _ in task.cancel() }
+                })
             case .linesThenFailure(let lines, let code):
                 return (ok, AsyncThrowingStream { continuation in
                     for line in lines { continuation.yield(line) }
@@ -140,6 +151,38 @@ struct FallbackModelClientTests {
                                         .openRouter: [.lines(answer("лишнее"))]])
         await #expect(throws: ModelError.network) { try await collect(client(network)) }
         #expect(network.providers == [.deepSeek])
+    }
+
+    @Test("Первый кусочек приходит ровно к сроку сторожа — ответ одним путём, без задвоения")
+    func watchdogRace() async throws {
+        for round in 0..<300 {
+            let pause = Duration.microseconds(1_500 + (round % 30) * 50)
+            let network = FakeModelNetwork([.deepSeek: [.delayed(pause, answer("Напрямую"))], .openRouter: [.lines(answer("Запасной"))]])
+            let turn = try await collect(client(network, timeout: .milliseconds(2)))
+            #expect(turn.text == "Напрямую" || turn.text == "Запасной", "Раунд \(round): \(turn.text)")
+            if turn.text == "Запасной" { #expect(turn.route?.provider == .openRouter) }
+            if turn.text == "Напрямую" { #expect(network.providers == [.deepSeek], "Раунд \(round)") }
+        }
+    }
+
+    @Test("Поток оборвался без [DONE] и без причины конца — ошибка связи, а не готовый ответ")
+    func cutStream() async throws {
+        let network = FakeModelNetwork([.deepSeek: [.lines([#"data: {"choices":[{"delta":{"content":"Нач"}}]}"#])],
+                                        .openRouter: [.lines(answer("лишнее"))]])
+        await #expect(throws: ModelError.network) { try await collect(client(network)) }
+        #expect(network.providers == [.deepSeek], "Ответ уже начался — запасной путь задвоил бы его")
+    }
+
+    @Test("Поток кончился причиной конца без [DONE] — ответ готов")
+    func finishedWithoutDone() async throws {
+        let network = FakeModelNetwork([.deepSeek: [.lines(Array(answer("Готово").dropLast()))]])
+        #expect(try await collect(client(network)).text == "Готово")
+    }
+
+    @Test("Ответ 200 с ошибкой JSON-телом без data: — ошибка поставщика, не пустой ответ")
+    func bareErrorBody() async throws {
+        let network = FakeModelNetwork([.openRouter: [.lines([#"{"error":{"code":400,"message":"No endpoints found"}}"#])]])
+        await #expect(throws: ModelError.provider("No endpoints found")) { try await collect(client(network), model: ModelCatalog.glmFlash) }
     }
 
     @Test("После сбоя две минуты запросы идут сразу через OpenRouter, потом снова напрямую")

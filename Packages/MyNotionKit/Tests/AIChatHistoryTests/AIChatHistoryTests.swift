@@ -245,13 +245,40 @@ struct AIChatSyncTests {
         let a = try ChatDevice()
         let chat = try a.chats.createChat(title: "Из снимка", at: date)
         try a.chats.append("m", id: UUID(), to: chat.id, at: date)
-        let all = try a.notes.database.dbWriter.read { try AIChatSync.all(in: $0) }
-        #expect(all.count == 1)
-        #expect(all.first?.messages.count == 1)
+        let snapshot = try a.notes.database.dbWriter.read { try AIChatSync.snapshot(in: $0) }
+        #expect(snapshot.isComplete)
+        #expect(snapshot.records.count == 1)
+        #expect(snapshot.records.first?.messages.count == 1)
 
         let c = try ChatDevice()
-        try c.receive(all)
+        try c.notes.write { try AIChatSync.mergeSnapshot(snapshot.records, isComplete: true, in: $0) }
         #expect(try c.chats.messages(in: chat.id).map(\.body) == ["m"])
+        #expect(try c.pending() == nil, "Полный снимок — просить у других нечего")
+    }
+
+    @Test("Снимок не растёт без предела: свежие чаты целиком, старые не влезли — новое устройство попросит их у других")
+    func boundedSnapshot() throws {
+        let a = try ChatDevice()
+        let page = String(repeating: "т", count: 20_000)
+        var ids: [UUID] = []
+        for day in 0..<5 {
+            let at = date.addingTimeInterval(Double(day) * 86_400)
+            let chat = try a.chats.createChat(title: "Чат \(day)", at: at)
+            for minute in 0..<3 { try a.chats.append(page, id: UUID(), to: chat.id, at: at.addingTimeInterval(Double(minute) * 60)) }
+            ids.append(chat.id)
+        }
+        let snapshot = try a.notes.database.dbWriter.read { try AIChatSync.snapshot(in: $0, maxBytes: 300_000) }
+        #expect(!snapshot.isComplete)
+        let size = snapshot.records.flatMap(\.messages).reduce(0) { $0 + $1.body.utf8.count }
+        #expect(size <= 300_000)
+        #expect(Set(snapshot.records.map(\.id)) == Set(ids.suffix(2)), "Влезли два самых свежих чата")
+        #expect(snapshot.records.allSatisfy { $0.messages.count == 3 }, "Чат в снимке — целиком, без дыр")
+
+        let c = try ChatDevice()
+        try c.notes.write { try AIChatSync.mergeSnapshot(snapshot.records, isComplete: false, in: $0) }
+        let request = try #require(try c.pending())
+        #expect(request.request != nil, "Устройство со снимком без части чатов просит другие прислать свои")
+        #expect(request.records.isEmpty, "Свои — пришедшие из снимка — обратно не отправляет")
     }
 
     @Test("Запись пачки читается и без новых полей; незнакомые поля пропускаются")

@@ -83,9 +83,8 @@ public final class RemoteChangeApplier {
             if snapshot.serviceKeys == nil, serviceKeys != nil {
                 try ServiceKeys.markForSending(requestingOthers: true, in: transaction.database)
             }
-            chatsChanged = try AIChatSync.merge(snapshot.aiChats, requestedByOthers: false, in: transaction)
-            // Снимок версии без чатов: чаты из сжатой части журнала пропали — попросить другие устройства.
-            if snapshot.aiChats == nil { try AIChatSync.markAllForSending(requestingOthers: true, in: transaction.database) }
+            // Снимок версии без чатов или с частью чатов: недостающие из сжатой части журнала попросить у других устройств.
+            chatsChanged = try AIChatSync.mergeSnapshot(snapshot.aiChats, isComplete: snapshot.aiChatsPartial != true, in: transaction)
             try SyncAccountStore.recordPulled(seq: snapshot.seq, in: transaction.database)
             return merged
         }

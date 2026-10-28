@@ -55,6 +55,16 @@ struct StreamChunkDecoderTests {
         }
         #expect(throws: ModelError.badResponse) { try StreamChunkDecoder.decode(line: "data: {не json") }
     }
+
+    @Test("Ошибка JSON-телом без data: при ответе 200 — ошибка, а не пустой ответ")
+    func bareErrorBody() {
+        #expect(throws: ModelError.provider("Model is overloaded")) {
+            try StreamChunkDecoder.decode(line: #"{"error":{"code":400,"message":"Model is overloaded"}}"#, provider: .openRouter)
+        }
+        #expect(throws: ModelError.server(.deepSeek, 503)) {
+            try StreamChunkDecoder.decode(line: #"  {"error":{"code":503,"message":"busy"}}"#, provider: .deepSeek)
+        }
+    }
 }
 
 @Suite("Сборка ответа модели")
@@ -77,6 +87,32 @@ struct ModelTurnTests {
                                    ModelToolCall(id: "b", name: "search", arguments: "{}")])
         #expect(turn.finishReason == "tool_calls")
         #expect(turn.usage?.promptTokens == 10)
+    }
+
+    @Test("Параллельные вызовы под одним index с разными id — два вызова; имя, повторённое в каждом кусочке, не двоится")
+    func sameIndexCalls() {
+        var turn = ModelTurn()
+        for delta in [ToolCallDelta(index: 0, id: "a", name: "page_read", arguments: #"{"page":"#),
+                      ToolCallDelta(index: 0, id: "a", name: "page_read", arguments: #""x"}"#),
+                      ToolCallDelta(index: 0, id: "b", name: "search", arguments: #"{"query":"y"}"#),
+                      ToolCallDelta(index: 1, id: nil, name: "page_", arguments: ""),
+                      ToolCallDelta(index: 1, id: nil, name: "tree", arguments: "")] {
+            turn.apply(.toolCall(delta))
+        }
+        #expect(turn.toolCalls.map(\.name) == ["page_read", "search", "page_tree"])
+        #expect(turn.toolCalls.map(\.arguments) == [#"{"page":"x"}"#, #"{"query":"y"}"#, "{}"])
+        #expect(turn.toolCalls.prefix(2).map(\.id) == ["a", "b"])
+        #expect(!turn.toolCalls[2].id.isEmpty)
+    }
+
+    @Test("Вызов без id получает свой id, а id из следующего кусочка заменяет его, не начиная новый вызов")
+    func lateID() {
+        var turn = ModelTurn()
+        turn.apply(.toolCall(ToolCallDelta(index: 0, id: nil, name: "page_read", arguments: "{")))
+        let generated = turn.toolCalls.first?.id
+        #expect(generated == turn.toolCalls.first?.id, "Свой id не меняется от чтения к чтению")
+        turn.apply(.toolCall(ToolCallDelta(index: 0, id: "real", name: nil, arguments: "}")))
+        #expect(turn.toolCalls == [ModelToolCall(id: "real", name: "page_read", arguments: "{}")])
     }
 
     @Test("Вызов без аргументов получает {}, без id — свой id")

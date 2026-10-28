@@ -56,13 +56,21 @@ public struct ModelRouteClient: Sendable {
             throw ModelError.status(response.statusCode, body: body, provider: route.provider)
         }
         continuation.yield(.route(route))
+        var isFinished = false
         for try await line in lines {
             try Task.checkCancellation()
             switch try StreamChunkDecoder.decode(line: line, provider: route.provider) {
             case .done: return
-            case .events(let events): for event in events { continuation.yield(event) }
+            case .events(let events):
+                for event in events {
+                    if case .finished = event { isFinished = true }
+                    continuation.yield(event)
+                }
             }
         }
+        try Task.checkCancellation()
+        // Связь оборвалась «чисто»: без [DONE] и причины конца недописанный ответ сошёл бы за готовый.
+        guard isFinished else { throw ModelError.network }
     }
 
     static func modelError(_ error: Error) -> Error {
