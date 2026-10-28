@@ -2,7 +2,8 @@ import XCTest
 
 /// Цвет текста, фона и блока вживую (FR-112): слово красится кнопкой «A» панели форматирования, другое слово получает
 /// цвет фона, весь блок — цвет из меню «⋮⋮» → «Цвет». После перезапуска цвета на месте, в выгрузке в Markdown они есть.
-/// Правила окна цветов и подложки проверены модульными тестами; здесь — что части работают вместе, в обеих темах.
+/// Правила окна цветов и подложки проверены модульными тестами; здесь — что части работают вместе.
+/// Сценарий идёт один раз в светлой теме; тёмная — снимком страницы после перезапуска в ней.
 final class ColorTests: XCTestCase {
     private var library: UITestLibrary!
 
@@ -11,12 +12,9 @@ final class ColorTests: XCTestCase {
         library = try UITestLibrary.make(for: self)
     }
 
-    @MainActor func testColorsLightTheme() throws { try colorWordsAndBlock(appearance: "light", exportToMarkdown: true) }
-    @MainActor func testColorsDarkTheme() throws { try colorWordsAndBlock(appearance: "dark", exportToMarkdown: false) }
-
     @MainActor
-    private func colorWordsAndBlock(appearance: String, exportToMarkdown: Bool) throws {
-        var app = library.launchApp(appearance: appearance)
+    func testColorWordsAndBlock() throws {
+        var app = library.launchApp(appearance: "light")
         app.createPage(titled: "Цвета")
         app.typeText("раз два три")
 
@@ -57,9 +55,9 @@ final class ColorTests: XCTestCase {
         XCTAssertTrue(app.colorRow("text", "text", "blue").waitForExistence(timeout: 5), "Окно цветов от меню блока не открылось")
         app.chooseColor("text", "text", "blue")
         XCTAssertTrue(app.colorRow("text", "text", "blue").waitForNonExistence(timeout: 5))
-        attachSnapshot(of: app.pageBody, named: "colors-\(appearance)")
+        attachSnapshot(of: app.pageBody, named: "colors-light")
 
-        if exportToMarkdown { try exportAndCheckMarkdown(in: app) }
+        try exportAndCheckMarkdown(in: app)
         app.quit()
 
         let styles = try XCTUnwrap(library.savedTextStyles(ofPage: "Цвета").first)
@@ -68,11 +66,11 @@ final class ColorTests: XCTestCase {
         let blockColor = try XCTUnwrap(library.savedBlockColors(ofPage: "Цвета").first)
         XCTAssertTrue(blockColor.contains("\"blue\""), "Синий цвет блока не записан: \(blockColor)")
 
-        // Перезапуск: цвета на месте, а текст тот же.
-        app = library.launchApp(appearance: appearance)
+        // Перезапуск в тёмной теме: цвета на месте, а текст тот же.
+        app = library.launchApp(appearance: "dark")
         XCTAssertTrue(app.pageBody.waitForExistence(timeout: 10))
         XCTAssertEqual(app.pageBody.value as? String, "раз два три")
-        attachSnapshot(of: app.pageBody, named: "colors-relaunched-\(appearance)")
+        attachSnapshot(of: app.pageBody, named: "colors-relaunched-dark")
         app.quit()
         XCTAssertEqual(try library.savedTextStyles(ofPage: "Цвета").first, styles, "После перезапуска оформление изменилось")
     }

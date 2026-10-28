@@ -2,7 +2,8 @@ import AppKit
 import XCTest
 
 /// «Исправить ошибки» вживую с подменным исправителем (`--fake-proofreader`: без сети и ключа):
-/// выделил текст → кнопка в панели → окно правок → «Заменить» → ⌘Z возвращает. Снимки окна — в светлой и тёмной теме.
+/// выделил текст → кнопка в панели → окно правок → «Заменить» → ⌘Z возвращает; Esc в окне правок — «Отмена».
+/// Сценарий — в светлой теме; тёмная — только снимок окна правок.
 /// Сравнение, перенос оформления и ошибки проверены модульными тестами `ProofreadingTests` и `ProofreadTests`.
 final class ProofreadTests: XCTestCase {
     private var library: UITestLibrary!
@@ -32,6 +33,16 @@ final class ProofreadTests: XCTestCase {
 
         app.typeKey("z", modifierFlags: .command)
         XCTAssertEqual(app.pageBody.value as? String, "превет всем, как дила", "⌘Z не вернул текст одним шагом")
+
+        // Esc — «Отмена»: окно закрывается, текст прежний.
+        app.typeKey(.rightArrow, modifierFlags: .command)
+        app.typeKey(.leftArrow, modifierFlags: [.command, .shift])
+        XCTAssertTrue(button.waitForExistence(timeout: 5), "Панель не всплыла над выделением")
+        button.click()
+        XCTAssertTrue(replace.waitForExistence(timeout: 10), "Окно правок не открылось второй раз")
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(replace.waitForNonExistence(timeout: 5), "Esc не закрыл окно правок")
+        XCTAssertEqual(app.pageBody.value as? String, "превет всем, как дила")
         app.quit()
     }
 
@@ -46,10 +57,6 @@ final class ProofreadTests: XCTestCase {
         button.click()
         XCTAssertTrue(app.descendants(matching: .any)["proofread-replace"].waitForExistence(timeout: 10))
         attachSnapshot(of: app, named: "grammar-dark")
-        // Esc — «Отмена»: окно закрывается, текст прежний.
-        app.typeKey(.escape, modifierFlags: [])
-        XCTAssertTrue(app.descendants(matching: .any)["proofread-replace"].waitForNonExistence(timeout: 5))
-        XCTAssertEqual(app.pageBody.value as? String, "превет всем, как дила")
         app.quit()
     }
 

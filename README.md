@@ -126,8 +126,12 @@ iMac (пароль рядом, права 600) и профиль «MyNotion iPho
 
 ```sh
 # Всё — на iMac через imac-run (см. «Проверки на iMac»): основной Mac только правит код.
-# Модули (Swift Testing)
-cd Packages/MyNotionKit && imac-run --no-fallback --wait 1800 --no-setup -- swift test --jobs 4
+# Модули (Swift Testing): каждый тестовый модуль — свой процесс, 4 дорожки параллельно; логи — .build/test-lanes
+imac-run --no-fallback --wait 1800 --no-setup -- zsh scripts/test-package.zsh [--filter <имя>]
+
+# Группа замеров скорости — в обычном прогоне её нет: полные объёмы эталонной базы и бюджеты времени
+# (тесты с «Performance»/«FullScale» в имени, MYNOTION_PERF=1) и UI-бюджеты: меню «/» ≤ 3 с (SlashMenuSpeedTests), страница с клавиатуры ≤ 10 с (KeyboardOnlyPageTests)
+scripts/imac/perf-tests.zsh [package|ui]
 
 # Сценарии XCUITest — сборка и прогон на iMac, журнал и снимки возвращаются сюда
 scripts/imac/run-on-imac.sh uitest [-only-testing:UITests/<Класс>]

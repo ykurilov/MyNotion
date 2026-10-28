@@ -3,6 +3,8 @@ import XCTest
 /// SC-101: любой новый блок 002 создаётся через «/» не дольше 3 секунд набора — от первого знака «/» до блока на странице.
 /// Картинка, файл, видео и закладка дальше ждут файл или адрес: для них конец набора — открывшееся окно вставки,
 /// а у видео и закладки ещё вставляется адрес, чтобы проверить, что блок записался. Каждый тип — на своей странице.
+/// Замер скорости — группа замеров, в обычном прогоне его нет: `scripts/imac/perf-tests.zsh ui`
+/// (`TEST_RUNNER_MYNOTION_PERF=1`). Меню «/» вживую в обычном прогоне проверяет `BlockEditingTests`.
 final class SlashMenuSpeedTests: XCTestCase {
     private var library: UITestLibrary!
 
@@ -38,6 +40,7 @@ final class SlashMenuSpeedTests: XCTestCase {
 
     @MainActor
     func testEveryNewBlockFromSlashWithinThreeSeconds() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["MYNOTION_PERF"] != nil, "замер скорости: MYNOTION_PERF=1")
         let app = library.launchApp()
         var timings: [(String, TimeInterval)] = []
         var savedKinds: [String: String] = [:]
