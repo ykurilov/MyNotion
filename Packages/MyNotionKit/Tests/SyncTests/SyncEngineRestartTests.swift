@@ -36,8 +36,10 @@ struct SyncEngineRestartTests {
         engine.stop()
     }
 
+    /// Ждёт условие, а не время: зелёный прогон проходит за доли секунды. Запас 30 с — на очередь главного потока
+    /// под чужой нагрузкой; без исправления цикл не проснётся вовсе, и тест всё равно упадёт.
     private func waitUntil(_ what: String, _ condition: @MainActor () -> Bool) async throws {
-        let deadline = ContinuousClock.now + .seconds(3)
+        let deadline = ContinuousClock.now + .seconds(30)
         while !condition() {
             guard ContinuousClock.now < deadline else {
                 Issue.record("Не дождались: \(what)")
