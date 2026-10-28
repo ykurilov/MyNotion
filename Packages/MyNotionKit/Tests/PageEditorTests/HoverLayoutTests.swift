@@ -142,6 +142,35 @@ struct TrailingParagraphClickTests {
         #expect(editor.document.blocks.count == 2)
     }
 
+    @Test("Пустой абзац от щелчка — не отдельный шаг: одно ⌘Z убирает его и отменяет прежнее действие")
+    func clickAddedParagraphIsNotItsOwnUndoStep() throws {
+        let editor = try EditorFixture([.checkbox("Задача")])
+        let id = editor.document.blocks[0].id
+        editor.step { editor.textView.toggleCheckbox(ofBlock: id) }
+        try clickBelow(editor)
+        #expect(editor.document.blocks.count == 2)
+        editor.undo()
+        #expect(editor.document.blocks.count == 1)
+        #expect(!editor.document.blocks[0].isChecked)
+        editor.redo()
+        #expect(editor.document.blocks.count == 1)
+        #expect(editor.document.blocks[0].isChecked)
+    }
+
+    @Test("Если в абзац от щелчка что-то вписали, он — обычный шаг отмены")
+    func typedClickAddedParagraphIsItsOwnUndoStep() throws {
+        let editor = try EditorFixture([.checkbox("Задача")])
+        let id = editor.document.blocks[0].id
+        editor.step { editor.textView.toggleCheckbox(ofBlock: id) }
+        try clickBelow(editor)
+        editor.type("а")
+        editor.undo()
+        #expect(editor.document.blocks.count == 2)
+        editor.undo()
+        #expect(editor.document.blocks.count == 1)
+        #expect(editor.document.blocks[0].isChecked)
+    }
+
     @Test("Повторный щелчок не плодит пустые абзацы")
     func repeatedClickAddsNothing() throws {
         let editor = try EditorFixture([.paragraph("Текст"), EditorFixture.Spec(kind: .pageLink, link: UUID())])

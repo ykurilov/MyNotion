@@ -49,6 +49,10 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
     public var onReady: (@MainActor () -> Void)?
     /// Отмена, когда окна нет или оно своей не даёт (проверки без приложения).
     public var fallbackUndoManager: UndoManager?
+    /// Пустой абзац, который поставил щелчок ниже последнего блока, пока в нём ничего не меняли (`TrailingParagraphClick`).
+    var untouchedClickedParagraph: UUID?
+    /// ⌘Z только что убрал такой абзац: отмена идёт дальше, к прежнему действию.
+    var undoesPastClickedParagraph = false
     /// Названия и иконки страниц, на которые ссылаются блоки-подстраницы.
     public var linkedPages: [UUID: LinkedPage] = [:] {
         didSet { if linkedPages != oldValue { redrawBlockDecorations() } }
@@ -245,7 +249,12 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
     }
 
     @objc private func undoManagerDidRestore(_ notification: Notification) {
-        guard notification.object as? UndoManager === undoManager, mapper.hasPendingEdits else { return }
+        guard let undoManager, notification.object as? UndoManager === undoManager else { return }
+        if undoesPastClickedParagraph, notification.name == .NSUndoManagerDidUndoChange {
+            undoesPastClickedParagraph = false
+            if undoManager.canUndo { undoManager.undo() }
+        }
+        guard mapper.hasPendingEdits else { return }
         let blockCount = document.blocks.count
         mapper.commitPendingEdits()
         refreshBlockStructure()
@@ -298,6 +307,7 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
 
     public override func didChangeText() {
         scrollAnchor = nil
+        untouchedClickedParagraph = nil
         super.didChangeText()
         // Посреди набора с помощью IME текст ещё не окончательный.
         guard !hasMarkedText() else { return }
@@ -678,6 +688,11 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
         let previous = blocks[range].map(BlockDraft.init)
         guard previous != drafts || !moved.isEmpty else { return }
         breakUndoCoalescing()
+        if let clicked = untouchedClickedParagraph, undoManager?.isUndoing == true,
+           blocks[range].contains(where: { $0.id == clicked }) {
+            undoesPastClickedParagraph = true
+        }
+        untouchedClickedParagraph = nil
 
         let anchors = selectionAnchors()
         let touchesEnd = range.upperBound == blocks.count
