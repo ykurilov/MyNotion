@@ -44,6 +44,7 @@ let package = Package(
         .library(name: "NotionAPI", targets: ["NotionAPI"]),
         .library(name: "PhoneShell", targets: ["PhoneShell"]),
         .library(name: "PhonePageEditor", targets: ["PhonePageEditor"]),
+        .library(name: "AIModels", targets: ["AIModels"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.11.1"),
@@ -125,6 +126,8 @@ let package = Package(
         // 007. Редактор страницы для iPhone (UIKit): блок — ячейка списка со своим текстом. Правила правки — без UIKit,
         // их тесты идут и на Mac; на Mac сам экран не собирается.
         .target(name: "PhonePageEditor", dependencies: ["NotesCore", "VisualStyle"]),
+        // 008. Модели чата: каталог, запрос, поток, запасной путь DeepSeek → OpenRouter — только Foundation.
+        .target(name: "AIModels", dependencies: ["ControlProtocol"]),
 
         .testTarget(name: "VisualStyleTests", dependencies: ["VisualStyle"]),
         .testTarget(name: "NotesCoreTests", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
@@ -168,6 +171,7 @@ let package = Package(
         .testTarget(name: "NotionAPITests", dependencies: ["NotionAPI"]),
         .testTarget(name: "PhoneShellTests", dependencies: ["PhoneShell", "NotesCore", "Sync"]),
         .testTarget(name: "PhonePageEditorTests", dependencies: ["PhonePageEditor", "NotesCore"]),
+        .testTarget(name: "AIModelsTests", dependencies: ["AIModels", "ControlProtocol"]),
     ],
     swiftLanguageModes: [.v6]
 )
