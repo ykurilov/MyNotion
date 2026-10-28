@@ -45,6 +45,7 @@ let package = Package(
         .library(name: "PhoneShell", targets: ["PhoneShell"]),
         .library(name: "PhonePageEditor", targets: ["PhonePageEditor"]),
         .library(name: "AIModels", targets: ["AIModels"]),
+        .library(name: "AIChatHistory", targets: ["AIChatHistory"]),
         .library(name: "AIAgent", targets: ["AIAgent"]),
     ],
     dependencies: [
@@ -63,7 +64,7 @@ let package = Package(
         .target(name: "MarkdownExport", dependencies: ["NotesCore", "LinkPreview", "Databases", .product(name: "GRDB", package: "GRDB.swift")]),
         // Импорт из Notion (US6): записи и журнал импортов (`import_run`) пишет прямо через GRDB, как поиск свой индекс.
         .target(name: "NotionImport", dependencies: ["NotesCore", "CodeHighlighting", "LinkPreview", "Databases", "MarkdownExport", .product(name: "GRDB", package: "GRDB.swift")]),
-        .target(name: "Sync", dependencies: ["NotesCore", "Proofreading", "NotionAPI", .product(name: "GRDB", package: "GRDB.swift")]),
+        .target(name: "Sync", dependencies: ["NotesCore", "Proofreading", "NotionAPI", "AIChatHistory", .product(name: "GRDB", package: "GRDB.swift")]),
         // Состояния галереи для блоков 002 — из описателей типов редактора (`BlockKinds.gallerySamples`).
         .target(name: "UIGallery", dependencies: ["NotesCore", "PageEditor"]),
         .target(name: "ServiceLaunch"),
@@ -129,6 +130,8 @@ let package = Package(
         .target(name: "PhonePageEditor", dependencies: ["NotesCore", "VisualStyle"]),
         // 008. Модели чата: каталог, запрос, поток, запасной путь DeepSeek → OpenRouter — только Foundation.
         .target(name: "AIModels", dependencies: ["ControlProtocol"]),
+        // Чаты ИИ-агента в базе заметок и их синхронизация; записи — непрозрачный JSON (ChatEntry из AIAgent).
+        .target(name: "AIChatHistory", dependencies: ["NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
         // 008. Агент чата: записи, запрос под кэш, цикл «модель → инструменты», инструменты из каталога команд 005.
         .target(name: "AIAgent", dependencies: ["AIModels", "ControlProtocol"]),
 
@@ -141,7 +144,7 @@ let package = Package(
         .testTarget(name: "MarkdownExportTests", dependencies: ["MarkdownExport", "NotesCore", "Databases"]),
         .testTarget(name: "NotionImportTests", dependencies: ["NotionImport", "NotesCore", "MarkdownExport", "PageEditor", "Databases", .product(name: "GRDB", package: "GRDB.swift")],
                     resources: [.copy("Fixtures")]),
-        .testTarget(name: "SyncTests", dependencies: ["Sync", "NotesCore", "Databases", "Reminders", "Attachments", .product(name: "GRDB", package: "GRDB.swift")]),
+        .testTarget(name: "SyncTests", dependencies: ["Sync", "NotesCore", "AIChatHistory", "Databases", "Reminders", "Attachments", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "UIGalleryTests", dependencies: ["UIGallery", "NotesCore", "PageEditor"]),
         .testTarget(name: "ServiceLaunchTests", dependencies: ["ServiceLaunch"]),
         .testTarget(name: "CodeHighlightingTests", dependencies: ["CodeHighlighting"]),
@@ -176,6 +179,7 @@ let package = Package(
         .testTarget(name: "PhonePageEditorTests", dependencies: ["PhonePageEditor", "NotesCore"]),
         .testTarget(name: "AIModelsTests", dependencies: ["AIModels", "ControlProtocol"]),
         .testTarget(name: "AIAgentTests", dependencies: ["AIAgent", "AIModels", "ControlProtocol"]),
+        .testTarget(name: "AIChatHistoryTests", dependencies: ["AIChatHistory", "NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
     ],
     swiftLanguageModes: [.v6]
 )

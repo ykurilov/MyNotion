@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import AIChatHistory
 import GRDB
 import NotesCore
 
@@ -9,7 +10,12 @@ public enum SyncSetup {
     public static func resume(store: NotesStore) throws -> SyncAccount? {
         let account = try SyncAccountStore(store: store).account()
         store.keepsDeletionMarks = account != nil
-        if account != nil { try store.database.dbWriter.write { try ServiceKeys.introduceIfNeeded(in: $0) } }
+        if account != nil {
+            try store.database.dbWriter.write { db in
+                try ServiceKeys.introduceIfNeeded(in: db)
+                try AIChatSync.introduceIfNeeded(in: db)
+            }
+        }
         return account
     }
 
@@ -22,6 +28,7 @@ public enum SyncSetup {
                                              arguments: [Outbox.setAsidePrefix + "%"])
             try Outbox.enqueueAllRecords(in: transaction)
             try ServiceKeys.introduce(in: transaction.database)
+            try AIChatSync.introduce(in: transaction.database)
         }
         store.keepsDeletionMarks = true
     }
@@ -34,6 +41,7 @@ public enum SyncSetup {
             try db.execute(sql: "DELETE FROM sync_account; DELETE FROM outbox_entry; DELETE FROM app_meta WHERE key LIKE ?",
                            arguments: [Outbox.setAsidePrefix + "%"])
             try ServiceKeys.forgetPending(in: db)
+            try AIChatSync.forgetPending(in: db)
         }
         store.keepsDeletionMarks = false
         try TombstoneCollector(store: store).collect(deviceAcks: [])

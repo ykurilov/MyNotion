@@ -1,3 +1,4 @@
+import AIChatHistory
 import Foundation
 import NotesCore
 
@@ -15,6 +16,10 @@ public struct SyncBatch: Sendable, Hashable, Codable {
     public var serviceKeys: [ServiceKeyChange]?
     /// Устройство просит прислать текущие ключи: оно подключилось или обновилось и могло пропустить их в журнале.
     public var requestsServiceKeys: Bool?
+    /// Чаты ИИ-агента (008): новые сообщения и заголовки. Необязательное, как ключи: старый MyNotion его пропускает.
+    public var aiChats: [AIChatSyncRecord]?
+    /// Устройство просит прислать все чаты: оно могло пропустить их, пока было старой версии.
+    public var requestsAIChats: Bool?
 
     /// 2 — блоки 002: поля `placement`, `color`, `props`, новые типы и оформления, сущность `reminder`
     /// (contracts/sync-and-files-api.md). 3 — поля страницы 003: обложка, вид, избранное, открытие, шаблон
@@ -23,13 +28,16 @@ public struct SyncBatch: Sendable, Hashable, Codable {
     public static let currentFormatVersion = 4
 
     public init(formatVersion: Int = SyncBatch.currentFormatVersion, deviceId: String, deviceName: String,
-                changes: [SyncChange], serviceKeys: [ServiceKeyChange]? = nil, requestsServiceKeys: Bool? = nil) {
+                changes: [SyncChange], serviceKeys: [ServiceKeyChange]? = nil, requestsServiceKeys: Bool? = nil,
+                aiChats: [AIChatSyncRecord]? = nil, requestsAIChats: Bool? = nil) {
         self.formatVersion = formatVersion
         self.deviceId = deviceId
         self.deviceName = deviceName
         self.changes = changes
         self.serviceKeys = serviceKeys
         self.requestsServiceKeys = requestsServiceKeys
+        self.aiChats = aiChats
+        self.requestsAIChats = requestsAIChats
     }
 }
 

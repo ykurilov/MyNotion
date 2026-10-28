@@ -39,7 +39,7 @@ final class SyncController {
     @ObservationIgnored private var fileWork: AttachmentSyncWork?
     @ObservationIgnored private let openDocuments: OpenDocuments
     @ObservationIgnored private let secrets: any SyncSecrets
-    /// Ключи DeepSeek и Notion: ввод в настройках и пришедшие с других устройств.
+    /// Ключи DeepSeek, Notion и OpenRouter: ввод в настройках и пришедшие с других устройств.
     @ObservationIgnored let serviceKeys: ServiceKeySync
     @ObservationIgnored private var serviceKeysObserver: (any NSObjectProtocol)?
     /// Пришедшие правки легли в базу: окну перечитать дерево.
@@ -51,7 +51,8 @@ final class SyncController {
         self.attachments = attachments
         self.openDocuments = openDocuments
         self.secrets = secrets
-        serviceKeys = ServiceKeySync(store: store, keys: KeychainServiceKeys(deepSeek: AppProofreading.keychain, notion: AppNotion.keychain))
+        serviceKeys = ServiceKeySync(store: store, keys: KeychainServiceKeys(deepSeek: AppProofreading.keychain, notion: AppNotion.keychain,
+                                                                                openRouter: AppAIChat.openRouterKeychain))
         serviceKeysObserver = NotificationCenter.default.addObserver(forName: ServiceKeySync.didWriteKeys, object: nil,
                                                                      queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.serviceKeysRevision += 1 }

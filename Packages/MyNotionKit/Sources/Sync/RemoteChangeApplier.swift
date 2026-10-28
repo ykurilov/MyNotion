@@ -1,3 +1,4 @@
+import AIChatHistory
 import Foundation
 import NotesCore
 
@@ -43,8 +44,10 @@ public final class RemoteChangeApplier {
         openDocuments?.saveAll()
         var report = MergeReport()
         var keys: [ServiceKeyChange] = []
+        var chatsChanged = false
         defer {
             writeServiceKeys(keys)
+            if chatsChanged { notifyChats() }
             deliver(report)
         }
         for received in batches {
@@ -52,6 +55,10 @@ public final class RemoteChangeApplier {
                 var merged = try merger.apply(received.batch, in: transaction)
                 let won = try ServiceKeys.merge(received.batch.serviceKeys, requestedByOthers: received.batch.requestsServiceKeys == true,
                                                 names: acceptsServiceKeys ? serviceKeys?.keys.names : nil, in: transaction)
+                if try AIChatSync.merge(received.batch.aiChats, requestedByOthers: received.batch.requestsAIChats == true,
+                                        in: transaction) {
+                    chatsChanged = true
+                }
                 try SyncAccountStore.recordPulled(seq: received.seq, in: transaction.database)
                 keys += won
                 merged.changedServiceKeys = Set(won.map(\.name))
@@ -66,6 +73,7 @@ public final class RemoteChangeApplier {
     public func apply(_ snapshot: SyncSnapshot) throws -> MergeReport {
         openDocuments?.saveAll()
         var keys: [ServiceKeyChange] = []
+        var chatsChanged = false
         let report = try store.write { transaction in
             var merged = try merger.apply(snapshot, in: transaction)
             keys = try ServiceKeys.merge(snapshot.serviceKeys, requestedByOthers: false,
@@ -75,10 +83,14 @@ public final class RemoteChangeApplier {
             if snapshot.serviceKeys == nil, serviceKeys != nil {
                 try ServiceKeys.markForSending(requestingOthers: true, in: transaction.database)
             }
+            chatsChanged = try AIChatSync.merge(snapshot.aiChats, requestedByOthers: false, in: transaction)
+            // Снимок версии без чатов: чаты из сжатой части журнала пропали — попросить другие устройства.
+            if snapshot.aiChats == nil { try AIChatSync.markAllForSending(requestingOthers: true, in: transaction.database) }
             try SyncAccountStore.recordPulled(seq: snapshot.seq, in: transaction.database)
             return merged
         }
         writeServiceKeys(keys)
+        if chatsChanged { notifyChats() }
         try SyncAccountStore(store: store).recordSnapshot(seq: snapshot.seq)
         deliver(report)
         return report
@@ -88,6 +100,10 @@ public final class RemoteChangeApplier {
     private func writeServiceKeys(_ changes: [ServiceKeyChange]) {
         guard let serviceKeys, !changes.isEmpty else { return }
         Task { await serviceKeys.writeReceived(changes) }
+    }
+
+    private func notifyChats() {
+        NotificationCenter.default.post(name: AIChatStore.didChange, object: nil)
     }
 
     private func deliver(_ report: MergeReport) {
