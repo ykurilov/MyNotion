@@ -281,6 +281,71 @@ struct AIChatSyncTests {
         #expect(request.records.isEmpty, "Свои — пришедшие из снимка — обратно не отправляет")
     }
 
+    @Test("Удалённый чат пропадает на всех устройствах вместе с сообщениями; в него больше не пишется")
+    func deleteSpreads() throws {
+        let a = try ChatDevice(wallMillis: 10_000)
+        let b = try ChatDevice(wallMillis: 10_000)
+        let chat = try a.chats.createChat(title: "Лишний", at: date)
+        try a.chats.append("секрет", id: UUID(), to: chat.id, at: date)
+        let kept = try a.chats.createChat(title: "Нужный", at: date)
+        try b.receive(a.sendAll())
+
+        a.setWall(20_000)
+        try a.chats.delete(chat.id)
+        #expect(try a.chats.chats().map(\.id) == [kept.id])
+        #expect(try a.chats.messages(in: chat.id).isEmpty, "Сообщения стёрты, а не спрятаны")
+        #expect(throws: AIChatStoreError.chatNotFound) { try a.chats.append("ещё", id: UUID(), to: chat.id, at: date) }
+        let sent = try a.sendAll()
+        #expect(sent.map(\.id) == [chat.id])
+        #expect(sent.first?.deletedAt != nil)
+        #expect(sent.first?.messages.isEmpty == true)
+
+        #expect(try b.receive(sent))
+        #expect(try b.chats.chats().map(\.id) == [kept.id])
+        #expect(try b.chats.messages(in: chat.id).isEmpty)
+        #expect(try b.pending() == nil, "Пришедшее удаление обратно не уходит")
+    }
+
+    @Test("Сообщение, дописанное на другом устройстве до того, как пришло удаление, чат не воскрешает")
+    func deleteBeatsLateMessage() throws {
+        let a = try ChatDevice(wallMillis: 10_000)
+        let b = try ChatDevice(wallMillis: 10_000)
+        let chat = try a.chats.createChat(title: "Лишний", at: date)
+        try b.receive(a.sendAll())
+
+        b.setWall(15_000)
+        try b.chats.append("с B", id: UUID(), to: chat.id, at: date.addingTimeInterval(5))
+        a.setWall(20_000)
+        try a.chats.delete(chat.id)
+        let fromA = try a.sendAll()
+        let fromB = try b.sendAll()
+        try a.receive(fromB)
+        try b.receive(fromA)
+        for device in [a, b] {
+            #expect(try device.chats.chats().isEmpty)
+            #expect(try device.chats.messages(in: chat.id).isEmpty)
+        }
+    }
+
+    @Test("Снимок несёт удаление: новое устройство не получает ни удалённый чат, ни его сообщения")
+    func snapshotCarriesDeletion() throws {
+        let a = try ChatDevice()
+        let gone = try a.chats.createChat(title: "Удалённый", at: date)
+        try a.chats.append("секрет", id: UUID(), to: gone.id, at: date)
+        let kept = try a.chats.createChat(title: "Живой", at: date)
+        try a.chats.delete(gone.id)
+        let snapshot = try a.notes.database.dbWriter.read { try AIChatSync.snapshot(in: $0) }
+        #expect(snapshot.records.first { $0.id == gone.id }?.deletedAt != nil)
+        #expect(snapshot.records.allSatisfy { $0.deletedAt == nil || $0.messages.isEmpty })
+
+        let b = try ChatDevice()
+        try b.chats.createChat(id: gone.id, title: "Удалённый", at: date)
+        try b.chats.append("секрет", id: UUID(), to: gone.id, at: date)
+        try b.notes.write { try AIChatSync.mergeSnapshot(snapshot.records, isComplete: true, in: $0) }
+        #expect(try b.chats.chats().map(\.id) == [kept.id])
+        #expect(try b.chats.messages(in: gone.id).isEmpty)
+    }
+
     @Test("Запись пачки читается и без новых полей; незнакомые поля пропускаются")
     func recordCoding() throws {
         let record = AIChatSyncRecord(id: UUID(), title: "Т", createdAt: date, updatedAt: date, deletedAt: nil,

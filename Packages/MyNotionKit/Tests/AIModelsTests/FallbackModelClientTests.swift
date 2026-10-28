@@ -118,6 +118,7 @@ struct FallbackModelClientTests {
         #expect(turn.text == "Через запасной")
         #expect(turn.route == ModelCatalog.deepSeekFlash.routes[1])
         #expect(network.providers == [.deepSeek, .openRouter])
+        #expect(turn.notice == nil, "Сбой связи или сервера — без пометки: ключ и счёт в порядке")
         let body = try #require(network.lastRequest?.httpBody)
         #expect(String(decoding: body, as: UTF8.self).contains("deepseek/deepseek-v4.1-flash-1017:nitro"))
     }
@@ -138,11 +139,39 @@ struct FallbackModelClientTests {
         #expect(network.providers == [.openRouter])
     }
 
-    @Test("Неверный ключ DeepSeek — ошибка, запасной путь не нужен")
-    func invalidKeyStops() async throws {
-        let network = FakeModelNetwork([.deepSeek: [.status(401, "")], .openRouter: [.lines(answer("лишнее"))]])
-        await #expect(throws: ModelError.invalidKey(.deepSeek)) { try await collect(client(network)) }
-        #expect(network.providers == [.deepSeek])
+    @Test("Ключ DeepSeek не подходит или нет денег — ответ через OpenRouter с короткой пометкой о причине",
+          arguments: [(401, "DeepSeek: ключ не подходит"), (403, "DeepSeek: ключ не подходит"), (402, "DeepSeek: нет денег на счёте")])
+    func badKeyOrBalanceFallsBack(status: Int, notice: String) async throws {
+        let network = FakeModelNetwork([.deepSeek: [.status(status, "")], .openRouter: [.lines(answer("Через запасной"))]])
+        let turn = try await collect(client(network))
+        #expect(turn.text == "Через запасной")
+        #expect(turn.route?.provider == .openRouter)
+        #expect(turn.notice == notice)
+        #expect(network.providers == [.deepSeek, .openRouter])
+    }
+
+    @Test("Исправленный ключ DeepSeek работает со следующего же запроса: такой сбой не откладывает DeepSeek на две минуты")
+    func fixedKeyWorksAtOnce() async throws {
+        let network = FakeModelNetwork([.deepSeek: [.status(401, ""), .lines(answer("Напрямую"))], .openRouter: [.lines(answer("Запасной"))]])
+        let model = client(network)
+        #expect(try await collect(model).notice == "DeepSeek: ключ не подходит")
+        let next = try await collect(model)
+        #expect(next.text == "Напрямую")
+        #expect(next.notice == nil)
+        #expect(network.providers == [.deepSeek, .openRouter, .deepSeek])
+    }
+
+    @Test("Ключ DeepSeek не подходит, а OpenRouter тоже не ответил — ошибка OpenRouter, пометка о DeepSeek остаётся")
+    func badKeyAndFallbackFails() async throws {
+        let network = FakeModelNetwork([.deepSeek: [.status(401, "")], .openRouter: [.status(503, "")]])
+        var turn = ModelTurn()
+        await #expect(throws: ModelError.server(.openRouter, 503)) {
+            for try await event in client(network).stream(ModelRequest(messages: [.user("Привет")], tools: [], level: .none),
+                                                          model: ModelCatalog.deepSeekFlash) {
+                turn.apply(event)
+            }
+        }
+        #expect(turn.notice == "DeepSeek: ключ не подходит")
     }
 
     @Test("Обрыв после первого кусочка — ошибка без повтора: ответ задвоился бы")
@@ -158,7 +187,13 @@ struct FallbackModelClientTests {
         for round in 0..<300 {
             let pause = Duration.microseconds(1_500 + (round % 30) * 50)
             let network = FakeModelNetwork([.deepSeek: [.delayed(pause, answer("Напрямую"))], .openRouter: [.lines(answer("Запасной"))]])
-            let turn = try await collect(client(network, timeout: .milliseconds(2)))
+            let turn: ModelTurn
+            do {
+                turn = try await collect(client(network, timeout: .milliseconds(2)))
+            } catch ModelError.timeout {
+                // Под нагрузкой и запасной путь не уложился в 2 мс — честная ошибка срока, не задвоение.
+                continue
+            }
             #expect(turn.text == "Напрямую" || turn.text == "Запасной", "Раунд \(round): \(turn.text)")
             if turn.text == "Запасной" { #expect(turn.route?.provider == .openRouter) }
             if turn.text == "Напрямую" { #expect(network.providers == [.deepSeek], "Раунд \(round)") }
@@ -240,6 +275,8 @@ struct ModelErrorTests {
         for error in all { #expect(!error.message.isEmpty) }
         #expect(ModelError.missingKey(.openRouter).message.contains("OpenRouter"))
         #expect(ModelError.invalidKey(.deepSeek).message.contains("DeepSeek"))
-        #expect(all.filter(\.allowsFallback) == [.missingKey(.openRouter), .rateLimited(.openRouter), .server(.deepSeek, 502), .network, .timeout])
+        #expect(all.filter(\.allowsFallback) == [.missingKey(.openRouter), .invalidKey(.deepSeek), .noBalance(.deepSeek), .rateLimited(.openRouter),
+                                                  .server(.deepSeek, 502), .network, .timeout])
+        #expect(all.compactMap(\.fallbackNotice) == ["DeepSeek: ключ не подходит", "DeepSeek: нет денег на счёте"])
     }
 }

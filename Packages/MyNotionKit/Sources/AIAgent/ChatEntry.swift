@@ -58,6 +58,8 @@ public struct ChatEntry: Sendable, Hashable, Codable, Identifiable {
     /// Подпись вызова в ленте: «Читает страницу «План»».
     public var title: String?
     public var ok: Bool?
+    /// Пометка под ответом: почему он пришёл запасным путём.
+    public var notice: String?
 
     public init(id: UUID = UUID(), createdAt: Date = Date(), kind: Kind, text: String = "") {
         self.id = id
@@ -79,6 +81,7 @@ public struct ChatEntry: Sendable, Hashable, Codable, Identifiable {
         entry.modelID = modelID
         entry.provider = turn.route?.provider
         entry.usage = turn.usage
+        entry.notice = turn.notice
         return entry
     }
 

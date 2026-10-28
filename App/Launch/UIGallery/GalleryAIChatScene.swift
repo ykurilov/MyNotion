@@ -27,6 +27,11 @@ enum GalleryAIChatScene {
         case .pastChats:
             chat.openChat(mainChat)
             chat.popup = .pastChats
+        case .deleteMenu:
+            chat.openChat(mainChat)
+            chat.popup = .pastChats
+            guard let row = chat.chatList.first(where: { $0.title == "Идеи для отпуска" }) else { return "нет прошлого чата" }
+            chat.toggleChatMenu(row.id)
         }
         chat.isOpen = true
         if kind == .toolReply, chat.entries.count < 5 { return "чат не открылся" }

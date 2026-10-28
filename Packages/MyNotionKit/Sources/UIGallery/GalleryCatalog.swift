@@ -113,6 +113,8 @@ public enum GalleryAIChat: CaseIterable, Sendable {
     case levelMenu
     /// Прошлые чаты под заголовком, по срокам.
     case pastChats
+    /// Меню строки прошлого чата с «Удалить».
+    case deleteMenu
 }
 
 /// Базы данных (004, contracts/database-ui.md).
@@ -324,6 +326,7 @@ public enum GalleryCatalog {
         GalleryState("ai-chat-model-menu", .aiChat(.modelMenu), "Список моделей над полем ввода", section: "ИИ-агент"),
         GalleryState("ai-chat-level-menu", .aiChat(.levelMenu), "Список уровней рассуждений", section: "ИИ-агент"),
         GalleryState("ai-chat-past-chats", .aiChat(.pastChats), "Прошлые чаты по срокам с поиском", section: "ИИ-агент"),
+        GalleryState("ai-chat-delete-menu", .aiChat(.deleteMenu), "Меню строки прошлого чата: удалить на всех устройствах", section: "ИИ-агент"),
     ]
 
     /// Базы (004): этап 0 — пустая база и таблица эталона; истории добавляют свои строки в конец списка.

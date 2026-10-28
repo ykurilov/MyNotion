@@ -37,12 +37,14 @@ public enum ModelStreamEvent: Sendable, Hashable {
     case toolCall(ToolCallDelta)
     case usage(ModelUsage)
     case finished(String?)
+    /// Пометка под ответом: почему он пришёл запасным путём — «DeepSeek: ключ не подходит».
+    case notice(String)
 
     /// Модель начала отвечать: после этого запасной путь уже не пробуют.
     var isContent: Bool {
         switch self {
         case .reasoning, .text, .toolCall: true
-        case .route, .usage, .finished: false
+        case .route, .usage, .finished, .notice: false
         }
     }
 }
@@ -98,6 +100,7 @@ public struct ModelTurn: Sendable, Hashable {
     public var text = ""
     public var usage: ModelUsage?
     public var finishReason: String?
+    public var notice: String?
 
     private var calls: [ModelToolCall] = []
     private var callPositions: [Int: Int] = [:]
@@ -123,6 +126,7 @@ public struct ModelTurn: Sendable, Hashable {
         case .text(let part): text += part
         case .usage(let usage): self.usage = usage
         case .finished(let reason): finishReason = reason
+        case .notice(let text): notice = text
         case .toolCall(let delta): applyToolCall(delta)
         }
     }

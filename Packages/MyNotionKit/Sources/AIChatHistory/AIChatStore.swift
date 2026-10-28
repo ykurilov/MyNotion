@@ -91,11 +91,24 @@ public final class AIChatStore: Sendable {
         notify()
     }
 
-    /// Дописать сообщение в конец чата; то же `id` второй раз ничего не меняет.
+    /// Удалить чат на всех устройствах: заголовок остаётся с отметкой удаления и уходит синхронизацией,
+    /// сообщения стираются. Удаление — правка заголовка с поздней меткой: оно сходится так же, как название.
+    public func delete(_ chatId: UUID, at date: Date = Date()) throws {
+        try store.write { transaction in
+            let db = transaction.database
+            try db.execute(sql: "UPDATE ai_chat SET deletedAt = ?, clock = ?, sendMark = ? WHERE id = ? AND deletedAt IS NULL",
+                           arguments: [date, transaction.clock.now().description, AIChatSync.newSendMark(), chatId.databaseText])
+            guard db.changesCount > 0 else { return }
+            try db.execute(sql: "DELETE FROM ai_chat_message WHERE chatId = ?", arguments: [chatId.databaseText])
+        }
+        notify()
+    }
+
+    /// Дописать сообщение в конец чата; то же `id` второй раз ничего не меняет. В удалённый чат не пишется.
     public func append(_ body: String, id: UUID, to chatId: UUID, at date: Date = Date()) throws {
         try store.write { transaction in
             let db = transaction.database
-            guard try Bool.fetchOne(db, sql: "SELECT EXISTS (SELECT 1 FROM ai_chat WHERE id = ?)", arguments: [chatId.databaseText]) == true else {
+            guard try Bool.fetchOne(db, sql: "SELECT EXISTS (SELECT 1 FROM ai_chat WHERE id = ? AND deletedAt IS NULL)", arguments: [chatId.databaseText]) == true else {
                 throw AIChatStoreError.chatNotFound
             }
             try db.execute(sql: """

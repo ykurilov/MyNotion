@@ -415,6 +415,87 @@ struct AIChatControllerTests {
         #expect(controller.entries.last?.modelID == ModelCatalog.qwenFlash.id)
     }
 
+    @Test("Ответ пришёл запасным путём — пометка о причине под ответом, в ленте и в базе")
+    func fallbackNotice() async throws {
+        let model = ScriptedModel([.events([.notice("DeepSeek: ключ не подходит"), .text("Готово"), .finished("stop")])])
+        let controller = controller(model)
+        controller.draft = "Привет"
+        controller.send()
+        try await finish(controller)
+        #expect(controller.entries.last?.notice == "DeepSeek: ключ не подходит")
+        let chatID = try #require(controller.chatID)
+        let stored = try #require(try chats.messages(in: chatID).last)
+        #expect(try ChatEntryCoding.decode(stored.body).notice == "DeepSeek: ключ не подходит")
+    }
+
+    @Test("Сорвался и запасной путь — под ошибкой та же пометка о DeepSeek")
+    func failedFallbackNotice() async throws {
+        let model = ScriptedModel([.failure(ModelError.server(.openRouter, 503))])
+        let controller = controller(model)
+        controller.draft = "Привет"
+        controller.send()
+        try await finish(controller)
+        #expect(controller.entries.last?.error != nil)
+        #expect(controller.entries.last?.notice == nil, "Пометки не было — и нет")
+
+        let noticed = ScriptedModel([.hang([.notice("DeepSeek: нет денег на счёте")])])
+        let second = self.controller(noticed)
+        second.draft = "Ещё"
+        second.send()
+        try await wait { second.reply != nil && noticed.requests.count == 1 }
+        try await Task.sleep(for: .milliseconds(100))
+        second.stop()
+        try await finish(second)
+        #expect(second.entries.last?.notice == "DeepSeek: нет денег на счёте")
+    }
+
+    @Test("«Удалить» в меню строки: открытый чат удаляется, панель — в пустом новом чате, меню закрыто")
+    func deleteOpenChat() async throws {
+        let controller = controller(ScriptedModel([]))
+        controller.draft = "Лишний разговор"
+        controller.send()
+        try await finish(controller)
+        let id = try #require(controller.chatID)
+        controller.popup = .pastChats
+        controller.toggleChatMenu(id)
+        #expect(controller.chatMenu == id)
+
+        controller.deleteChat(id)
+        #expect(controller.chatMenu == nil)
+        #expect(controller.chatID == nil)
+        #expect(controller.entries.isEmpty)
+        #expect(controller.chatList.isEmpty)
+        #expect(try chats.chat(id) == nil)
+        #expect(try chats.messages(in: id).isEmpty)
+    }
+
+    @Test("Удаление другого чата открытый не трогает")
+    func deleteOtherChat() async throws {
+        let other = try chats.createChat(title: "Старый")
+        let controller = controller(ScriptedModel([]))
+        controller.draft = "Открытый"
+        controller.send()
+        try await finish(controller)
+        let open = try #require(controller.chatID)
+        controller.deleteChat(other.id)
+        #expect(controller.chatID == open)
+        #expect(controller.entries.count == 2)
+        #expect(controller.chatList.map(\.id) == [open])
+    }
+
+    @Test("Открытый чат удалили на другом устройстве — панель переходит в новый чат")
+    func deletedElsewhere() async throws {
+        let controller = controller(ScriptedModel([]))
+        controller.draft = "Открытый"
+        controller.send()
+        try await finish(controller)
+        let id = try #require(controller.chatID)
+        try chats.delete(id)
+        try await wait { controller.chatID == nil }
+        #expect(controller.chatID == nil)
+        #expect(controller.entries.isEmpty)
+    }
+
     @Test("Чат с другого устройства появляется в списке")
     func remoteChat() async throws {
         let controller = controller(ScriptedModel([]))

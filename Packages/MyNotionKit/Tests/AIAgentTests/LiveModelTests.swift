@@ -137,6 +137,18 @@ struct LiveModelTests {
             try await ModelKeyCheck.check("sk-or-v1-0000000000000000000000000000000000000000000000000000000000000000", provider: .openRouter)
         }
     }
+
+    @Test("Запасной путь: ключ DeepSeek не подходит — ответ через OpenRouter с пометкой")
+    func fallbackOnInvalidKey() async throws {
+        let live = keys.provider
+        let client = FallbackModelClient(routes: ModelRouteClient(keys: { provider in
+            provider == .deepSeek ? "sk-00000000000000000000000000000000" : await live(provider)
+        }))
+        let turn = try await ask(client, ModelCatalog.deepSeekFlash, level: .none, "Сколько будет 17 + 25?")
+        #expect(turn.route?.provider == .openRouter)
+        #expect(turn.text.contains("42"), "\(turn.text)")
+        #expect(turn.notice == "DeepSeek: ключ не подходит")
+    }
 }
 
 struct LiveKeys: Sendable {

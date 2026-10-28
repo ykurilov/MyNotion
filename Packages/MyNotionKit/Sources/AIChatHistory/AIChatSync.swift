@@ -40,7 +40,8 @@ public struct AIChatSyncRecord: Sendable, Hashable, Codable {
 }
 
 /// Отправка и слияние чатов. Сообщения не меняются после записи: сходятся объединением по id. Название и удаление —
-/// по поздней метке, время последнего сообщения — наибольшее. Устройство, которое могло пропустить чаты (обновилось
+/// по поздней метке, время последнего сообщения — наибольшее. У удалённого чата сообщений нет: пришедшие позже
+/// пропускаются, чат не воскрешают. Устройство, которое могло пропустить чаты (обновилось
 /// со старой версии или начало со снимка старой версии), просит другие прислать свои; ответ не просит.
 package enum AIChatSync {
     private static let requestMark = "sync.aiChats.request"
@@ -188,6 +189,11 @@ package enum AIChatSync {
                     INSERT INTO ai_chat (id, title, createdAt, updatedAt, deletedAt, clock, sendMark) VALUES (?, ?, ?, ?, ?, ?, NULL)
                     """, arguments: [id, record.title, record.createdAt, record.updatedAt, record.deletedAt, record.clock.description])
                 changed = true
+            }
+            if try Bool.fetchOne(db, sql: "SELECT deletedAt IS NOT NULL FROM ai_chat WHERE id = ?", arguments: [id]) == true {
+                try db.execute(sql: "DELETE FROM ai_chat_message WHERE chatId = ?", arguments: [id])
+                changed = changed || db.changesCount > 0
+                continue
             }
             for message in record.messages {
                 try db.execute(sql: """

@@ -28,11 +28,20 @@ public enum ModelError: Error, Sendable, Hashable {
         }
     }
 
-    /// Можно повторить запрос другим путём: сбой связи или сервера, а не ошибка в самом запросе или ключе.
+    /// Можно повторить запрос другим путём: сбой связи, сервера, ключа или счёта, а не ошибка в самом запросе.
     public var allowsFallback: Bool {
         switch self {
-        case .missingKey, .rateLimited, .server, .network, .timeout: true
-        case .invalidKey, .noBalance, .provider, .badResponse: false
+        case .missingKey, .invalidKey, .noBalance, .rateLimited, .server, .network, .timeout: true
+        case .provider, .badResponse: false
+        }
+    }
+
+    /// Пометка под ответом, пришедшим запасным путём: человеку стоит поправить ключ или пополнить счёт.
+    public var fallbackNotice: String? {
+        switch self {
+        case .invalidKey(let provider): "\(provider.title): ключ не подходит"
+        case .noBalance(let provider): "\(provider.title): нет денег на счёте"
+        default: nil
         }
     }
 

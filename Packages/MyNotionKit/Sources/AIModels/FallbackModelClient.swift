@@ -7,8 +7,9 @@ public protocol ChatModelClient: Sendable {
 }
 
 /// Пути модели по очереди. Следующий путь пробуется, только пока модель не начала отвечать:
-/// сбой связи или сервера, 429, молчание дольше `firstTokenTimeout`, нет ключа основного поставщика.
-/// После сбоя поставщик пропускается `skipFailedFor` — чтобы каждый запрос не ждал заново.
+/// сбой связи или сервера, 429, молчание дольше `firstTokenTimeout`, нет ключа основного поставщика, ключ не подходит
+/// или нет денег — тогда под ответом пометка о причине. После сбоя связи или сервера поставщик пропускается
+/// `skipFailedFor` — чтобы каждый запрос не ждал заново.
 public final class FallbackModelClient: ChatModelClient {
     private let routes: ModelRouteClient
     private let firstTokenTimeout: Duration
@@ -50,8 +51,14 @@ public final class FallbackModelClient: ChatModelClient {
             } catch let failure as AttemptFailure {
                 try Task.checkCancellation()
                 guard !failure.started, let error = failure.error as? ModelError, error.allowsFallback, !isLast else { throw failure.error }
-                // Ключ Юрий может добавить в любую минуту — пропускать поставщика незачем.
-                if case .missingKey = error {} else { markFailed(route.provider) }
+                // Ключ можно добавить или поправить, счёт — пополнить в любую минуту: такой отказ приходит быстро,
+                // и поставщика пропускать незачем.
+                if let notice = error.fallbackNotice {
+                    continuation.yield(.notice(notice))
+                } else if case .missingKey = error {
+                } else {
+                    markFailed(route.provider)
+                }
                 lastError = error
             }
         }

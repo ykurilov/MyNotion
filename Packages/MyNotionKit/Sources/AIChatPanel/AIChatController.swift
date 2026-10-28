@@ -61,7 +61,11 @@ public final class AIChatController {
 
     public var isOpen = false
     public var draft = ""
-    public var popup: Popup?
+    public var popup: Popup? {
+        didSet { if popup != .pastChats { chatMenu = nil } }
+    }
+    /// Строка прошлого чата, у которой открыто меню.
+    public var chatMenu: UUID?
     public private(set) var chatList: [AIChat] = []
     public private(set) var chatID: UUID?
     public private(set) var entries: [ChatEntry] = []
@@ -139,10 +143,8 @@ public final class AIChatController {
     }
 
     public func newChat() {
-        detachRun()
         popup = nil
-        chatID = nil
-        entries = []
+        closeChat()
     }
 
     public func openChat(_ id: UUID) {
@@ -150,6 +152,16 @@ public final class AIChatController {
         popup = nil
         chatID = id
         entries = loadEntries(id)
+    }
+
+    /// Меню строки прошлого чата: открывается у одной строки, повторное нажатие закрывает.
+    public func toggleChatMenu(_ id: UUID) { chatMenu = chatMenu == id ? nil : id }
+
+    /// Чат удаляется на всех устройствах. Открытый — панель переходит в пустой новый чат, список прошлых остаётся открытым.
+    public func deleteChat(_ id: UUID) {
+        chatMenu = nil
+        if chatID == id { closeChat() }
+        try? chats.delete(id)
     }
 
     public func select(_ model: ChatModel) {
@@ -256,6 +268,12 @@ public final class AIChatController {
         if self.run === run { liveAgent = agent }
     }
 
+    private func closeChat() {
+        detachRun()
+        chatID = nil
+        entries = []
+    }
+
     /// Ход отцепляется от панели и останавливается; панель свободна для нового сообщения сразу.
     private func detachRun() {
         run?.stop()
@@ -331,6 +349,8 @@ public final class AIChatController {
 
     private func reload() {
         chatList = (try? chats.chats()) ?? []
+        // Открытый чат удалили на другом устройстве.
+        if let chatID, let exists = try? chats.chat(chatID) != nil, !exists { return closeChat() }
         // Запись с другого устройства — в ленту, если сейчас не идёт свой ответ.
         if let chatID, !isRunning {
             let stored = loadEntries(chatID)

@@ -61,6 +61,12 @@ struct AIChatEntryView: View {
                 if entry.stopped == true {
                     Text("Остановлено").font(AIChatStyle.smallFont).foregroundStyle(AIChatStyle.secondary)
                 }
+                if let notice = entry.notice {
+                    Label(notice, systemImage: "info.circle")
+                        .font(AIChatStyle.smallFont)
+                        .foregroundStyle(AIChatStyle.secondary)
+                        .help("Ответ пришёл через OpenRouter")
+                }
             }
         case .tool:
             AIChatToolRow(title: entry.title ?? entry.toolName ?? "", state: entry.ok == false ? .failed : .done)
