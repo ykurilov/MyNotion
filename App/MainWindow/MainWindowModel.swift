@@ -143,6 +143,8 @@ final class MainWindowModel {
     var sync: SyncController! { library.sync }
     /// Настройки синхронизации — карточкой поверх этого окна (⌘, или «Настройки синхронизации…» у значка).
     var isSyncSettingsShown = false
+    /// Растёт при каждой просьбе открыть или закрыть окно корзины; панель слушает и открывает окно.
+    private(set) var trashToggleRequest = 0
     /// Окно «Поделиться» для этой страницы (006).
     var sharePageId: UUID?
     /// Галерея показывает в карточке настроек свой образец вместо настоящего подключения.
@@ -333,6 +335,10 @@ final class MainWindowModel {
     }
 
     /// Шторка: спрятать или показать боковую панель; состояние переживает перезапуск.
+    func toggleTrash() {
+        trashToggleRequest += 1
+    }
+
     func toggleSidebar() {
         isSidebarCollapsed.toggle()
         saveWindowState { $0.isSidebarCollapsed = isSidebarCollapsed }

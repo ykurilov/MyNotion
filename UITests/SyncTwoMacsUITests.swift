@@ -33,18 +33,18 @@ final class SyncTwoMacsUITests: XCTestCase {
         addTeardownBlock { @MainActor in if first.state != .notRunning { first.terminate() } }
         XCTAssertTrue(first.pageBody.waitForExistence(timeout: 15))
         XCTAssertTrue(waitFor(timeout: 20) { FileManager.default.fileExists(atPath: code.path) }, "Первый Mac не выдал код подключения")
-        XCTAssertTrue(first.syncBadge.waitForExistence(timeout: 10), "Нет значка синхронизации")
+        XCTAssertTrue(waitFor(timeout: 10) { !syncStatus("mac-a").isEmpty }, "Нет состояния синхронизации")
 
         let second = XCUIApplication(url: live.appendingPathComponent("MyNotionB.app"))
         second.launchArguments = ["--database", live.appendingPathComponent("mac-b/MyNotion.sqlite").path, "--versions-quick",
                                   "--sync-server", server, "--sync-device-name", "Mac B", "--sync-log", live.appendingPathComponent("mac-b.log").path, "--sync-join-code-file", code.path]
         second.launch()
         addTeardownBlock { @MainActor in if second.state != .notRunning { second.terminate() } }
-        XCTAssertTrue(second.syncBadge.waitForExistence(timeout: 20), "Второй Mac не подключился")
-        XCTAssertTrue(waitFor(timeout: 15) { second.syncBadge.label == "Синхронизировано" },
-                      "Второй Mac: \(second.syncBadge.label) — \(second.syncBadge.value as? String ?? "")")
-        XCTAssertTrue(waitFor(timeout: 15) { first.syncBadge.label == "Синхронизировано" },
-                      "Первый Mac: \(first.syncBadge.label) — \(first.syncBadge.value as? String ?? "")")
+        XCTAssertTrue(waitFor(timeout: 20) { !syncStatus("mac-b").isEmpty }, "Второй Mac не подключился")
+        XCTAssertTrue(waitFor(timeout: 15) { syncStatus("mac-b").hasPrefix("Синхронизировано") },
+                      "Второй Mac: \(syncStatus("mac-b"))")
+        XCTAssertTrue(waitFor(timeout: 15) { syncStatus("mac-a").hasPrefix("Синхронизировано") },
+                      "Первый Mac: \(syncStatus("mac-a"))")
         // Образец лежит внутри «Буфера»: пустой Mac открыл первую пришедшую страницу, образец открываем в дереве.
         let sampleRow = second.outlines["page-tree"].outlineRows.containing(NSPredicate(format: "value == %@", "MyNotion — образец")).firstMatch
         XCTAssertTrue(sampleRow.waitForExistence(timeout: 20), "Страницы с первого Mac не дошли до второго")
@@ -53,7 +53,7 @@ final class SyncTwoMacsUITests: XCTestCase {
         sampleRow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
         let opened = waitFor(timeout: 10) { second.pageBodyText.contains("Заголовок первого уровня") }
         if !opened { saveScreenshots(first, second, suffix: "-failed") }
-        XCTAssertTrue(opened, "Образец не открылся: \(second.pageBodyText.prefix(200)); значок: \(second.syncBadge.label) — \(second.syncBadge.value as? String ?? "")")
+        XCTAssertTrue(opened, "Образец не открылся: \(second.pageBodyText.prefix(200)); синхронизация: \(syncStatus("mac-b"))")
 
         // Правка на первом Mac — в открытой странице второго.
         first.activate()
@@ -74,8 +74,8 @@ final class SyncTwoMacsUITests: XCTestCase {
         XCTAssertTrue(waitFor(timeout: 10) { first.pageBodyText.contains("Правка с Mac A и ответ с Mac B") }, "Ответ не дошёл за 10 с")
         let secondDelay = Date().timeIntervalSince(back)
 
-        XCTAssertTrue(waitFor(timeout: 10) { first.syncBadge.label == "Синхронизировано" && second.syncBadge.label == "Синхронизировано" },
-                      "Значок: \(first.syncBadge.label) / \(second.syncBadge.label)")
+        XCTAssertTrue(waitFor(timeout: 10) { syncStatus("mac-a").hasPrefix("Синхронизировано") && syncStatus("mac-b").hasPrefix("Синхронизировано") },
+                      "Синхронизация: \(syncStatus("mac-a")) / \(syncStatus("mac-b"))")
         print("Задержка синхронизации: A→B \(String(format: "%.2f", firstDelay)) с, B→A \(String(format: "%.2f", secondDelay)) с")
 
         // Картинка (US5): вставлена на первом Mac — на втором появляется файл с теми же байтами (части зашифрованы,
@@ -235,8 +235,8 @@ final class SyncTwoMacsUITests: XCTestCase {
         let a = favoriteTitles(first), b = favoriteTitles(second)
         saveScreenshots(first, second, suffix: "-3-concurrent")
         XCTAssertTrue(converged && a == b && Set(a) == all && a.count == 3, "Порядок не сошёлся: Mac A \(a), Mac B \(b)")
-        XCTAssertTrue(waitFor(timeout: 15) { first.syncBadge.label == "Синхронизировано" && second.syncBadge.label == "Синхронизировано" },
-                      "Значок: \(first.syncBadge.label) / \(second.syncBadge.label)")
+        XCTAssertTrue(waitFor(timeout: 15) { syncStatus("mac-a").hasPrefix("Синхронизировано") && syncStatus("mac-b").hasPrefix("Синхронизировано") },
+                      "Синхронизация: \(syncStatus("mac-a")) / \(syncStatus("mac-b"))")
         print("Задержка шаг 3 (встречные перестановки): сошлось через \(Self.seconds(delay)) с после размораживания сервера; Mac A \(firstAlone), Mac B \(secondAlone) → итог \(a)")
     }
 
@@ -517,6 +517,14 @@ final class SyncTwoMacsUITests: XCTestCase {
         add(attachment)
     }
 
+    /// Последнее состояние синхронизации из журнала приложения (`--sync-log`): строки внизу панели при норме больше нет.
+    private func syncStatus(_ logName: String) -> String {
+        guard let text = try? String(contentsOf: live.appendingPathComponent("\(logName).log"), encoding: .utf8),
+              let line = text.split(separator: "\n").last(where: { $0.contains("Синхронизация [") }),
+              let end = line.range(of: "] ") else { return "" }
+        return String(line[end.upperBound...])
+    }
+
     private func waitFor(timeout: TimeInterval, _ condition: () -> Bool) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
@@ -528,6 +536,5 @@ final class SyncTwoMacsUITests: XCTestCase {
 }
 
 private extension XCUIApplication {
-    var syncBadge: XCUIElement { buttons["sidebar-sync-status"] }
     var pageBodyText: String { (pageBody.exists ? pageBody.value as? String : nil) ?? "" }
 }

@@ -150,11 +150,11 @@ public enum GalleryNotionImport: String, Hashable, Sendable, CaseIterable {
 }
 
 public enum GallerySync: String, Hashable, Sendable, CaseIterable {
-    /// Значок внизу панели: всё отправлено.
+    /// Всё отправлено: внизу панели синхронизации не видно.
     case badgeReady
-    /// Значок: идёт отправка.
+    /// Идёт отправка: внизу панели синхронизации не видно.
     case badgeSending
-    /// Значок: ошибка (нет связи).
+    /// Строка внизу панели: ошибка (нет связи).
     case badgeError
     /// Подробности ошибки по щелчку на значке.
     case badgeErrorDetails
@@ -206,8 +206,8 @@ public enum GalleryPageCover: String, Hashable, Sendable, CaseIterable {
 }
 
 public enum GalleryTrash: String, Hashable, Sendable, CaseIterable {
-    /// Строка «Корзина» внизу панели.
-    case rowAtBottom
+    /// Панель без строки «Корзина»: корзина открывается из меню.
+    case sidebarWithoutRow
     /// Окно корзины с записями.
     case open
     /// Диалог «Удалить навсегда?».
@@ -633,10 +633,11 @@ public enum GalleryCatalog {
     ]
 
     private static let syncStates: [GalleryState] = [
-        GalleryState("sync-badge-ready", .sync(.badgeReady), "Значок синхронизации внизу панели: «Синхронизировано»",
+        GalleryState("sync-badge-ready", .sync(.badgeReady), "Всё синхронизировано: внизу панели нет ни строки, ни линии",
                      section: "Синхронизация", narrowToo: true),
-        GalleryState("sync-badge-sending", .sync(.badgeSending), "Значок синхронизации: «Отправка…»", section: "Синхронизация"),
-        GalleryState("sync-badge-error", .sync(.badgeError), "Значок синхронизации: «Ошибка синхронизации» красным",
+        GalleryState("sync-badge-sending", .sync(.badgeSending), "Идёт отправка: внизу панели по-прежнему ничего нет",
+                     section: "Синхронизация"),
+        GalleryState("sync-badge-error", .sync(.badgeError), "Внизу панели появляется «Ошибка синхронизации» красным, над ней линия",
                      section: "Синхронизация"),
         GalleryState("sync-badge-error-details", .sync(.badgeErrorDetails),
                      "Щелчок по значку: что случилось (нет связи — правки уйдут позже), когда всё сошлось, «Настройки…»",
@@ -658,7 +659,7 @@ public enum GalleryCatalog {
     ]
 
     private static let trashStates: [GalleryState] = [
-        GalleryState("trash-row", .trash(.rowAtBottom), "Строка «Корзина» внизу панели в низком окне", section: "Корзина",
+        GalleryState("trash-row", .trash(.sidebarWithoutRow), "Низ панели в низком окне: строки «Корзина» нет", section: "Корзина",
                      narrowToo: true),
         GalleryState("trash-open", .trash(.open), "Окно корзины с записями", section: "Корзина", narrowToo: true),
         GalleryState("trash-confirm-delete-forever", .trash(.confirmDeleteForever),

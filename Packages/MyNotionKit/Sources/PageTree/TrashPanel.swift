@@ -4,7 +4,7 @@ import SwiftUI
 import VisualStyle
 
 /// Где стоит окно корзины (contracts/visual-style.md, «Окно корзины»): справа от боковой панели,
-/// низом у строки «Корзина», целиком внутри окна приложения.
+/// низом у нижнего края панели, целиком внутри окна приложения.
 enum TrashPanelLayout {
     /// Карточка в координатах окна (начало внизу слева). `contentHeight` — сколько хочет содержимое.
     static func cardFrame(windowSize: NSSize, sidebarMaxX: CGFloat, anchorRow: NSRect, contentHeight: CGFloat) -> NSRect {
@@ -17,11 +17,11 @@ enum TrashPanelLayout {
     }
 }
 
-/// Окно корзины: всплывающая панель над страницей. Закрывается по Esc, щелчку мимо и повторному щелчку по «Корзине».
+/// Окно корзины: всплывающая панель над страницей. Закрывается по Esc, щелчку мимо и повторной команде «Корзина».
 /// Удалить навсегда и очистить корзину — только после вопроса (`ConfirmationDialogWindow`).
 @MainActor
 final class TrashPanelController {
-    /// Строка «Корзина»: от неё окно узнаёт своё место.
+    /// Место у нижнего края панели: от него окно узнаёт своё место.
     weak var anchorView: NSView?
     private var panel: TrashPanelWindow?
     private var hosting: NSHostingView<TrashView>?
@@ -105,7 +105,7 @@ final class TrashPanelController {
         panel.setCard(parent.convertToScreen(card))
     }
 
-    /// Щелчок мимо окна корзины закрывает его; щелчок по самой «Корзине» закроет её кнопка.
+    /// Щелчок мимо окна корзины закрывает его.
     private func watchOutsideClicks() {
         guard monitors.isEmpty else { return }
         let monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in

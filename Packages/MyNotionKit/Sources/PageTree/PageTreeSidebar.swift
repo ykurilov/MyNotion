@@ -4,7 +4,7 @@ import SwiftUI
 import VisualStyle
 
 /// Боковая панель: верхняя строка в линию со светофором с «✎» справа, поле поиска, заголовок «Страницы», дерево
-/// и «Корзина» внизу. Поле поиска — из модуля поиска: панель только отводит ему место.
+/// и, только при ошибке синхронизации, строка с ней внизу. Корзина открывается из меню. Поле поиска — из модуля поиска: панель только отводит ему место.
 public struct PageTreeSidebar<SearchField: View>: View {
     let tree: PageTreeSnapshot
     /// Меняется, когда дерево нужно перечитать.
@@ -19,8 +19,10 @@ public struct PageTreeSidebar<SearchField: View>: View {
     /// «✎» в верхней строке — то же, что ⌘N.
     let newPage: () -> Void
     let searchField: SearchField
-    /// Значок синхронизации внизу (FR-022); `nil` — синхронизация выключена, строки нет.
+    /// Состояние синхронизации (FR-022); строка внизу видна только при ошибке, `nil` — синхронизация выключена.
     let syncBadge: SyncBadgeState?
+    /// Растёт на единицу при каждой просьбе открыть или закрыть окно корзины (меню «Файл → Корзина»).
+    let trashToggleRequest: Int
     let openSyncSettings: () -> Void
     /// Разделы над «Страницами» (003): по порядку описателей `SidebarSection`.
     let sections: [SidebarSectionContent]
@@ -33,7 +35,7 @@ public struct PageTreeSidebar<SearchField: View>: View {
     public init(tree: PageTreeSnapshot, treeRevision: Int, collapsedPageIds: Set<UUID>, selectedPageId: UUID?,
                 liveTitle: String?, trashEntries: [Page], actions: PageTreeActions, trashActions: TrashActions,
                 newPage: @escaping () -> Void, syncBadge: SyncBadgeState? = nil,
-                openSyncSettings: @escaping () -> Void = {}, sections: [SidebarSectionContent] = [],
+                openSyncSettings: @escaping () -> Void = {}, trashToggleRequest: Int = 0, sections: [SidebarSectionContent] = [],
                 collapsedSections: Set<SidebarSectionID> = [], toggleSection: @escaping (SidebarSectionID) -> Void = { _ in },
                 @ViewBuilder searchField: () -> SearchField) {
         self.tree = tree
@@ -47,6 +49,7 @@ public struct PageTreeSidebar<SearchField: View>: View {
         self.newPage = newPage
         self.syncBadge = syncBadge
         self.openSyncSettings = openSyncSettings
+        self.trashToggleRequest = trashToggleRequest
         self.sections = sections
         self.collapsedSections = collapsedSections
         self.toggleSection = toggleSection
@@ -76,12 +79,21 @@ public struct PageTreeSidebar<SearchField: View>: View {
                 .padding(.top, shownSections.isEmpty ? 0 : Metrics.Sidebar.sectionTopSpacing)
             PageOutline(tree: tree, treeRevision: treeRevision, collapsedPageIds: collapsedPageIds,
                         selectedPageId: selectedPageId, liveTitle: liveTitle, actions: actions)
-            footerDivider
-            trashRow
-            if let syncBadge {
+            if let syncBadge, syncBadge.kind == .error {
+                footerDivider
                 SyncStatusBadge(state: syncBadge, openSettings: openSyncSettings)
             }
         }
+        // Окно корзины встаёт у нижнего края панели: невидимая «строка» внизу задаёт ему место.
+        .overlay(alignment: .bottom) {
+            Color.clear
+                .frame(height: Metrics.Sidebar.rowHeight)
+                .background(TrashPanelAnchor(controller: trashPanel))
+                .allowsHitTesting(false)
+        }
+        .onChange(of: trashToggleRequest) { trashPanel.toggle(entries: trashEntries, actions: trashActions) }
+        .onChange(of: trashEntries) { _, entries in trashPanel.update(entries: entries, actions: trashActions) }
+        .onDisappear { trashPanel.close() }
         .padding(.horizontal, Metrics.Sidebar.panelInset)
         .padding(.bottom, Metrics.Sidebar.footerBottomInset)
         .background(Color(nsColor: Palette.sidebarBackground))
@@ -106,38 +118,13 @@ public struct PageTreeSidebar<SearchField: View>: View {
             .frame(height: Metrics.Sidebar.rowHeight, alignment: .leading)
     }
 
-    /// Линия цвета border между деревом и нижними строками: прокрученное дерево не сливается с «Корзиной».
+    /// Линия цвета border между деревом и строкой ошибки синхронизации.
     private var footerDivider: some View {
         Rectangle()
             .fill(Color(nsColor: Palette.border))
             .frame(height: 1)
             .padding(.horizontal, Metrics.Sidebar.rowHorizontalPadding)
             .padding(.vertical, Metrics.Sidebar.footerDividerSpacing)
-    }
-
-    /// «Корзина» — обычная строка панели: те же высота, поля, квадрат иконки и цвета, что у строк страниц.
-    private var trashRow: some View {
-        Button { trashPanel.toggle(entries: trashEntries, actions: trashActions) } label: {
-            HStack(spacing: Metrics.Sidebar.rowIconSpacing) {
-                Image(systemName: "trash")
-                    .font(.system(size: Metrics.Sidebar.rowEmojiFontSize - 1, weight: .regular))
-                    .foregroundStyle(Color(nsColor: Palette.sidebarIcon))
-                    .frame(width: Metrics.Sidebar.rowIconSize, height: Metrics.Sidebar.rowIconSize)
-                Text("Корзина")
-                    .font(Font(Typography.sidebarRow.font))
-                    .foregroundStyle(Color(nsColor: Palette.sidebarText))
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, Metrics.Sidebar.rowHorizontalPadding)
-            .padding(.vertical, Metrics.Sidebar.rowVerticalPadding)
-            .frame(maxWidth: .infinity, minHeight: Metrics.Sidebar.rowHeight, maxHeight: Metrics.Sidebar.rowHeight)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(SidebarRowButtonStyle())
-        .accessibilityIdentifier("sidebar-trash")
-        .background(TrashPanelAnchor(controller: trashPanel))
-        .onChange(of: trashEntries) { _, entries in trashPanel.update(entries: entries, actions: trashActions) }
-        .onDisappear { trashPanel.close() }
     }
 }
 
@@ -184,7 +171,7 @@ extension PageTreeSidebar where SearchField == EmptyView {
     }
 }
 
-/// Строка «Корзина» для окна корзины: по ней окно находит своё место.
+/// Место окна корзины: от этого вида окно узнаёт, где встать.
 private struct TrashPanelAnchor: NSViewRepresentable {
     let controller: TrashPanelController
 
@@ -285,7 +272,7 @@ struct PageOutline: NSViewRepresentable {
 
 /// Прокрутка списков панели, как у Notion 7.39 (замер 21.10.2026): справа у всех разделов одно поле под полосу прокрутки
 /// (строки «Недавних», «Избранного» и «Страниц» одной ширины — у Notion 239 при панели 270), полоса поверх этого поля;
-/// прокрученный список гаснет сверху на 34 — строки не срезаются под заголовком. Снизу — без затухания, линия перед «Корзиной».
+/// прокрученный список гаснет сверху на 34 — строки не срезаются под заголовком. Снизу — без затухания.
 final class SidebarScrollView: NSScrollView {
     private let fade = CAGradientLayer()
 
