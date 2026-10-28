@@ -48,7 +48,7 @@ final class FavoritesRecentsTests: XCTestCase {
         rowMiddle(app, "Бета").click()
         app.outlines["page-tree"].typeKey(.delete, modifierFlags: .command)
         XCTAssertTrue(waitForTitles(app, in: "favorites", ["Гамма"]))
-        app.buttons["sidebar-trash"].click()
+        app.typeKey("t", modifierFlags: [.command, .option])  // «Файл → Корзина»
         let entry = app.descendants(matching: .any).matching(identifier: "trash-entry").firstMatch
         XCTAssertTrue(entry.waitForExistence(timeout: 5))
         entry.buttons["trash-restore"].click()

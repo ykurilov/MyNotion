@@ -362,7 +362,7 @@ final class UIGalleryRunner {
         case .trash(let trash):
             await open(library.sample.page.id)
             switch trash {
-            case .rowAtBottom: break
+            case .sidebarWithoutRow: break
             case .open:
                 await toggleTrash()
                 guard isTrashShown else { return "окно корзины не открылось" }
@@ -657,10 +657,10 @@ final class UIGalleryRunner {
         if !keepingCaret { window.makeFirstResponder(nil) }
     }
 
-    /// Щелчок по «Корзине»; `true` — окно корзины теперь в нужном состоянии.
+    /// Команда «Корзина» из меню; `true` — окно корзины теперь в нужном состоянии.
     @discardableResult
     private func toggleTrash() async -> Bool {
-        GalleryInput.clickTrashRow(in: window)
+        model.toggleTrash()
         await settle()
         isTrashShown = GalleryInput.trashPopoverWindow != nil
         return true
@@ -879,14 +879,7 @@ enum GalleryInput {
         }
     }
 
-    /// Строка «Корзина» внизу боковой панели.
-    static func clickTrashRow(in window: NSWindow) {
-        let point = NSPoint(x: Metrics.Sidebar.panelInset + Metrics.Sidebar.rowHorizontalPadding + 40,
-                            y: Metrics.Sidebar.footerBottomInset + Metrics.Sidebar.rowHeight / 2)
-        click(at: point, in: window)
-    }
-
-    /// Значок синхронизации — самая нижняя строка панели, под «Корзиной».
+    /// Строка ошибки синхронизации — самая нижняя строка панели.
     static func clickSyncBadge(in window: NSWindow) {
         let point = NSPoint(x: Metrics.Sidebar.panelInset + Metrics.Sidebar.rowHorizontalPadding + 40,
                             y: Metrics.Sidebar.footerBottomInset + Metrics.Sidebar.rowHeight / 2)

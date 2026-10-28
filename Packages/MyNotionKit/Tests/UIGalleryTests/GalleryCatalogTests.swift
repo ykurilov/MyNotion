@@ -120,7 +120,7 @@ struct GalleryCatalogTests {
         let required: [GalleryScene] = [
             .samplePage(scrolledToBottom: false), .emptyPage, .longBreadcrumb, .saveErrorBanner, .blockHover(.paragraph),
             .slashMenu(filter: ""), .sidebarTree(collapsed: false), .sidebarRowHover(longTitle: true),
-            .trash(.rowAtBottom), .trash(.open),
+            .trash(.sidebarWithoutRow), .trash(.open),
         ]
         for scene in required { #expect(narrow.contains(scene), "\(scene)") }
     }

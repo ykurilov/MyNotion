@@ -267,6 +267,7 @@ private struct PagesWindow: View {
             newPage: { model.createPage() },
             syncBadge: model.sync.badge,
             openSyncSettings: { model.isSyncSettingsShown = true },
+            trashToggleRequest: model.trashToggleRequest,
             sections: sidebarSections,
             collapsedSections: model.collapsedSections,
             toggleSection: { model.toggleSection($0) }

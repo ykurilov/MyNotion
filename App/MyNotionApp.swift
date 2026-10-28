@@ -314,6 +314,11 @@ private struct PageCommands: Commands {
                 .keyboardShortcut("n", modifiers: [.command, .option])
                 .disabled(library == nil)
         }
+        CommandGroup(after: .newItem) {
+            Button("Корзина") { model?.toggleTrash() }
+                .keyboardShortcut("t", modifiers: [.command, .option])
+                .disabled(model == nil)
+        }
         CommandGroup(after: .textEditing) {
             Button("Найти страницу") { model?.search.focusField() }
                 .keyboardShortcut("f", modifiers: [.command, .shift])

@@ -42,7 +42,7 @@ final class PageTreeTests: XCTestCase {
         XCTAssertTrue(waitForTitles(app, ["Входящие", "MyNotion"]))
 
         // 2.4. Вернуть из корзины — на своё место.
-        app.buttons["sidebar-trash"].click()
+        app.typeKey("t", modifierFlags: [.command, .option])  // «Файл → Корзина»
         let entry = app.descendants(matching: .any).matching(identifier: "trash-entry").firstMatch
         XCTAssertTrue(entry.waitForExistence(timeout: 5))
         XCTAssertEqual(entry.label, "Проекты")
