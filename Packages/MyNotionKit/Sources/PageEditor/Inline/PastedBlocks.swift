@@ -3,7 +3,7 @@ import NotesCore
 
 /// Вставка текста другой программы блоками (Markdown ответа ИИ): блоки даёт `pastedTextReader`, редактор ставит их
 /// на место курсора, как Notion. Первый блок вставки сливается с текстом до курсора, последний — с текстом после;
-/// остальные встают целиком. Вся вставка — один шаг ⌘Z.
+/// остальные встают целиком; вложенные блоки остаются у своего блока, вставка — после них. Вся вставка — один шаг ⌘Z.
 extension PageTextView {
     /// Блоки из простого текста и HTML буфера; `nil` — вставлять текстом в строку. Блоки потока страницы —
     /// без `containerId`, содержимое таблиц и колонок — с id своего контейнера из этого же списка; страница — `pageId`.
@@ -22,11 +22,21 @@ extension PageTextView {
         guard first.kind.holdsPastedText, last.kind.holdsPastedText else { return false }
         let head = first.text.slice(0..<start.offset)
         let tail = last.text.slice(end.offset..<(last.text.string as NSString).length)
+        // Вложенные блоки (и спрятанные в свёрнутом переключателе) остаются у своего блока: вставка — после них.
+        let subtreeEnd = start.index == end.index ? BlockStructure.subtreeEnd(blocks, of: start.index) : end.index + 1
+        let hasChildren = start.index == end.index && subtreeEnd > start.index + 1
 
-        var drafts = flow.map { block in
+        // Новые строки продолжают тип блока, как Enter в нём: пункт — пунктами, задача — задачами без галочки,
+        // цитата — цитатой, после заголовка — абзацы. Строение Markdown и блоки, скопированные в MyNotion, — свои.
+        let continued: BlockKind = keepsLook ? .paragraph : first.kind == .quote ? .quote : first.kind.kindAfterSplit
+        var drafts = flow.enumerated().map { position, block in
             var draft = BlockDraft(block)
             draft.id = nil
             draft.indent += first.indent
+            if position > 0, block.kind == .paragraph, continued != .paragraph {
+                draft.adoptDefaults(of: continued, from: block)
+                draft.kind = continued
+            }
             return draft
         }
         // Какой блок вставки стал каким черновиком: по нему содержимое таблиц находит свой новый контейнер.
@@ -48,7 +58,7 @@ extension PageTextView {
                 }
             }
             drafts[0] = merged
-        } else if !head.string.isEmpty {
+        } else if !head.string.isEmpty || hasChildren {
             var kept = BlockDraft(first)
             kept.text = head
             drafts.insert(kept, at: 0)
@@ -59,24 +69,39 @@ extension PageTextView {
         if let lastDraft = drafts.last, lastDraft.kind.holdsPastedText {
             caret = (drafts.count - 1, (lastDraft.text.string as NSString).length)
             drafts[drafts.count - 1].text = lastDraft.text.appending(tail, separator: "")
+            // Хвост со строкой вставки остаётся типа своего блока, как при Enter в середине заголовка в Notion.
+            if !keepsLook, !tail.string.isEmpty, drafts.count > 1, flow.count > 1, flow[flow.count - 1].kind == .paragraph {
+                drafts[drafts.count - 1].adoptDefaults(of: last.kind, from: flow[flow.count - 1])
+                drafts[drafts.count - 1].kind = last.kind
+                drafts[drafts.count - 1].isChecked = false
+            }
         } else {
             // После кода или таблицы — абзац с хвостом; в конце страницы — пустой, чтобы писать дальше.
             // Курсор — в начало блока под вставкой.
             caret = (drafts.count, 0)
-            if !tail.string.isEmpty || end.index == blocks.count - 1 {
-                drafts.append(BlockDraft(id: nil, text: tail, indent: first.indent))
+            if !tail.string.isEmpty || subtreeEnd == blocks.count {
+                var after = BlockDraft(id: nil, text: tail, indent: first.indent)
+                if !keepsLook, !tail.string.isEmpty { after.kind = last.kind }
+                drafts.append(after)
                 origins.append(nil)
             }
         }
 
         let undoManager = undoManager
+        // Место черновика вставки в документе: при вложенных блоках первый — на месте блока, остальные — после них.
+        let documentIndex = { (position: Int) in hasChildren && position > 0 ? subtreeEnd + position - 1 : start.index + position }
         undoManager?.beginUndoGrouping()
-        changeBlocks(start.index..<end.index + 1, to: drafts, actionName: "Вставить")
-        insertContents(of: pasted, origins: origins, at: start.index, fitsTablesToPage: !keepsLook)
+        if hasChildren {
+            changeBlocks(start.index..<start.index + 1, to: [drafts[0]], actionName: "Вставить")
+            changeBlocks(subtreeEnd..<subtreeEnd, to: Array(drafts.dropFirst()), actionName: "Вставить")
+        } else {
+            changeBlocks(start.index..<end.index + 1, to: drafts, actionName: "Вставить")
+        }
+        insertContents(of: pasted, origins: origins, at: documentIndex, fitsTablesToPage: !keepsLook)
         undoManager?.endUndoGrouping()
         undoManager?.setActionName("Вставить")
 
-        let index = min(start.index + caret.item, document.blocks.count - 1)
+        let index = min(documentIndex(caret.item), document.blocks.count - 1)
         setSelectedRange(NSRange(location: mapper.paragraphStart(ofBlockAt: index) + caret.offset, length: 0))
         scrollRangeToVisible(selectedRange())
         return true
@@ -96,12 +121,12 @@ extension PageTextView {
     }
 
     /// Ячейки таблиц и блоки колонок вставки — в потоки своих новых контейнеров.
-    private func insertContents(of pasted: [Block], origins: [UUID?], at startIndex: Int, fitsTablesToPage: Bool) {
+    private func insertContents(of pasted: [Block], origins: [UUID?], at documentIndex: (Int) -> Int, fitsTablesToPage: Bool) {
         let contents = pasted.filter { $0.containerId != nil }
         guard !contents.isEmpty else { return }
         var newIds: [UUID: UUID] = [:]
-        for (position, origin) in origins.enumerated() where startIndex + position < document.blocks.count {
-            if let origin { newIds[origin] = document.blocks[startIndex + position].id }
+        for (position, origin) in origins.enumerated() where documentIndex(position) < document.blocks.count {
+            if let origin { newIds[origin] = document.blocks[documentIndex(position)].id }
         }
         var upserts = contents.map { block in
             var block = block
@@ -118,6 +143,9 @@ extension PageTextView {
 extension BlockKind {
     /// В абзац блока можно вставить текст: не код, не таблица, не картинка, не подстраница.
     var holdsPastedText: Bool { !rendersAsAttachment && self != .pageLink }
+
+    /// Новый блок после Enter: пункт и чекбокс продолжаются, заголовок и ссылка на страницу — нет (описатель типа).
+    var kindAfterSplit: BlockKind { descriptor.continuesAfterSplit ? self : .paragraph }
 }
 
 extension InlineText {

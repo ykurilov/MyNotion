@@ -192,7 +192,7 @@ public final class PageTextStorageMapper: NSObject {
                 return draft
             }
             let source = paragraphIds[position].lazy.compactMap(document.block).first
-            return BlockDraft(id: nil, kind: Self.kindAfterSplit(of: source?.kind ?? .paragraph), text: text, indent: source?.indent ?? 0)
+            return BlockDraft(id: nil, kind: (source?.kind ?? .paragraph).kindAfterSplit, text: text, indent: source?.indent ?? 0)
         }
     }
 
@@ -202,11 +202,6 @@ public final class PageTextStorageMapper: NSObject {
             if let id = value as? UUID, !ids.contains(id) { ids.append(id) }
         }
         return ids
-    }
-
-    /// Новый блок после Enter: пункт и чекбокс продолжаются, заголовок и ссылка на страницу — нет (описатель типа).
-    private static func kindAfterSplit(of kind: BlockKind) -> BlockKind {
-        kind.descriptor.continuesAfterSplit ? kind : .paragraph
     }
 
     /// Переписать атрибуты абзацев по их блокам: один id на абзац, вид по типу блока.
