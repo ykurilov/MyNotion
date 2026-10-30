@@ -2,10 +2,11 @@ import Foundation
 import NotesCore
 
 /// Текст другой программы при ⌘V → блоки страницы: Markdown ответов ИИ (кнопка «Копировать» Claude, ChatGPT),
-/// отрисованный HTML (ответ чата или страница, выделенные мышью) и обычный текст со строками-списками.
+/// отрисованный HTML (ответ чата или страница, выделенные мышью) и обычный текст в несколько строк (списки — списками).
 /// Разбор тот же, что у `mynotion page write` (`MarkdownBlocksBuilder`), только без файлов с диска и ссылок на страницы.
 public enum PastedText {
-    /// `nil` — вставлять как раньше, текстом в строку: одна строка или текст без Markdown, списков и строения в HTML.
+    /// `nil` — вставлять как раньше, текстом в строку: одна строка или, рядом с оформленным текстом, текст без Markdown
+    /// и строения в HTML. Обычный текст в несколько строк — абзацами, по блоку на строку.
     /// `html` — HTML буфера: главнее простого текста, если в нём есть строение (заголовок, список, цитата, код
     /// рядом с текстом, таблица, разделитель); HTML-обёртка простого текста (редактор кода) уступает его Markdown.
     /// `hasRichText` — в буфере есть и оформленный текст (HTML, RTF). Тогда из простого текста блоками — только явный
@@ -27,7 +28,8 @@ public enum PastedText {
         let markdown: String
         if lines.contains(where: isExplicitMarkdown) || (!hasRichText && lines.contains { markdownListItem.matches($0) }) {
             markdown = lines.map(withMarkdownMarker).joined(separator: "\n")
-        } else if !hasRichText, lines.contains(where: { plainListItem.matches($0) }) {
+        } else if !hasRichText {
+            // Обычный текст, как у Notion: каждая строка — свой блок, пустые строки — только разделители.
             markdown = plainMarkdown(lines)
         } else {
             return nil
