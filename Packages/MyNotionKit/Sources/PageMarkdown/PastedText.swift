@@ -23,14 +23,19 @@ public enum PastedText {
         }
         if let html, let blocks = structuredBlocks(fromHTML: html, pageId: pageId) { return blocks }
         let lines = text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
-            .components(separatedBy: "\n")
-        guard lines.filter({ !isBlank($0) }).count > 1 else { return nil }
+            .components(separatedBy: "\n").map { isBlankLine($0) ? "" : $0 }
+        guard lines.filter({ !isBlankLine($0) }).count > 1 else { return nil }
         let markdown: String
         if lines.contains(where: isExplicitMarkdown) || (!hasRichText && lines.contains { markdownListItem.matches($0) }) {
             markdown = lines.map(withMarkdownMarker).joined(separator: "\n")
-        } else if !hasRichText {
-            // Обычный текст, как у Notion: каждая строка — свой блок, пустые строки — только разделители.
+        } else if !hasRichText, lines.contains(where: { plainListItem.matches($0) }) {
             markdown = plainMarkdown(lines)
+        } else if !hasRichText {
+            // Обычный текст, как у Notion: каждая строка — свой абзац, пустые строки — только разделители.
+            // Без разбора Markdown: знаки текста ничего не значат, а длинный текст (песня) вставляется быстро.
+            return lines.filter { !isBlankLine($0) }.map { line in
+                Block(pageId: pageId, text: InlineText(line.trimmingCharacters(in: .whitespaces)), sortKey: .between(nil, nil))
+            }
         } else {
             return nil
         }
@@ -83,7 +88,7 @@ public enum PastedText {
         let builder = MarkdownBlocksBuilder(attachments: nil, baseFolder: nil, linkTarget: { _ in nil })
         // Пустые строки — только разделители абзацев: пустых абзацев вставка не добавляет.
         return builder.blocks(fromMarkdown: markdown, pageId: pageId).blocks.filter { block in
-            !(block.kind == .paragraph && block.containerId == nil && block.text.string.isEmpty && block.props.isEmpty)
+            !(block.kind == .paragraph && block.containerId == nil && isBlankLine(block.text.string) && block.props.isEmpty)
         }.map(withWebLinksOnly)
     }
 
@@ -133,9 +138,12 @@ public enum PastedText {
     nonisolated(unsafe) private static let plainMarker = try! NSRegularExpression(pattern: #"^(\s*)[•◦▪‣·][ \t]+"#)
     nonisolated(unsafe) private static let anyMarker = try! NSRegularExpression(pattern: #"^(\s*)([-*+•◦▪‣·]|\d{1,9}[.)])[ \t]+"#)
 
-    private static func isBlank(_ line: String) -> Bool {
-        line.allSatisfy { $0 == " " || $0 == "\t" }
+    /// Строка без видимых знаков: пробелы, табуляция, неразрывный и нулевой ширины пробелы.
+    public static func isBlankLine(_ line: String) -> Bool {
+        line.unicodeScalars.allSatisfy { $0.properties.isWhitespace || invisibleScalars.contains($0) }
     }
+
+    private static let invisibleScalars: Set<Unicode.Scalar> = ["\u{200B}", "\u{200C}", "\u{200D}", "\u{2060}", "\u{FEFF}"]
 
     /// Знак списка обычного текста — знаком Markdown `- `.
     private static func withMarkdownMarker(_ line: String) -> String {
@@ -145,7 +153,7 @@ public enum PastedText {
     /// Обычный текст — Markdown, в котором каждая строка — свой блок, а знаки текста (`*`, `_`, `#`) ничего не значат:
     /// пункт списка — знак и текст, остальное — абзац; знаки препинания экранированы.
     private static func plainMarkdown(_ lines: [String]) -> String {
-        lines.filter { !isBlank($0) }.map { line in
+        lines.filter { !isBlankLine($0) }.map { line in
             let range = NSRange(location: 0, length: (line as NSString).length)
             if let match = anyMarker.firstMatch(in: line, range: range) {
                 let indent = (line as NSString).substring(with: match.range(at: 1))

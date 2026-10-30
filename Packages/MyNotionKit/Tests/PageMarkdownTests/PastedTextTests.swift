@@ -95,6 +95,15 @@ struct PastedTextTests {
         #expect(blocks.allSatisfy { $0.text.runs.isEmpty && $0.indent == 0 })
     }
 
+    @Test("Строка из невидимых знаков (U+200B, неразрывный пробел) — пустая")
+    func invisibleLinesAreBlank() throws {
+        let blocks = try #require(blocks("а\n\u{200B}\n\u{00A0}\u{00A0}\n\u{FEFF}\nб"))
+        #expect(blocks.map(\.text.string) == ["а", "б"])
+        #expect(self.blocks("слово\n\u{200B}\n\u{00A0}") == nil)
+        let markdown = try #require(self.blocks("# План\n\u{200B}\nтекст"))
+        #expect(markdown.map(\.text.string) == ["План", "текст"])
+    }
+
     @Test("Обычный текст рядом с оформленным (HTML, RTF) — не блоки: его вставит вставка с оформлением")
     func plainTextWithRichAlternative() {
         #expect(blocks("Первая строка письма\nВторая строка\n\nПодпись", hasRichText: true) == nil)
