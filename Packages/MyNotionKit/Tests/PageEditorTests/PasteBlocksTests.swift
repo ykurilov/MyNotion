@@ -8,6 +8,8 @@ import Testing
 @MainActor
 @Suite("Вставка блоками")
 struct PasteBlocksTests {
+    typealias Spec = EditorFixture.Spec
+
     /// Разбор, который на текст «markdown» отвечает этими блоками, а на прочий — «вставлять текстом».
     private static func reader(_ blocks: [Block]) -> PageTextView.PastedTextReader {
         { text, _, _, _, _ in text == "markdown" ? blocks : nil }
@@ -15,6 +17,11 @@ struct PasteBlocksTests {
 
     private static func block(_ kind: BlockKind, _ text: String = "", indent: Int = 0, runs: [StyledRun] = []) -> Block {
         Block(pageId: UUID(), kind: kind, text: InlineText(text, runs: runs), indent: indent, sortKey: .between(nil, nil))
+    }
+
+    /// Разбор обычного текста: строка — абзац, как у `PastedText` для текста без Markdown.
+    private static let plainLines: PageTextView.PastedTextReader = { text, _, _, _, _ in
+        text.components(separatedBy: "\n").map { block(.paragraph, $0) }
     }
 
     private static func pasteboard(_ string: String) -> NSPasteboard {
@@ -228,5 +235,84 @@ struct PasteBlocksTests {
         #expect(!asked)
         #expect(editor.kinds.allSatisfy { $0 == .paragraph })
         #expect(editor.texts == ["## Заголовок", "**жирный**"])
+    }
+
+    // MARK: Тип новых строк — как у Enter в блоке, куда вставляют
+
+    @Test("Строки в середину пункта, задачи и цитаты продолжают их тип; хвост задачи — без галочки")
+    func linesContinueListItemsTasksAndQuotes() throws {
+        let editor = try EditorFixture([.bullet("одиндва"), .checkbox("делоещё", checked: true), Spec(kind: .quote, text: "цитата")])
+        editor.textView.pastedTextReader = Self.plainLines
+
+        editor.placeCaret(inBlock: 0, at: 4)
+        editor.step { editor.textView.paste(from: Self.pasteboard("x\ny\nz")) }
+        #expect(editor.kinds == [.bulletItem, .bulletItem, .bulletItem, .checkbox, .quote])
+        #expect(editor.texts == ["одинx", "y", "zдва", "делоещё", "цитата"])
+
+        editor.placeCaret(inBlock: 3, at: 4)
+        editor.step { editor.textView.paste(from: Self.pasteboard("x\ny")) }
+        #expect(editor.kinds == [.bulletItem, .bulletItem, .bulletItem, .checkbox, .checkbox, .quote])
+        #expect(editor.document.blocks[3...4].map(\.isChecked) == [true, false])
+        #expect(editor.texts[3...4] == ["делоx", "yещё"])
+
+        editor.placeCaret(inBlock: 5, at: nil)
+        editor.step { editor.textView.paste(from: Self.pasteboard("x\ny")) }
+        #expect(editor.kinds.suffix(2) == [.quote, .quote])
+        #expect(editor.texts.suffix(2) == ["цитатаx", "y"])
+
+        editor.undo()
+        #expect(editor.kinds.suffix(1) == [.quote])
+        #expect(editor.texts.suffix(1) == ["цитата"])
+    }
+
+    @Test("Вставка в заголовок: новые строки — абзацы, хвост остаётся заголовком")
+    func headingTailStaysHeading() throws {
+        let editor = try EditorFixture([.heading(1, "Заголовок"), .heading(2, "Итог")])
+        editor.textView.pastedTextReader = Self.plainLines
+
+        editor.placeCaret(inBlock: 0, at: 3)
+        editor.step { editor.textView.paste(from: Self.pasteboard("x\ny\nz")) }
+        #expect(editor.kinds == [.heading1, .paragraph, .heading1, .heading2])
+        #expect(editor.texts == ["Загx", "y", "zоловок", "Итог"])
+
+        editor.placeCaret(inBlock: 3, at: nil)
+        editor.step { editor.textView.paste(from: Self.pasteboard("x\ny")) }
+        #expect(editor.kinds.suffix(2) == [.heading2, .paragraph])
+    }
+
+    // MARK: Вложенные блоки
+
+    @Test("Вложенные блоки остаются у своего блока: вставка встаёт после них; одна ⌘Z")
+    func childrenStayWithTheirBlock() throws {
+        let editor = try EditorFixture([.bullet("a"), .bullet("b", indent: 1), .paragraph("c")])
+        let childId = editor.document.blocks[1].id
+        editor.textView.pastedTextReader = Self.plainLines
+        editor.placeCaret(inBlock: 0, at: nil)
+
+        editor.step { editor.textView.paste(from: Self.pasteboard("x\ny")) }
+
+        #expect(editor.texts == ["ax", "b", "y", "c"])
+        #expect(editor.indents == [0, 1, 0, 0])
+        #expect(editor.kinds == [.bulletItem, .bulletItem, .bulletItem, .paragraph])
+        #expect(editor.document.blocks[1].id == childId)
+        #expect(editor.textView.selectedRange() == NSRange(location: editor.textLocation(ofBlock: 2) + 1, length: 0))
+
+        editor.undo()
+        #expect(editor.texts == ["a", "b", "c"])
+        #expect(editor.indents == [0, 1, 0])
+    }
+
+    @Test("В свёрнутый переключатель: строки встают после его спрятанных детей")
+    func collapsedToggleKeepsHiddenChildren() throws {
+        let editor = try EditorFixture([Spec(kind: .toggle, text: "Раздел"), Spec(kind: .paragraph, text: "внутри", indent: 1), .paragraph("после")])
+        editor.textView.blockViewState = BlockViewStateStore(database: editor.store.database)
+        editor.textView.setCollapsed(true, ofBlock: editor.document.blocks[0].id)
+        editor.textView.pastedTextReader = Self.plainLines
+        editor.placeCaret(inBlock: 0, at: nil)
+
+        editor.step { editor.textView.paste(from: Self.pasteboard("x\ny")) }
+
+        #expect(editor.texts == ["Разделx", "внутри", "y", "после"])
+        #expect(editor.indents == [0, 1, 0, 0])
     }
 }
