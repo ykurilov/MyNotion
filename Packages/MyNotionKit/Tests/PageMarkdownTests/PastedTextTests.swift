@@ -86,9 +86,27 @@ struct PastedTextTests {
         #expect(blocks("\n\n- пункт\n\n") == nil)
     }
 
-    @Test("Обычный текст без Markdown и списков — не блоки: вставится как раньше")
-    func plainText() {
-        #expect(blocks("Первая строка письма\nВторая строка\n\nПодпись") == nil)
+    @Test("Обычный текст в несколько строк — каждая строка свой абзац, пустые строки — только разделители, как в Notion")
+    func plainText() throws {
+        let song = "Куплет первый,\nвторая строка\r\n\n\n  Припев *звёздочки* и file_name_x\n\nПоследняя # строка\n"
+        let blocks = try #require(blocks(song))
+        #expect(blocks.map(\.kind) == [.paragraph, .paragraph, .paragraph, .paragraph])
+        #expect(blocks.map(\.text.string) == ["Куплет первый,", "вторая строка", "Припев *звёздочки* и file_name_x", "Последняя # строка"])
+        #expect(blocks.allSatisfy { $0.text.runs.isEmpty && $0.indent == 0 })
+    }
+
+    @Test("Строка из невидимых знаков (U+200B, неразрывный пробел) — пустая")
+    func invisibleLinesAreBlank() throws {
+        let blocks = try #require(blocks("а\n\u{200B}\n\u{00A0}\u{00A0}\n\u{FEFF}\nб"))
+        #expect(blocks.map(\.text.string) == ["а", "б"])
+        #expect(self.blocks("слово\n\u{200B}\n\u{00A0}") == nil)
+        let markdown = try #require(self.blocks("# План\n\u{200B}\nтекст"))
+        #expect(markdown.map(\.text.string) == ["План", "текст"])
+    }
+
+    @Test("Обычный текст рядом с оформленным (HTML, RTF) — не блоки: его вставит вставка с оформлением")
+    func plainTextWithRichAlternative() {
+        #expect(blocks("Первая строка письма\nВторая строка\n\nПодпись", hasRichText: true) == nil)
     }
 
     @Test("Обычный текст со строками-списками «•», «1)» — списки, остальное — абзацы, знаки текста не разбираются")
@@ -103,9 +121,11 @@ struct PastedTextTests {
         #expect(numbered.map(\.kind) == [.paragraph, .numberedItem, .numberedItem])
     }
 
-    @Test("Реплики диалога с тире — не список: вставятся как раньше")
-    func dialogue() {
-        #expect(blocks("— Привет, — сказал он.\n— Здравствуй.\n– И тебе.") == nil)
+    @Test("Реплики диалога с тире — не список: абзацы")
+    func dialogue() throws {
+        let blocks = try #require(blocks("— Привет, — сказал он.\n— Здравствуй.\n– И тебе."))
+        #expect(blocks.map(\.kind) == [.paragraph, .paragraph, .paragraph])
+        #expect(blocks.map(\.text.string) == ["— Привет, — сказал он.", "— Здравствуй.", "– И тебе."])
     }
 
     @Test("Есть HTML или RTF: блоками — только явный Markdown, одни списки «1.» отдаются оформленному тексту")
