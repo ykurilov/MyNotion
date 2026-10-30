@@ -6,7 +6,8 @@ import NotesCore
 /// Разбор тот же, что у `mynotion page write` (`MarkdownBlocksBuilder`), только без файлов с диска и ссылок на страницы.
 public enum PastedText {
     /// `nil` — вставлять как раньше, текстом в строку: одна строка или, рядом с оформленным текстом, текст без Markdown
-    /// и строения в HTML. Обычный текст в несколько строк — абзацами, по блоку на строку.
+    /// и строения в HTML. Обычный текст в несколько строк — абзацами, по блоку на строку; пустые строки между ними —
+    /// один пустой абзац.
     /// `html` — HTML буфера: главнее простого текста, если в нём есть строение (заголовок, список, цитата, код
     /// рядом с текстом, таблица, разделитель); HTML-обёртка простого текста (редактор кода) уступает его Markdown.
     /// `hasRichText` — в буфере есть и оформленный текст (HTML, RTF). Тогда из простого текста блоками — только явный
@@ -31,16 +32,28 @@ public enum PastedText {
         } else if !hasRichText, lines.contains(where: { plainListItem.matches($0) }) {
             markdown = plainMarkdown(lines)
         } else if !hasRichText {
-            // Обычный текст, как у Notion: каждая строка — свой абзац, пустые строки — только разделители.
-            // Без разбора Markdown: знаки текста ничего не значат, а длинный текст (песня) вставляется быстро.
-            return lines.filter { !isBlankLine($0) }.map { line in
-                Block(pageId: pageId, text: InlineText(line.trimmingCharacters(in: .whitespaces)), sortKey: .between(nil, nil))
-            }
+            // Обычный текст: каждая строка — свой абзац, пустые строки подряд — один пустой абзац (разрыв строф),
+            // в начале и в конце — ни одного. Без разбора Markdown: знаки текста ничего не значат, а длинный текст
+            // (песня) вставляется быстро.
+            return paragraphs(lines, pageId: pageId)
+
         } else {
             return nil
         }
         let blocks = blocks(fromMarkdown: markdown, pageId: pageId)
         return blocks.contains { $0.containerId == nil } ? blocks : nil
+    }
+
+    private static func paragraphs(_ lines: [String], pageId: UUID) -> [Block] {
+        var texts: [String] = []
+        var afterBlank = false
+        for line in lines {
+            if isBlankLine(line) { afterBlank = !texts.isEmpty; continue }
+            if afterBlank { texts.append("") }
+            texts.append(line.trimmingCharacters(in: .whitespaces))
+            afterBlank = false
+        }
+        return texts.map { Block(pageId: pageId, text: InlineText($0), sortKey: .between(nil, nil)) }
     }
 
     /// Блоки HTML, если в нём есть строение и их больше одного; абзацы без строения — `nil`: Word, Pages и Заметки

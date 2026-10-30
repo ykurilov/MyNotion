@@ -86,19 +86,19 @@ struct PastedTextTests {
         #expect(blocks("\n\n- пункт\n\n") == nil)
     }
 
-    @Test("Обычный текст в несколько строк — каждая строка свой абзац, пустые строки — только разделители, как в Notion")
+    @Test("Обычный текст в несколько строк — строка свой абзац, пустые строки подряд — один пустой абзац, по краям — ни одного")
     func plainText() throws {
-        let song = "Куплет первый,\nвторая строка\r\n\n\n  Припев *звёздочки* и file_name_x\n\nПоследняя # строка\n"
+        let song = "\n\nКуплет первый,\nвторая строка\r\n\n\n  Припев *звёздочки* и file_name_x\n\nПоследняя # строка\n\n"
         let blocks = try #require(blocks(song))
-        #expect(blocks.map(\.kind) == [.paragraph, .paragraph, .paragraph, .paragraph])
-        #expect(blocks.map(\.text.string) == ["Куплет первый,", "вторая строка", "Припев *звёздочки* и file_name_x", "Последняя # строка"])
+        #expect(blocks.map(\.kind) == Array(repeating: .paragraph, count: 6))
+        #expect(blocks.map(\.text.string) == ["Куплет первый,", "вторая строка", "", "Припев *звёздочки* и file_name_x", "", "Последняя # строка"])
         #expect(blocks.allSatisfy { $0.text.runs.isEmpty && $0.indent == 0 })
     }
 
     @Test("Строка из невидимых знаков (U+200B, неразрывный пробел) — пустая")
     func invisibleLinesAreBlank() throws {
         let blocks = try #require(blocks("а\n\u{200B}\n\u{00A0}\u{00A0}\n\u{FEFF}\nб"))
-        #expect(blocks.map(\.text.string) == ["а", "б"])
+        #expect(blocks.map(\.text.string) == ["а", "", "б"])
         #expect(self.blocks("слово\n\u{200B}\n\u{00A0}") == nil)
         let markdown = try #require(self.blocks("# План\n\u{200B}\nтекст"))
         #expect(markdown.map(\.text.string) == ["План", "текст"])
