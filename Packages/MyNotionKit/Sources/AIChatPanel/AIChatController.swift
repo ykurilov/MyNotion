@@ -70,6 +70,8 @@ public final class AIChatController {
     static let replyInterval = Duration.milliseconds(50)
 
     public static let pageActions = [
+        PageAction(id: "proofread", title: "Исправить ошибки", symbol: "textformat.abc.dottedunderline",
+                   prompt: "Исправь на этой странице орфографические и пунктуационные ошибки и опечатки. Содержание и структуру не меняй."),
         PageAction(id: "summary", title: "Пересказать страницу", symbol: "text.alignleft", prompt: "Кратко перескажи эту страницу."),
         PageAction(id: "translate", title: "Перевести страницу", symbol: "character.bubble", prompt: "Переведи эту страницу на английский."),
         PageAction(id: "insights", title: "Найти главное", symbol: "lightbulb", prompt: "Найди на этой странице главные мысли и выводы."),
