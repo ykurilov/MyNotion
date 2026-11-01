@@ -320,6 +320,9 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
             // Набор внутри блока: поддеревья те же, поправки нужны только перерисованным абзацам.
             reapplyAdjustments(aroundBlockAt: position.index)
         }
+        // После удаления выделения AppKit оставляет оформление его первого знака (например, заголовка),
+        // а курсор уже в пустом абзаце.
+        applyEmptyParagraphTypingAttributes()
         updateEmptyParagraphHint()
         textDidChangeForPopups()
         refreshMentionPicker()
@@ -933,7 +936,9 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
         emptyHintBlockID = document.blocks[position.index].id
         let caretOnScreen = firstRect(forCharacterRange: selection, actualRange: nil)
         let caret = convert(window.convertFromScreen(caretOnScreen), from: nil)
-        let font = typingAttributes[.font] as? NSFont ?? Typography.line(for: .paragraph).font
+        // Шрифт — по типу блока, а не из оформления набора: оно бывает от другого блока или с жирным.
+        let kindFont = Typography.line(for: PageTextStorageMapper.textStyle(of: document.blocks[position.index].kind)).font
+        let font = kindFont.withSize(kindFont.pointSize * layoutSettings.fontScale)
         emptyParagraphHint.font = font
         emptyParagraphHint.sizeToFit()
         // Подсказка стоит там, где встанет набранный текст: с начала текста блока, на базовой линии его строки.
