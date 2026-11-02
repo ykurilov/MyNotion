@@ -64,6 +64,15 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
     private(set) lazy var conflictMarks = ConflictMarksOverlay(textView: self)
     /// Щелчок по блоку-подстранице: открыть страницу.
     public var onOpenPage: (@MainActor (UUID) -> Void)?
+    /// Пункты страницы в меню блока-ссылки по правой кнопке (`PageLinkMenu.swift`): их даёт хозяин окна; `nil` —
+    /// в меню только строки меню блока.
+    public var pageLinkMenuEntries: (@MainActor (PageLinkMenuRequest) -> [ActionMenuEntry])?
+    /// Меню блока-ссылки по правой кнопке.
+    private(set) lazy var pageLinkMenu: PageLinkMenuPresenter = {
+        let menu = PageLinkMenuPresenter()
+        menu.textView = self
+        return menu
+    }()
     /// «Страница» в меню «/» и «Преобразовать в»: подстраницу со ссылкой у блока создаёт владелец дерева.
     public var onSubpageRequest: (@MainActor (SubpageRequest) -> Void)?
     /// ⌘-щелчок по ссылке: открыть адрес (по умолчанию — в браузере по умолчанию).

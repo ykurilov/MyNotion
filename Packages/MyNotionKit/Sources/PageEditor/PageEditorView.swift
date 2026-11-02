@@ -40,6 +40,8 @@ public struct PageEditorView: View {
     let restoringScroll: TabScroll?
     /// Шаблоны для строк на пустой странице (US7).
     let templates: TemplateSettings
+    /// Пункты страницы в меню блока-ссылки по правой кнопке (`PageTextView.pageLinkMenuEntries`).
+    let pageLinkMenu: (@MainActor (PageLinkMenuRequest) -> [ActionMenuEntry])?
 
     public init(document: PageDocument, ancestors: [BreadcrumbAncestor] = [], initialFocus: PageTextView.InitialFocus,
                 linkedPages: [UUID: LinkedPage] = [:], onOpenPage: @escaping @MainActor (UUID) -> Void = { _ in },
@@ -50,7 +52,8 @@ public struct PageEditorView: View {
                 onReady: @escaping @MainActor () -> Void = {}, mentions: MentionSettings = MentionSettings(),
                 pageMenuItems: [PageMenuItem] = [], topBarAccessory: AnyView? = nil, headerAddons: [PageHeaderAddonFactory] = [],
                 scrollPlace: PageScrollPlace? = nil, restoringScroll: TabScroll? = nil,
-                templates: TemplateSettings = TemplateSettings(), topBarLeading: AnyView? = nil) {
+                templates: TemplateSettings = TemplateSettings(), topBarLeading: AnyView? = nil,
+                pageLinkMenu: (@MainActor (PageLinkMenuRequest) -> [ActionMenuEntry])? = nil) {
         self.document = document
         self.ancestors = ancestors
         self.initialFocus = initialFocus
@@ -70,6 +73,7 @@ public struct PageEditorView: View {
         self.restoringScroll = restoringScroll
         self.templates = templates
         self.topBarLeading = topBarLeading
+        self.pageLinkMenu = pageLinkMenu
     }
 
     public var body: some View {
@@ -82,7 +86,7 @@ public struct PageEditorView: View {
                            onOpenPage: onOpenPage, onSubpageRequest: onSubpageRequest, onSetIcon: onSetIcon, onResolveConflict: onResolveConflict,
                            blockViewState: blockViewState, blockReveal: blockReveal, onReady: onReady,
                            mentions: mentions, headerAddons: headerAddons, scrollPlace: scrollPlace, restoringScroll: restoringScroll,
-                           templates: templates)
+                           templates: templates, pageLinkMenu: pageLinkMenu)
                 // Новый документ — новый редактор (страницу открыли или перечитали после операции с деревом); верхняя
                 // полоса остаётся и только обновляется: её пересоздание стоило каждому переходу (профиль вкладок, 003).
                 .id(ObjectIdentifier(document))
@@ -153,6 +157,7 @@ struct PageTextEditor: NSViewRepresentable {
     var scrollPlace: PageScrollPlace?
     var restoringScroll: TabScroll?
     var templates = TemplateSettings()
+    var pageLinkMenu: (@MainActor (PageLinkMenuRequest) -> [ActionMenuEntry])?
 
     /// Какой запрос перехода к блоку редактор уже выполнил.
     final class Coordinator {
@@ -177,6 +182,7 @@ struct PageTextEditor: NSViewRepresentable {
         textView.onSubpageRequest = onSubpageRequest
         textView.onSetIcon = onSetIcon
         textView.onResolveConflict = onResolveConflict
+        textView.pageLinkMenuEntries = pageLinkMenu
         mentions.apply(to: textView)
         templates.apply(to: textView)
         let scrollView = Self.makeScrollView(around: textView)
@@ -203,6 +209,7 @@ struct PageTextEditor: NSViewRepresentable {
         textView.onSubpageRequest = onSubpageRequest
         textView.onSetIcon = onSetIcon
         textView.onResolveConflict = onResolveConflict
+        textView.pageLinkMenuEntries = pageLinkMenu
         mentions.apply(to: textView)
         templates.apply(to: textView)
         textView.showIcon(icon)

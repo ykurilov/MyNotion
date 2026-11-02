@@ -5,6 +5,8 @@ import VisualStyle
 /// Место пункта в меню строки страницы панели (contracts/pages-ui.md, «Боковая панель»), по порядку.
 public enum PageRowMenuSlot: Int, CaseIterable, Comparable, Sendable {
     case newFromTemplate, favorite, copyLink, duplicate, moveTo, rename, addSubpage, openInNewTab, template, trash
+    /// Только в меню ссылки на страницу (`PageLinkMenu`).
+    case changeIcon, openInNewWindow, askAI
 
     public static func < (lhs: PageRowMenuSlot, rhs: PageRowMenuSlot) -> Bool { lhs.rawValue < rhs.rawValue }
 }
@@ -48,13 +50,20 @@ public enum PageRowMenu {
                                handlers: [PageRowMenuSlot: (UUID) -> Void]) -> [ActionMenuEntry] {
         var entries: [ActionMenuEntry] = []
         for item in items.sorted(by: { $0.slot < $1.slot }) {
-            guard let title = item.title(context), let handler = handlers[item.slot] else { continue }
+            guard let action = action(item, context: context, handlers: handlers, identifierPrefix: "row-menu") else { continue }
             if item.slot == .trash, !entries.isEmpty { entries.append(.separator) }
-            let pageId = context.pageId
-            entries.append(.action(ActionMenuAction(title: title, icon: item.slot.icon(context), hint: item.slot.hint,
-                                                    identifier: "row-menu-\(item.slot)") { _ in handler(pageId) }))
+            entries.append(.action(action))
         }
         return entries
+    }
+
+    /// Пункт для страницы `context`: название, значок и подсказка места, обработчик окна; `nil` — пункт не нужен или обработчика нет.
+    static func action(_ item: PageRowMenuItem, context: PageRowMenuContext, handlers: [PageRowMenuSlot: (UUID) -> Void],
+                       identifierPrefix: String) -> ActionMenuAction? {
+        guard let title = item.title(context), let handler = handlers[item.slot] else { return nil }
+        let pageId = context.pageId
+        return ActionMenuAction(title: title, icon: item.slot.icon(context), hint: item.slot.hint,
+                                identifier: "\(identifierPrefix)-\(item.slot)") { _ in handler(pageId) }
     }
 
     public static func make(items: [PageRowMenuItem], context: PageRowMenuContext,
@@ -77,6 +86,9 @@ extension PageRowMenuSlot {
         case .openInNewTab: "macwindow.badge.plus"
         case .template: "doc.on.doc"
         case .trash: "trash"
+        case .changeIcon: "face.smiling"
+        case .openInNewWindow: "macwindow"
+        case .askAI: "sparkles"
         }
     }
 
