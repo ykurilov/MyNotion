@@ -72,6 +72,14 @@ struct PlannedDatabase {
     var declaredRelations: [Int: DeclaredRelation] = [:]
     /// Сводки по схеме Notion: колонка → связь, свойство цели и вычисление; id целей находятся вторым проходом.
     var pendingRollups: [Int: PendingRollup] = [:]
+    /// Значения сводок из выгрузки и угаданный тип столбца: если вторым проходом сводку собрать не удалось, остаются они.
+    var rollupFallbacks: [Int: RollupFallback] = [:]
+}
+
+/// Столбец сводки Notion как он был в таблице: тип по значениям и текст ячейки каждой строки (по странице строки).
+struct RollupFallback {
+    var kind: ColumnKind
+    var texts: [Int: String] = [:]
 }
 
 /// Базы выгрузки (research R18): место, строки ↔ файлы, типы по значениям, связи по 32 hex, отчёт. Своя выгрузка
@@ -247,6 +255,7 @@ struct NotionDatabaseReader {
         // Значения строк и шаблонов.
         var rows: [PlannedRow] = []
         var pending: [Int: [Int: [String]]] = [:]
+        var rollupTexts: [Int: [Int: String]] = [:]
         func plannedRow(_ pageIndex: Int, values: (Int) -> String?, isTemplate: Bool) -> PlannedRow {
             var row = PlannedRow(pageIndex: pageIndex, isTemplate: isTemplate)
             for column in header.indices.dropFirst() {
@@ -259,6 +268,8 @@ struct NotionDatabaseReader {
                     row.updatedAt = ColumnGuess.date(text, timeZone: timeZone).flatMap { DateText.parse($0.start, timeZone: timeZone.identifier) }
                 case .relation:
                     pending[column, default: [:]][pageIndex] = RelationText.targets(text)
+                case .rollup:
+                    rollupTexts[column, default: [:]][pageIndex] = text
                 default:
                     if let value = columnKinds[column].value(text, optionIds: optionIds[property.id] ?? [:], timeZone: timeZone) {
                         row.cells.append((property.id, value))
@@ -293,7 +304,10 @@ struct NotionDatabaseReader {
                 if pending[column] == nil { pending[column] = [:] }
                 database.declaredRelations[column] = relation
             }
-            if let rollup = overlayColumn.rollup { database.pendingRollups[column] = rollup }
+            if let rollup = overlayColumn.rollup {
+                database.pendingRollups[column] = rollup
+                database.rollupFallbacks[column] = RollupFallback(kind: Self.valueKind(guessedKinds[column]), texts: rollupTexts[column] ?? [:])
+            }
         }
         database.pendingRelations = pending
         return database
@@ -372,11 +386,14 @@ struct NotionDatabaseReader {
         for (index, database) in databases.sorted(by: { $0.key < $1.key }) where !database.pendingRollups.isEmpty {
             var source = database
             for (column, rollup) in database.pendingRollups.sorted(by: { $0.key < $1.key }) {
-                let name = source.properties[column].name
-                guard let target = targetOfColumn[[index, rollup.relationColumn]], source.properties[rollup.relationColumn].kind == .relation,
-                      let targetProperty = databases[target]?.properties.first(where: { $0.name == rollup.targetName })
-                else {
-                    source.summary.notes.append("«\(name)» — сводка Notion не перенесена: связь или свойство цели не найдены, значения не заполнены")
+                let relationName = source.properties[rollup.relationColumn].name
+                guard let target = targetOfColumn[[index, rollup.relationColumn]], source.properties[rollup.relationColumn].kind == .relation else {
+                    keepRollupValues(ofColumn: column, reason: "связь «\(relationName)» не перенесена", in: &source)
+                    continue
+                }
+                guard let targetProperty = databases[target]?.properties.first(where: { $0.name == rollup.targetName }) else {
+                    let targetTitle = databases[target]?.summary.title ?? ""
+                    keepRollupValues(ofColumn: column, reason: "в базе «\(targetTitle)» нет столбца «\(rollup.targetName)»", in: &source)
                     continue
                 }
                 source.properties[column].config = ["relationPropertyId": .string(source.properties[rollup.relationColumn].id.databaseText),
@@ -384,6 +401,40 @@ struct NotionDatabaseReader {
                                                     "calculation": .string(rollup.calculation)]
             }
             databases[index] = source
+        }
+    }
+
+    /// Сводку собрать не удалось: столбец остаётся значениями из выгрузки — угаданным типом, как у непереведённой формулы.
+    private func keepRollupValues(ofColumn column: Int, reason: String, in database: inout PlannedDatabase) {
+        guard let fallback = database.rollupFallbacks[column] else { return }
+        let property = database.properties[column]
+        database.properties[column].kind = fallback.kind.propertyKind
+        database.properties[column].config = fallback.kind.config
+        var optionIds: [String: UUID] = [:]
+        if let names = fallback.kind.optionNames {
+            var optionKey: FractionalSortKey?
+            for (position, name) in names.enumerated() {
+                optionKey = .between(optionKey, nil)
+                let option = SelectOption(propertyId: property.id, name: name, color: OptionColor.allCases[position % OptionColor.allCases.count],
+                                          sortKey: optionKey!)
+                database.options.append(option)
+                optionIds[name] = option.id
+            }
+        }
+        for position in database.rows.indices {
+            guard let text = fallback.texts[database.rows[position].pageIndex], !text.isEmpty,
+                  let value = fallback.kind.value(text, optionIds: optionIds, timeZone: timeZone) else { continue }
+            database.rows[position].cells.append((property.id, value))
+        }
+        database.summary.properties[column] = fallback.kind.reportLine(name: property.name)
+        database.summary.notes.append("«\(property.name)» — сводка Notion не перенесена (\(reason)): значения из выгрузки")
+    }
+
+    /// Тип для значений сводки, которую не удалось собрать: угаданный, а то, что значениями не бывает, — текст.
+    static func valueKind(_ guessed: ColumnKind) -> ColumnKind {
+        switch guessed {
+        case .title, .relation, .createdTime, .lastEditedTime, .rollup, .formula, .status: .text
+        default: guessed
         }
     }
 
