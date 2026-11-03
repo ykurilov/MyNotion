@@ -93,12 +93,10 @@ import Testing
         #expect(try Self.publicMethods(of: "WindowTabs").isSuperset(of: ["open", "reopenClosedTab", "goBack"]))
     }
 
-    /// Команда каталога без обработчика — только шаблоны строк базы: в приложении нет шаблонов строк (004, US6).
-    @Test func everyCatalogCommandHasHandlerExceptRowTemplates() {
+    /// У каждой команды каталога есть обработчик: исключений нет (шаблоны строк `db template …` — 004, US6).
+    @Test func everyCatalogCommandHasHandler() {
         let withoutHandler = CommandCatalog.all.filter { HandlerRegistry.standard.handler(for: $0.name) == nil }
-        let unexpected = withoutHandler.filter { !$0.name.hasPrefix("db.template.") }
-        #expect(unexpected.isEmpty, "Команды без обработчика: \(unexpected.map(\.invocation).joined(separator: ", "))")
-        #expect(withoutHandler.map(\.name).sorted() == ["db.template.add", "db.template.default", "db.template.delete", "db.template.list"],
-                "Список db template … изменился: сверить с contracts/coverage.md и quickstart.md")
+        let names = withoutHandler.map(\.invocation).joined(separator: ", ")
+        #expect(withoutHandler.isEmpty, "Команды без обработчика: \(names)")
     }
 }
