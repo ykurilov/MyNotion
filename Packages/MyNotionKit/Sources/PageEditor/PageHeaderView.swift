@@ -42,15 +42,9 @@ public final class PageHeaderView: NSView, NSTextFieldDelegate {
         addIconButton.isAvailable = page.icon == nil
         addButton(addIconButton)
 
-        let titleStyle = Typography.pageTitle
         titleField.stringValue = page.title
-        titleField.font = titleStyle.font
         titleField.textColor = Palette.textPrimary
-        let placeholderStyle = NSMutableParagraphStyle()
-        placeholderStyle.firstLineHeadIndent = Metrics.Page.emptyHintCaretGap
-        titleField.placeholderAttributedString = NSAttributedString(string: Page.untitledTitle, attributes: [
-            .font: titleStyle.font, .foregroundColor: Palette.textSecondary, .paragraphStyle: placeholderStyle,
-        ])
+        applyTitleFont()
         titleField.isBordered = false
         titleField.drawsBackground = false
         titleField.focusRingType = .none
@@ -125,7 +119,26 @@ public final class PageHeaderView: NSView, NSTextFieldDelegate {
 
     private func titleHeight(forWidth width: CGFloat) -> CGFloat {
         let fitting = titleField.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: width, height: .greatestFiniteMagnitude)).height
-        return max(fitting ?? 0, Typography.pageTitle.lineHeight)
+        return max(fitting ?? 0, Typography.pageTitle.lineHeight * titleScale)
+    }
+
+    /// Масштаб текста приложения (`PageTextZoom`): название — той же шкалой; мелкий шрифт страницы его не меняет.
+    var titleScale: CGFloat = 1 {
+        didSet {
+            guard titleScale != oldValue else { return }
+            applyTitleFont()
+            needsLayout = true
+        }
+    }
+
+    private func applyTitleFont() {
+        let font = Typography.pageTitle.font.withSize(Typography.pageTitle.font.pointSize * titleScale)
+        titleField.font = font
+        let placeholderStyle = NSMutableParagraphStyle()
+        placeholderStyle.firstLineHeadIndent = Metrics.Page.emptyHintCaretGap
+        titleField.placeholderAttributedString = NSAttributedString(string: Page.untitledTitle, attributes: [
+            .font: font, .foregroundColor: Palette.textSecondary, .paragraphStyle: placeholderStyle,
+        ])
     }
 
     func height(forWidth width: CGFloat) -> CGFloat {

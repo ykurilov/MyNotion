@@ -28,13 +28,15 @@ struct UITestLibrary {
     static let startWindowFrame = "156 76 1200 800 0 0 1512 952 "
 
     @MainActor
-    func launchApp(appearance: String? = nil, arguments extra: [String] = []) -> XCUIApplication {
+    /// `keepsTextZoom` — масштаб текста из прошлого запуска; иначе — обычный 100 %, что бы ни оставил другой тест.
+    func launchApp(appearance: String? = nil, arguments extra: [String] = [], keepsTextZoom: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         // «-MyNotion.recentColors ""» перекрывает сохранённые «Последние цвета» пустым значением: у каждого запуска свои, чистые.
         // Окно — с одного места и размера, как у нового запуска: иначе тест начинает в окне, которое оставил прошлый запуск
         // (галерея в окне 900×700 — и колонке страницы не хватает ширины).
         app.launchArguments = ["--database", databaseURL.path, "-MyNotion.recentColors", "",
                                "-NSWindow Frame pages-AppWindow-1", Self.startWindowFrame]
+            + (keepsTextZoom ? [] : ["-MyNotion.pageTextZoom", "1"])
             + (appearance.map { ["--appearance", $0] } ?? []) + extra
         app.launch()
         return app

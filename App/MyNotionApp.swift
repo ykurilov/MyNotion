@@ -103,6 +103,7 @@ struct MyNotionApp: App {
             NavigationCommands(library: try? library.get())
             FormatCommands()
             PageFindCommands()
+            TextZoomCommands()
             ExportCommands(controller: exportController)
             NotionImportCommands(controller: importController)
         }
@@ -240,8 +241,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // ⌘⌥S — по клавише S, а не по букве: с ⌥ и на русской раскладке буква другая, и меню сочетание не узнаёт.
         // ⌥⌘N — «Новое окно» — так же.
+        // ⌘= — «Увеличить текст», как ⌘+ на той же клавише без Shift (так же в Safari и Notion).
         sidebarShortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             let modifiers = event.modifierFlags.intersection([.command, .option, .shift, .control])
+            if modifiers == [.command], event.charactersIgnoringModifiers == "=" {
+                PageTextZoom.shared.zoomIn()
+                return nil
+            }
             guard modifiers == [.command, .option], let library = Self.library else { return event }
             switch event.keyCode {
             case Self.sKeyCode: library.activeWindow?.toggleSidebar()
