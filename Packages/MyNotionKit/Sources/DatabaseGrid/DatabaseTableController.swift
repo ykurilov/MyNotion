@@ -157,12 +157,12 @@ public final class DatabaseTableController {
 
     /// Новая строка: внизу, вверху вида («Создать») или под строкой («+» при наведении). Возвращает её место в виде.
     @discardableResult
-    public func addRow(at placement: NewRowPlacement = .bottom, groupKey: String? = nil) -> Int? {
+    public func addRow(at placement: NewRowPlacement = .bottom, groupKey: String? = nil, template: RowTemplateChoice = .databaseDefault) -> Int? {
         var rowId: UUID?
         // Строка получает значения, при которых она видна в виде (фильтр, группа — FR-330).
         let defaults = NewRowDefaults.make(filter: view.filterNode, group: groupKey.flatMap { key in view.groupSettings.map { (settings: $0, key: key) } },
                                            catalog: catalog)
-        attempt { rowId = try operations.addRow(to: databaseId, in: viewId, at: placement, defaults: defaults) }
+        attempt { rowId = try operations.addRow(to: databaseId, in: viewId, at: placement, defaults: defaults, template: template) }
         if isInline, let rowId, let limit = shownLimit, content.rowIds.count >= limit, placement == .bottom {
             // Новая строка внизу встроенной базы должна быть видна: предел раздвигается на неё.
             extraLoaded += 1

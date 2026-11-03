@@ -32,6 +32,9 @@ public final class DatabaseTableView: NSView, NSTextFieldDelegate {
     let selectionBar = RowSelectionBar()
     private let rowMenu = RowMenuPresenter()
     private let tabMenuCard = PopupCard()
+    /// «Создать ▾» и меню «•••» шаблона в нём (`NewRowMenu.swift`).
+    let newRowMenuCard = PopupCard()
+    let templateMenuCard = PopupCard()
 
     /// Высота сменилась (строки, «Загрузить ещё»): хозяин перекладывает строку блока.
     public var onHeightChange: (() -> Void)?
@@ -175,6 +178,7 @@ public final class DatabaseTableView: NSView, NSTextFieldDelegate {
         viewBar.onSelectTab = { [weak self] id in self?.switchView(to: id) }
         viewBar.onTabMenu = { [weak self] id, tab in self?.showTabMenu(id, from: tab) }
         viewBar.onAddView = { [weak self] _ in self?.addView() }
+        viewBar.onCreateMenu = { [weak self] chevron in self?.showNewRowMenu(from: chevron) }
         viewBar.actions = actions
         chipsBar.onChip = { [weak self] chip, view in
             guard let self else { return }

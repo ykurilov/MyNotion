@@ -19,6 +19,7 @@ enum GalleryDatabasesScene {
         if GalleryRelationsScene.handles(kind) { return await GalleryRelationsScene.show(kind, model: model, window: window) }
         if GalleryViewScene.handles(kind) { return await GalleryViewScene.show(kind, model: model, window: window) }
         if GalleryTypesScene.handles(kind) { return await GalleryTypesScene.show(kind, model: model, window: window) }
+        if GalleryRowTemplatesScene.handles(kind) { return await GalleryRowTemplatesScene.show(kind, model: model, window: window) }
         let store = model.store
         do {
             switch kind {
@@ -132,6 +133,7 @@ enum GalleryDatabasesScene {
         GalleryRelationsScene.tearDown()
         GalleryViewScene.tearDown()
         GalleryTypesScene.tearDown()
+        GalleryRowTemplatesScene.tearDown(model: model)
         NSApp.windows.filter { $0.isVisible && $0.className.contains("PopupCardPanel") }.forEach { $0.orderOut(nil) }
     }
 

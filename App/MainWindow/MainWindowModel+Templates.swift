@@ -1,3 +1,4 @@
+import Databases
 import Foundation
 import NotesCore
 import PageEditor
@@ -22,7 +23,10 @@ extension MainWindowModel {
 
     /// Шаблоны для строк на пустой странице: кроме тех, чья ветка содержит саму страницу (на себя шаблон не кладут).
     func templateChoices(forPage pageId: UUID) -> [TemplateChoice] {
-        library.templatePageIds.compactMap { id in
+        if let row = openDocuments.document(for: pageId), isDatabaseRow(row) {
+            return row.page.isTemplate ? [] : rowTemplateChoices(of: row.page.parentId)
+        }
+        return library.templatePageIds.compactMap { id in
             guard let template = tree.page(id), !tree.isPage(pageId, insideBranchOf: id) else { return nil }
             return TemplateChoice(id: id, title: template.title, icon: template.icon)
         }
@@ -32,6 +36,25 @@ extension MainWindowModel {
     func fillOpenPage(_ pageId: UUID, fromTemplate templateId: UUID) {
         reopenFocus = .title
         defer { reopenFocus = nil }
+        if rowDatabaseId(pageId) != nil {
+            do { try databaseOperations.applyRowTemplate(templateId, toRow: pageId) } catch {
+                showError("Не удалось применить шаблон: \(SaveStatus.reason(for: error))")
+            }
+            return
+        }
         performTreeOperation { try treeOperations.fill(pageId, fromTemplate: templateId) }
+    }
+
+    /// Шаблоны строк базы (US6) на пустой странице её строки: у самого шаблона строки шаблонов нет.
+    private func rowTemplateChoices(of databaseId: UUID?) -> [TemplateChoice] {
+        guard let databaseId else { return [] }
+        return ((try? RowTemplates.list(of: databaseId, in: store))?.templates ?? [])
+            .map { TemplateChoice(id: $0.id, title: $0.title, icon: $0.icon) }
+    }
+
+    /// База строки — у открытой строки, которая сама не шаблон строки.
+    private func rowDatabaseId(_ pageId: UUID) -> UUID? {
+        guard let document = openDocuments.document(for: pageId), isDatabaseRow(document), !document.page.isTemplate else { return nil }
+        return document.page.parentId
     }
 }

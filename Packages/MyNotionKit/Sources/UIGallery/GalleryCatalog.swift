@@ -143,6 +143,8 @@ public enum GalleryDatabases: Hashable, Sendable, CaseIterable {
     case rollupCalculateMenu
     case relationProjectsTable
     case relationPicker
+    /// US6: «Создать ▾» без шаблонов и с шаблонами, меню «•••» шаблона, правка шаблона по центру, «Быстрый выбор» даты шаблона.
+    case rowTemplatesMenuEmpty, rowTemplatesMenu, rowTemplateItemMenu, rowTemplateEditor, rowTemplateDateShortcuts
     /// US3: вид — строка вида с синими значками и плашками, окна фильтра, сортировки, видимости, группировки, раскладки,
     /// настройки вида, меню вкладки, поиск, таблица с группами и итогами, перенос текста, меню «Посчитать».
     case viewBarActive, viewFilterSimple, viewFilterAdvanced, viewFilterDate, viewSorts, viewVisibility, viewGrouping, viewGroupedTable,
@@ -373,6 +375,15 @@ public enum GalleryCatalog {
         GalleryState("relation-picker", .databases(.relationPicker), "Окно ячейки связи: поиск, «1 выбрано» с «−», «Выбрать ещё», «В «Проекты»»",
                      section: "Базы"),
         GalleryState("relation-projects-table", .databases(.relationProjectsTable), "«Проекты»: ответная связь «Задачи» плашками, сводки числом", section: "Базы"),
+        // US6, сверка — `notion-new-dropdown-templates*.png`, `notion-template-*.png`.
+        GalleryState("row-templates-menu-empty", .databases(.rowTemplatesMenuEmpty), "«Создать ▾» новой базы: подсказка и «+ Новый шаблон»", section: "Базы"),
+        GalleryState("row-templates-menu", .databases(.rowTemplatesMenu), "«Создать ▾»: «Баг» по умолчанию, «Созвон», «Пустая страница», «+ Новый шаблон»",
+                     section: "Базы"),
+        GalleryState("row-template-item-menu", .databases(.rowTemplateItemMenu), "«•••» шаблона: Изменить, Дублировать, Удалить", section: "Базы"),
+        GalleryState("row-template-editor", .databases(.rowTemplateEditor), "Шаблон «Баг» по центру: янтарная полоса, «Срок» — «Сегодня», чек-лист",
+                     section: "Базы"),
+        GalleryState("row-template-date-shortcuts", .databases(.rowTemplateDateShortcuts), "Окно даты шаблона: «Быстрый выбор» — «Сейчас», «Сегодня»",
+                     section: "Базы"),
         // US3, сверка — `notion-filter-*.png`, `notion-sort-*.png`, `notion-group-*.png`, `notion-view-*.png`, `notion-calculate-*.png`.
         GalleryState("view-bar-active", .databases(.viewBarActive), "Вид «Задачи — работа»: синие фильтр и сортировка, плашки, группы по статусу",
                      section: "Базы"),

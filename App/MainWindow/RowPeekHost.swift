@@ -45,6 +45,8 @@ struct RowPeekHost: View {
                     .frame(width: width)
                     .overlay(alignment: .leading) { Rectangle().fill(Color(nsColor: Palette.border)).frame(width: 1) }
                     .shadow(color: .black.opacity(0.08), radius: 12, x: -4)
+                    // Своя группа: метки кнопок и полосы шаблона внутри не затираются меткой карточки.
+                    .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("row-side-peek")
             }
         }
@@ -63,6 +65,7 @@ struct RowPeekHost: View {
                            height: min(metrics.centerPeekHeight, proxy.size.height - 2 * metrics.centerPeekMargin))
                     .clipShape(RoundedRectangle(cornerRadius: metrics.centerPeekCornerRadius))
                     .shadow(color: .black.opacity(0.2), radius: 24, y: 8)
+                    .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("row-center-peek")
             }
         }
@@ -84,11 +87,34 @@ struct RowPeekHost: View {
             mentions: mentions,
             pageMenuItems: PageMenuItems.all(for: model, pageId: document.pageId),
             headerAddons: [PageCoverAddon.factory(model), model.rowPageAddonFactory(), BacklinksAddon.factory(model)],
+            templates: TemplateSettings(templates: model.templateChoices(forPage: document.pageId),
+                                        choose: { model.fillOpenPage(document.pageId, fromTemplate: $0) }),
             topBarLeading: AnyView(RowPeekBar(close: { model.closeRowPeek() }, expand: { model.expandRowPeek() }))
         )
+        .overlay(alignment: .top) {
+            if document.page.isTemplate, let databaseId = document.page.parentId {
+                RowTemplateBanner(databaseTitle: model.tree.page(databaseId)?.title ?? "").padding(.top, Metrics.Page.topBarHeight)
+            }
+        }
         // Новая строка в просмотре — новый редактор.
         .id(ObjectIdentifier(document))
         .background(RowPeekEscape(rowId: document.pageId) { model.closeRowPeek() })
+    }
+}
+
+/// Янтарная полоса над шаблоном строки (`notion-template-editor.png`): правки идут в шаблон, а не в строку.
+private struct RowTemplateBanner: View {
+    let databaseTitle: String
+
+    var body: some View {
+        Text("Вы правите шаблон в «\(databaseTitle.isEmpty ? "Без названия" : databaseTitle)»")
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(Color(nsColor: Palette.templateBannerText))
+            .frame(maxWidth: .infinity)
+            .frame(height: 30)
+            .background(Color(nsColor: Palette.templateBannerBackground))
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("row-template-banner")
     }
 }
 

@@ -53,6 +53,12 @@ enum DateValues {
 
     /// Формат даты свойства (contracts/property-types.md, «Дата: форматы»), время — 12 / 24 часа / скрыть.
     static func display(_ value: JSONValue?, in context: PropertyContext) -> String {
+        // Дата шаблона строки — «Сегодня» или «Сейчас» (момент создания строки, US6).
+        switch value?["relative"]?.string {
+        case "today": return "Сегодня"
+        case "now": return "Сейчас"
+        default: break
+        }
         guard let start = start(value) else { return "" }
         let hasTime = value?["hasTime"]?.bool ?? false
         let config = context.config["dateFormat"] == nil && context.config["format"] != nil ? JSONValue.emptyObject : context.config

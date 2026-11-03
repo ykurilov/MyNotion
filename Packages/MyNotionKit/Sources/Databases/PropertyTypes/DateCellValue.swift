@@ -153,6 +153,12 @@ public struct DateCellValue: Sendable, Hashable {
         return .object(object)
     }
 
+    /// «Сегодня» или «Сейчас» шаблона строки (US6, «Быстрый выбор»): `today`, `now`; `nil` — обычная дата.
+    public var templateRelative: String? {
+        get { extra["relative"]?.string }
+        set { extra["relative"] = newValue.map(JSONValue.string) }
+    }
+
     /// «Дата окончания»: конец — как начало; выключить — конца нет.
     public mutating func setHasEnd(_ on: Bool) {
         end = on ? (end ?? start) : nil
