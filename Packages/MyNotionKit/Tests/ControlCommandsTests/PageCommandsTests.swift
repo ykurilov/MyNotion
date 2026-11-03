@@ -322,6 +322,8 @@ import Testing
 
     // MARK: Откат
 
+    // Отмена видна тестам только в отладочной сборке: `CommandExecutor.lastUndoManager` есть только там.
+    #if DEBUG
     @Test func failedWriteRollsBackAndWriteUndoes() async throws {
         let page = try host.page("Заметка", texts: ["было"])
         let missing = await run("page.append", ["page": "Заметка", "markdown": "x", "after": .string(UUID().uuidString)])
@@ -332,4 +334,5 @@ import Testing
         undo.undo()
         #expect(try host.texts(page.id) == ["было"])
     }
+    #endif
 }

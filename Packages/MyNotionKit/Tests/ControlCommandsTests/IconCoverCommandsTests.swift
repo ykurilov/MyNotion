@@ -76,6 +76,8 @@ import Testing
         expectError(await run("page.icon", ["emoji": "🚀", "remove": true]), .invalidArgument)
     }
 
+    // Отмена видна тестам только в отладочной сборке: `CommandExecutor.lastUndoManager` есть только там.
+    #if DEBUG
     @Test func iconIsOneUndoStepAndTellsTheWindow() async throws {
         await run("page.icon", ["emoji": "🚀"])
         #expect(host.iconChanges == [page.id])
@@ -85,6 +87,7 @@ import Testing
         executor.lastUndoManager?.redo()
         #expect(try current().icon == "🚀")
     }
+    #endif
 
     @Test func iconIgnoresMissingPage() async throws {
         expectError(await run("page.icon", ["page": "Нет такой", "emoji": "🚀"]), .pageNotFound)
@@ -178,6 +181,8 @@ import Testing
         expectError(await run("page.cover", ["gallery": "solid_red", "file": "/tmp/a.png"]), .invalidArgument)
     }
 
+    // Отмена видна тестам только в отладочной сборке: `CommandExecutor.lastUndoManager` есть только там.
+    #if DEBUG
     @Test func coverIsOneUndoStepAndTellsTheWindow() async throws {
         await run("page.cover", ["gallery": "solid_red", "offset": 0.1])
         #expect(host.appearanceChanges == [page.id])
@@ -187,6 +192,7 @@ import Testing
         executor.lastUndoManager?.redo()
         #expect(try current().cover == PageCover(source: .gallery("solid_red"), offset: 0.1))
     }
+    #endif
 
     @Test func batchRollsBackIconAndCover() async throws {
         let response = await run("batch", ["steps": [
