@@ -30,6 +30,8 @@ public final class ViewBarView: NSView {
     public var onTabMenu: ((UUID, NSView) -> Void)?
     /// «+» после вкладок — новый вид.
     public var onAddView: ((NSView) -> Void)?
+    /// «▾» у «Создать» — меню шаблонов строк (US6); `nil` — кнопка без «▾».
+    public var onCreateMenu: ((NSView) -> Void)? { didSet { rebuild() } }
     /// Поиск в базе: текст поля; `nil` — поле закрыто.
     public var onSearchChange: ((String?) -> Void)?
     /// Поле поиска раскрыто (лупа превращается в поле).
@@ -78,8 +80,9 @@ public final class ViewBarView: NSView {
         buttons = ViewBarItem.ordered(ViewBarItem.all, isInline: isInline).compactMap { item -> NSView? in
             guard let action = actions[item.slot] else { return nil }
             if item.slot == .create {
-                let button = CreateRowButton()
+                let button = CreateRowButton(showsMenu: onCreateMenu != nil)
                 button.onPress = { [weak button] in if let button { action(button) } }
+                button.onMenu = { [weak self] chevron in self?.onCreateMenu?(chevron) }
                 return button
             }
             if item.slot == .search, isSearching { return searchField }
@@ -257,23 +260,74 @@ final class ViewBarIconButton: NSView {
 @MainActor
 final class CreateRowButton: NSView {
     var onPress: (() -> Void)?
+    /// «▾» справа (Notion «New ▾»): меню шаблонов строк.
+    var onMenu: ((NSView) -> Void)?
     static let title = "Создать"
+    static let chevronWidth: CGFloat = 22
     private let font = NSFont.systemFont(ofSize: 14, weight: .medium)
-    private var isPressed = false { didSet { needsDisplay = true } }
+    private let main = CreateRowButtonPart(label: CreateRowButton.title, identifier: "database-new-row")
+    private let chevron: CreateRowButtonPart?
 
-    init() {
+    init(showsMenu: Bool = false) {
+        chevron = showsMenu ? CreateRowButtonPart(label: "Шаблоны", identifier: "database-new-row-templates") : nil
         super.init(frame: .zero)
-        setAccessibilityElement(true)
-        setAccessibilityRole(.button)
-        setAccessibilityLabel(Self.title)
-        setAccessibilityIdentifier("database-new-row")
+        main.onPress = { [weak self] in self?.onPress?() }
+        chevron?.onPress = { [weak self] in if let self, let chevron { onMenu?(chevron) } }
+        addSubview(main)
+        if let chevron { addSubview(chevron) }
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
 
     override var isFlipped: Bool { true }
-    var fittingWidth: CGFloat { (Self.title as NSString).size(withAttributes: [.font: font]).width + 20 }
+    var fittingWidth: CGFloat { (Self.title as NSString).size(withAttributes: [.font: font]).width + 20 + (chevron == nil ? 0 : Self.chevronWidth) }
+
+    override func layout() {
+        super.layout()
+        let chevronWidth = chevron == nil ? 0 : Self.chevronWidth
+        main.frame = NSRect(x: 0, y: 0, width: bounds.width - chevronWidth, height: bounds.height)
+        chevron?.frame = NSRect(x: bounds.width - chevronWidth, y: 0, width: chevronWidth, height: bounds.height)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let pressed = main.isPressed || chevron?.isPressed == true
+        (pressed ? Palette.primaryButtonFill.blended(withFraction: 0.15, of: .black) ?? Palette.primaryButtonFill : Palette.primaryButtonFill).setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill()
+        let title = NSAttributedString(string: Self.title, attributes: [.font: font, .foregroundColor: NSColor.white])
+        let size = title.size()
+        title.draw(at: NSPoint(x: (main.frame.width - size.width) / 2, y: (bounds.height - size.height) / 2))
+        guard let chevron else { return }
+        NSColor.white.withAlphaComponent(0.35).setFill()
+        NSRect(x: chevron.frame.minX, y: 6, width: 1, height: bounds.height - 12).fill()
+        let config = NSImage.SymbolConfiguration(pointSize: 9, weight: .bold)
+        guard let image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: nil)?.withSymbolConfiguration(config) else { return }
+        let tinted = NSImage(size: image.size, flipped: false) { rect in
+            image.draw(in: rect)
+            NSColor.white.set()
+            rect.fill(using: .sourceAtop)
+            return true
+        }
+        tinted.draw(in: NSRect(x: chevron.frame.midX - image.size.width / 2, y: (bounds.height - image.size.height) / 2,
+                               width: image.size.width, height: image.size.height))
+    }
+}
+
+/// Часть кнопки «Создать ▾»: сама кнопка или «▾»; рисует её родитель.
+private final class CreateRowButtonPart: NSView {
+    var onPress: (() -> Void)?
+    private(set) var isPressed = false { didSet { superview?.needsDisplay = true } }
+
+    init(label: String, identifier: String) {
+        super.init(frame: .zero)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
+        setAccessibilityLabel(label)
+        setAccessibilityIdentifier(identifier)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
 
     override func mouseDown(with event: NSEvent) { isPressed = true }
     override func mouseUp(with event: NSEvent) {
@@ -283,13 +337,5 @@ final class CreateRowButton: NSView {
     override func accessibilityPerformPress() -> Bool {
         onPress?()
         return true
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        (isPressed ? Palette.primaryButtonFill.blended(withFraction: 0.15, of: .black) ?? Palette.primaryButtonFill : Palette.primaryButtonFill).setFill()
-        NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill()
-        let title = NSAttributedString(string: Self.title, attributes: [.font: font, .foregroundColor: NSColor.white])
-        let size = title.size()
-        title.draw(at: NSPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2))
     }
 }

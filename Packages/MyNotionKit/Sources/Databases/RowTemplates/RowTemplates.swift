@@ -8,12 +8,23 @@ public struct RowTemplate: Sendable, Hashable, Identifiable {
     public let id: UUID
     public let title: String
     public let icon: String?
+
+    public init(id: UUID, title: String, icon: String?) {
+        self.id = id
+        self.title = title
+        self.icon = icon
+    }
 }
 
 /// Шаблоны базы по порядку и шаблон по умолчанию (`nil` — «Пустая»).
 public struct RowTemplateList: Sendable, Hashable {
     public var templates: [RowTemplate] = []
     public var defaultTemplateId: UUID?
+
+    public init(templates: [RowTemplate] = [], defaultTemplateId: UUID? = nil) {
+        self.templates = templates
+        self.defaultTemplateId = defaultTemplateId
+    }
 }
 
 /// По какому шаблону делать новую строку.

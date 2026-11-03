@@ -84,11 +84,34 @@ struct RowPeekHost: View {
             mentions: mentions,
             pageMenuItems: PageMenuItems.all(for: model, pageId: document.pageId),
             headerAddons: [PageCoverAddon.factory(model), model.rowPageAddonFactory(), BacklinksAddon.factory(model)],
+            templates: TemplateSettings(templates: model.templateChoices(forPage: document.pageId),
+                                        choose: { model.fillOpenPage(document.pageId, fromTemplate: $0) }),
             topBarLeading: AnyView(RowPeekBar(close: { model.closeRowPeek() }, expand: { model.expandRowPeek() }))
         )
+        .overlay(alignment: .top) {
+            if document.page.isTemplate, let databaseId = document.page.parentId {
+                RowTemplateBanner(databaseTitle: model.tree.page(databaseId)?.title ?? "").padding(.top, Metrics.Page.topBarHeight)
+            }
+        }
         // Новая строка в просмотре — новый редактор.
         .id(ObjectIdentifier(document))
         .background(RowPeekEscape(rowId: document.pageId) { model.closeRowPeek() })
+    }
+}
+
+/// Янтарная полоса над шаблоном строки (`notion-template-editor.png`): правки идут в шаблон, а не в строку.
+private struct RowTemplateBanner: View {
+    let databaseTitle: String
+
+    var body: some View {
+        Text("Вы правите шаблон в «\(databaseTitle.isEmpty ? "Без названия" : databaseTitle)»")
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(Color(nsColor: Palette.templateBannerText))
+            .frame(maxWidth: .infinity)
+            .frame(height: 30)
+            .background(Color(nsColor: Palette.templateBannerBackground))
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("row-template-banner")
     }
 }
 

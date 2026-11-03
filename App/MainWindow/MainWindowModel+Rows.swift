@@ -1,4 +1,5 @@
 import AppKit
+import DatabaseGrid
 import DatabaseRowPage
 import Databases
 import Foundation
@@ -79,6 +80,10 @@ extension MainWindowModel {
             let addon = RowPropertiesAddon(rowId: document.pageId, operations: databaseOperations)
             addon.onError = { [weak self] error in self?.showError("Не удалось изменить значение: \(SaveStatus.reason(for: error))") }
             addon.onAddProperty = { [weak self] anchor in self?.addRowProperty(document.pageId, anchor: anchor) }
+            addon.onOpenEditor = { [weak self] propertyId, anchor in
+                guard let self else { return }
+                RowValuePopup.show(rowId: document.pageId, propertyId: propertyId, store: store, operations: databaseOperations, below: anchor)
+            }
             return addon
         }
     }

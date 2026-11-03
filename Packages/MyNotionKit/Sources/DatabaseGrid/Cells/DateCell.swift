@@ -5,7 +5,8 @@ import VisualStyle
 
 /// Окно ячейки даты (spec US2, сценарий 4; `notion-date-format-options.png`): поле даты (и конца), месяц с «Сегодня»
 /// и «‹ ›», календарь с понедельника, «Дата окончания», «Формат даты ›», «Включить время», «Напомнить ›», «Очистить».
-/// Каждая правка пишется сразу (свой шаг ⌘Z), как у Notion.
+/// Каждая правка пишется сразу (свой шаг ⌘Z), как у Notion. У шаблона строки сверху — «Быстрый выбор» (US6,
+/// `notion-template-date-shortcuts-picker.png`): «Сейчас» и «Сегодня» — момент создания строки по шаблону.
 @MainActor
 final class DateCellView: NSView, CellPopupContent {
     nonisolated static let factory = CellPopupFactory(kinds: [.date]) { DateCellView(context: $0) }
@@ -28,6 +29,11 @@ final class DateCellView: NSView, CellPopupContent {
     private let remindRow = ChoiceRow(title: "Напомнить", identifier: "date-remind")
     private let clearRow = ChoiceRow(title: "Очистить", identifier: "date-clear")
     private let submenu = PopupCard()
+    /// «Быстрый выбор» — только у шаблона строки.
+    private let shortcuts = PropertyPopupStack()
+    private let nowShortcut = DateShortcutRow(title: "Сейчас", caption: "время создания", identifier: "date-shortcut-now")
+    private let todayShortcut = DateShortcutRow(title: "Сегодня", caption: "день создания", identifier: "date-shortcut-today")
+    private let isTemplateRow: Bool
 
     init(context: CellPopupContext) {
         self.context = context
@@ -42,6 +48,7 @@ final class DateCellView: NSView, CellPopupContent {
         startField = DateTextField(identifier: "date-start-field")
         endField = DateTextField(identifier: "date-end-field")
         grid = CalendarGridView(calendar: calendar)
+        isTemplateRow = ((try? context.store.write { try $0.page(context.rowId)?.isTemplate }) ?? nil) ?? false
         super.init(frame: NSRect(x: 0, y: 0, width: Self.width, height: 400))
         setAccessibilityIdentifier("date-popup")
         addSubview(startField)
@@ -50,6 +57,15 @@ final class DateCellView: NSView, CellPopupContent {
         addSubview(grid)
         addSubview(stack)
         stack.topPadding = 0
+        if isTemplateRow {
+            addSubview(shortcuts)
+            shortcuts.bottomPadding = 0
+            shortcuts.append(PropertyPopupCaption("Быстрый выбор"), height: PropertyPopupMetrics.captionHeight)
+            shortcuts.append(nowShortcut, height: PropertyPopupMetrics.rowHeight)
+            shortcuts.append(todayShortcut, height: PropertyPopupMetrics.rowHeight)
+            nowShortcut.onPress = { [weak self] in self?.chooseShortcut("now") }
+            todayShortcut.onPress = { [weak self] in self?.chooseShortcut("today") }
+        }
         for row in [formatRow, remindRow] { row.showsChevron = true }
         stack.append(PropertyPopupSeparator(), height: PropertyPopupMetrics.separatorHeight)
         stack.append(endToggle, height: PropertyPopupMetrics.rowHeight)
@@ -92,9 +108,10 @@ final class DateCellView: NSView, CellPopupContent {
 
     private var zone: String { value?.timeZone ?? TimeZone.current.identifier }
     private var fieldsHeight: CGFloat { value?.end != nil ? 2 * 34 : 34 }
+    private var shortcutsHeight: CGFloat { isTemplateRow ? shortcuts.contentHeight + 4 : 0 }
 
     var preferredSize: NSSize {
-        NSSize(width: Self.width, height: 8 + fieldsHeight + MonthHeaderView.height + CalendarGridView.height + stack.contentHeight + 6)
+        NSSize(width: Self.width, height: 8 + shortcutsHeight + fieldsHeight + MonthHeaderView.height + CalendarGridView.height + stack.contentHeight + 6)
     }
 
     override var fittingSize: NSSize { preferredSize }
@@ -105,6 +122,10 @@ final class DateCellView: NSView, CellPopupContent {
         super.layout()
         let inset: CGFloat = 8
         var y: CGFloat = 8
+        if isTemplateRow {
+            shortcuts.frame = NSRect(x: 0, y: 0, width: bounds.width, height: shortcuts.contentHeight)
+            y += shortcutsHeight
+        }
         startField.frame = NSRect(x: inset, y: y, width: bounds.width - 2 * inset, height: 30)
         y += 34
         endField.isHidden = value?.end == nil
@@ -128,12 +149,26 @@ final class DateCellView: NSView, CellPopupContent {
         write(next)
     }
 
-    private func write(_ next: DateCellValue) {
+    /// Любая правка, кроме «Быстрого выбора», делает дату шаблона обычной.
+    private func write(_ next: DateCellValue, keepsShortcut: Bool = false) {
         let hadEnd = value?.end != nil
+        var next = next
+        if !keepsShortcut { next.templateRelative = nil }
         value = next
         context.attempt { try context.operations.setCell(rowId: context.rowId, propertyId: context.propertyId, value: next.json) }
         refresh()
         if hadEnd != (next.end != nil) { context.resize() }
+    }
+
+    /// «Сейчас» — день и время, «Сегодня» — день; в строке по шаблону — момент её создания.
+    private func chooseShortcut(_ relative: String) {
+        let now = DateParts(Date(), calendar: calendar)
+        var next = DateCellValue(day: now, timeZone: zone)
+        next.reminder = value?.reminder
+        if relative == "now" { next.setHasTime(true, now: (now.hour, now.minute)) }
+        next.templateRelative = relative
+        month = now.monthKey
+        write(next, keepsShortcut: true)
     }
 
     private func pick(_ day: DateParts) {
@@ -175,6 +210,8 @@ final class DateCellView: NSView, CellPopupContent {
         endField.isActive = editingEnd
         monthHeader.title = MonthGrid.title(year: month.year, month: month.month, locale: .current)
         grid.show(year: month.year, month: month.month, start: value?.start, end: value?.end)
+        nowShortcut.isChecked = value?.templateRelative == "now"
+        todayShortcut.isChecked = value?.templateRelative == "today"
         endToggle.isOn = value?.end != nil
         timeToggle.isOn = value?.hasTime ?? false
         formatRow.detail = (DateDisplayFormat(rawValue: config["dateFormat"]?.string ?? "") ?? .full).title
@@ -446,4 +483,73 @@ final class CalendarGridView: NSView {
 @MainActor
 public enum DateReminderPermission {
     public static var request: (@MainActor () -> Void)?
+}
+
+/// Строка «Быстрого выбора» даты шаблона: синяя метка с календарём и серое пояснение, галочка у выбранной.
+@MainActor
+final class DateShortcutRow: NSView {
+    let title: String
+    let caption: String
+    var isChecked = false { didSet { needsDisplay = true } }
+    var onPress: (() -> Void)?
+    private var isHighlighted = false { didSet { needsDisplay = true } }
+
+    init(title: String, caption: String, identifier: String) {
+        self.title = title
+        self.caption = caption
+        super.init(frame: .zero)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
+        setAccessibilityLabel("\(title) — \(caption)")
+        setAccessibilityIdentifier(identifier)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
+
+    override var isFlipped: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let padding = PropertyPopupMetrics.padding
+        if isHighlighted {
+            Palette.hoverBackground.setFill()
+            NSBezierPath(roundedRect: NSRect(x: 4, y: 0, width: bounds.width - 8, height: bounds.height - 1),
+                         xRadius: Metrics.PopupMenu.rowCornerRadius, yRadius: Metrics.PopupMenu.rowCornerRadius).fill()
+        }
+        let font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        let label = NSAttributedString(string: title, attributes: [.font: font, .foregroundColor: Palette.dateShortcutText])
+        let chip = NSRect(x: padding, y: ((bounds.height - 20) / 2).rounded(), width: label.size().width + 26, height: 20)
+        Palette.dateShortcutBackground.setFill()
+        NSBezierPath(roundedRect: chip, xRadius: 4, yRadius: 4).fill()
+        ActionMenuIcon.draw("calendar", color: Palette.dateShortcutText, in: NSRect(x: chip.minX + 4, y: chip.minY + 3, width: 14, height: 14), inkSide: 12)
+        label.draw(at: NSPoint(x: chip.minX + 21, y: chip.midY - label.size().height / 2))
+        let style = Typography.popupMenuTitle
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingTail
+        var end = bounds.maxX - padding
+        if isChecked {
+            ActionMenuIcon.draw("checkmark", color: Palette.textPrimary, in: NSRect(x: end - 14, y: (bounds.height - 14) / 2, width: 14, height: 14), inkSide: 12)
+            end -= 22
+        }
+        NSAttributedString(string: "— " + caption, attributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: Palette.textSecondary,
+                                                                .paragraphStyle: paragraph])
+            .draw(in: NSRect(x: chip.maxX + 6, y: (bounds.height - style.lineHeight) / 2 + 1, width: max(0, end - chip.maxX - 6), height: style.lineHeight))
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) { isHighlighted = true }
+    override func mouseExited(with event: NSEvent) { isHighlighted = false }
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) {
+        if bounds.contains(convert(event.locationInWindow, from: nil)) { onPress?() }
+    }
+    override func accessibilityPerformPress() -> Bool {
+        onPress?()
+        return true
+    }
 }
