@@ -45,6 +45,8 @@ struct RowPeekHost: View {
                     .frame(width: width)
                     .overlay(alignment: .leading) { Rectangle().fill(Color(nsColor: Palette.border)).frame(width: 1) }
                     .shadow(color: .black.opacity(0.08), radius: 12, x: -4)
+                    // Своя группа: метки кнопок и полосы шаблона внутри не затираются меткой карточки.
+                    .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("row-side-peek")
             }
         }
@@ -63,6 +65,7 @@ struct RowPeekHost: View {
                            height: min(metrics.centerPeekHeight, proxy.size.height - 2 * metrics.centerPeekMargin))
                     .clipShape(RoundedRectangle(cornerRadius: metrics.centerPeekCornerRadius))
                     .shadow(color: .black.opacity(0.2), radius: 24, y: 8)
+                    .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("row-center-peek")
             }
         }

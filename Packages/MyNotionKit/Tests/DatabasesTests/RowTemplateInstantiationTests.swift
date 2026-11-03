@@ -32,6 +32,7 @@ struct RowTemplateInstantiationTests {
         store = NotesStore(database: try AppDatabase.open(at: folder.appendingPathComponent("MyNotion.sqlite")), clock: HybridLogicalClock(deviceId: UUID()))
         store.addWriteHook(CellIndexer())
         store.addWriteHook(ComputationHook(store: store, queue: nil))
+        store.addTreeAddon(DatabaseTreeAddon())
         undo.groupsByEvent = false
         operations = DatabaseOperations(store: store, undoManager: undo)
         quiet = DatabaseOperations(store: store)
@@ -282,24 +283,35 @@ struct RowTemplateInstantiationTests {
 
     // MARK: Копия базы
 
-    @Test("Копия шаблонов в другую базу: свойства, варианты и строки по таблице замены, метка по умолчанию — на копию")
-    func copyTemplatesToAnotherDatabase() throws {
+    @Test("«Дублировать» базу: шаблоны — шаблонами копии со значениями, связями и телом, метка по умолчанию — на копию, «Сегодня» остаётся относительным")
+    func duplicateDatabaseCopiesTemplates() async throws {
         let bugId = try makeBugTemplate()
+        let callId = try makeCallTemplate(relative: "today")
         try quiet.setDefaultRowTemplate(bugId, of: tasks.databaseId)
-        let copy = try quiet.createDatabase(in: nil, isInline: false, title: "Задачи (копия)")
-        let copyTag = try quiet.addProperty(to: copy.databaseId, name: "Тег", kind: .select).id
-        let copyBug = try quiet.createOption(in: copyTag, named: "Баг", color: .red)
-        let copyProject = try quiet.addRelation(to: copy.databaseId, name: "Проект", target: projects.databaseId).id
-        let idMap: [UUID: UUID] = [tag: copyTag, bug.id: copyBug.id, project: copyProject]
-        let copied = try store.write { tx in try RowTemplateCopier.copyTemplates(from: tasks.databaseId, to: copy.databaseId, idMap: idMap, in: tx) }
-        let copyTemplate = try #require(copied[bugId])
-        let list = try RowTemplates.list(of: copy.databaseId, in: store)
-        #expect(list.templates.map(\.id) == [copyTemplate] && list.defaultTemplateId == copyTemplate)
-        #expect(try page(copyTemplate).isTemplate && page(copyTemplate).title == "Баг" && page(copyTemplate).parentId == copy.databaseId)
-        #expect(try cell(copyTemplate, copyTag) == .string(copyBug.id.databaseText))
-        let relation = try #require(try read { try $0.property(copyProject) })
-        #expect(try RelationLinks.related(copyTemplate, through: relation, in: store).map(\.id) == [projectA])
-        #expect(try store.pageContent(copyTemplate)?.blocks.map(\.kind) == [.checkbox, .pageLink])
-        #expect(try templates().templates.map(\.id) == [bugId], "у исходной базы шаблоны на месте")
+        undo.beginUndoGrouping()
+        let duplicated = try await PageTreeOperations(store: store, undoManager: undo).duplicate(tasks.databaseId)
+        undo.endUndoGrouping()
+        let copy = try #require(duplicated)
+
+        let list = try RowTemplates.list(of: copy.id, in: store)
+        #expect(list.templates.map(\.title) == ["Баг", "Созвон"])
+        #expect(Set(list.templates.map(\.id)).isDisjoint(with: [bugId, callId]))
+        let copyBug = try #require(list.templates.first { $0.title == "Баг" }).id
+        let copyCall = try #require(list.templates.first { $0.title == "Созвон" }).id
+        #expect(list.defaultTemplateId == copyBug)
+        #expect(try read { tx in try tx.allPages().filter { $0.parentId == copy.id && !$0.isTemplate && $0.trashedAt == nil } }.isEmpty,
+                "шаблоны копии не стали строками")
+
+        let properties = try read { try $0.properties(ofDatabase: copy.id) }
+        let copyTag = try #require(properties.first { $0.name == "Тег" })
+        let copyDue = try #require(properties.first { $0.name == "Срок" }).id
+        let copyProject = try #require(properties.first { $0.name == "Проект" })
+        let copyBugOption = try #require(try read { try $0.options(ofProperty: copyTag.id) }.first { $0.name == "Баг" })
+        #expect(try cell(copyBug, copyTag.id) == .string(copyBugOption.id.databaseText))
+        #expect(try RelationLinks.related(copyBug, through: copyProject, in: store).map(\.id) == [projectA])
+        #expect(try store.pageContent(copyBug)?.blocks.map(\.kind) == [.checkbox, .pageLink])
+        #expect(try cell(copyCall, copyDue)?["relative"] == "today", "«Сегодня» у даты копии шаблона")
+        #expect(try bodyDates(copyCall).first?.templateRelative == .today, "«@сегодня» в теле копии шаблона")
+        #expect(try templates().templates.map(\.id) == [bugId, callId], "у исходной базы шаблоны на месте")
     }
 }

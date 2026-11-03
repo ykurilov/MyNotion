@@ -33,7 +33,7 @@ final class RowTemplatesTests: XCTestCase {
         // «Создать ▾» без шаблонов: подсказка и «+ Новый шаблон».
         openNewMenu(app)
         XCTAssertFalse(element(app, "row-template-empty").exists, "Без шаблонов в меню «Пустая страница»")
-        element(app, "row-template-new").click()
+        press(element(app, "row-template-new"))
         XCTAssertTrue(element(app, "row-center-peek").waitForExistence(timeout: 5), "Новый шаблон открылся не по центру")
         XCTAssertTrue(element(app, "row-template-banner").waitForExistence(timeout: 5), "Нет янтарной полосы «Вы правите шаблон»")
         app.typeText("Созвон")
@@ -46,7 +46,7 @@ final class RowTemplatesTests: XCTestCase {
         date.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.5)).click()
         let today = element(app, "date-shortcut-today")
         XCTAssertTrue(today.waitForExistence(timeout: 5), "В окне даты шаблона нет «Быстрого выбора»")
-        today.click()
+        press(today)
         XCTAssertTrue(waitUntil { (try? self.templates())?.first.map { $0.date.contains("\"relative\":\"today\"") } == true },
                       "У шаблона не «Сегодня»: \(String(describing: try? templates()))")
         app.typeKey(.escape, modifierFlags: [])
@@ -59,10 +59,10 @@ final class RowTemplatesTests: XCTestCase {
         let template = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'row-template-' AND label BEGINSWITH 'Созвон'")).element
         XCTAssertTrue(template.waitForExistence(timeout: 5), "В «Создать ▾» нет шаблона «Созвон»")
         XCTAssertTrue(element(app, "row-template-empty").exists, "В меню нет «Пустой страницы»")
-        app.descendants(matching: .any)["\(template.identifier)-more"].click()
+        press(app.descendants(matching: .any)["\(template.identifier)-more"])
         let setDefault = element(app, "row-template-set-default")
         XCTAssertTrue(setDefault.waitForExistence(timeout: 5), "В меню шаблона нет «Сделать по умолчанию»")
-        setDefault.click()
+        press(setDefault)
         XCTAssertTrue(waitUntil { (try? self.defaultTemplateTitle()) == "Созвон" }, "Шаблон не стал шаблоном по умолчанию")
 
         element(app, "database-new-row").click()
@@ -72,21 +72,21 @@ final class RowTemplatesTests: XCTestCase {
         XCTAssertTrue(waitUntil { (try? self.rowsByTemplate()).map { $0.contains { $0.date.contains(day) && !$0.date.contains("relative") } } == true },
                       "У строки по шаблону не сегодняшняя дата: \(String(describing: try? rowsByTemplate()))")
         XCTAssertTrue(waitUntil { (try? self.bodyTexts(ofRowTitled: "Созвон"))?.contains("Повестка") == true }, "В строке нет тела шаблона")
-        app.typeKey(.escape, modifierFlags: [])
+        closePeek(app)
 
         // «Пустая страница» — строка без значений шаблона.
         let emptyBefore = try pages(isTemplate: false).filter { $0.title.isEmpty && $0.date.isEmpty }.count
         openNewMenu(app)
-        element(app, "row-template-empty").click()
+        press(element(app, "row-template-empty"))
         XCTAssertTrue(waitUntil { (try? self.liveRows())?.count == rowsBefore + 2 }, "«Пустая страница» не сделала строку")
         let rowsAfter = try pages(isTemplate: false)
         XCTAssertEqual(rowsAfter.filter { $0.title.isEmpty && $0.date.isEmpty }.count, emptyBefore + 1, "Строка «Пустой страницы» не пустая: \(rowsAfter)")
-        app.typeKey(.escape, modifierFlags: [])
+        closePeek(app)
 
         // «Дублировать» — копия открывается по центру; «Удалить» копию — снова один шаблон.
         openNewMenu(app)
-        app.descendants(matching: .any)["\(template.identifier)-more"].click()
-        element(app, "row-template-duplicate").click()
+        press(app.descendants(matching: .any)["\(template.identifier)-more"])
+        press(element(app, "row-template-duplicate"))
         XCTAssertTrue(element(app, "row-template-banner").waitForExistence(timeout: 5), "Копия шаблона не открылась")
         XCTAssertTrue(waitUntil { (try? self.templates())?.count == 2 }, "Копии шаблона нет: \(String(describing: try? templates()))")
         element(app, "row-peek-close").click()
@@ -94,8 +94,8 @@ final class RowTemplatesTests: XCTestCase {
         // Копия встаёт сразу под исходным: вторая «•••» среди шаблонов (без «Пустой страницы»).
         let mores = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'row-template-' AND identifier ENDSWITH '-more' AND identifier != 'row-template-empty-more'"))
         XCTAssertEqual(mores.count, 2, "В меню не два шаблона")
-        mores.element(boundBy: 1).click()
-        element(app, "row-template-delete").click()
+        press(mores.element(boundBy: 1))
+        press(element(app, "row-template-delete"))
         XCTAssertTrue(waitUntil { (try? self.templates())?.count == 1 }, "Копия не удалилась: \(String(describing: try? templates()))")
         app.quit()
     }
@@ -104,6 +104,22 @@ final class RowTemplatesTests: XCTestCase {
 
     @MainActor
     private func element(_ app: XCUIApplication, _ identifier: String) -> XCUIElement { app.descendants(matching: .any)[identifier] }
+
+    /// Строки меню — пункты меню (menuItem): обычный `click()` ждёт системного меню, поэтому щелчок по точке.
+    @MainActor
+    private func press(_ element: XCUIElement) {
+        XCTAssertTrue(element.waitForExistence(timeout: 5), "Нет \(element)")
+        element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+    }
+
+    /// Новая строка открывается сбоку с курсором в названии: Esc лишь снимает курсор, поэтому «»».
+    @MainActor
+    private func closePeek(_ app: XCUIApplication) {
+        let close = element(app, "row-peek-close")
+        XCTAssertTrue(close.waitForExistence(timeout: 5), "Строка не открылась в просмотре")
+        close.click()
+        XCTAssertTrue(waitUntil { !close.exists }, "Просмотр строки не закрылся")
+    }
 
     @MainActor
     private func openNewMenu(_ app: XCUIApplication) {
