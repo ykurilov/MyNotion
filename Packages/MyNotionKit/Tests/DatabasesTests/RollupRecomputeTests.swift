@@ -185,6 +185,34 @@ struct RollupRecomputeTests {
         #expect(try computed(projectA, count) == 3)
     }
 
+    @Test("Строка-цель ушла из базы (в обычную страницу или другую базу) и вернулась — сводка пересчитана той же записью")
+    func recomputeOnRowMovedOut() throws {
+        let sum = try addRollup("Часы", of: hours, .sum)
+        let count = try addRollup("Число", of: hours, .countAll)
+        let tree = PageTreeOperations(store: store)
+        let plain = try store.write { try $0.createPage(title: "Черновики").id }
+        try tree.move(taskRows[0], toParent: plain, at: .max)
+        #expect(try computed(projectA, sum) == 7.5)
+        #expect(try computed(projectA, count) == 3)
+        try tree.move(taskRows[0], toParent: tasks.databaseId, at: .max)
+        #expect(try computed(projectA, sum) == 9.5)
+        #expect(try computed(projectA, count) == 4)
+
+        let other = try operations.createDatabase(in: nil, isInline: false, title: "Архив")
+        try tree.move(taskRows[1], toParent: other.databaseId, at: .max)
+        #expect(try computed(projectA, sum) == 6)
+        #expect(try computed(projectA, count) == 3)
+    }
+
+    @Test("Связь сводки сменила тип — сводка пустеет, а не держит старый итог")
+    func rollupEmptiesWhenRelationChangesType() throws {
+        let sum = try addRollup("Часы", of: hours, .sum)
+        #expect(try computed(projectA, sum) == 9.5)
+        try operations.changeType(paired, to: .text)
+        queue.waitUntilIdle()
+        #expect(try computed(projectA, sum) == nil)
+    }
+
     @Test("База-цель в корзину и обратно — сводки читающей базы пересчитаны в фоне")
     func recomputeOnDatabaseTrash() throws {
         let projectCount = try #require(try store.write { tx throws -> UUID in

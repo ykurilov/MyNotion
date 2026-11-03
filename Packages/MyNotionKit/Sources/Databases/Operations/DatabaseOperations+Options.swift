@@ -184,7 +184,7 @@ extension DatabaseOperations {
         try perform("Удаление варианта") { transaction in
             guard var option = try transaction.option(optionId) else { throw NotesStoreError.invalidRecord("варианта нет") }
             let id = JSONValue.string(optionId.databaseText)
-            var previous: [(rowId: UUID, value: JSONValue?)] = []
+            var previous: [(rowId: UUID, value: JSONValue?, written: JSONValue?)] = []
             var writes: [(rowId: UUID, value: JSONValue?)] = []
             for (rowId, value) in try Self.cellValues(of: option.propertyId, transaction) {
                 guard let value else { continue }
@@ -196,7 +196,7 @@ extension DatabaseOperations {
                     guard value == id else { continue }
                     writes.append((rowId, nil))
                 }
-                previous.append((rowId, value))
+                previous.append((rowId, value, writes[writes.count - 1].value))
             }
             try transaction.setCells(writes, propertyId: option.propertyId)
             option.deletedAt = Date()
@@ -321,12 +321,16 @@ extension DatabaseOperations {
     }
 
     /// Отмена удаления: вариант и прежние значения строк.
-    private func restoreOption(_ optionId: UUID, propertyId: UUID, values: [(rowId: UUID, value: JSONValue?)]) throws {
+    /// ⌘Z удаления: прежнее значение — только в ячейки, где осталось записанное удалением. Ячейку, которую с тех пор
+    /// поправили (здесь или на другом Mac), отмена не трогает.
+    private func restoreOption(_ optionId: UUID, propertyId: UUID, values: [(rowId: UUID, value: JSONValue?, written: JSONValue?)]) throws {
         try perform("Удаление варианта") { transaction in
             guard var option = try transaction.option(optionId) else { throw NotesStoreError.invalidRecord("варианта нет") }
             option.deletedAt = nil
             try transaction.saveOption(option)
-            try transaction.setCells(values, propertyId: propertyId)
+            let current = Dictionary(try Self.cellValues(of: propertyId, transaction), uniquingKeysWith: { first, _ in first })
+            let untouched = values.filter { (current[$0.rowId] ?? nil) == $0.written }.map { (rowId: $0.rowId, value: $0.value) }
+            try transaction.setCells(untouched, propertyId: propertyId)
             return ((), { try $0.deleteOption(optionId) })
         }
     }

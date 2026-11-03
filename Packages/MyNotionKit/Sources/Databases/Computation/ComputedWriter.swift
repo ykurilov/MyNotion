@@ -42,21 +42,32 @@ public enum ComputedWriter {
         for item in values { try statement.execute(arguments: arguments(item)) }
     }
 
-    /// Пачка фонового пересчёта (R21): строка, у которой `updatedAt` уже не тот, что при чтении, не трогается —
-    /// её поправили после чтения, и правка сама пересчитала свои итоги. Возвращает пропущенные строки.
+    /// Пачка фонового пересчёта (R21): строка, у которой метка уже не та, что при чтении, не трогается — её поправили
+    /// после чтения, или правка другой строки пересчитала её итоги в своей записи. Возвращает пропущенные строки.
     static func write(_ values: [ComputedValue], readStamps: [UUID: String], in db: Database) throws -> Set<UUID> {
         var skipped: Set<UUID> = []
-        var current: [UUID: String] = [:]
         let rows = Array(Set(values.map(\.rowId)))
-        let marks = Array(repeating: "?", count: rows.count).joined(separator: ",")
-        for row in try Row.fetchAll(db, sql: "SELECT id, CAST(updatedAt AS TEXT) FROM page WHERE id IN (\(marks))",
-                                    arguments: StatementArguments(rows.map(\.databaseText))) {
-            if let id = UUID(uuidString: row[0]) { current[id] = row[1] }
-        }
+        let current = try rowStamps(rows, in: db)
         for row in rows where current[row] != readStamps[row] { skipped.insert(row) }
         let statement = try db.cachedStatement(sql: upsert)
         for item in values where !skipped.contains(item.rowId) { try statement.execute(arguments: arguments(item)) }
         return skipped
+    }
+
+    /// Метка строки для сверки фоновой пачки: `updatedAt` и все итоги строки. Правка связанной строки итоги этой
+    /// пересчитывает, а `updatedAt` не трогает.
+    static func rowStamps(_ rows: [UUID], in db: Database) throws -> [UUID: String] {
+        var stamps: [UUID: String] = [:]
+        try SQLChunks.forEach(rows) { marks, arguments in
+            for row in try Row.fetchAll(db, sql: """
+                SELECT id, CAST(updatedAt AS TEXT) || char(10) || ifnull((SELECT group_concat(item, char(10)) FROM (
+                    SELECT propertyId || '=' || ifnull(value, '') AS item FROM db_computed WHERE rowId = page.id ORDER BY propertyId)), '')
+                FROM page WHERE id IN (\(marks))
+                """, arguments: arguments) {
+                if let id = UUID(uuidString: row[0]) { stamps[id] = row[1] }
+            }
+        }
+        return stamps
     }
 
     private static func arguments(_ item: ComputedValue) -> StatementArguments {

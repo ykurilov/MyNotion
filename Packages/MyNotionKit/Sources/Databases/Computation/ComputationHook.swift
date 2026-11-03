@@ -7,7 +7,8 @@ import Synchronization
 /// Подписчик записи (research R6, R8, R21, contracts/formulas.md, «Пересчёт»): правка значения пересчитывает зависящие
 /// формулы и сводки своей строки и строк, связанных с ней, в той же транзакции (сначала сводки, затем формулы — формула
 /// может читать сводку); новая или изменённая формула или сводка, смена типа, удаление свойства и переименование
-/// варианта, от которых они зависят, корзина базы-цели — полный пересчёт базы в фоне после фиксации.
+/// варианта, от которых они зависят, корзина базы-цели, а также больше 200 строк, читающих правку по одной связи, —
+/// пересчёт базы в фоне после фиксации.
 /// Переименование свойства формул не трогает: в них хранятся id.
 public final class ComputationHook: NotesWriteHook {
     let store: NotesStore
@@ -85,6 +86,20 @@ public final class ComputationHook: NotesWriteHook {
                 touch(parent, change.page.id, title.id)
             }
         }
+        // Строка ушла из базы (в другую базу или на обычную страницу): прежнего родителя запись не знает — его выдают
+        // связи, по которым строку читали сводки и формулы; дальше — как при корзине строки.
+        let moved = changes.pages.filter { !$0.isNew && $0.changedFields.contains(.placement) }.map(\.page)
+        if !moved.isEmpty {
+            for (databaseId, relations) in graph.relationsInto {
+                let away = Set(moved.filter { $0.parentId != databaseId }.map(\.id))
+                guard !away.isEmpty else { continue }
+                for relation in relations where graph.formulas[relation.databaseId]?.ownDependencies.contains(relation.id) == true {
+                    guard try !ComputationGraph.rows(linkingTo: away, through: relation, in: db).isEmpty else { continue }
+                    for row in away { touch(databaseId, row, nil) }
+                    break
+                }
+            }
+        }
         for change in changes.database.relationLinks {
             let link = change.record
             guard let relation = try transaction.property(link.propertyId) else { continue }
@@ -112,6 +127,8 @@ public final class ComputationHook: NotesWriteHook {
         }
         announced.formUnion(changes.database.erasedLinks.flatMap { [$0.rowId, $0.targetRowId] })
 
+        /// База → свойства читателей, чей пересчёт уходит в фон (читающих строк слишком много для записи правки).
+        var background: [UUID: Set<UUID>] = [:]
         // Круги: свои строки, затем строки, читающие их по связям (итог формулы — тоже правка для читателей).
         for _ in 0..<4 where !touched.isEmpty {
             for (databaseId, rows) in touched {
@@ -127,9 +144,12 @@ public final class ComputationHook: NotesWriteHook {
                     .union(dirty[databaseId] == nil ? [] : graph.formulas[databaseId]?.computedIds ?? [])
                 for (relation, readers) in graph.readers(of: databaseId, changed: changed) {
                     let linked = try ComputationGraph.rows(linkingTo: Set(rows.keys), through: relation, in: db)
-                    if !linked.isEmpty {
-                        indirectProperties[relation.databaseId, default: []].formUnion(readers.relationReaders[relation.id] ?? readers.computedIds)
+                    let properties = readers.relationReaders[relation.id] ?? readers.computedIds
+                    if queue != nil, linked.count > Self.readersInTransactionLimit {
+                        background[relation.databaseId, default: []].formUnion(properties)
+                        continue
                     }
+                    if !linked.isEmpty { indirectProperties[relation.databaseId, default: []].formUnion(properties) }
                     for row in linked where dirty[relation.databaseId]?.contains(row) != true {
                         next[relation.databaseId, default: [:]][row] = .some(readers.computedIds)
                     }
@@ -139,6 +159,7 @@ public final class ComputationHook: NotesWriteHook {
             for (databaseId, rows) in next { dirty[databaseId, default: []].formUnion(rows.keys) }
             touched = next.filter { databaseId, _ in !graph.readers(of: databaseId, changed: graph.formulas[databaseId]?.computedIds).isEmpty }
         }
+        if let queue, !background.isEmpty { scheduleReaders(background, graph: graph, queue: queue, in: db) }
 
         for databaseId in graph.readingOrder(order) {
             guard let rows = dirty[databaseId], let formulas = graph.formulas[databaseId], !formulas.isEmpty else { continue }
@@ -157,6 +178,36 @@ public final class ComputationHook: NotesWriteHook {
         let rows = announced
         db.afterNextTransaction { _ in
             DispatchQueue.main.async { MainActor.assumeIsolated { DatabaseOperations.announce(rows) } }
+        }
+    }
+
+    /// Больше читающих строк одной связи — их пересчёт в фоне, а не в записи правки: проект на 1 000 задач пересчитывал
+    /// их до 179 мс (p95) при бюджете правки 50 мс (SC-303, находка ревью №4 T113).
+    static let readersInTransactionLimit = 200
+
+    /// Читатели, отложенные в фон, и те, кто читает их итоги: фоновая запись подписчиков не будит, поэтому следом
+    /// ставятся и они — по порядку чтения.
+    private func scheduleReaders(_ readers: [UUID: Set<UUID>], graph: ComputationGraph, queue: FormulaRecomputeQueue, in db: Database) {
+        var jobs = readers
+        // Порядок обнаружения: базы, что читают друг друга (задачи ↔ проекты), идут в нём — читатель после прочитанного.
+        var found = Array(readers.keys)
+        var frontier = found
+        for _ in 0..<4 where !frontier.isEmpty {
+            var next: [UUID] = []
+            for databaseId in frontier {
+                for (relation, formulas) in graph.readers(of: databaseId, changed: graph.formulas[databaseId]?.computedIds) {
+                    let properties = formulas.relationReaders[relation.id] ?? formulas.computedIds
+                    guard jobs[relation.databaseId]?.isSuperset(of: properties) != true else { continue }
+                    jobs[relation.databaseId, default: []].formUnion(properties)
+                    next.append(relation.databaseId)
+                    if !found.contains(relation.databaseId) { found.append(relation.databaseId) }
+                }
+            }
+            frontier = next
+        }
+        let order = found, scheduled = jobs
+        db.afterNextTransaction { _ in
+            for databaseId in order { queue.enqueue(databaseId, propertyIds: scheduled[databaseId]) }
         }
     }
 
