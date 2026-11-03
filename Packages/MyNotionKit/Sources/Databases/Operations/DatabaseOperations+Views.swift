@@ -291,21 +291,6 @@ extension DatabaseOperations {
         }
     }
 
-    // MARK: Новая строка со значениями вида
-
-    /// «+ Новая строка», «Создать» и «+ Новая строка» группы при фильтре или группе: строка сразу получает значения,
-    /// при которых она видна (`NewRowDefaults`), одним шагом.
-    @discardableResult
-    public func addRow(to databaseId: UUID, in viewId: UUID?, at placement: NewRowPlacement = .bottom, defaults: NewRowDefaults) throws -> UUID {
-        try perform("Новая строка") { transaction in
-            let rowId = try Self.writeRow(in: databaseId, viewId: viewId, placement: placement, title: defaults.title ?? "", transaction)
-            for (propertyId, value) in defaults.cells.sorted(by: { $0.key.uuidString < $1.key.uuidString }) {
-                try transaction.setCell(rowId: rowId, propertyId: propertyId, value: value)
-            }
-            return (rowId, { try $0.setRowsTrashed([rowId], true) })
-        }
-    }
-
     // MARK: Внутреннее
 
     /// Правка записи вида одним шагом: ⌘Z возвращает прежние поля целиком.
