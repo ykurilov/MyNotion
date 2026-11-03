@@ -126,6 +126,30 @@ import Testing
 
     // MARK: Связи
 
+    /// Живая проверка двух Mac (T111): у строк, добавленных `db row add`, формула и сводка посчитаны сразу — на том Mac,
+    /// где строки добавлены, а не только на том, куда они пришли синхронизацией.
+    @Test func addedRowsGetFormulaAndRollupAtOnce() async throws {
+        let clients = try await fixture.createDatabase("Клиенты")
+        try await fixture.ok("db.prop.add", ["database": "Задачи", "name": "Клиент", "type": "relation",
+                                             "config": ["target": "Клиенты", "related": "Задачи"]])
+        try await fixture.ok("db.prop.add", ["database": "Задачи", "name": "Вдвое", "type": "formula", "config": ["formula": #"prop("Часы") * 2"#]])
+        try await fixture.ok("db.prop.add", ["database": "Задачи", "name": "ID", "type": "uniqueId"])
+        try await fixture.ok("db.prop.add", ["database": "Клиенты", "name": "Сумма часов", "type": "rollup",
+                                             "config": ["relation": "Задачи", "property": "Часы", "calculation": "sum"]])
+        try await fixture.ok("db.row.add", ["database": "Клиенты", "values": ["Название": "Дом"]])
+        let added = try await fixture.ok("db.row.add", ["database": "Задачи", "values": [
+            "Название": "Позвонить", "Статус": "В работе", "Тег": "Срочно", "Срок": "2026-11-10", "Часы": 2, "Клиент": ["Дом"],
+        ]])
+        #expect(added["row"]?["values"]?["Вдвое"]?["value"] == 4, "формула в ответе")
+        try await fixture.ok("db.row.add", ["database": "Задачи", "values": ["Название": "Купить", "Часы": 3, "Клиент": ["Дом"]]])
+
+        let twice = try fixture.property("Вдвое", in: tasks)
+        #expect(try fixture.computed(try row("Позвонить").id, twice.id) == .number(4))
+        #expect(try fixture.computed(try row("Купить").id, twice.id) == .number(6))
+        let home = try #require(try fixture.rows(clients).first { $0.title == "Дом" })
+        #expect(try fixture.computed(home.id, try fixture.property("Сумма часов", in: clients).id) == .number(5))
+    }
+
     @Test func linksAndUnlinksRowsWithPairedSideAndRollup() async throws {
         let clients = try await fixture.createDatabase("Клиенты")
         try await fixture.ok("db.prop.add", ["database": "Задачи", "name": "Клиент", "type": "relation",
