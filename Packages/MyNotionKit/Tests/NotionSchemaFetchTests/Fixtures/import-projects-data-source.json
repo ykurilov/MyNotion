@@ -1,0 +1,78 @@
+{
+  "id": "d0000000-0000-0000-0000-000000000003",
+  "is_inline": false,
+  "object": "data_source",
+  "parent": {
+    "database_id": "a0000000-0000-0000-0000-000000000003",
+    "type": "database_id"
+  },
+  "properties": {
+    "Name": {
+      "id": "title",
+      "name": "Name",
+      "title": {},
+      "type": "title"
+    },
+    "Бюджет": {
+      "id": "bj",
+      "name": "Бюджет",
+      "number": {
+        "format": "ruble"
+      },
+      "type": "number"
+    },
+    "Бюджет за час": {
+      "formula": {
+        "expression": "prop(\"Бюджет\") / prop(\"Всего часов\")"
+      },
+      "id": "bh",
+      "name": "Бюджет за час",
+      "type": "formula"
+    },
+    "Всего часов": {
+      "id": "vc",
+      "name": "Всего часов",
+      "rollup": {
+        "function": "sum",
+        "relation_property_id": "zd",
+        "relation_property_name": "Задачи",
+        "rollup_property_id": "ch",
+        "rollup_property_name": "Часы"
+      },
+      "type": "rollup"
+    },
+    "Задачи": {
+      "id": "zd",
+      "name": "Задачи",
+      "relation": {
+        "data_source_id": "d0000000-0000-0000-0000-000000000002",
+        "database_id": "a0000000-0000-0000-0000-000000000002",
+        "dual_property": {
+          "synced_property_id": "pr",
+          "synced_property_name": "Проект"
+        },
+        "limit": null,
+        "type": "dual_property"
+      },
+      "type": "relation"
+    },
+    "Стиль": {
+      "formula": {
+        "expression": "style(\"Привет\", \"b\")"
+      },
+      "id": "sl",
+      "name": "Стиль",
+      "type": "formula"
+    }
+  },
+  "title": [
+    {
+      "plain_text": "Проекты",
+      "text": {
+        "content": "Проекты",
+        "link": null
+      },
+      "type": "text"
+    }
+  ]
+}

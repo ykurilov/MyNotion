@@ -166,7 +166,7 @@ let package = Package(
         .testTarget(name: "DatabaseGridTests", dependencies: ["DatabaseGrid", "DatabaseViewBar", "DatabaseRowPage", "Databases", "NotesCore", "Formulas"]),
         .testTarget(name: "DatabaseViewBarTests", dependencies: ["DatabaseViewBar", "DatabaseGrid", "Databases", "NotesCore"]),
         .testTarget(name: "DatabaseRowPageTests", dependencies: ["DatabaseRowPage", "DatabaseGrid", "Databases", "NotesCore"]),
-        .testTarget(name: "NotionSchemaFetchTests", dependencies: ["NotionSchemaFetch", "Formulas"]),
+        .testTarget(name: "NotionSchemaFetchTests", dependencies: ["NotionSchemaFetch", "Formulas"], resources: [.copy("Fixtures")]),
         .testTarget(name: "ControlProtocolTests", dependencies: ["ControlProtocol"]),
         .testTarget(name: "ControlServerTests", dependencies: ["ControlServer", "ControlProtocol"]),
         .testTarget(name: "ControlClientTests", dependencies: ["ControlClient", "ControlServer", "ControlProtocol"]),

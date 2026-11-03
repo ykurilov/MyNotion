@@ -1,0 +1,21 @@
+{
+  "data_sources": [
+    {
+      "id": "d0000000-0000-0000-0000-000000000003",
+      "name": "Проекты"
+    }
+  ],
+  "id": "a0000000-0000-0000-0000-000000000003",
+  "is_inline": false,
+  "object": "database",
+  "title": [
+    {
+      "plain_text": "Проекты",
+      "text": {
+        "content": "Проекты",
+        "link": null
+      },
+      "type": "text"
+    }
+  ]
+}
