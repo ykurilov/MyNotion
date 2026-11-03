@@ -62,11 +62,13 @@ public final class NotesStore: Sendable {
 
     /// Страница и её блоки по порядку; `nil`, если страницы нет.
     public func pageContent(_ pageId: UUID) throws -> PageContent? {
-        try database.dbWriter.read { db in
-            guard let page = try NotesTransaction.fetchPage(pageId, in: db) else { return nil }
-            return PageContent(page: page, blocks: try NotesTransaction.fetchBlocks(ofPage: pageId, in: db),
-                               removedContainers: try NotesTransaction.fetchRemovedContainers(ofPage: pageId, in: db))
-        }
+        try database.dbWriter.read { try Self.pageContent(pageId, in: $0) }
+    }
+
+    static func pageContent(_ pageId: UUID, in db: Database) throws -> PageContent? {
+        guard let page = try NotesTransaction.fetchPage(pageId, in: db) else { return nil }
+        return PageContent(page: page, blocks: try NotesTransaction.fetchBlocks(ofPage: pageId, in: db),
+                           removedContainers: try NotesTransaction.fetchRemovedContainers(ofPage: pageId, in: db))
     }
 
     /// Неразрешённые конфликты текста в блоках страницы.
