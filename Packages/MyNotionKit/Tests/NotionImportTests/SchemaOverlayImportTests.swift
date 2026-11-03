@@ -181,6 +181,41 @@ struct SchemaOverlayImportTests {
         #expect(projects.notes.contains { $0.contains("Всего часов") })
     }
 
+    @Test("Сводка по схеме, у которой во втором проходе нет свойства цели: значения из CSV сохранены угаданным типом, причина — в отчёте")
+    func rollupWithoutTargetKeepsCsvValues() throws {
+        // В таблице «Задач» нет столбца «Часы», хотя схема его знает: сводка «Всего часов» ссылается на пустоту.
+        let copy = try export()
+        let owner = copy.appendingPathComponent("MyNotion — базы 004 a0000000000000000000000000000001", isDirectory: true)
+        do {
+            let url = owner.appendingPathComponent("Задачи \(Self.tasksId)_all.csv")
+            var rows = NotionCSV.rows(try String(contentsOf: url, encoding: .utf8)).filter { !$0.isEmpty }
+            let hours = try #require(rows[0].firstIndex(of: "Часы"))
+            rows = rows.map { row in row.enumerated().filter { $0.offset != hours }.map(\.element) }
+            let text = "\u{FEFF}" + rows.map { row in
+                row.map { $0.contains(where: { ",\"\n".contains($0) }) ? "\"" + $0.replacingOccurrences(of: "\"", with: "\"\"") + "\"" : $0 }
+                    .joined(separator: ",")
+            }.joined(separator: "\n") + "\n"
+            try text.write(to: url, atomically: true, encoding: .utf8)
+        }
+        let prepared = try NotionExportUnpacker().prepare(copy)
+        defer { prepared.discard() }
+        let report = try NotionImporter(store: store, now: { [importDate] in importDate })
+            .importExport(prepared, schema: bothSchemas())
+
+        let projects = try database("Проекты", report)
+        let hours = try #require(try properties(projects)["Всего часов"])
+        #expect(hours.kind == .number)
+        let values: [JSONValue?] = try rows(projects).map { row in
+            try store.write { try $0.cell(rowId: row.id, propertyId: hours.id) }?.value
+        }
+        #expect(values == [.number(3.5), .number(2)])
+        let summary = try #require(report.databases.first { $0.title == "Проекты" })
+        #expect(summary.properties.contains { $0.hasPrefix("Всего часов — число") })
+        let note = try #require(summary.notes.first { $0.contains("Всего часов") })
+        #expect(note.contains("Часы"))
+        #expect(note.contains("значения из выгрузки"))
+    }
+
     @Test("Id баз для дочитывания схемы — таблицы выгрузки без служебных копий _all")
     func databaseIdsOfExport() throws {
         let prepared = try NotionExportUnpacker().prepare(export())
