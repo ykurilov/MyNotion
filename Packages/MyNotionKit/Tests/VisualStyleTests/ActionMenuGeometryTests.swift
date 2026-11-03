@@ -103,7 +103,8 @@ struct ActionMenuGeometryTests {
             let bitmap = try #require(search.bitmapImageRepForCachingDisplay(in: search.bounds))
             search.cacheDisplay(in: search.bounds, to: bitmap)
             let scale = CGFloat(bitmap.pixelsWide) / search.bounds.width
-            return try #require(bitmap.colorAt(x: Int(search.bounds.midX * scale), y: Int(1.5 * scale))?.usingColorSpace(.sRGB))
+            // Рамка — обводка по краю поля, отступившему на 1 точку: середина линии на y = 1 при любой толщине.
+            return try #require(bitmap.colorAt(x: Int(search.bounds.midX * scale), y: Int(1 * scale))?.usingColorSpace(.sRGB))
         }
         let idle = try edge()
         #expect(idle.blueComponent - idle.redComponent < 0.1, "без фокуса рамка уже синяя: \(idle)")
