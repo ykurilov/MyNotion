@@ -385,8 +385,9 @@ final class ColorMenuController {
     var menuFrame: NSRect? { isOpen ? window?.menuFrame : nil }
 
     /// Открыть окно; `place` получает размер окна и видимую область (координаты экрана) и возвращает его место.
-    func open(_ target: Target, place: (_ size: NSSize, _ visible: NSRect) -> NSRect) {
-        guard let textView, let parent = textView.window else { return }
+    /// `parent` — окно, над которым встаёт окно цветов (по умолчанию — окно страницы).
+    func open(_ target: Target, parent: NSWindow? = nil, place: (_ size: NSSize, _ visible: NSRect) -> NSRect) {
+        guard let textView, let parent = parent ?? textView.window else { return }
         let menu = window ?? ColorMenuWindow()
         window = menu
         menu.menuView.onChoose = { [weak self] in self?.choose($0) }
@@ -452,6 +453,7 @@ extension PageTextView {
             perform(.applyColor(choice))
         case .block(let id):
             closePopups()
+            pageLinkMenu.close()
             guard let index = document.index(ofBlock: id) else { return }
             selectBlocks(index..<index + 1)
             perform(.applyBlockColor(choice))
@@ -461,8 +463,8 @@ extension PageTextView {
 
     /// Меню блока «⋮⋮» → «Цвет»: окно цветов — подменю справа от меню `menuFrame`, верх — вровень со строкой `row`,
     /// как у Notion; справа места нет — слева от меню.
-    func openColorMenu(forBlock id: UUID, besideRow row: NSRect, of menuFrame: NSRect) {
-        colorMenu.open(.block(id)) { size, visible in
+    func openColorMenu(forBlock id: UUID, besideRow row: NSRect, of menuFrame: NSRect, parent: NSWindow? = nil) {
+        colorMenu.open(.block(id), parent: parent) { size, visible in
             var x = menuFrame.maxX - Metrics.PopupMenu.submenuOverlap
             if x + size.width > visible.maxX { x = menuFrame.minX - size.width + Metrics.PopupMenu.submenuOverlap }
             let top = row.maxY + Metrics.PopupMenu.verticalPadding

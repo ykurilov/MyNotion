@@ -30,6 +30,7 @@ public class FlowTextView: PageTextView {
         onOpenPage = host.onOpenPage
         onSubpageRequest = host.onSubpageRequest
         onResolveConflict = host.onResolveConflict
+        pageLinkMenuEntries = host.pageLinkMenuEntries
         openURL = host.openURL
         mentionDirectory = host.mentionDirectory
         pageLookup = host.pageLookup

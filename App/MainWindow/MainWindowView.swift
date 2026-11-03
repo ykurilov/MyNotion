@@ -177,6 +177,8 @@ private struct PagesWindow: View {
     @State private var widthAtDragStart: Double?
     /// Окно выбора иконки для строк боковой панели; у шапки страницы — своё в редакторе.
     @State private var sidebarIconPicker = EmojiPickerController()
+    /// «Переименовать» в меню ссылки на страницу.
+    @State private var pageRenameCard = PageRenameCard()
     /// Окно во весь экран: кнопок окна нет, шторка стоит у левого края панели.
     @State private var isFullScreen = false
 
@@ -316,6 +318,28 @@ private struct PagesWindow: View {
         return actions
     }
 
+    /// Пункты страницы в меню ссылки на неё (правая кнопка в редакторе): обработчики меню строки панели и свои для
+    /// иконки, имени, корзины, нового окна и ИИ — все со страницей по ссылке.
+    private func pageLinkMenu(_ request: PageLinkMenuRequest) -> [ActionMenuEntry] {
+        let actions = sidebarActions
+        let anchor = request.anchor
+        var handlers = actions.rowMenuHandlers
+        handlers[.rename] = { pageId in
+            guard let window = model.window else { return }
+            pageRenameCard.show(title: model.tree.page(pageId)?.title ?? "", below: anchor, in: window) { model.rename(pageId, to: $0) }
+        }
+        handlers[.trash] = actions.moveToTrash
+        handlers[.changeIcon] = { pageId in
+            guard let window = model.window else { return }
+            sidebarIconPicker.show(below: anchor, in: window) { model.setIcon(pageId, to: $0) }
+        }
+        handlers[.openInNewWindow] = { model.openInNewWindow($0) }
+        handlers[.askAI] = { model.askAI(about: $0) }
+        let flags = actions.pageFlags(request.pageId)
+        return PageLinkMenu.entries(context: PageRowMenuContext(pageId: request.pageId, isTemplate: flags.isTemplate, isFavorite: flags.isFavorite),
+                                    handlers: handlers, footer: model.pageLinkFooter(request.pageId))
+    }
+
     /// «Недавние», «Избранное» и «Шаблоны» над деревом «Страницы»: пустой раздел не показывается.
     private var sidebarSections: [SidebarSectionContent] {
         let library = model.library
@@ -438,7 +462,8 @@ private struct PagesWindow: View {
                 scrollPlace: model.scrollPlace,
                 restoringScroll: model.restoringScroll,
                 templates: TemplateSettings(templates: model.templateChoices(forPage: document.pageId),
-                                            choose: { model.fillOpenPage(document.pageId, fromTemplate: $0) })
+                                            choose: { model.fillOpenPage(document.pageId, fromTemplate: $0) }),
+                pageLinkMenu: pageLinkMenu
             )
             .overlay(alignment: .top) {
                 if model.showsRestoredBanner {

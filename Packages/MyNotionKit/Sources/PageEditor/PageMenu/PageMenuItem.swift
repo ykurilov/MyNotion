@@ -130,8 +130,11 @@ public enum PageMenuFooter {
 
     /// Слова страницы: название и текст блоков.
     @MainActor public static func wordCount(of document: PageDocument) -> Int {
-        ([document.page.title] + document.blocks.map(\.text.string)).reduce(0) { total, text in
-            total + text.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
-        }
+        wordCount(of: [document.page.title] + document.blocks.map(\.text.string))
+    }
+
+    /// Слова в строках: название и тексты блоков.
+    public static func wordCount(of texts: [String]) -> Int {
+        texts.reduce(0) { total, text in total + text.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count }
     }
 }

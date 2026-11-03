@@ -74,6 +74,11 @@ enum PageLinkPainter {
 extension PageTextView {
     /// Страница блока-подстраницы под точкой (координаты окна текста).
     func linkedPage(at point: NSPoint) -> UUID? {
+        linkedPageRow(at: point)?.pageId
+    }
+
+    /// Блок-подстраница под точкой: его номер, страница и строка (координаты вида).
+    func linkedPageRow(at point: NSPoint) -> (index: Int, pageId: UUID, row: CGRect)? {
         guard let (index, line) = markerLineNear(point) else { return nil }
         let block = document.blocks[index]
         guard block.kind == .pageLink, let pageId = block.linkedPageId else { return nil }
@@ -82,7 +87,7 @@ extension PageTextView {
         // Вся подсвеченная строка, а не только название: текста для ввода у блока нет.
         let width = origin.x + (textContainer?.size.width ?? Metrics.Page.columnWidth) - column.minX
         let target = CGRect(x: column.minX, y: column.minY, width: width, height: column.height)
-        return target.contains(point) ? pageId : nil
+        return target.contains(point) ? (index, pageId, target) : nil
     }
 }
 
