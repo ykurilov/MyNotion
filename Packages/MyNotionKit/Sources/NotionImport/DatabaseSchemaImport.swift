@@ -51,9 +51,16 @@ struct DatabaseSchemaImport {
         func id(_ old: String) -> UUID { UUID(uuidString: newIds[old] ?? old) ?? UUID() }
         func key(_ raw: String) -> FractionalSortKey { FractionalSortKey(rawValue: raw) ?? .between(nil, nil) }
 
+        // Вторая сторона пары вне выгрузки (выгружена одна база): у копии связь односторонняя на те же строки — пара
+        // осталась у оригинала, а чужая пара перевернула бы сторону хранения связей.
+        let unpaired = Set(schema.properties.filter { property in
+            property.type == PropertyKind.relation.rawValue && property.config["pairedPropertyId"]?.string.map { newIds[$0] == nil } == true
+        }.map(\.id))
         let properties = schema.properties.map { property in
-            DatabaseProperty(id: id(property.id), databaseId: databaseId, name: property.name, kind: PropertyKind(rawValue: property.type),
-                             config: remap(property.config, deep: true), sortKey: key(property.sortKey), deletedAt: property.deletedAt)
+            var config = remap(property.config, deep: true)
+            if unpaired.contains(property.id) { config["pairedPropertyId"] = nil }
+            return DatabaseProperty(id: id(property.id), databaseId: databaseId, name: property.name, kind: PropertyKind(rawValue: property.type),
+                                    config: config, sortKey: key(property.sortKey), deletedAt: property.deletedAt)
         }
         let options = schema.options.map { option in
             SelectOption(id: id(option.id), propertyId: id(option.propertyId), name: option.name, colorName: option.color,
@@ -86,8 +93,20 @@ struct DatabaseSchemaImport {
         let others = plan.pages[index].children.filter { !rowIndices.contains($0) && !templateIndices.contains($0) }
         plan.pages[index].children = rowIndices + templateIndices + others
 
+        // Записи связи без пары могли храниться на стороне вне выгрузки: связи таких свойств — из ячеек строк, по порядку.
+        let unpairedIds = Set(unpaired.map(id))
         let links = schema.links.map { links in
-            links.map { RelationLink(propertyId: id($0.propertyId), rowId: id($0.rowId), targetRowId: id($0.targetRowId), sortKey: key($0.sortKey)) }
+            links.filter { !unpaired.contains($0.propertyId) }
+                .map { RelationLink(propertyId: id($0.propertyId), rowId: id($0.rowId), targetRowId: id($0.targetRowId), sortKey: key($0.sortKey)) }
+                + rows.flatMap { row in
+                    row.relations.filter { unpairedIds.contains($0.propertyId) }.flatMap { propertyId, targets in
+                        var key: FractionalSortKey?
+                        return targets.map { target in
+                            key = .between(key, nil)
+                            return RelationLink(propertyId: propertyId, rowId: plan.pages[row.pageIndex].id, targetRowId: target, sortKey: key!)
+                        }
+                    }
+                }
         }
         let rowOrders = schema.rowOrders.map { (viewId: id($0.viewId), rowId: id($0.rowId), sortKey: key($0.sortKey)) }
         let titles = Dictionary(uniqueKeysWithValues: schemas.values.map { ($0.databaseId, $0.title) })
@@ -95,7 +114,7 @@ struct DatabaseSchemaImport {
             var line = "\(property.name) — \(PropertyKindTitles.title(PropertyKind(rawValue: property.type)))"
             if property.type == PropertyKind.relation.rawValue, let target = property.config["targetDatabaseId"]?.string {
                 line += " с «\(titles[target] ?? plan.pages[index].title)»"
-                if property.config["pairedPropertyId"] != nil { line += ", двусторонняя" }
+                if property.config["pairedPropertyId"] != nil, !unpaired.contains(property.id) { line += ", двусторонняя" }
             }
             return line
         }

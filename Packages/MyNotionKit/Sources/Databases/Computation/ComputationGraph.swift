@@ -109,12 +109,14 @@ struct ComputationGraph: Sendable {
 extension ComputationGraph {
     /// Строки базы связи `relation`, которые ссылаются на строки `targets`.
     static func rows(linkingTo targets: Set<UUID>, through relation: DatabaseProperty, in db: Database) throws -> Set<UUID> {
-        guard !targets.isEmpty else { return [] }
-        let marks = Array(repeating: "?", count: targets.count).joined(separator: ",")
         let (linkProperty, own, other) = relation.readsLinksReversed ? (relation.pairedRelation!, "targetRowId", "rowId") : (relation.id, "rowId", "targetRowId")
-        let ids = try String.fetchAll(db, sql: """
-            SELECT \(own) FROM db_relation_link WHERE propertyId = ? AND \(other) IN (\(marks)) AND isPresent = 1
-            """, arguments: StatementArguments([linkProperty.databaseText] + targets.map(\.databaseText)))
-        return Set(ids.compactMap(UUID.init(uuidString:)))
+        var rows: Set<UUID> = []
+        try SQLChunks.forEach(targets) { marks, arguments in
+            let ids = try String.fetchAll(db, sql: """
+                SELECT \(own) FROM db_relation_link WHERE propertyId = ? AND \(other) IN (\(marks)) AND isPresent = 1
+                """, arguments: StatementArguments([linkProperty.databaseText]) + arguments)
+            rows.formUnion(ids.compactMap(UUID.init(uuidString:)))
+        }
+        return rows
     }
 }

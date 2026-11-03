@@ -166,6 +166,43 @@ struct DatabaseCopyMoveTests {
         #expect(try related(task1, blocking.id, in: tasks.databaseId) == ["Купить"])
     }
 
+    @Test("Дублировать свойство-связь: копия односторонняя на те же строки; связь через копию не трогает пару оригинала")
+    func duplicateRelationProperty() throws {
+        let back = try property(named: "Задачи", in: projects.databaseId)
+        let copy = try quiet.duplicateProperty(project.id, in: tasks.viewId)
+        #expect(copy.relationTarget == projects.databaseId)
+        #expect(copy.pairedRelation == nil, "у пары может быть только одна сторона — копия односторонняя")
+        #expect(try related(task1, copy.id, in: tasks.databaseId) == ["Дом"], "строки копии связаны с теми же проектами")
+
+        try quiet.linkRow(task2, through: copy.id, to: projectA)
+        #expect(try related(task2, copy.id, in: tasks.databaseId) == ["Дом"])
+        #expect(try related(task2, project.id, in: tasks.databaseId) == [], "оригинал не тронут")
+        #expect(try related(projectA, back.id, in: projects.databaseId) == ["Позвонить"], "пара оригинала не тронута")
+        #expect(try property(named: "Задачи", in: projects.databaseId).pairedRelation == project.id)
+    }
+
+    @Test("Дублировать строку: связи сохраняются, напоминание даты сбрасывается; дублировать свойство-дату — тоже без напоминаний")
+    func duplicateRowKeepsLinksDropsReminders() throws {
+        let due = try quiet.addProperty(to: tasks.databaseId, name: "Срок", kind: .date)
+        let date: JSONValue = ["start": "2030-05-10T15:00", "hasTime": true, "timeZone": "Europe/Moscow", "reminder": "hour1"]
+        try quiet.setCell(rowId: task1, propertyId: due.id, value: date)
+
+        let copy = try #require(try quiet.duplicateRows([task1], in: tasks.viewId).first)
+        #expect(try related(copy, project.id, in: tasks.databaseId) == ["Дом"])
+        #expect(try related(copy, blocking.id, in: tasks.databaseId) == ["Купить"])
+        let back = try property(named: "Задачи", in: projects.databaseId)
+        #expect(try Set(related(projectA, back.id, in: projects.databaseId)) == ["Позвонить", "Позвонить (1)"])
+        let copiedDate = try #require(try cell(copy, due.id))
+        #expect(copiedDate["start"] == "2030-05-10T15:00")
+        #expect(copiedDate["reminder"] == nil, "напоминание у копии строки сбрасывается")
+        #expect(try cell(task1, due.id)?["reminder"] == "hour1")
+
+        let dueCopy = try quiet.duplicateProperty(due.id, in: tasks.viewId)
+        let copiedColumn = try #require(try cell(task1, dueCopy.id))
+        #expect(copiedColumn["start"] == "2030-05-10T15:00")
+        #expect(copiedColumn["reminder"] == nil, "напоминание у копии свойства сбрасывается")
+    }
+
     @Test("Страница со встроенной базой копируется вместе с базой; ⌘Z стирает копию вместе с записями базы")
     func duplicatePageWithInlineDatabase() async throws {
         let page = try store.write { try $0.createPage(title: "Дневник").id }

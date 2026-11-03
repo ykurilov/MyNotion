@@ -98,7 +98,8 @@ extension DatabaseOperations {
     }
 
     /// «Дублировать свойство»: копия «Имя (1)» справа от оригинала (в базе и в виде) со значениями и вариантами.
-    /// Связи строк у связи и номера ID не копируются: связь копирует US4, второго ID в базе не бывает.
+    /// Копия связи — односторонняя на те же строки (у пары может быть только одна сторона); напоминания дат не
+    /// копируются, как в Notion. Номер ID не дублируется: второго ID в базе не бывает.
     @discardableResult
     public func duplicateProperty(_ propertyId: UUID, in viewId: UUID?) throws -> DatabaseProperty {
         try perform("Дублирование свойства") { transaction in
@@ -108,8 +109,10 @@ extension DatabaseOperations {
             let taken = Set(siblings.filter { $0.deletedAt == nil }.map(\.name))
             var number = 1
             while taken.contains("\(original.name) (\(number))") { number += 1 }
+            var config = original.config
+            if original.kind == .relation { config["pairedPropertyId"] = nil }
             let copy = try transaction.saveProperty(DatabaseProperty(databaseId: original.databaseId, name: "\(original.name) (\(number))",
-                                                                     kind: original.kind, config: original.config,
+                                                                     kind: original.kind, config: config,
                                                                      sortKey: Self.key(beside: original, side: .right, among: siblings)))
             var optionIds: [String: JSONValue] = [:]
             for option in try transaction.options(ofProperty: original.id) {
@@ -126,8 +129,15 @@ extension DatabaseOperations {
             }
             let isOption = [.select, .multiSelect, .status].contains(original.kind)
             for (rowId, value) in try Self.cellValues(of: original.id, transaction) {
-                guard let value else { continue }
-                try transaction.setCell(rowId: rowId, propertyId: copy.id, value: isOption ? remap(value) : value)
+                guard var value else { continue }
+                if isOption { value = remap(value) }
+                if original.kind == .date { value["reminder"] = nil }
+                try transaction.setCell(rowId: rowId, propertyId: copy.id, value: value)
+            }
+            if original.kind == .relation {
+                for link in try DatabaseTreeAddon.links(through: original, in: transaction) {
+                    try DatabaseTreeAddon.saveLink(link.rowId, through: copy, to: link.targetRowId, sortKey: link.sortKey, in: transaction)
+                }
             }
             if let viewId { try Self.placeColumn(copy.id, beside: original.id, side: .right, in: viewId, transaction) }
             return (copy, { try $0.setDeleted(copy.id, true) })

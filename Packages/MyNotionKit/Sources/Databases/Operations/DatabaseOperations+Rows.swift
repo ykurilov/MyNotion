@@ -24,8 +24,8 @@ extension DatabaseOperations {
         }
     }
 
-    /// «Дублировать» (меню строки ⌘D, полоса «N выбрано»): копия со своими блоками и значениями — сразу под строкой,
-    /// название «Имя (1)», свой номер ID. Возвращает копии в порядке строк.
+    /// «Дублировать» (меню строки ⌘D, полоса «N выбрано»): копия со своими блоками, значениями и связями — сразу под
+    /// строкой, название «Имя (1)», свой номер ID; напоминания дат не копируются, как в Notion. Возвращает копии в порядке строк.
     @discardableResult
     public func duplicateRows(_ rowIds: [UUID], in viewId: UUID?) throws -> [UUID] {
         try perform("Дублирование строки") { transaction in
@@ -38,8 +38,17 @@ extension DatabaseOperations {
                 let result = try PageBranchCopier.copy(rowId, in: transaction, title: try Self.copyTitle(of: original, in: databaseId, transaction),
                                                        parentId: databaseId, sortKey: Self.key(between: original.sortKey, nextPageKey))
                 let uniqueId = try UniqueIds.property(ofDatabase: databaseId, in: transaction)?.id
+                let properties = try transaction.properties(ofDatabase: databaseId)
+                let dates = Set(properties.filter { $0.kind == .date }.map(\.id))
                 for cell in try transaction.cells(ofRow: rowId) where cell.propertyId != uniqueId && cell.value != nil {
-                    try transaction.setCell(rowId: result.rootId, propertyId: cell.propertyId, value: cell.value)
+                    var value = cell.value
+                    if dates.contains(cell.propertyId) { value?["reminder"] = nil }
+                    try transaction.setCell(rowId: result.rootId, propertyId: cell.propertyId, value: value)
+                }
+                for relation in properties where relation.kind == .relation {
+                    for link in try DatabaseTreeAddon.links(of: rowId, through: relation, in: transaction) {
+                        try DatabaseTreeAddon.saveLink(result.rootId, through: relation, to: link.targetRowId, sortKey: link.sortKey, in: transaction)
+                    }
                 }
                 try UniqueIds.assign(toRow: result.rootId, ofDatabase: databaseId, in: transaction)
                 if let viewId, try Self.hasManualOrder(viewId, transaction) {

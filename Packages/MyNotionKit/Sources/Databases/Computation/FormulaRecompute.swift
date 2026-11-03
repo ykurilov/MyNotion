@@ -126,7 +126,7 @@ public struct FormulaRecompute: Sendable {
                 let rows = Array(pending[start..<min(start + readBatch, pending.count)])
                 let (values, stamps) = try store.database.dbWriter.read { db -> ([ComputedValue], [UUID: String]) in
                     let inputs = try FormulaInputs(rows: rows, needed: needed, catalog: catalog, now: now(), calendar: calendar, in: db)
-                    return (evaluate(rows, inputs: inputs), inputs.stamps)
+                    return (evaluate(rows, inputs: inputs), try ComputedWriter.rowStamps(rows, in: db))
                 }
                 let perRow = Dictionary(grouping: values, by: \.rowId)
                 for chunkStart in stride(from: 0, to: rows.count, by: writeBatch) {
