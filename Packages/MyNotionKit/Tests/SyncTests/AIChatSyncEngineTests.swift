@@ -47,7 +47,7 @@ struct AIChatSyncEngineTests {
         let chat = try AIChatStore(store: a.store).createChat(title: "Из снимка", at: date)
         try AIChatStore(store: a.store).append("m", id: UUID(), to: chat.id, at: date)
         try await eventually("чат дошёл до B", within: .seconds(10)) { try AIChatStore(store: b.store).messages(in: chat.id).count == 1 }
-        try await a.engine.uploadSnapshot()
+        try await a.uploadSnapshot()
         try await eventually("журнал сжат", within: .seconds(10)) { try await server.isCompacted() }
 
         let c = try EngineTestMac(name: "Mac C", wallMillis: 30_000)

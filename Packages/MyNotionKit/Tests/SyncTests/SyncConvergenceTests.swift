@@ -96,7 +96,7 @@ struct SyncConvergenceTests {
                 && a.engine.status == .ready && b.engine.status == .ready
         }
 
-        try await a.engine.uploadSnapshot()
+        try await a.uploadSnapshot()
         try await eventually("журнал сжат", within: .seconds(10)) { try await server.isCompacted() }
 
         let c = try EngineTestMac(name: "Mac C", wallMillis: 50_000)

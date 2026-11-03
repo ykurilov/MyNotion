@@ -79,7 +79,7 @@ struct ServiceKeySyncTests {
             try a.serviceKeys?.value(for: notion) == "ntn_later" && c.serviceKeys?.value(for: notion) == "ntn_later"
                 && a.engine.status == .ready && b.engine.status == .ready && c.engine.status == .ready
         }
-        try await a.engine.uploadSnapshot()
+        try await a.uploadSnapshot()
         try await eventually("журнал сжат", within: .seconds(10)) { try await server.isCompacted() }
 
         let d = try EngineTestMac(name: "Mac D", wallMillis: 40_000)

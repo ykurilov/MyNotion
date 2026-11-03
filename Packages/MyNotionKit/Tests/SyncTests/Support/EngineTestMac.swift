@@ -101,6 +101,19 @@ final class EngineTestMac {
         try makeEngine(server.server)
     }
 
+    /// Выложить снимок, когда этот Mac прочёл из журнала всё, что сам отправил, — как цикл. Раньше
+    /// `SyncEngine.uploadSnapshot()` молча ничего не выкладывает, и журнал не сжимается.
+    func uploadSnapshot() async throws {
+        let accounts = SyncAccountStore(store: store)
+        try await eventually("\(name) прочёл из журнала свои пачки", within: .seconds(10)) {
+            guard let account = try accounts.account() else { return false }
+            return try Outbox(store: store).isEmpty() && account.lastPulledSeq >= account.lastSentSeq
+        }
+        try await engine.uploadSnapshot()
+        let account = try #require(try accounts.account())
+        #expect(account.lastSnapshotSeq == account.lastPulledSeq, "\(name) не выложил снимок")
+    }
+
     func makeJoinCode() async throws -> JoinCode {
         try await SyncSetup.makeJoinCode(transport: connection, account: account, secrets: secrets)
     }
