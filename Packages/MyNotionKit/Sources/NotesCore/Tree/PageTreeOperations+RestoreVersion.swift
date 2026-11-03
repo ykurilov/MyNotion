@@ -1,6 +1,7 @@
 import Foundation
 
-/// Какой сделать страницу восстановлением версии: поля и блоки всех потоков (снимок версии, research R11).
+/// Какой сделать страницу восстановлением версии: поля и блоки всех потоков (снимок версии, research R11), у строки
+/// базы — и значения свойств со связями (research R15; `nil` — снимок версии 1, значения не трогаются).
 public struct PageRestoreTarget: Sendable, Hashable {
     public var title: String
     public var icon: String?
@@ -8,26 +9,29 @@ public struct PageRestoreTarget: Sendable, Hashable {
     public var isFullWidth: Bool
     public var isSmallText: Bool
     public var blocks: [Block]
+    public var rowValues: RowValues?
 
-    public init(title: String, icon: String?, cover: PageCover?, isFullWidth: Bool, isSmallText: Bool, blocks: [Block]) {
+    public init(title: String, icon: String?, cover: PageCover?, isFullWidth: Bool, isSmallText: Bool, blocks: [Block],
+                rowValues: RowValues? = nil) {
         self.title = title
         self.icon = icon
         self.cover = cover
         self.isFullWidth = isFullWidth
         self.isSmallText = isSmallText
         self.blocks = blocks
+        self.rowValues = rowValues
     }
 
-    init(page: Page, blocks: [Block]) {
+    init(page: Page, blocks: [Block], rowValues: RowValues? = nil) {
         self.init(title: page.title, icon: page.icon, cover: page.cover, isFullWidth: page.isFullWidth, isSmallText: page.isSmallText,
-                  blocks: blocks)
+                  blocks: blocks, rowValues: rowValues)
     }
 }
 
 /// Восстановление версии (contracts/page-operations.md, «История версий»): одна транзакция и одна запись отмены.
 /// Поля страницы — как в версии; блоки — правятся под версию, лишние удаляются, удалённые с тех пор возвращаются с прежними
 /// id; копии блоков версии, унесённые «Переместить в» на другие страницы (`props.movedFrom`), удаляются, а подстраницы
-/// их ссылок возвращаются под страницу. Уходит на другие Mac обычными правками.
+/// их ссылок возвращаются под страницу; у строки базы — значения свойств и связи версии. Уходит на другие Mac обычными правками.
 extension PageTreeOperations {
     public func restoreVersion(of pageId: UUID, to target: PageRestoreTarget) throws {
         let inverse = try perform { transaction in
@@ -111,6 +115,8 @@ extension PageTreeOperations {
         page.isFullWidth = step.target.isFullWidth
         page.isSmallText = step.target.isSmallText
         try transaction.updatePage(page)
+        // Значения строки базы; обратный шаг возвращает прежние значения тех же свойств.
+        if let values = step.target.rowValues { inverse.target.rowValues = try transaction.applyRowValues(values, to: pageId) }
 
         // Блоки страницы. Ссылка на подстраницу, живущую сейчас в другом месте дерева, не возвращается: подстраница —
         // там, где её положили. Ссылки на живые подстраницы этой страницы, которых нет в версии, остаются — иначе

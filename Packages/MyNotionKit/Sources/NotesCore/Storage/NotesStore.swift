@@ -8,6 +8,7 @@ public final class NotesStore: Sendable {
     public let database: AppDatabase
     public let clock: HybridLogicalClock
     private let writeHooks = Mutex<[any NotesWriteHook]>([])
+    private let treeAddons = Mutex<[any PageTreeAddon]>([])
     private let deletionMarks = Mutex(false)
     private let recordedClock = Mutex<HybridTimestamp?>(nil)
 
@@ -23,6 +24,11 @@ public final class NotesStore: Sendable {
     /// Подписчик (поиск, синхронизация) будет писать в каждую транзакцию записи перед её фиксацией.
     public func addWriteHook(_ hook: any NotesWriteHook) {
         writeHooks.withLock { $0.append(hook) }
+    }
+
+    /// Добавка модуля к копии ветки и переносу страниц (`PageTreeAddon`) — до первой записи.
+    public func addTreeAddon(_ addon: any PageTreeAddon) {
+        treeAddons.withLock { $0.append(addon) }
     }
 
     /// Удалённый блок остаётся пометкой с меткой часов, пока её не получат все устройства (data-model.md, «Block»).
@@ -112,8 +118,9 @@ public final class NotesStore: Sendable {
     @discardableResult
     public func write<T>(_ body: (NotesTransaction) throws -> T) throws -> T {
         let hooks = writeHooks.withLock { $0 }
+        let addons = treeAddons.withLock { $0 }
         return try database.dbWriter.write { db in
-            let transaction = NotesTransaction(db: db, clock: clock, keepsDeletionMarks: keepsDeletionMarks)
+            let transaction = NotesTransaction(db: db, clock: clock, keepsDeletionMarks: keepsDeletionMarks, treeAddons: addons)
             let result = try body(transaction)
             try transaction.giveEveryTouchedPageABlock()
             let changes = transaction.changes

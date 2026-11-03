@@ -4,6 +4,7 @@ import Foundation
 /// новые id страниц и блоков; ссылки-подстраницы на страницы ветки ведут на копии, остальные и упоминания — как были;
 /// у дат копии напоминания выключены; файлы — та же `AttachmentRef` (байты не копируются, счётчик ссылок 002 видит копию).
 /// Страницы ветки в корзине и ссылки на них не копируются. Избранное и открытие — не содержимое: у копии их нет.
+/// Записи модулей (схема базы, значения строк) копируют добавки `PageTreeAddon`.
 public enum PageBranchCopier {
     public struct Result: Sendable {
         public let rootId: UUID
@@ -69,7 +70,10 @@ public enum PageBranchCopier {
             blockIds.merge(copied.newIds) { $1 }
             for block in copied.blocks { try transaction.insertBlock(block) }
         }
-        return Result(rootId: pageIds[rootId]!, pageIds: pageIds, blockIds: blockIds)
+        let result = Result(rootId: pageIds[rootId]!, pageIds: pageIds, blockIds: blockIds)
+        // Записи модулей ветки (базы, их строки и значения — `Databases`) — в той же транзакции.
+        for addon in transaction.treeAddons { try addon.branchCopied(result, in: transaction) }
+        return result
     }
 
     /// Даты копии: свой id (он же id напоминания), напоминание выключено; дата шаблона — момент создания.
