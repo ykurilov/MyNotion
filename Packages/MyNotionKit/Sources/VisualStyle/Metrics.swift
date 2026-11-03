@@ -409,7 +409,7 @@ public enum Metrics {
         public static let searchCornerRadius: CGFloat = 6
         public static let searchTextX: CGFloat = 28
         public static let searchIconSize: CGFloat = 16
-        public static let focusRingWidth: CGFloat = 2
+        public static let focusRingWidth: CGFloat = 1
         public static let highlightHeight: CGFloat = 28
         public static let chevronSize: CGFloat = 16
         public static let chevronInkHeight: CGFloat = 10

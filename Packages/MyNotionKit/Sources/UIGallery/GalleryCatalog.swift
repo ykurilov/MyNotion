@@ -126,6 +126,8 @@ public enum GalleryDatabases: Hashable, Sendable, CaseIterable {
     // US1: таблица в работе.
     case inlineEmpty, inlineOverview, rowHover, cellSelection, cellEditing, columnMenu, typePicker, editProperty, propertiesWindow,
          deleteConfirm, rowMenu, rowPage, sidePeek, centerPeek
+    /// Состояния, которых не было: строки выбраны флажками (полоса «N выбрано») и поиск без результата.
+    case rowsSelected, searchNoResults
     /// US5: редактор формулы — пустой, с итогом, с ошибкой, с кругом; ячейки формул всех типов итога.
     case formulaEditorEmpty
     case formulaEditorResult
@@ -346,6 +348,9 @@ public enum GalleryCatalog {
         GalleryState("database-properties-window", .databases(.propertiesWindow), "Окно «Свойства» базы с «Удалёнными свойствами»", section: "Базы"),
         GalleryState("database-delete-confirm", .databases(.deleteConfirm), "Подтверждение удаления свойства", section: "Базы"),
         GalleryState("database-row-menu", .databases(.rowMenu), "Меню строки (правый щелчок)", section: "Базы"),
+        GalleryState("database-rows-selected", .databases(.rowsSelected), "Три строки отмечены флажками: полоса «Выбрано: 3»", section: "Базы"),
+        GalleryState("database-search-no-results", .databases(.searchNoResults), "Поиск без результата: пустая таблица под строкой вида",
+                     section: "Базы"),
         GalleryState("database-row-page", .databases(.rowPage), "Строка на всю страницу: свойства под названием, «+ Добавить свойство»", section: "Базы"),
         GalleryState("database-side-peek", .databases(.sidePeek), "Строка сбоку: таблица слева рабочая", section: "Базы"),
         GalleryState("database-center-peek", .databases(.centerPeek), "Строка по центру поверх затемнения", section: "Базы"),

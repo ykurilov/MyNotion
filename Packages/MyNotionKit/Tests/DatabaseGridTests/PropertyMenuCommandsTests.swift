@@ -227,4 +227,20 @@ struct PropertyMenuCommandsTests {
         #expect(PropertySettingsPanel.sections(for: .number, handled: PropertyMenuCommands.panelSlots.union([.typeSettings])).map(\.slot)
                 == [.name, .type, .typeSettings, .duplicate, .delete])
     }
+
+    @Test("«Переносить текст» в панели: раздел есть у колонки вида, переключатель пишет перенос в вид, ⌘Z возвращает")
+    func panelWrapText() throws {
+        let text = try operations.addProperty(to: base.databaseId, name: "Заметка", kind: .text)
+        #expect(PropertySettingsPanel.sections(for: .text, handled: commands.panelSlots).map(\.slot) == [.name, .type, .wrapText, .duplicate, .delete])
+        // Без вида переносить нечего.
+        let withoutView = PropertyMenuCommands(store: store, operations: operations, databaseId: base.databaseId, viewId: nil)
+        #expect(!withoutView.panelSlots.contains(.wrapText))
+        #expect(try !commands.wraps(text))
+        try commands.setWrap(text, true)
+        #expect(try commands.wraps(text))
+        let view = try #require(try store.write { try $0.view(base.viewId) })
+        #expect(view.wraps(text.id))
+        try commands.setWrap(text, false)
+        #expect(try !commands.wraps(text))
+    }
 }

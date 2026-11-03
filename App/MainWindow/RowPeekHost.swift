@@ -86,7 +86,7 @@ struct RowPeekHost: View {
             blockViewState: model.blockViewState,
             mentions: mentions,
             pageMenuItems: PageMenuItems.all(for: model, pageId: document.pageId),
-            headerAddons: [PageCoverAddon.factory(model), model.rowPageAddonFactory(), BacklinksAddon.factory(model)],
+            headerAddons: [PageCoverAddon.factory(model), model.rowPageAddonFactory(compactTitle: peek.mode == .sidePeek), BacklinksAddon.factory(model)],
             templates: TemplateSettings(templates: model.templateChoices(forPage: document.pageId),
                                         choose: { model.fillOpenPage(document.pageId, fromTemplate: $0) }),
             topBarLeading: AnyView(RowPeekBar(close: { model.closeRowPeek() }, expand: { model.expandRowPeek() }))

@@ -245,7 +245,7 @@ final class AdvancedFilterPage: PanelPage, FocusablePage {
             }
             self.panels.showMenu(ChoiceMenuView(choices: choices), below: button, level: self.menuLevel)
         }
-        row.add(opButton, .fixed(150))
+        row.add(opButton, .fixed(200))
         let editor = FilterValues.editor(for: condition, catalog: catalog)
         switch editor {
         case .none:

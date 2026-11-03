@@ -74,10 +74,11 @@ extension MainWindowModel {
     }
 
     /// Добавки шапки страницы строки: свойства под названием. У обычной страницы — ничего.
-    func rowPageAddonFactory() -> PageHeaderAddonFactory {
+    func rowPageAddonFactory(compactTitle: Bool = false) -> PageHeaderAddonFactory {
         { [weak self] document in
             guard let self, isDatabaseRow(document) else { return NoHeaderAddon() }
             let addon = RowPropertiesAddon(rowId: document.pageId, operations: databaseOperations)
+            addon.usesCompactTitle = compactTitle
             addon.onError = { [weak self] error in self?.showError("Не удалось изменить значение: \(SaveStatus.reason(for: error))") }
             addon.onAddProperty = { [weak self] anchor in self?.addRowProperty(document.pageId, anchor: anchor) }
             addon.onOpenEditor = { [weak self] propertyId, anchor in

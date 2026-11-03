@@ -70,7 +70,7 @@ extension PageTextView {
         if ratio != 1 { textLayoutManager?.textViewportLayoutController.layoutViewport() }
         let place = ratio != 1 ? scrollPlace() : nil
         layoutSettings = settings
-        header.titleScale = settings.textZoom
+        header.titleScale = settings.textZoom * titleSizeFactor
         if ratio != 1 {
             mapper.fontScale = settings.fontScale
             if let textStorage { PageFontScaling.rescale(textStorage, in: NSRange(location: 0, length: textStorage.length), to: settings.fontScale) }
