@@ -172,11 +172,11 @@ final class RelationSettingsView: NSView {
 @MainActor
 final class PropertySwitchRow: NSView {
     private let row: PropertyPopupRow
-    private let toggle = NSSwitch()
+    private let toggle = PopupSwitchTrack()
     var onToggle: ((Bool) -> Void)?
     var isOn: Bool {
-        get { toggle.state == .on }
-        set { toggle.state = newValue ? .on : .off }
+        get { toggle.isOn }
+        set { toggle.isOn = newValue }
     }
     var isEnabled = true {
         didSet {
@@ -189,12 +189,9 @@ final class PropertySwitchRow: NSView {
         row = PropertyPopupRow(title: title, icon: icon)
         super.init(frame: .zero)
         addSubview(row)
-        toggle.controlSize = .mini
-        toggle.state = isOn ? .on : .off
-        toggle.target = self
-        toggle.action = #selector(switched)
-        toggle.setAccessibilityIdentifier(identifier)
-        toggle.setAccessibilityLabel(title)
+        toggle.isOn = isOn
+        toggle.onChange = { [weak self] _ in self?.switched() }
+        toggle.setIdentifier(identifier, label: title)
         addSubview(toggle)
         row.onPress = { [weak self] in
             guard let self, self.isEnabled else { return }
@@ -211,7 +208,7 @@ final class PropertySwitchRow: NSView {
     override func layout() {
         super.layout()
         row.frame = bounds
-        let size = toggle.fittingSize
+        let size = PopupSwitchTrack.size
         toggle.frame = NSRect(x: bounds.maxX - PropertyPopupMetrics.padding - size.width,
                               y: ((min(bounds.height, Metrics.ActionMenu.highlightHeight) - size.height) / 2).rounded(), width: size.width, height: size.height)
     }
@@ -277,5 +274,51 @@ final class PropertyChoiceCard {
 
     private final class FlippedContainer: NSView {
         override var isFlipped: Bool { true }
+    }
+}
+
+/// Переключатель окон свойства: включённый — синий, как у переключателей вида; выключенный — серый (Notion).
+@MainActor
+final class PopupSwitchTrack: NSView {
+    static let size = NSSize(width: 30, height: 18)
+    var onChange: ((Bool) -> Void)?
+    var isOn = false { didSet { needsDisplay = true; setAccessibilityValue(isOn ? 1 : 0) } }
+    var isEnabled = true { didSet { needsDisplay = true } }
+
+    init() {
+        super.init(frame: NSRect(origin: .zero, size: Self.size))
+        setAccessibilityElement(true)
+        setAccessibilityRole(.checkBox)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
+
+    override var isFlipped: Bool { true }
+
+    func setIdentifier(_ identifier: String, label: String) {
+        setAccessibilityIdentifier(identifier)
+        setAccessibilityLabel(label)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        (isOn ? Palette.focusRing : Palette.switchOff).withAlphaComponent(isEnabled ? 1 : 0.5).setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: bounds.height / 2, yRadius: bounds.height / 2).fill()
+        let knob = bounds.height - 4
+        NSColor.white.setFill()
+        NSBezierPath(ovalIn: NSRect(x: isOn ? bounds.maxX - 2 - knob : 2, y: 2, width: knob, height: knob)).fill()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard isEnabled else { return }
+        isOn.toggle()
+        onChange?(isOn)
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        guard isEnabled else { return false }
+        isOn.toggle()
+        onChange?(isOn)
+        return true
     }
 }

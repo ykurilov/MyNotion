@@ -80,7 +80,7 @@ final class EditPropertyView: NSView {
         stack.append(header("Изменить свойство") { [weak self] in self?.commitName(); self?.onBack?() },
                      height: PropertyPopupMetrics.headerHeight, inset: 0)
         let settings = PropertyTypeSettings.settings(for: property.kind)
-        let handled = PropertyMenuCommands.panelSlots.union(settings == nil ? [] : [.typeSettings])
+        let handled = commands.panelSlots.union(settings == nil ? [] : [.typeSettings])
         var lastWasAction = false
         for section in PropertySettingsPanel.sections(for: property.kind, handled: handled) {
             switch section.slot {
@@ -120,7 +120,14 @@ final class EditPropertyView: NSView {
                     self.onResize?()
                 }
             case .wrapText:
-                continue
+                let row = PropertySwitchRow(title: "Переносить текст", icon: "arrow.right.to.line.compact",
+                                            isOn: (try? commands.wraps(property)) ?? false, identifier: "edit-property-wrap")
+                let property = property
+                row.onToggle = { [weak self] isOn in
+                    guard let self else { return }
+                    PropertyMenuPresenter.attempt { try self.commands.setWrap(property, isOn) }
+                }
+                stack.append(row, height: PropertyPopupMetrics.rowHeight)
             case .duplicate, .delete:
                 if !lastWasAction { stack.append(PropertyPopupSeparator(), height: PropertyPopupMetrics.separatorHeight) }
                 let isDelete = section.slot == .delete

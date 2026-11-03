@@ -2,6 +2,7 @@ import AppKit
 import DatabaseGrid
 import DatabaseViewBar
 import Databases
+import EmojiPicker
 import Navigation
 import NotesCore
 import PageEditor
@@ -16,6 +17,8 @@ final class DatabaseBlockViewFactory: BlockViewFactory {
     weak var library: PagesLibrary?
     /// Показанные базы по блоку: высота строки блока — их высота.
     private let views = NSMapTable<NSUUID, DatabaseTableView>.strongToWeakObjects()
+    /// Выбор иконки строки из её меню («Изменить иконку»).
+    private let rowIconPicker = EmojiPickerController()
 
     init(library: PagesLibrary) {
         self.library = library
@@ -78,6 +81,11 @@ final class DatabaseBlockViewFactory: BlockViewFactory {
         actions.isFavorite = { resolve()?.isFavorite($0) ?? false }
         actions.toggleFavorite = { resolve()?.toggleFavorite($0) }
         actions.moveTo = { resolve()?.showMovePagePicker($0) }
+        actions.changeIcon = { [weak self] rowId, anchor in
+            guard let self, let window = anchor.window else { return }
+            let screenRect = window.convertToScreen(anchor.convert(anchor.bounds, to: nil))
+            rowIconPicker.show(below: screenRect, in: window) { resolve()?.setIcon(rowId, to: $0) }
+        }
         view.rowMenuActions = actions
         weak var textView = context.textView
         view.onHeightChange = { textView?.relayoutDatabaseBlock(block.id) }

@@ -46,6 +46,21 @@ public struct PropertyMenuCommands {
     /// Разделы панели «Изменить свойство» US1; настройки типа — когда у типа есть окно (`PropertyTypeSettings`).
     public static let panelSlots: Set<PropertySettingsSlot> = [.name, .type, .duplicate, .delete]
 
+    /// Разделы панели у этого окна: «Переносить текст» пишется в вид, без вида его нет.
+    public var panelSlots: Set<PropertySettingsSlot> {
+        viewId == nil ? Self.panelSlots : Self.panelSlots.union([.wrapText])
+    }
+
+    public func wraps(_ property: DatabaseProperty) throws -> Bool {
+        guard let viewId, let view = try store.write({ try $0.view(viewId) }) else { return false }
+        return view.wraps(property.id)
+    }
+
+    public func setWrap(_ property: DatabaseProperty, _ wraps: Bool) throws {
+        guard let viewId else { return }
+        try operations.setWrap(property.id, wraps, in: viewId)
+    }
+
     public func entries(for property: DatabaseProperty) -> [PropertyMenu.Entry] {
         let wraps = (viewId.flatMap { id in try? store.write { try $0.view(id) } })?.wraps(property.id) ?? false
         return PropertyMenu.entries(items: PropertyMenuItem.all, property: property, handled: handledSlots).map { entry in

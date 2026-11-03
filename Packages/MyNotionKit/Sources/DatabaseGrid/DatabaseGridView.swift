@@ -22,6 +22,9 @@ public final class DatabaseGridView: NSView {
     /// Выбранные ячейки; `nil` — ничего.
     public internal(set) var selection: CellSelection? { didSet { if selection != oldValue { documentView.selectionDidChange(from: oldValue) } } }
     /// Строки, отмеченные флажками (полоса «N выбрано»).
+    /// Отметить строки флажками (для галереи состояний и тестов).
+    public func selectRows(_ rows: Set<Int>) { selectedRows = rows }
+
     public internal(set) var selectedRows: Set<Int> = [] {
         didSet {
             guard selectedRows != oldValue else { return }

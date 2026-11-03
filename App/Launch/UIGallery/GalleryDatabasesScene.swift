@@ -68,6 +68,9 @@ enum GalleryDatabasesScene {
         model.select(sample.tasksId)
         await settle()
         guard let table = find(DatabaseTableView.self, in: window.contentView) else { return "таблица не показана" }
+        // Страница-база открывается сверху, как в приложении: прокрутка соседней страницы не переносится.
+        find(PageTextView.self, in: window.contentView)?.scroll(NSPoint(x: 0, y: 0))
+        await settle()
         let grid = table.grid
         let controller = table.controller
         let rowId = { (row: Int) in controller.content.rowId(at: row) }
@@ -108,7 +111,14 @@ enum GalleryDatabasesScene {
             presenter.showPropertiesWindow(below: NSRect(x: table.bounds.width - 300, y: 0, width: 32, height: ViewBarView.height), in: table)
         case .rowMenu:
             grid.select(CellPosition(row: 2, column: 0))
-            grid.onRowMenu?(2, NSPoint(x: 120, y: grid.cellRect(row: 2, column: 0).maxY))
+            // Как правый щелчок: точка внутри ячейки, а не на её нижней границе.
+            let cell = grid.cellRect(row: 2, column: 0)
+            grid.onRowMenu?(2, NSPoint(x: cell.minX + 60, y: cell.midY))
+        case .rowsSelected:
+            grid.selectRows([1, 2, 3])
+        case .searchNoResults:
+            table.viewBar.setSearching(true, text: "яяяя")
+            controller.setSearch("яяяя")
         case .rowPage, .sidePeek, .centerPeek:
             guard let row = rowId(1) else { return "строки нет" }
             model.openRow(row, mode: kind == .rowPage ? .fullPage : kind == .sidePeek ? .sidePeek : .centerPeek)

@@ -198,10 +198,13 @@ final class ViewChipView: NSView {
         }
         if style != .add {
             let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 13, yRadius: 13)
-            (style == .active ? Palette.activeViewControl.withAlphaComponent(0.12) : Palette.hoverBackground).setFill()
+            (style == .active ? Palette.activeViewControl.withAlphaComponent(0.2) : Palette.hoverBackground).setFill()
             path.fill()
-            (style == .active ? Palette.activeViewControl.withAlphaComponent(0.35) : Palette.border).setStroke()
-            path.stroke()
+            // У Notion активная плашка — полупрозрачная заливка без рамки.
+            if style != .active {
+                Palette.border.setStroke()
+                path.stroke()
+            }
         }
         var x: CGFloat = 10
         if let symbol {

@@ -3,6 +3,7 @@ import DatabaseGrid
 import DatabaseViewBar
 import Databases
 import NotesCore
+import PageEditor
 import UIGallery
 import VisualStyle
 
@@ -28,6 +29,9 @@ enum GalleryViewScene {
         model.select(sample.tasksId)
         await settle()
         guard let table = GalleryDatabasesScene.find(DatabaseTableView.self, in: window.contentView) else { return "таблица не показана" }
+        // Страница-база открывается сверху: прокрутка соседней страницы не переносится.
+        GalleryDatabasesScene.find(PageTextView.self, in: window.contentView)?.scroll(NSPoint(x: 0, y: 0))
+        await settle()
         let controller = table.controller
         let operations = DatabaseOperations(store: store)
         let property = { (name: String) in sample.taskProperties[name]! }

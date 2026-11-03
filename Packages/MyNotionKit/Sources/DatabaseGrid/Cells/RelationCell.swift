@@ -37,7 +37,7 @@ final class RelationCellView: NSView, CellPopupContent {
 
     init(context: CellPopupContext) {
         self.context = context
-        search = PropertyPopupField(text: context.initialText ?? "", placeholder: "Найти или создать страницу…", searchGlyph: true,
+        search = PropertyPopupField(text: context.initialText ?? "", placeholder: "Найти или создать…", searchGlyph: true,
                                     identifier: "relation-picker-search")
         query = context.initialText ?? ""
         super.init(frame: NSRect(x: 0, y: 0, width: Self.width, height: 200))

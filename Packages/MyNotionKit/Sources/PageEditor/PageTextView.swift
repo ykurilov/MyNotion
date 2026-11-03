@@ -141,6 +141,13 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
     var marginDrag: (start: NSPoint, moved: Bool)?
     /// Вид страницы: ширина колонки и шкала шрифтов (`PageLayout/`).
     public internal(set) var layoutSettings = PageLayoutSettings()
+    /// Размер названия относительно обычного: просмотр строки сбоку показывает название мельче страницы (Notion).
+    public var titleSizeFactor: CGFloat = 1 {
+        didSet {
+            guard titleSizeFactor != oldValue else { return }
+            header.titleScale = layoutSettings.textZoom * titleSizeFactor
+        }
+    }
     /// Место обложки над шапкой (`PageLayout/`).
     let coverSlot = CoverSlot()
     /// Масштаб текста, за которым следует редактор; пробы подставляют свой, чтобы не трогать общий.
@@ -184,7 +191,7 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
         layoutSettings = PageLayoutSettings(isFullWidth: document.page.isFullWidth, isSmallText: document.page.isSmallText,
                                             textZoom: PageTextZoom.shared.scale)
         mapper.fontScale = layoutSettings.fontScale
-        header.titleScale = layoutSettings.textZoom
+        header.titleScale = layoutSettings.textZoom * titleSizeFactor
         coverSlot.shownAppearance = PageAppearance(document.page)
         // После загрузки текста система ставит выделение в конец, и место курсора там считалось бы раскладкой
         // всей страницы (на 10 000 блоках — секунды). Пока текст загружается, вид выделения не обновляется;
@@ -1228,7 +1235,9 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
             switch focus {
             case .title: header.focusTitle()
             case .body where restored: window?.makeFirstResponder(self)
-            case .body: focusBody(at: 0)
+            // Страница только открылась: курсор в начале текста, но страница не прокручивается к нему — у страницы строки
+            // сверху название и свойства, и прокрутка к курсору уводила их за верх окна.
+            case .body: focusBody(at: 0, scrollsToCaret: false)
             case .bodyWithoutCaret:
                 isCaretHiddenUntilUserAction = true
                 window?.makeFirstResponder(self)
@@ -1248,10 +1257,10 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
         return true
     }
 
-    public func focusBody(at location: Int) {
+    public func focusBody(at location: Int, scrollsToCaret: Bool = true) {
         window?.makeFirstResponder(self)
         setSelectedRange(NSRange(location: min(location, textStorage?.length ?? 0), length: 0))
-        scrollRangeToVisible(selectedRange())
+        if scrollsToCaret { scrollRangeToVisible(selectedRange()) }
     }
 
     /// Записать текущий набор с IME и передать документу всё, что ещё не передано.

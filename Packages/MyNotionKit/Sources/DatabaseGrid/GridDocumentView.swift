@@ -480,7 +480,7 @@ enum GridSymbols {
 
 /// «ОТКРЫТЬ» у названия строки при наведении.
 final class GridOpenButton: NSButton {
-    static let size = NSSize(width: 78, height: 22)
+    static let size = NSSize(width: 72, height: 20)
 
     init() {
         super.init(frame: NSRect(origin: .zero, size: Self.size))
@@ -501,12 +501,12 @@ final class GridOpenButton: NSButton {
         Palette.border.setStroke()
         path.stroke()
         let icon = MainActor.assumeIsolated { GridSymbols.image("rectangle.righthalf.inset.filled", size: 10, color: Palette.textSecondary) }
-        icon.draw(in: NSRect(x: 7, y: (bounds.height - 12) / 2, width: 13, height: 12))
-        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10.5, weight: .semibold),
-                                                          .foregroundColor: Palette.textSecondary, .kern: 0.6]
+        icon.draw(in: NSRect(x: 6, y: (bounds.height - 12) / 2, width: 13, height: 12))
+        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10, weight: .semibold),
+                                                          .foregroundColor: Palette.textSecondary, .kern: 0.4]
         let title = NSAttributedString(string: GridStrings.open, attributes: attributes)
         let size = title.size()
-        title.draw(at: NSPoint(x: 24, y: (bounds.height - size.height) / 2))
+        title.draw(at: NSPoint(x: 21, y: (bounds.height - size.height) / 2))
     }
 }
 

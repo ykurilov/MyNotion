@@ -121,12 +121,21 @@ public final class RowMenuPresenter {
                     grid.clearSelection()
                 }))
             case .footer:
-                guard single, let page = try? controller.store.write({ try $0.page(rowId) }) else { continue }
+                guard single, let content = try? controller.store.pageContent(rowId) else { continue }
+                let words = RowMenuFooter.wordCount(of: [content.page.title] + content.blocks.map(\.text.string))
                 entries.append(.separator)
-                entries.append(.footer("Изменено \(Self.editedText(page.updatedAt))", identifier: "database-row-menu-footer"))
+                entries.append(.footer(RowMenuFooter.text(updatedAt: content.page.updatedAt, wordCount: words), identifier: "database-row-menu-footer"))
             }
         }
         return entries
+    }
+
+}
+
+/// Подпись внизу меню строки: «Изменено 5 минут назад, 12 слов» (слова — название и текст страницы строки).
+enum RowMenuFooter {
+    static func text(updatedAt: Date, wordCount: Int, now: Date = Date()) -> String {
+        "Изменено \(editedText(updatedAt, now: now)), \(words(wordCount))"
     }
 
     static func editedText(_ date: Date, now: Date = Date()) -> String {
@@ -134,5 +143,16 @@ public final class RowMenuPresenter {
         formatter.locale = Locale(identifier: "ru_RU")
         formatter.unitsStyle = .full
         return formatter.localizedString(for: date, relativeTo: now)
+    }
+
+    /// «1 слово», «3 слова», «11 слов».
+    static func words(_ count: Int) -> String {
+        let lastTwo = count % 100, last = count % 10
+        let word = (11...14).contains(lastTwo) ? "слов" : last == 1 ? "слово" : (2...4).contains(last) ? "слова" : "слов"
+        return "\(count) \(word)"
+    }
+
+    static func wordCount(of texts: [String]) -> Int {
+        texts.reduce(0) { $0 + $1.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count }
     }
 }

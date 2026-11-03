@@ -8,8 +8,8 @@ import VisualStyle
 enum PanelMetrics {
     /// Окно простого фильтра, сортировки, видимости, группировки, раскладки ≈ 290.
     static let windowWidth: CGFloat = 300
-    /// Расширенный фильтр ≈ 620 (`notion-advanced-filter-nested-group.png`).
-    static let advancedWidth: CGFloat = 640
+    /// Расширенный фильтр ≈ 620 (условие «Относительно сегодня» целиком — на 60 шире) (`notion-advanced-filter-nested-group.png`).
+    static let advancedWidth: CGFloat = 700
     /// Сортировка: ручка, свойство, направление, ✕ ≈ 380.
     static let sortWidth: CGFloat = 400
     /// Выше — прокрутка.
