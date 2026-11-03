@@ -118,6 +118,8 @@ struct MyNotionApp: App {
         store.addWriteHook(SearchIndexer())
         // 004: сравнимые колонки и строки поиска значений ячеек — в той же транзакции (research R3, R14).
         store.addWriteHook(CellIndexer())
+        // 004: «Дублировать» базы и «Переместить в» строки пишут записи баз в транзакции самой операции (T102).
+        store.addTreeAddon(DatabaseTreeAddon())
         // 004, US5: зависящие формулы — в той же транзакции; полные пересчёты — в фоне (research R21).
         let formulas = FormulasAddon.install(on: store)
         // Индекс обратных ссылок — в той же транзакции, что и блок (research R10); после фиксации открытые страницы

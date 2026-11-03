@@ -13,6 +13,8 @@ public struct VersionSummary: Sendable, Hashable, Codable {
     public var blocksAdded = 0
     public var blocksRemoved = 0
     public var blocksChanged = 0
+    /// Значения свойств или связи строки базы (research R15).
+    public var propertiesChanged = false
     /// Снимок «до правки агента» (005, research R5): имя агента, который сейчас начнёт править страницу.
     public var agent: String?
 
@@ -46,6 +48,7 @@ public struct VersionSummary: Sendable, Hashable, Codable {
         if blocksAdded > 0 { lines.append(Self.count(blocksAdded, one: "добавлен", many: "добавлено")) }
         if blocksRemoved > 0 { lines.append(Self.count(blocksRemoved, one: "удалён", many: "удалено")) }
         if blocksChanged > 0 { lines.append(Self.count(blocksChanged, one: "изменён", many: "изменено")) }
+        if propertiesChanged { lines.append("изменены свойства") }
         return lines.isEmpty ? ["без изменений"] : lines
     }
 
@@ -58,7 +61,7 @@ public struct VersionSummary: Sendable, Hashable, Codable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case isFirst, titleChanged, iconChanged, coverChanged, layoutChanged, blocksAdded, blocksRemoved, blocksChanged, agent
+        case isFirst, titleChanged, iconChanged, coverChanged, layoutChanged, blocksAdded, blocksRemoved, blocksChanged, propertiesChanged, agent
     }
 
     /// Неизвестные и пропущенные ключи — по умолчанию: сводку могла записать другая версия приложения.
@@ -72,6 +75,7 @@ public struct VersionSummary: Sendable, Hashable, Codable {
         blocksAdded = try container.decodeIfPresent(Int.self, forKey: .blocksAdded) ?? 0
         blocksRemoved = try container.decodeIfPresent(Int.self, forKey: .blocksRemoved) ?? 0
         blocksChanged = try container.decodeIfPresent(Int.self, forKey: .blocksChanged) ?? 0
+        propertiesChanged = try container.decodeIfPresent(Bool.self, forKey: .propertiesChanged) ?? false
         agent = try container.decodeIfPresent(String.self, forKey: .agent)
     }
 }
@@ -95,6 +99,7 @@ public enum VersionDiff {
             }
         }
         summary.blocksRemoved = before.keys.filter { !after.contains($0) }.count
+        summary.propertiesChanged = previous.rowValues != current.rowValues && current.rowValues != nil
         return summary
     }
 

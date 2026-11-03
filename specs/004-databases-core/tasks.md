@@ -267,11 +267,11 @@ description: "Задачи: базы данных — основа"
 
 **Goal**: поиск страниц по значениям, версии строк со значениями, копия и перенос баз и строк, починка ID.
 
-- [ ] T100 [P] [X] `PK/Tests/PageSearchTests/PageSearchDatabaseTests.swift`: строка находится по названию, телу и текстовому значению; путь «Родитель / … / База»; шаблоны и корзина — нет
-- [ ] T101 [P] [X] `PK/Tests/PageVersionsTests/RowVersionTests.swift`: снимок версии 2 с ячейками и связями; правка ячейки ставит в очередь снимка; восстановление возвращает значения с ⌘Z; снимок версии 1 читается
-- [ ] T102 [P] [X] `PK/Tests/DatabasesTests/DatabaseCopyMoveTests.swift` по spec, Edge Cases: «Дублировать» базу (схема, виды, строки, шаблоны, связи на ту же базу односторонне, своя база — на копию), строку в другую базу (совпавшие свойства — значения, остальные — ⌘Z), строку в страницу (предупреждение), страницу в базу (пустые свойства), удалить базу — вернуть со связями
-- [ ] T103 [P] [X] `PK/Tests/SyncTests/UniqueIdRepairTests.swift`: два клиента без связи создают строки с одним номером — после встречи номера разные, перенумерация сходится
-- [ ] T104 [X] Код: `PK/Sources/PageSearch/` (выдача и путь), `PK/Sources/PageVersions/PageSnapshot.swift` и восстановление, копия и перенос в `PK/Sources/NotesCore/Tree/PageTreeOperations+{Duplicate,MoveBlocks}.swift` и `Databases/Operations/DatabaseOperations+Copy.swift`, починка в `Databases/UniqueIds.swift` (T100–T103)
+- [x] T100 [P] [X] `PK/Tests/PageSearchTests/PageSearchDatabaseTests.swift`: строка находится по названию, телу и текстовому значению; путь «Родитель / … / База»; шаблоны и корзина — нет
+- [x] T101 [P] [X] `PK/Tests/PageVersionsTests/RowVersionTests.swift`: снимок версии 2 с ячейками и связями; правка ячейки ставит в очередь снимка; восстановление возвращает значения с ⌘Z; снимок версии 1 читается
+- [x] T102 [P] [X] `PK/Tests/DatabasesTests/DatabaseCopyMoveTests.swift` по spec, Edge Cases: «Дублировать» базу (схема, виды, строки, шаблоны, связи на ту же базу односторонне, своя база — на копию), строку в другую базу (совпавшие свойства — значения, остальные — ⌘Z), строку в страницу (предупреждение), страницу в базу (пустые свойства), удалить базу — вернуть со связями
+- [x] T103 [P] [X] `PK/Tests/SyncTests/UniqueIdRepairTests.swift`: два клиента без связи создают строки с одним номером — после встречи номера разные, перенумерация сходится
+- [x] T104 [X] Код: `PK/Sources/PageSearch/` (выдача и путь), `PK/Sources/PageVersions/PageSnapshot.swift` и восстановление, копия и перенос в `PK/Sources/NotesCore/Tree/PageTreeOperations+{Duplicate,MoveBlocks}.swift` и `Databases/Operations/DatabaseOperations+Copy.swift`, починка в `Databases/UniqueIds.swift` (T100–T103)
 - [ ] T105 [X] Затронутые тесты зелёные; замер перехода и поиска на эталоне с базами; коммит
 
 ---

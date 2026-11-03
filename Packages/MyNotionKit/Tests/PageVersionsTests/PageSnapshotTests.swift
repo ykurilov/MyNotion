@@ -4,7 +4,7 @@ import Testing
 @testable import PageVersions
 
 /// Снимок страницы для версии (data-model.md, «PageSnapshot»): поля страницы и все блоки всех потоков в формате записи 002,
-/// JSON со сжатием LZFSE, `snapshotVersion` 1.
+/// JSON со сжатием LZFSE, `snapshotVersion` — текущая версия формата.
 @MainActor
 @Suite("Версии: снимок страницы")
 struct PageSnapshotTests {
@@ -40,7 +40,7 @@ struct PageSnapshotTests {
         let pageId = try richPage()
         let content = try #require(try mac.store.pageContent(pageId))
         let snapshot = PageSnapshot(page: content.page, blocks: content.blocks)
-        #expect(snapshot.snapshotVersion == 1)
+        #expect(snapshot.snapshotVersion == PageSnapshot.currentVersion)
         #expect(snapshot.title == "Снимок")
         #expect(snapshot.icon == "📸")
         #expect(snapshot.cover == PageCover(source: .gallery("gradients_3"), offset: 0.3))
@@ -72,9 +72,9 @@ struct PageSnapshotTests {
     func newerFormatRejected() throws {
         let content = try #require(try mac.store.pageContent(try mac.page("Новее", texts: ["а"]).id))
         var snapshot = PageSnapshot(page: content.page, blocks: content.blocks)
-        snapshot.snapshotVersion = 2
+        snapshot.snapshotVersion = PageSnapshot.currentVersion + 1
         let data = try snapshot.compressed()
-        #expect(throws: PageSnapshotError.newerFormat(2)) { try PageSnapshot(compressed: data) }
+        #expect(throws: PageSnapshotError.newerFormat(PageSnapshot.currentVersion + 1)) { try PageSnapshot(compressed: data) }
     }
 
     @Test("Снимок 1 000 блоков: размер записан")
