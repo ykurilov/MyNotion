@@ -53,9 +53,9 @@ enum RowHandlers {
 
     static let addRows: CommandHandler = { session in
         let database = try session.database()
-        if session.string("template") != nil {
-            throw ControlError(.notImplemented, "Шаблоны строк ещё не готовы", hint: "Без --template", details: ["argument": "template"])
-        }
+        // Без --template строки делаются по шаблону базы по умолчанию, как «+ Новая строка» в окне.
+        let template = try session.string("template").map { try session.rowTemplate($0, in: database.page.id) }
+            ?? session.templateList(of: database.page.id).defaultTemplateId.map { try session.rowTemplate($0.controlText, in: database.page.id) }
         let batch = session.args["rows"]
         let items: [ControlJSON]
         if let batch {
@@ -80,7 +80,17 @@ enum RowHandlers {
                 throw batch == nil ? error : error.adding("row", .number(Double(index)))
             }
         }
-        let ids = try writer.write(inputs, to: nil)
+        let ids: [UUID]
+        if let template {
+            // Строки по шаблону, значения команды — поверх него.
+            ids = try inputs.map { _ in
+                try session.databases.addRow(to: database.page.id, in: nil, defaults: NewRowDefaults(), template: .template(template.id),
+                                             now: session.host.now)
+            }
+            try writer.write(inputs, to: ids)
+        } else {
+            ids = try writer.write(inputs, to: nil)
+        }
         session.touch(Set(ids))
         let rows = try session.rowsJSON(ids, databaseId: database.page.id)
         var data: [String: ControlJSON] = ["rows": .array(rows), "count": .number(Double(ids.count))]
