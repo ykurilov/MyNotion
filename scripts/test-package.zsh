@@ -8,7 +8,7 @@
 #
 #   zsh scripts/test-package.zsh                    # все модули
 #   zsh scripts/test-package.zsh --filter Sync      # аргументы уходят каждому модулю
-#   MYNOTION_PERF=1 zsh scripts/test-package.zsh --filter "Performance|FullScale"   # замеры скорости
+#   MYNOTION_PERF=1 zsh scripts/test-package.zsh --filter "Performance|FullScale"   # замеры скорости, Release
 #
 # Логи модулей: Packages/MyNotionKit/.build/test-lanes/<Модуль>.log.
 # Выход с ошибкой, если упал хоть один модуль.
@@ -20,9 +20,11 @@ root=${0:A:h:h}
 cd "$root/Packages/MyNotionKit" || exit 1
 lanes=${MYNOTION_TEST_LANES:-4}
 
-swift build --build-tests -j "$lanes" || exit 1
+# Замеры скорости — в Release, как бюджеты quickstart; @testable в Release требует -enable-testing.
+config=(); [[ -n ${MYNOTION_PERF:-} ]] && config=(-c release -Xswiftc -enable-testing)
+swift build --build-tests $config -j "$lanes" || exit 1
 
-bin=$(swift build --show-bin-path)
+bin=$(swift build $config --show-bin-path)
 helper=${$(xcrun --find swift):h:h}/libexec/swift/pm/swiftpm-testing-helper
 # Тестовый модуль ищет XCTest и Testing там же, где их находит `swift test`.
 platform=$(xcode-select -p)/Platforms/MacOSX.platform/Developer

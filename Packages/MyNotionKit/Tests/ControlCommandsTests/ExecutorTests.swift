@@ -199,6 +199,8 @@ import Testing
         if case .result(let response) = lines.last { #expect(response.id == "r1") }
     }
 
+    // Отмена видна тестам только в отладочной сборке: `CommandExecutor.lastUndoManager` есть только там.
+    #if DEBUG
     @Test func writeIsOneUndoStep() async throws {
         let parent = try host.page("Корень")
         let executor = executor(["page.create": { session in
@@ -212,4 +214,5 @@ import Testing
         executor.lastUndoManager?.undo()
         #expect(executor.lastUndoManager?.canUndo == false)
     }
+    #endif
 }

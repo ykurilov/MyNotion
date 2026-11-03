@@ -1,6 +1,6 @@
 import XCTest
 
-/// Импорт из Notion (US6): «Файл → Импорт из Notion…» → окно выбора (путь через ⌘⇧G) → «Перенести» → окно итога
+/// Импорт из Notion (US6): «Файл → Импорт из Notion…» → окно выбора (путь через ⌘⇧G) → «Перенести» → «Перенести без схемы» → окно итога
 /// → страницы выгрузки в базе; CSV-таблица «Задачи» — база, её строки — страницы. Повтор той же выгрузки — вопрос до начала, «Отмена» дублей не создаёт.
 final class NotionImportUITests: XCTestCase {
     override func setUpWithError() throws {
@@ -21,6 +21,10 @@ final class NotionImportUITests: XCTestCase {
         XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 10))
 
         chooseExport(source, in: app)
+        // В выгрузке есть база «Задачи»: до переноса — вопрос, дочитать ли её схему из Notion (Q3). Без схемы — по таблице.
+        let schemaOffer = app.descendants(matching: .any)["notion-import-schema-offer"]
+        XCTAssertTrue(schemaOffer.waitForExistence(timeout: 30), "Нет вопроса о схеме баз из Notion")
+        app.buttons["notion-import-schema-skip"].click()
         let report = app.descendants(matching: .any)["notion-import-report"]
         XCTAssertTrue(report.waitForExistence(timeout: 30), "Отчёт об импорте не появился")
         // Текст SwiftUI на macOS виден тестам как значение элемента, а не как подпись.

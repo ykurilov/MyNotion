@@ -595,6 +595,8 @@ import Testing
         #expect(!document.hasUnsavedChanges)
     }
 
+    // Отмена видна тестам только в отладочной сборке: `CommandExecutor.lastUndoManager` есть только там.
+    #if DEBUG
     @Test func eachCommandIsOneUndoStep() async throws {
         await run("block.insert", JSONArgument.page(page) + ["kind": "paragraph", "text": "новый", "first": true])
         #expect(try host.texts(page.id) == ["новый", "один", "два", "три"])
@@ -630,6 +632,7 @@ import Testing
         #expect(try outline(nested.id).count == 6)
         #expect(try stored(target.id).allSatisfy { $0.text.string.isEmpty })
     }
+    #endif
 
     @Test func failedStepRollsBackBatch() async throws {
         let before = try outline()
