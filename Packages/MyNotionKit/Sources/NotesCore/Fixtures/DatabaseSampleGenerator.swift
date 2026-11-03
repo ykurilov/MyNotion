@@ -154,7 +154,7 @@ private struct Writer {
         let tasksKey = FractionalSortKey.between(projectsKey, nil)
         let overviewKey = FractionalSortKey.between(tasksKey, nil)
 
-        sample.projectsId = try insertPage(DatabaseSampleGenerator.projectsTitle, icon: "🗂", parent: nil, sortKey: projectsKey, withBlock: false)
+        sample.projectsId = try insertPage(DatabaseSampleGenerator.projectsTitle, icon: "🗂️", parent: nil, sortKey: projectsKey, withBlock: false)
         sample.tasksId = try insertPage(DatabaseSampleGenerator.tasksTitle, icon: "✅", parent: nil, sortKey: tasksKey, withBlock: false)
         sample.overviewId = try insertPage(DatabaseSampleGenerator.overviewTitle, icon: "📊", parent: nil, sortKey: overviewKey, withBlock: false)
         sample.inlineTasksId = try insertPage(DatabaseSampleGenerator.inlineTasksTitle, icon: nil, parent: sample.overviewId,

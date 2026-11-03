@@ -55,9 +55,13 @@ public final class ComputationHook: NotesWriteHook {
         var touched: [UUID: [UUID: Set<UUID>?]] = [:]
         func touch(_ databaseId: UUID, _ row: UUID, _ property: UUID?) {
             var rows = touched[databaseId] ?? [:]
-            if let property, let known = rows[row] { rows[row] = known.map { $0.union([property]) } } else if let property, rows[row] == nil {
-                rows[row] = .some([property])
-            } else { rows[row] = .some(nil) }
+            // Разбор обоих уровней явно: `rows[row] = known.map { … }` с пустым `known` удалял строку из словаря,
+            // и новая строка с названием в той же записи оставалась без пересчёта.
+            switch (rows[row], property) {
+            case (.some(.some(let known)), let property?): rows[row] = .some(known.union([property]))
+            case (.none, let property?): rows[row] = .some([property])
+            default: rows[row] = .some(nil)
+            }
             touched[databaseId] = rows
         }
         var databaseOf: [UUID: UUID?] = [:]

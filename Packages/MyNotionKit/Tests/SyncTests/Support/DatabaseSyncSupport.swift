@@ -18,8 +18,11 @@ struct SyncTasksDatabase {
 }
 
 @MainActor
-func makeTasksDatabase(on mac: SyncTestMac) throws -> SyncTasksDatabase {
-    try mac.store.write { tx in
+func makeTasksDatabase(on mac: SyncTestMac) throws -> SyncTasksDatabase { try makeTasksDatabase(in: mac.store) }
+
+@MainActor
+func makeTasksDatabase(in store: NotesStore) throws -> SyncTasksDatabase {
+    try store.write { tx in
         let page = try tx.createPage(title: "Задачи")
         try tx.saveDatabase(DatabaseSchema(pageId: page.id))
         var key: FractionalSortKey?
@@ -51,4 +54,19 @@ extension SyncTestMac {
     }
 
     func dbProperty(_ id: UUID) throws -> DatabaseProperty? { try store.write { try $0.property(id) } }
+}
+
+/// Все записи баз одной строкой на запись — без меток времени: у двух сошедшихся Mac одинаково.
+@MainActor
+func databaseDump(_ store: NotesStore) throws -> [String] {
+    let records = try store.write { try $0.allDatabaseRecords() }
+    func text(_ value: JSONValue?) -> String { value?.jsonText ?? "∅" }
+    func date(_ value: Date?) -> String { value.map { "\($0.timeIntervalSince1970)" } ?? "∅" }
+    return records.databases.map { "база \($0.pageId) встроенная=\($0.isInline) шаблон=\($0.defaultTemplateId?.uuidString ?? "∅")" }
+        + records.properties.map { "свойство \($0.id) \($0.name) \($0.kind.rawValue) \(text($0.config)) \($0.sortKey) удалено=\(date($0.deletedAt))" }
+        + records.options.map { "вариант \($0.id) \($0.name) \($0.color) \($0.statusGroup?.rawValue ?? "") \($0.sortKey) удалён=\(date($0.deletedAt))" }
+        + records.views.map { "вид \($0.id) \($0.name) \($0.type) \(text($0.filter)) \(text($0.sorts)) \(text($0.columns)) \(text($0.group)) \(text($0.layoutOptions))" }
+        + records.cells.map { "ячейка \($0.rowId) \($0.propertyId) \(text($0.value))" }.sorted()
+        + records.links.map { "связь \($0.id) \($0.propertyId) \($0.rowId)→\($0.targetRowId) \($0.sortKey) есть=\($0.isPresent)" }.sorted()
+        + records.rowOrders.map { "порядок \($0.viewId) \($0.rowId) \($0.sortKey)" }.sorted()
 }

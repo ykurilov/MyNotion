@@ -76,21 +76,18 @@ public struct RollupRecompute: Sendable {
         try ComputedWriter.write(values(rows, in: transaction.database), in: transaction)
     }
 
-    /// Все строки базы в фоне (не с главного потока): чтение пачками по `readBatch`, запись — по `writeBatch` строк.
-    public func recomputeAll(in store: NotesStore, readBatch: Int = 500, writeBatch: Int = 100) throws {
+    /// Все строки базы в фоне (не с главного потока): пачками по `batch` строк, чтение и запись пачки — одной записью.
+    /// Иначе правка цели между чтением и записью (её сводки посчитаны в ней же) затиралась бы прочитанным раньше:
+    /// ⌘Z фоновой смены типа оставлял сводку пустой.
+    public func recomputeAll(in store: NotesStore, batch: Int = 100) throws {
         guard !rollups.isEmpty else { return }
         let rows = try store.database.dbWriter.read { db in
             try String.fetchAll(db, sql: "SELECT id FROM page WHERE parentId = ? AND trashedAt IS NULL ORDER BY sortKey",
                                 arguments: [databaseId.databaseText]).compactMap(UUID.init(uuidString:))
         }
-        for start in stride(from: 0, to: rows.count, by: readBatch) {
-            let chunk = Array(rows[start..<min(start + readBatch, rows.count)])
-            let values = try store.database.dbWriter.read { db in try self.values(chunk, in: db) }
-            let perRow = Dictionary(grouping: values, by: \.rowId)
-            for writeStart in stride(from: 0, to: chunk.count, by: writeBatch) {
-                let part = chunk[writeStart..<min(writeStart + writeBatch, chunk.count)].flatMap { perRow[$0] ?? [] }
-                try store.database.dbWriter.write { db in try ComputedWriter.write(part, in: db) }
-            }
+        for start in stride(from: 0, to: rows.count, by: batch) {
+            let chunk = Array(rows[start..<min(start + batch, rows.count)])
+            try store.database.dbWriter.write { db in try ComputedWriter.write(self.values(chunk, in: db), in: db) }
         }
     }
 

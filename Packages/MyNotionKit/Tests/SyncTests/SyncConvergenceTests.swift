@@ -482,3 +482,201 @@ struct SyncConvergenceV3Tests {
         return (a, b)
     }
 }
+
+/// Сходимость баз 004 через настоящий цикл синхронизации двух Mac и поддельный сервер (T110): все семь сущностей v4,
+/// одновременные правки ячеек, вариантов, связей и видов без связи, Mac с форматом 3. Слияние по полям подробно
+/// проверяют `ChangeMergerV4Tests`, `RelationLinkMergeTests` и `SyncPayloadV4Tests`.
+@MainActor
+@Suite("Сходимость баз через сервер", .serialized)
+struct SyncConvergenceV4Tests {
+    @Test("Все сущности v4 доходят: база, свойства (и удалённое), варианты со статусом, вид с фильтром и группой, ячейки, связи, порядок, шаблон")
+    func allEntitiesArrive() async throws {
+        let server = try await SyncTestServerKind.fake.start()
+        defer { server.stop() }
+        let (a, b) = try await connectedPair(server)
+        defer { a.stop(); b.stop() }
+
+        let db = try makeTasksDatabase(in: a.store)
+        try a.store.write { tx throws in
+            let status = try tx.saveProperty(DatabaseProperty(databaseId: db.database, name: "Этап", kind: .status, sortKey: FractionalSortKey(rawValue: "x")!))
+            let doing = try tx.saveOption(SelectOption(propertyId: status.id, name: "В работе", color: .blue, sortKey: .between(nil, nil), statusGroup: .inProgress))
+            try tx.setCell(rowId: db.row, propertyId: status.id, value: .string(doing.id.databaseText))
+            var old = try tx.saveProperty(DatabaseProperty(databaseId: db.database, name: "Старое", kind: .number, sortKey: FractionalSortKey(rawValue: "y")!))
+            try tx.setCell(rowId: db.otherRow, propertyId: old.id, value: 7)
+            old.deletedAt = Date(timeIntervalSince1970: 1_790_000_000)
+            try tx.saveProperty(old)
+            var view = try #require(try tx.view(db.view))
+            view.filter = ["propertyId": .string(db.select.databaseText), "condition": "isNotEmpty"]
+            view.group = ["propertyId": .string(status.id.databaseText)]
+            try tx.saveView(view)
+            var template = try tx.createPage(title: "Новая задача", parentId: db.database)
+            template.isTemplate = true
+            try tx.updatePage(template)
+            try tx.setCell(rowId: template.id, propertyId: db.text, value: ["runs": [], "string": "из шаблона"])
+            var schema = try #require(try tx.database(db.database))
+            schema.defaultTemplateId = template.id
+            try tx.saveDatabase(schema)
+        }
+        let expected = try databaseDump(a.store)
+        for kind in ["база", "свойство", "вариант", "вид", "ячейка", "связь", "порядок"] {
+            #expect(expected.contains { $0.hasPrefix(kind + " ") }, "в базе A есть «\(kind)»")
+        }
+        try await eventually("базы сошлись", within: .seconds(15)) {
+            try databaseDump(b.store) == expected && a.engine.status == .ready && b.engine.status == .ready
+        }
+        #expect(try b.store.write { try $0.page(db.row) }?.title == "Позвонить")
+    }
+
+    @Test("Без связи: разные ячейки одной строки с двух Mac — обе; одна ячейка — позднее побеждает")
+    func concurrentCellEdits() async throws {
+        let server = try await SyncTestServerKind.fake.start()
+        defer { server.stop() }
+        let (a, b, db) = try await pairWithDatabase(server)
+        defer { a.stop(); b.stop() }
+
+        try await offline(a, b)
+        a.wall.set(50_000)
+        try a.store.write { tx in
+            try tx.setCell(rowId: db.row, propertyId: db.text, value: ["runs": [], "string": "правка A"])
+            try tx.setCell(rowId: db.otherRow, propertyId: db.text, value: ["runs": [], "string": "раньше, A"])
+        }
+        b.wall.set(60_000)
+        try b.store.write { tx in
+            try tx.setCell(rowId: db.row, propertyId: db.select, value: nil)
+            try tx.setCell(rowId: db.otherRow, propertyId: db.text, value: ["runs": [], "string": "позже, B"])
+        }
+        try await online(a, b)
+
+        for mac in [a, b] {
+            try mac.store.write { tx throws in
+                #expect(try tx.cell(rowId: db.row, propertyId: db.text)?.value?["string"]?.string == "правка A", "\(mac.name): правка A на месте")
+                #expect(try tx.cell(rowId: db.row, propertyId: db.select)?.value == nil, "\(mac.name): правка B на месте")
+                #expect(try tx.cell(rowId: db.otherRow, propertyId: db.text)?.value?["string"]?.string == "позже, B", "\(mac.name): позднее победило")
+            }
+        }
+    }
+
+    @Test("Без связи: по варианту выбора и по связи с каждого Mac — после встречи все четыре на месте")
+    func concurrentOptionsAndLinks() async throws {
+        let server = try await SyncTestServerKind.fake.start()
+        defer { server.stop() }
+        let (a, b, db) = try await pairWithDatabase(server)
+        defer { a.stop(); b.stop() }
+        let third = try a.store.write { try $0.createPage(title: "Третья", parentId: db.database).id }
+        try await eventually("третья строка дошла", within: .seconds(10)) { try b.store.write { try $0.page(third) } != nil }
+
+        try await offline(a, b)
+        try a.store.write { tx in
+            try tx.saveOption(SelectOption(propertyId: db.select, name: "С A", color: .red, sortKey: FractionalSortKey(rawValue: "x")!))
+            try tx.saveRelationLink(RelationLink(propertyId: db.relation, rowId: db.row, targetRowId: third, sortKey: .between(nil, nil)))
+        }
+        try b.store.write { tx in
+            try tx.saveOption(SelectOption(propertyId: db.select, name: "С B", color: .blue, sortKey: FractionalSortKey(rawValue: "y")!))
+            try tx.saveRelationLink(RelationLink(propertyId: db.relation, rowId: db.otherRow, targetRowId: third, sortKey: .between(nil, nil)))
+        }
+        try await online(a, b)
+
+        for mac in [a, b] {
+            try mac.store.write { tx throws in
+                #expect(Set(try tx.options(ofProperty: db.select).map(\.name)) == ["Готово", "С A", "С B"], "\(mac.name): все варианты")
+                #expect(Set(try tx.relationLinks(propertyId: db.relation, rowId: db.row).map(\.targetRowId)) == [db.otherRow, third], "\(mac.name)")
+                #expect(try tx.relationLinks(propertyId: db.relation, rowId: db.otherRow).map(\.targetRowId) == [third], "\(mac.name)")
+            }
+        }
+    }
+
+    @Test("Без связи: фильтр вида на одном Mac, группировка на другом — оба; название вида — позднее")
+    func concurrentViewEdits() async throws {
+        let server = try await SyncTestServerKind.fake.start()
+        defer { server.stop() }
+        let (a, b, db) = try await pairWithDatabase(server)
+        defer { a.stop(); b.stop() }
+        let filter: JSONValue = ["propertyId": .string(db.select.databaseText), "condition": "isNotEmpty"]
+        let group: JSONValue = ["propertyId": .string(db.select.databaseText)]
+
+        try await offline(a, b)
+        a.wall.set(50_000)
+        try a.store.write { tx throws in
+            var view = try #require(try tx.view(db.view))
+            view.filter = filter
+            view.name = "Вид A"
+            try tx.saveView(view)
+        }
+        b.wall.set(60_000)
+        try b.store.write { tx throws in
+            var view = try #require(try tx.view(db.view))
+            view.group = group
+            view.name = "Вид B"
+            try tx.saveView(view)
+        }
+        try await online(a, b)
+
+        for mac in [a, b] {
+            let view = try #require(try mac.store.write { try $0.view(db.view) })
+            #expect(view.filter == filter, "\(mac.name): фильтр A")
+            #expect(view.group == group, "\(mac.name): группировка B")
+            #expect(view.name == "Вид B", "\(mac.name): позднее название")
+        }
+    }
+
+    @Test("Mac с форматом 3 не применяет пачки v4 и показывает «Обновите MyNotion на этом Mac»; базы не появляется")
+    func formatThreeMacAsksToUpdate() async throws {
+        let server = try await SyncTestServerKind.fake.start()
+        defer { server.stop() }
+        let a = try EngineTestMac(name: "Mac A", wallMillis: 10_000)
+        try await a.connectFirst(server)
+        let b = try EngineTestMac(name: "Mac B", wallMillis: 20_000)
+        b.supportedFormatVersion = 3
+        try await b.join(server, code: a.makeJoinCode())
+        a.start()
+        b.start()
+        defer { a.stop(); b.stop() }
+
+        let db = try makeTasksDatabase(in: a.store)
+        try await eventually("B сообщил об обновлении", within: .seconds(10)) {
+            if case .error(let message) = b.engine.status { message.localizedCaseInsensitiveContains("Обновите MyNotion на этом Mac") } else { false }
+        }
+        #expect(try databaseDump(b.store).isEmpty, "на старом Mac записей базы нет")
+        #expect(try b.store.write { try $0.page(db.row) } == nil, "строки базы на Mac B нет")
+        #expect(try databaseDump(a.store).count > 0, "у нового Mac всё на месте")
+    }
+
+    // MARK: Помощники
+
+    private func connectedPair(_ server: any SyncTestServer) async throws -> (EngineTestMac, EngineTestMac) {
+        let a = try EngineTestMac(name: "Mac A", wallMillis: 10_000)
+        try await a.connectFirst(server)
+        let b = try EngineTestMac(name: "Mac B", wallMillis: 20_000)
+        try await b.join(server, code: a.makeJoinCode())
+        a.start()
+        b.start()
+        return (a, b)
+    }
+
+    /// Два Mac и база «Задачи» с первого, уже дошедшая до второго.
+    private func pairWithDatabase(_ server: any SyncTestServer) async throws -> (EngineTestMac, EngineTestMac, SyncTasksDatabase) {
+        let (a, b) = try await connectedPair(server)
+        let db = try makeTasksDatabase(in: a.store)
+        try await eventually("база дошла до B", within: .seconds(10)) {
+            try databaseDump(b.store) == databaseDump(a.store) && a.engine.status == .ready && b.engine.status == .ready
+        }
+        return (a, b, db)
+    }
+
+    private func offline(_ a: EngineTestMac, _ b: EngineTestMac) async throws {
+        a.connection.isOnline = false
+        b.connection.isOnline = false
+        try await eventually("оба без связи", within: .seconds(10)) { a.engine.status.isError && b.engine.status.isError }
+    }
+
+    /// Связь вернулась; ждать, пока записи баз обоих Mac не совпадут.
+    private func online(_ a: EngineTestMac, _ b: EngineTestMac) async throws {
+        a.connection.isOnline = true
+        b.connection.isOnline = true
+        a.engine.syncNow()
+        b.engine.syncNow()
+        try await eventually("базы сошлись", within: .seconds(20)) {
+            try databaseDump(a.store) == databaseDump(b.store) && a.engine.status == .ready && b.engine.status == .ready
+        }
+    }
+}
