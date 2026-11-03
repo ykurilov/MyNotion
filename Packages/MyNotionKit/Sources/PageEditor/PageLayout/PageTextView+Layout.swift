@@ -57,7 +57,7 @@ extension PageTextView {
         let appearance = PageAppearance(page)
         guard appearance != coverSlot.shownAppearance else { return }
         coverSlot.shownAppearance = appearance
-        applyLayout(PageLayoutSettings(isFullWidth: page.isFullWidth, isSmallText: page.isSmallText))
+        applyLayout(PageLayoutSettings(isFullWidth: page.isFullWidth, isSmallText: page.isSmallText, textZoom: layoutSettings.textZoom))
         for addon in headerAddons { addon.pageDidChange(page, in: self) }
     }
 
@@ -65,18 +65,32 @@ extension PageTextView {
     /// атрибутах; колонки, ячейки и код — той же шкалой (виды 002 не пересоздаются).
     public func applyLayout(_ settings: PageLayoutSettings) {
         guard settings != layoutSettings else { return }
-        let scaleChanged = settings.fontScale != layoutSettings.fontScale
+        let ratio = settings.fontScale / layoutSettings.fontScale
+        // Место — по свежей раскладке видимой области: после правок и смены выделения она бывает устаревшей.
+        if ratio != 1 { textLayoutManager?.textViewportLayoutController.layoutViewport() }
+        let place = ratio != 1 ? scrollPlace() : nil
         layoutSettings = settings
-        if scaleChanged {
+        header.titleScale = settings.textZoom
+        if ratio != 1 {
             mapper.fontScale = settings.fontScale
             if let textStorage { PageFontScaling.rescale(textStorage, in: NSRange(location: 0, length: textStorage.length), to: settings.fontScale) }
             typingAttributes = typingAttributes
             for codeBlock in codeBlocks.allViews { codeBlock.applyFontScale(settings.fontScale) }
-            for editor in embeddedFlowEditors { editor.applyLayout(PageLayoutSettings(isSmallText: settings.isSmallText)) }
+            for editor in embeddedFlowEditors { editor.applyLayout(PageLayoutSettings(isSmallText: settings.isSmallText, textZoom: settings.textZoom)) }
         }
         layoutColumn()
         needsLayout = true
         needsDisplay = true
+        // Новая шкала — тот же блок у верха видимой области, сдвиг в нём — в той же шкале.
+        if let place { scroll(to: TabScroll(blockId: place.blockId, offset: place.offset * ratio)) }
+    }
+
+    /// Масштаб текста приложения сменился (⌘+, ⌘−, ⌘0): колонки и ячейки получают его от своей страницы.
+    @objc func pageTextZoomDidChange(_ notification: Notification) {
+        guard showsPageHeader, let zoom = notification.object as? PageTextZoom, zoom === textZoom else { return }
+        var settings = layoutSettings
+        settings.textZoom = zoom.scale
+        applyLayout(settings)
     }
 
     /// Живые редакторы страниц (без редакторов колонок и ячеек): пробы вкладок проверяют, что редактор один.

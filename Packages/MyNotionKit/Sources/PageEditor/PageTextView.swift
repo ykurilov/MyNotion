@@ -143,6 +143,8 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
     public internal(set) var layoutSettings = PageLayoutSettings()
     /// Место обложки над шапкой (`PageLayout/`).
     let coverSlot = CoverSlot()
+    /// Масштаб текста, за которым следует редактор; пробы подставляют свой, чтобы не трогать общий.
+    var textZoom = PageTextZoom.shared
     /// Добавки шапки от хозяина редактора (US1: обложка); живут, пока жив редактор.
     public internal(set) var headerAddons: [any PageHeaderAddon] = []
 
@@ -179,8 +181,10 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
         tableOfContentsTracker = TableOfContentsTracker(textView: self)
         mapper = PageTextStorageMapper(flow: document, textStorage: textStorage!)
         // Вид страницы — до загрузки текста: страница с мелким шрифтом сразу пишется мелкой.
-        layoutSettings = PageLayoutSettings(isFullWidth: document.page.isFullWidth, isSmallText: document.page.isSmallText)
+        layoutSettings = PageLayoutSettings(isFullWidth: document.page.isFullWidth, isSmallText: document.page.isSmallText,
+                                            textZoom: PageTextZoom.shared.scale)
         mapper.fontScale = layoutSettings.fontScale
+        header.titleScale = layoutSettings.textZoom
         coverSlot.shownAppearance = PageAppearance(document.page)
         // После загрузки текста система ставит выделение в конец, и место курсора там считалось бы раскладкой
         // всей страницы (на 10 000 блоках — секунды). Пока текст загружается, вид выделения не обновляется;
@@ -238,6 +242,7 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
         isGrammarCheckingEnabled = false
         isAutomaticSpellingCorrectionEnabled = MistakeUnderlining.correctsSpellingAutomatically
         NotificationCenter.default.addObserver(self, selector: #selector(mistakeUnderliningDidChange), name: MistakeUnderlining.didChange, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(pageTextZoomDidChange(_:)), name: PageTextZoom.didChange, object: nil)
         drawsBackground = true
         backgroundColor = Palette.pageBackground
         // Курсор и выделение рисует сам редактор, как в Notion: системные — на всю строку и красят текст в белый.
@@ -264,6 +269,8 @@ public class PageTextView: NSTextView, FollowsMistakeUnderlining {
             if undoManager.canUndo { undoManager.undo() }
         }
         guard mapper.hasPendingEdits else { return }
+        // Отмена возвращает текст в размере, в каком его убрали: шкала с тех пор могла смениться (⌘+, ⌘−).
+        if let textStorage { PageFontScaling.rescale(textStorage, in: NSRange(location: 0, length: textStorage.length), to: layoutSettings.fontScale) }
         let blockCount = document.blocks.count
         mapper.commitPendingEdits()
         refreshBlockStructure()

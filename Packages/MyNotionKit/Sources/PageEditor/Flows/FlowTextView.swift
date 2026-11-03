@@ -36,7 +36,7 @@ public class FlowTextView: PageTextView {
         pageLookup = host.pageLookup
         onRequestReminderPermission = host.onRequestReminderPermission
         if let store = host.blockViewState { blockViewState = store }
-        applyLayout(PageLayoutSettings(isSmallText: host.layoutSettings.isSmallText))
+        applyLayout(PageLayoutSettings(isSmallText: host.layoutSettings.isSmallText, textZoom: host.layoutSettings.textZoom))
     }
 
     /// Высота текста потока без добавочной строки после последнего перевода строки.

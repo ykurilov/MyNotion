@@ -39,6 +39,15 @@ extension PageTextView {
     /// поэтому после первой прокрутки место уточняется по разложенному абзацу, а потом держится якорем
     /// (`keepScrollAnchor`). Выделение — в начало блока, но курсор скрыт (`isCaretHiddenUntilUserAction`).
     func restoreScrollPlace(_ place: TabScroll) {
+        guard let index = document.index(ofBlock: place.blockId) else { return }
+        scroll(to: place)
+        // Курсора на вернувшейся странице нет, пока человек сам не щёлкнет или не нажмёт клавишу.
+        isCaretHiddenUntilUserAction = true
+        setSelectedRange(NSRange(location: mapper.paragraphStart(ofBlockAt: index), length: 0))
+    }
+
+    /// Поставить блок места у верха видимой области и держать его там якорем; выделение не трогается.
+    func scroll(to place: TabScroll) {
         guard let index = document.index(ofBlock: place.blockId), let scrollView = enclosingScrollView,
               let layoutManager = textLayoutManager, let storage = textContentStorage else { return }
         let start = mapper.paragraphStart(ofBlockAt: index)
@@ -61,9 +70,6 @@ extension PageTextView {
         scrollAnchor = ScrollAnchor(blockId: place.blockId, offset: place.offset, visibleTop: clip.bounds.minY)
         layoutSubtreeIfNeeded()
         keepScrollAnchor()
-        // Курсора на вернувшейся странице нет, пока человек сам не щёлкнет или не нажмёт клавишу.
-        isCaretHiddenUntilUserAction = true
-        setSelectedRange(NSRange(location: start, length: 0))
     }
 
     /// Держать блок якоря на его месте у верха видимой области. Уже после возврата места — в первой отрисовке
