@@ -27,7 +27,8 @@
 | Скрыть свойство (FR-419) — скрытие в виде, как в окне | `db view update --hidden` |
 | Открыть строку базы как страницу (FR-419) — строка и есть страница | `page get/read <строка>`, `open <строка>` |
 | `addView`, `renameView`, `duplicateView`, `deleteView`, `moveView` | `db view add/rename/duplicate/delete/move` |
-| Шаблоны строк 004 (US6) | `db template …` |
+| `addRowTemplate`, `setDefaultRowTemplate`, `duplicateRowTemplate`, `trashRowTemplate`, `applyRowTemplate` | `db template add/default/duplicate/delete/apply` |
+| `addRow(to:in:at:defaults:template:now:)` — строка по шаблону | `db row add --template` |
 | Выгрузка базы | `db export` |
 | `PageSearch.results` | `search` |
 | `recentPages` | `recents` |

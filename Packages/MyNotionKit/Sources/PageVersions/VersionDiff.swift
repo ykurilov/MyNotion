@@ -99,7 +99,8 @@ public enum VersionDiff {
             }
         }
         summary.blocksRemoved = before.keys.filter { !after.contains($0) }.count
-        summary.propertiesChanged = previous.rowValues != current.rowValues && current.rowValues != nil
+        // Значений нет в прошлом снимке (версия 1) — сравнивать не с чем: это не правка свойств.
+        if let before = previous.rowValues, let after = current.rowValues { summary.propertiesChanged = !before.hasSameValues(as: after) }
         return summary
     }
 

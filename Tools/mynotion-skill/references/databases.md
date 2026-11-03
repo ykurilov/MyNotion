@@ -136,4 +136,18 @@ mynotion db option move Задачи Статус Ревью --group complete   
 
 ## Шаблоны строк
 
-`db template …` и `db row add --template` пока отвечают `not_implemented`: шаблонов строк в приложении ещё нет.
+```
+mynotion db template list Задачи                       # шаблоны, какой из них по умолчанию
+mynotion db template add Задачи --title 'Еженедельная' # пустой шаблон; значения: db cell set <база> <id шаблона> …
+mynotion db template default Задачи Еженедельная       # по умолчанию; --none — «Пустая»
+mynotion db template duplicate Задачи Еженедельная     # «Еженедельная (1)» сразу за оригиналом
+mynotion db template delete Задачи Еженедельная
+mynotion db template apply Задачи Отчёт Еженедельная   # шаблон на пустую строку
+mynotion db row add Задачи --template Еженедельная --values '{"Название":"Отчёт"}'
+```
+
+- Шаблон — по названию или id. Нет такого — `template_not_found`.
+- Шаблона нет в `db rows`, поиске и дереве. Тело и значения шаблона правятся по его id: `page append`, `db cell set`.
+- `db row add` без `--template` берёт шаблон по умолчанию базы. Значения команды ложатся поверх шаблона. «Сегодня» и «Сейчас» у дат шаблона становятся моментом создания.
+- `db template apply` кладёт шаблон только на пустую строку (нет текста и подстраниц), иначе `invalid_value`. Название строки остаётся своим.
+- `db template delete` убирает шаблон в корзину; был по умолчанию — по умолчанию снова «Пустая».

@@ -5,12 +5,12 @@ import Foundation
 import GRDB
 import NotesCore
 
-/// Базы — этап 4 005 (US3): схема, строки и ячейки, виды, строки по виду. Шаблоны строк (`db template …`) ждут шаблонов
-/// в основе и пока отвечают `not_implemented`.
+/// Базы — этап 4 005 (US3): схема, строки и ячейки, виды, шаблоны строк (004, US6), строки по виду.
 public enum DatabaseHandlers {
     public static let all: [String: CommandHandler] = SchemaHandlers.all
         .merging(RowHandlers.all) { first, _ in first }
         .merging(ViewHandlers.all) { first, _ in first }
+        .merging(TemplateHandlers.all) { first, _ in first }
         .merging(RowsQueryHandler.all) { first, _ in first }
 }
 

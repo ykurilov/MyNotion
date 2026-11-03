@@ -112,6 +112,38 @@ struct RowVersionTests {
         #expect(try linkedProjects() == [projectB])
     }
 
+    @Test("Восстановление не пишет несовместимое: «Выбор» стал «Текстом», вариант удалён; живые варианты возвращаются")
+    func restoreSkipsIncompatibleValues() async throws {
+        let kind = try databases.addProperty(to: tasks.databaseId, name: "Вид", kind: .select)
+        let call = try databases.createOption(in: kind.id, named: "Звонок")
+        let tags = try databases.addProperty(to: tasks.databaseId, name: "Метки", kind: .multiSelect)
+        let red = try databases.createOption(in: tags.id, named: "Красная")
+        let blue = try databases.createOption(in: tags.id, named: "Синяя")
+        try databases.pickOption(done.id, rowId: row, propertyId: status.id)
+        try databases.pickOption(call.id, rowId: row, propertyId: kind.id)
+        try databases.setCell(rowId: row, propertyId: tags.id, value: .array([.string(red.id.databaseText), .string(blue.id.databaseText)]))
+        let version = try await versionNow(row)
+
+        try databases.changeType(kind.id, to: .text)
+        try databases.deleteOption(done.id)
+        try databases.deleteOption(red.id)
+        let typed = try cell(kind)
+
+        try await mac.undoable { try await restorer().restore(versionId: version.id, ofPage: row) }
+        #expect(try cell(kind) == typed, "id варианта в «Текст» не пишется")
+        #expect(try cell(status) == nil, "удалённый вариант не возвращается")
+        #expect(try cell(tags) == .array([.string(blue.id.databaseText)]), "из нескольких вариантов возвращаются живые")
+    }
+
+    @Test("Первая версия строки после снимка версии 1 не пишет «изменены свойства»")
+    func firstRowVersionAfterVersionOne() throws {
+        let content = try #require(try mac.store.pageContent(row))
+        var old = PageSnapshot(page: content.page, blocks: content.blocks)
+        old.snapshotVersion = 1
+        let current = PageSnapshot(page: content.page, blocks: content.blocks, rowValues: try values())
+        #expect(!VersionDiff.summary(from: old, to: current).propertiesChanged)
+    }
+
     @Test("Снимок версии 1 читается; восстановление по нему возвращает название, а значения свойств не трогает")
     func versionOneLeavesValues() async throws {
         try databases.setCell(rowId: row, propertyId: note.id, value: text("сейчас"))

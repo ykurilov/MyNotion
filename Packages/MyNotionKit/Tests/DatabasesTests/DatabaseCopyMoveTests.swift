@@ -192,7 +192,56 @@ struct DatabaseCopyMoveTests {
         #expect(try read { try $0.properties(ofDatabase: copyDatabase, includingDeleted: true) }.isEmpty)
     }
 
+    /// Значение со ссылкой на удалённый вариант — так его может оставить правка с другого Mac.
+    func pointAtDeletedOption(_ row: UUID) throws -> UUID {
+        let cancelled = try quiet.createOption(in: status.id, named: "Отменено", color: .red)
+        try quiet.deleteOption(cancelled.id)
+        try store.write { try $0.setCell(rowId: row, propertyId: status.id, value: .string(cancelled.id.databaseText)) }
+        return cancelled.id
+    }
+
+    @Test("Копия базы не ссылается на варианты оригинала, даже на удалённые")
+    func duplicateDropsDeletedOptionValues() async throws {
+        let cancelled = try pointAtDeletedOption(task2)
+        var duplicated: Page?
+        try await asyncStep { duplicated = try await tree.duplicate(tasks.databaseId) }
+        let copy = try #require(duplicated)
+        let copyStatus = try property(named: "Статус", in: copy.id)
+        let originals: Set<JSONValue> = [.string(done.id.databaseText), .string(cancelled.databaseText)]
+        let values = try children(copy.id).map { try cell($0.id, copyStatus.id) }
+        #expect(values.compactMap { $0 }.count == 1, "у «Позвонить» — свой «Готово», у «Купить» — пусто")
+        #expect(values.allSatisfy { $0.map { !originals.contains($0) } ?? true })
+    }
+
     // MARK: Перенос
+
+    @Test("Строка с удалённым вариантом в другую базу — пусто, чужой id не переходит")
+    func moveRowWithDeletedOption() throws {
+        _ = try pointAtDeletedOption(task2)
+        let archive = try quiet.createDatabase(in: nil, isInline: false, title: "Архив")
+        let archiveStatus = try quiet.addProperty(to: archive.databaseId, name: "Статус", kind: .select)
+        try step { try tree.move(task2, toParent: archive.databaseId, at: .max) }
+        #expect(try cell(task2, archiveStatus.id) == nil)
+        #expect(try read { try $0.options(ofProperty: archiveStatus.id) }.isEmpty)
+    }
+
+    @Test("Строка возвращается в прежнюю базу — её прежние значения и связи там не затираются")
+    func moveRowBackKeepsItsValues() throws {
+        let garden = try quiet.addRow(to: projects.databaseId, in: nil, title: "Сад")
+        let archive = try quiet.createDatabase(in: nil, isInline: false, title: "Архив")
+        let archiveNote = try quiet.addProperty(to: archive.databaseId, name: "Заметка", kind: .text)
+        let archiveProject = try quiet.addRelation(to: archive.databaseId, name: "Проект", target: projects.databaseId)
+        try step { try tree.move(task1, toParent: archive.databaseId, at: .max) }
+        #expect(try cell(task1, archiveNote.id) == text("срочно"))
+        #expect(try related(task1, archiveProject.id, in: archive.databaseId) == ["Дом"])
+
+        try quiet.setCell(rowId: task1, propertyId: archiveNote.id, value: text("в архиве"))
+        try quiet.unlinkRow(task1, through: archiveProject.id, from: projectA)
+        try quiet.linkRow(task1, through: archiveProject.id, to: garden)
+        try step { try tree.move(task1, toParent: tasks.databaseId, at: .max) }
+        #expect(try cell(task1, note.id) == text("срочно"))
+        #expect(try related(task1, project.id, in: tasks.databaseId) == ["Дом"])
+    }
 
     @Test("Строка в другую базу: то же название и тип — значение переходит (вариант по названию), остальное скрыто; ⌘Z — как было")
     func moveRowToOtherDatabase() throws {

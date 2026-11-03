@@ -3,8 +3,9 @@ import GRDB
 import NotesCore
 
 /// Базы в операциях дерева (T102, spec Edge Cases): «Дублировать» базу или страницу со встроенной базой и «Переместить в»
-/// для строк. Пишет записи баз в транзакции самой операции — их видят поиск, формулы и синхронизация, а ⌘Z операции
-/// отменяет и их: копия стирается вместе с записями, перенос назад возвращает строку к её прежним значениям.
+/// для строк. Пишет записи баз в транзакции самой операции — их видят поиск, формулы и синхронизация. ⌘Z копии стирает
+/// копию вместе с записями базы; ⌘Z переноса возвращает строку на место с её значениями и связями, но вариант выбора,
+/// созданный переносом в новой базе, остаётся в её списке — это допустимо: в строках его уже нет.
 public struct DatabaseTreeAddon: PageTreeAddon {
     public init() {}
 
@@ -12,7 +13,8 @@ public struct DatabaseTreeAddon: PageTreeAddon {
 
     /// Каждая скопированная база получает схему, варианты, виды, значения строк (и шаблонов строк), связи и ручной порядок
     /// со своими id. Связь с базой вне ветки — односторонняя на те же строки; связь внутри ветки (в том числе с собой) —
-    /// на строки копии. У дат копии напоминания выключены, как у дат в тексте.
+    /// на строки копии. У дат копии напоминания выключены, как у дат в тексте. Ссылка на удалённый вариант (её может
+    /// оставить правка с другого Mac) в копию не идёт: копия не ссылается на варианты оригинала.
     public func branchCopied(_ copy: PageBranchCopier.Result, in transaction: NotesTransaction) throws {
         let databases = try copy.pageIds.keys.filter { try transaction.isDatabase($0) }.sorted { $0.uuidString < $1.uuidString }
         guard !databases.isEmpty else { return }
@@ -42,7 +44,7 @@ public struct DatabaseTreeAddon: PageTreeAddon {
         try transaction.saveDatabase(DatabaseSchema(pageId: newDatabaseId, isInline: original.isInline,
                                                     defaultTemplateId: original.defaultTemplateId.flatMap { copy.pageIds[$0] }))
 
-        var copiedProperties: [(original: DatabaseProperty, copy: DatabaseProperty)] = []
+        var copiedProperties: [(original: DatabaseProperty, copy: DatabaseProperty, options: Set<JSONValue>)] = []
         for property in schema.properties {
             var config = property.config
             // Пара связи остаётся парой, только если скопировано и ответное свойство.
@@ -50,12 +52,14 @@ public struct DatabaseTreeAddon: PageTreeAddon {
             let saved = try transaction.saveProperty(DatabaseProperty(
                 id: ids[property.id]!, databaseId: newDatabaseId, name: property.name, kind: property.kind,
                 config: ids.schemaJSON(config), sortKey: property.sortKey))
-            copiedProperties.append((property, saved))
+            var options: Set<JSONValue> = []
             for option in try transaction.options(ofProperty: property.id) {
-                try transaction.saveOption(SelectOption(id: ids[option.id]!, propertyId: saved.id, name: option.name, colorName: option.color,
-                                                        sortKey: option.sortKey, statusGroup: option.statusGroup, deletedAt: nil,
-                                                        fieldClocks: .init()))
+                let copied = try transaction.saveOption(SelectOption(
+                    id: ids[option.id]!, propertyId: saved.id, name: option.name, colorName: option.color, sortKey: option.sortKey,
+                    statusGroup: option.statusGroup, deletedAt: nil, fieldClocks: .init()))
+                options.insert(.string(copied.id.databaseText))
             }
+            copiedProperties.append((property, saved, options))
         }
         for view in schema.views {
             try transaction.saveView(DatabaseView(
@@ -70,6 +74,10 @@ public struct DatabaseTreeAddon: PageTreeAddon {
             for cell in try transaction.cells(ofRow: row) {
                 guard var value = cell.value, let pair = copiedProperties.first(where: { $0.original.id == cell.propertyId }) else { continue }
                 value = ids.wholeValues(value)
+                if TypeChange.optionKinds.contains(pair.copy.kind) {
+                    guard let kept = Self.keeping(value, options: pair.options) else { continue }
+                    value = kept
+                }
                 if pair.copy.kind == .date { value["reminder"] = nil }
                 try transaction.setCell(rowId: newRow, propertyId: pair.copy.id, value: value)
             }
@@ -96,8 +104,9 @@ public struct DatabaseTreeAddon: PageTreeAddon {
     // MARK: Перенос строки
 
     /// Страница пришла в базу — строка: значения свойств с тем же названием и типом переходят из прежней базы (вариант —
-    /// по названию, нет такого — создаётся), связь — если ведёт в ту же базу; остальные значения остаются при строке
-    /// скрытыми и возвращаются, когда строка вернётся (⌘Z). Номер ID — следующий в новой базе, если его ещё нет.
+    /// по названию, нет такого — создаётся; удалённый вариант — пусто), связь — если ведёт в ту же базу. Остальные
+    /// значения остаются при строке скрытыми. Переходят только в пустое свойство: если строка уже жила в этой базе, её
+    /// прежние значения и связи там главнее. Номер ID — следующий в новой базе, если его ещё нет.
     /// Правки с другого Mac не трогаются: там это уже сделано.
     public func pageMoved(_ pageId: UUID, from oldParentId: UUID?, to newParentId: UUID?, in transaction: NotesTransaction) throws {
         guard transaction.replicatedFromDeviceName == nil, let newParentId, try transaction.isDatabase(newParentId),
@@ -107,15 +116,15 @@ public struct DatabaseTreeAddon: PageTreeAddon {
             for source in try transaction.properties(ofDatabase: oldParentId) where source.kind != .uniqueId {
                 guard let target = targets.first(where: { $0.name == source.name && $0.kind == source.kind }) else { continue }
                 if source.kind == .relation {
-                    guard source.relationTarget == target.relationTarget else { continue }
+                    guard source.relationTarget == target.relationTarget,
+                          try Self.links(of: pageId, through: target, in: transaction).isEmpty else { continue }
                     for link in try Self.links(of: pageId, through: source, in: transaction) {
                         try Self.saveLink(pageId, through: target, to: link.targetRowId, sortKey: link.sortKey, in: transaction)
                     }
-                } else if source.kind.storesCells, let value = try transaction.cell(rowId: pageId, propertyId: source.id)?.value {
-                    let adopted = try Self.adoptOptions(value, from: source, to: target, in: transaction)
-                    if try transaction.cell(rowId: pageId, propertyId: target.id)?.value != adopted {
-                        try transaction.setCell(rowId: pageId, propertyId: target.id, value: adopted)
-                    }
+                } else if source.kind.storesCells, try transaction.cell(rowId: pageId, propertyId: target.id)?.value == nil,
+                          let value = try transaction.cell(rowId: pageId, propertyId: source.id)?.value,
+                          let adopted = try Self.adoptOptions(value, from: source, to: target, in: transaction) {
+                    try transaction.setCell(rowId: pageId, propertyId: target.id, value: adopted)
                 }
             }
         }
@@ -135,9 +144,10 @@ public struct DatabaseTreeAddon: PageTreeAddon {
     }
 
     /// Варианты выбора — по названию: в новой базе берётся вариант с тем же названием, нет — создаётся с тем же цветом.
+    /// Варианта нет и в прежней базе (удалён) — он пропадает; не осталось ни одного — `nil`, пусто.
     private static func adoptOptions(_ value: JSONValue, from source: DatabaseProperty, to target: DatabaseProperty,
-                                     in transaction: NotesTransaction) throws -> JSONValue {
-        guard [.select, .multiSelect, .status].contains(source.kind) else { return value }
+                                     in transaction: NotesTransaction) throws -> JSONValue? {
+        guard TypeChange.optionKinds.contains(source.kind) else { return value }
         let sourceOptions = try transaction.options(ofProperty: source.id)
         func adopt(_ id: JSONValue) throws -> JSONValue? {
             guard let option = sourceOptions.first(where: { $0.id.databaseText == id.string?.lowercased() }) else { return nil }
@@ -148,8 +158,20 @@ public struct DatabaseTreeAddon: PageTreeAddon {
                 sortKey: .between(existing.map(\.sortKey).max(), nil), statusGroup: option.statusGroup, deletedAt: nil, fieldClocks: .init()))
             return .string(created.id.databaseText)
         }
-        if let ids = value.array { return .array(try ids.compactMap(adopt)) }
-        return try adopt(value) ?? value
+        if let ids = value.array {
+            let adopted = try ids.compactMap(adopt)
+            return adopted.isEmpty ? nil : .array(adopted)
+        }
+        return try adopt(value)
+    }
+
+    /// Только варианты из `options`; не осталось ни одного — `nil`.
+    private static func keeping(_ value: JSONValue, options: Set<JSONValue>) -> JSONValue? {
+        if let list = value.array {
+            let kept = list.filter(options.contains)
+            return kept.isEmpty ? nil : .array(kept)
+        }
+        return options.contains(value) ? value : nil
     }
 
     // MARK: Связи

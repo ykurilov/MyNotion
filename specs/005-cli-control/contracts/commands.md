@@ -70,7 +70,11 @@
 | `db view list` | `<база>` | R |
 | `db view add` / `rename` / `duplicate` / `delete` / `move` | `<база> [<вид>] [--name]` | W B |
 | `db view update` | `<база> <вид> [--filter JSON] [--sort JSON] [--group JSON] [--visible a,b] [--hidden a,b] [--order a,b] [--width имя=пикс] [--wrap on\|off] [--calc имя=функция] [--open-in side\|center\|full] [--load-limit N] [--group-hide ключ] [--group-show ключ] [--group-collapse ключ] [--group-expand ключ] [--group-order k1,k2] [--order-rows <строка> --after <строка>]` | W B |
-| `db template list` / `add` / `default` / `delete` | `<база> [<шаблон>]` — когда шаблоны строк 004 (US6) влиты | R / W B |
+| `db template list` | `<база>` → `templates`, `defaultTemplate` | R |
+| `db template add` | `<база> --title` | W B |
+| `db template default` | `<база> (<шаблон> \| --none)` | W B |
+| `db template duplicate` / `delete` | `<база> <шаблон>` | W B |
+| `db template apply` | `<база> <строка> <шаблон>` — только на пустую строку | W B |
 | `db export` | `<база> --to <папка>` (CSV + Markdown + схема 004) | R (этап 7: вместе с выгрузкой) |
 
 Значения ячеек, фильтр, сортировка, группировка — contracts/block-json.md, разделы «Ячейки» и «Вид».

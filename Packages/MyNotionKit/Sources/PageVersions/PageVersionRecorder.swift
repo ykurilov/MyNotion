@@ -200,11 +200,11 @@ public final class PageVersionRecorder: Sendable {
     /// Снимок страницы из базы; сводка — разница с прошлой версией. Страницы нет — отметка снимается.
     @discardableResult
     private func record(_ pageId: UUID, deviceName: String?, agent: String? = nil) throws -> PageVersionInfo? {
-        guard let content = try store.pageContent(pageId) else {
+        guard let read = try store.pageContentWithRowValues(pageId) else {
             try versions.clearDue(pageId: pageId, upTo: .distantFuture)
             return nil
         }
-        return try record(content, rowValues: try store.rowValues(pageId), deviceName: deviceName, agent: agent)
+        return try record(read.content, rowValues: read.rowValues, deviceName: deviceName, agent: agent)
     }
 
     private func record(_ content: PageContent, rowValues: RowValues? = nil, deviceName: String?, agent: String? = nil,
