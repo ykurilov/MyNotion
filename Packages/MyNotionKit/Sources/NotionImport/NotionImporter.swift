@@ -1,6 +1,7 @@
 import Foundation
 import LinkPreview
 import NotesCore
+import NotionSchemaFetch
 import UniformTypeIdentifiers
 
 /// Ход импорта: сначала чтение страниц выгрузки, потом запись в базу.
@@ -127,13 +128,17 @@ public struct NotionImporter: Sendable {
         try ImportRunLog(store: store).all()
     }
 
-    public func importExport(_ export: PreparedNotionExport,
+    /// - Parameter schema: схемы баз, дочитанные из Notion по ключу (Q3): типы, цвета, формулы и сводки берутся из них, а не
+    ///   угадываются по таблице. Пусто — импорт по одному CSV.
+    public func importExport(_ export: PreparedNotionExport, schema: NotionSchemaFetchResult = NotionSchemaFetchResult(),
                              progress: (@Sendable (NotionImportProgress) -> Void)? = nil) throws -> NotionImportReport {
         try Task.checkCancellation()
         var plan = try NotionExportReader().read(export.contentRoot) { done, total in
             progress?(NotionImportProgress(phase: .reading, done: done, total: total))
         }
-        let databases = try NotionDatabaseReader().read(&plan)
+        var reader = NotionDatabaseReader()
+        reader.schema = schema
+        let databases = try reader.read(&plan)
         try copyAttachments(in: &plan, root: export.contentRoot)
         let log = ImportRunLog(store: store)
         let startedAt = now()
@@ -168,7 +173,10 @@ public struct NotionImporter: Sendable {
                 try log.finish(id: runId, at: now(), importedPages: plan.pages.count, simplified: simplified, in: transaction)
             }
             var notices = [NotionImportReport.markdownLossNotice, NotionImportReport.coverLossNotice]
-            if databases.values.contains(where: \.isFromNotion) { notices += NotionDatabaseReader.notionNotices }
+            let fromNotion = databases.values.filter(\.isFromNotion)
+            if !fromNotion.isEmpty {
+                notices += fromNotion.allSatisfy(\.summary.schemaApplied) ? NotionDatabaseReader.noticesWithSchema : NotionDatabaseReader.notionNotices
+            }
             let summaries = Self.databaseOrder(in: plan).compactMap { databases[$0]?.summary }
             return NotionImportReport(rootPageId: rootId, rootTitle: rootTitle, pageCount: plan.pages.count,
                                       blockCount: written, simplified: simplified, notices: notices, databases: summaries)

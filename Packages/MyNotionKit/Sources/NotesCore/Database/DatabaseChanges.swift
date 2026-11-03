@@ -28,6 +28,8 @@ public struct DatabaseChanges: Sendable {
     public internal(set) var views: [RecordChange<DatabaseView>] = []
     /// Ячейки, как они записаны (`value == nil` — пусто).
     public internal(set) var cells: [CellRecord] = []
+    /// Свойства, чьи ячейки переписаны пачкой (`setCells`: смена типа) — не правка строк, версий строк не порождает.
+    public internal(set) var bulkCellProperties: Set<UUID> = []
     public internal(set) var relationLinks: [RecordChange<RelationLink>] = []
     public internal(set) var rowOrders: [RowOrder] = []
     /// Связи, стёртые вместе со страницей навсегда (только этому Mac: стирание страницы уходит на сервер само) —

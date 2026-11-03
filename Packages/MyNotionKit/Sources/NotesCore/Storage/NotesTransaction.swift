@@ -9,11 +9,14 @@ public final class NotesTransaction {
     package internal(set) var changes = NotesChanges()
     var touchedPageIds: Set<UUID> = []
     private let keepsDeletionMarks: Bool
+    /// Добавки модулей к копии ветки и переносу страниц (`NotesStore.addTreeAddon`).
+    let treeAddons: [any PageTreeAddon]
 
-    init(db: Database, clock: HybridLogicalClock, keepsDeletionMarks: Bool = false) {
+    init(db: Database, clock: HybridLogicalClock, keepsDeletionMarks: Bool = false, treeAddons: [any PageTreeAddon] = []) {
         self.db = db
         self.clock = clock
         self.keepsDeletionMarks = keepsDeletionMarks
+        self.treeAddons = treeAddons
     }
 
     /// Соединение этой транзакции — для таблиц модулей-добавок (синхронизация).

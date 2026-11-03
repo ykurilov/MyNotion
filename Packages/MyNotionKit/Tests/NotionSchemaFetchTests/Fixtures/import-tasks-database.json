@@ -1,0 +1,21 @@
+{
+  "data_sources": [
+    {
+      "id": "d0000000-0000-0000-0000-000000000002",
+      "name": "Задачи"
+    }
+  ],
+  "id": "a0000000-0000-0000-0000-000000000002",
+  "is_inline": true,
+  "object": "database",
+  "title": [
+    {
+      "plain_text": "Задачи",
+      "text": {
+        "content": "Задачи",
+        "link": null
+      },
+      "type": "text"
+    }
+  ]
+}

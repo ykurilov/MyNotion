@@ -139,6 +139,7 @@ extension NotesTransaction {
     /// изменённые; «изменено» строк сдвигается одним запросом на пачку.
     public func setCells(_ values: [(rowId: UUID, value: JSONValue?)], propertyId: UUID) throws {
         let now = Date()
+        changes.database.bulkCellProperties.insert(propertyId)
         for start in stride(from: 0, to: values.count, by: 500) {
             let chunk = values[start..<min(start + 500, values.count)]
             for (rowId, value) in chunk {

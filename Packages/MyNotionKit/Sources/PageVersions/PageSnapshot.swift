@@ -1,10 +1,11 @@
 import Foundation
 import NotesCore
 
-/// Снимок страницы для версии (data-model.md, «PageSnapshot»): поля страницы и все её блоки всех потоков в формате записи 002.
-/// В базе — JSON, сжатый LZFSE. Снимок читается сам по себе: восстановление не проходит цепочку версий (research R11).
+/// Снимок страницы для версии (data-model.md, «PageSnapshot»): поля страницы и все её блоки всех потоков в формате записи 002,
+/// у строки базы — значения свойств и связи (версия 2, research R15). В базе — JSON, сжатый LZFSE. Снимок читается сам по себе:
+/// восстановление не проходит цепочку версий (research R11). Снимок версии 1 читается: значений в нём нет.
 public struct PageSnapshot: Sendable, Hashable, Codable {
-    public static let currentVersion = 1
+    public static let currentVersion = 2
 
     public var snapshotVersion: Int
     public var title: String
@@ -13,8 +14,10 @@ public struct PageSnapshot: Sendable, Hashable, Codable {
     public var isFullWidth: Bool
     public var isSmallText: Bool
     public var blocks: [SnapshotBlock]
+    /// Значения строки базы; `nil` — обычная страница или снимок версии 1.
+    public var rowValues: RowValues?
 
-    public init(page: Page, blocks: [Block]) {
+    public init(page: Page, blocks: [Block], rowValues: RowValues? = nil) {
         snapshotVersion = Self.currentVersion
         title = page.title
         icon = page.icon
@@ -22,6 +25,7 @@ public struct PageSnapshot: Sendable, Hashable, Codable {
         isFullWidth = page.isFullWidth
         isSmallText = page.isSmallText
         self.blocks = blocks.map(SnapshotBlock.init)
+        self.rowValues = rowValues
     }
 
     /// Разобрать сжатый снимок; снимок более новой версии формата — ошибка, а не пустая страница.
@@ -55,7 +59,7 @@ public struct PageSnapshot: Sendable, Hashable, Codable {
     /// Что вернуть восстановлением (`PageTreeOperations.restoreVersion`).
     public func restoreTarget(pageId: UUID) -> PageRestoreTarget {
         PageRestoreTarget(title: title, icon: icon, cover: cover, isFullWidth: isFullWidth, isSmallText: isSmallText,
-                          blocks: blocks(onPage: pageId))
+                          blocks: blocks(onPage: pageId), rowValues: rowValues)
     }
 
     /// Файлы снимка: обложка и файлы блоков — как ссылки на файлы у записей (`AttachmentReferenceCounter`).

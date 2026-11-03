@@ -2,6 +2,7 @@ import Databases
 import Foundation
 import MarkdownExport
 import NotesCore
+import NotionSchemaFetch
 
 /// Итог импорта одной базы для отчёта (contracts/sync-v4-and-export.md, «Отчёт»).
 public struct DatabaseImportSummary: Sendable, Equatable, Codable {
@@ -12,13 +13,25 @@ public struct DatabaseImportSummary: Sendable, Equatable, Codable {
     public var properties: [String]
     /// Что у этой базы перенесено не целиком.
     public var notes: [String]
+    /// Схема базы дочитана из Notion по ключу: типы, цвета, формулы и сводки — не угаданы, а взяты из неё.
+    public var schemaApplied: Bool
 
-    public init(title: String, rowCount: Int, templateCount: Int, properties: [String], notes: [String]) {
+    public init(title: String, rowCount: Int, templateCount: Int, properties: [String], notes: [String], schemaApplied: Bool = false) {
         self.title = title
         self.rowCount = rowCount
         self.templateCount = templateCount
         self.properties = properties
         self.notes = notes
+        self.schemaApplied = schemaApplied
+    }
+
+    /// Прежние отчёты в журнале — без поля о схеме.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(title: try container.decode(String.self, forKey: .title), rowCount: try container.decode(Int.self, forKey: .rowCount),
+                  templateCount: try container.decode(Int.self, forKey: .templateCount),
+                  properties: try container.decode([String].self, forKey: .properties), notes: try container.decode([String].self, forKey: .notes),
+                  schemaApplied: try container.decodeIfPresent(Bool.self, forKey: .schemaApplied) ?? false)
     }
 
     /// Строка отчёта у выгрузки без «Include subpages».
@@ -55,18 +68,30 @@ struct PlannedDatabase {
     var isFromNotion: Bool
     /// Сырые связи Notion до второго прохода: колонка → страница строки → 32 hex целей.
     var pendingRelations: [Int: [Int: [String]]] = [:]
+    /// Связи, о которых сказала схема Notion (даже если в таблице они пусты): колонка → цель и пара.
+    var declaredRelations: [Int: DeclaredRelation] = [:]
+    /// Сводки по схеме Notion: колонка → связь, свойство цели и вычисление; id целей находятся вторым проходом.
+    var pendingRollups: [Int: PendingRollup] = [:]
 }
 
 /// Базы выгрузки (research R18): место, строки ↔ файлы, типы по значениям, связи по 32 hex, отчёт. Своя выгрузка
 /// со схемой `*.mynotion-database.json` читается по схеме (`DatabaseSchemaImport`). Только план — пишет `NotionImporter`.
 struct NotionDatabaseReader {
     var timeZone: TimeZone = .current
+    /// Схемы баз, дочитанные из Notion по ключу, и причины, почему какие-то не прочитаны (Q3, research R19).
+    var schema = NotionSchemaFetchResult()
 
     /// Общие потери выгрузки Notion — в отчёт, если в ней были базы Notion.
     static let notionNotices = [
         "Формулы и сводки Notion приходят готовыми значениями — числом или текстом",
         "Статусы Notion стали выбором: в выгрузке они неотличимы",
         "Цвета вариантов, виды, фильтры и сортировки в выгрузке Notion не передаются: цвета — по кругу, вид — один, «Таблица»",
+        "Люди («Человек», «Создал», «Изменил») — текстом с именами",
+    ]
+
+    /// То, что не передаётся и со схемой: типы, цвета, формулы и сводки она возвращает, виды и людей — нет.
+    static let noticesWithSchema = [
+        "Виды, фильтры и сортировки в выгрузке Notion не передаются: вид один, «Таблица»",
         "Люди («Человек», «Создал», «Изменил») — текстом с именами",
     ]
 
@@ -135,33 +160,82 @@ struct NotionDatabaseReader {
         let templates = files.filter { !matched.contains($0) }
         plan.pages[index].children = rowPages + templates
 
-        // Типы колонок по всем значениям.
+        // Типы колонок: по всем значениям, а если схема из Notion прочитана — по ней (research R19).
         var properties: [DatabaseProperty] = []
         var options: [SelectOption] = []
         var summaryLines: [String] = []
         var notes: [String] = []
         var sortKey: FractionalSortKey?
         var columnKinds: [ColumnKind] = []
+        var guessedKinds: [ColumnKind] = []
+        var overlayColumns: [Int: DatabaseSchemaOverlay.Column] = [:]
+        let notionId = NotionExportReader.notionId(in: page.key)
+        let overlay = notionId.flatMap { schema.schemas[$0] }.map { DatabaseSchemaOverlay(schema: $0, fetched: schema) }
+        if overlay == nil, let failure = schema.failures.first(where: { $0.databaseId == notionId }) {
+            notes.append("Схема из Notion не прочитана, типы угаданы по значениям. " + failure.reason.explanation)
+        }
         for (column, name) in header.enumerated() {
             let values = csvRows.map { $0[column] }.filter { !$0.isEmpty }
             var kind = column == 0 ? ColumnKind.title : ColumnGuess.kind(name: name, values: values, timeZone: timeZone)
+            guessedKinds.append(kind)
+            if column > 0, let overlay {
+                switch overlay.resolve(name, values: values, header: header, plan: plan) {
+                case .column(let resolved):
+                    kind = resolved.kind
+                    overlayColumns[column] = resolved
+                case .keepGuess(let note):
+                    if let note { notes.append(note) }
+                }
+            }
             if case .relation = kind, !values.allSatisfy({ hexes in
                 RelationText.targets(hexes).allSatisfy { plan.pageByNotionId[$0] != nil }
             }) {
                 kind = .text
+                overlayColumns[column] = nil
                 notes.append(DatabaseImportSummary.outsideRelationNote(name))
             }
             columnKinds.append(kind)
+        }
+
+        // Формулы Notion — формулами MyNotion; не переведённая остаётся значениями из выгрузки.
+        let propertyIds = header.map { _ in UUID.timeOrdered() }
+        if let overlay, overlayColumns.values.contains(where: { $0.formula != nil }) {
+            let titles = header.map { $0.isEmpty ? "Без названия" : $0 }
+            var drafts = header.indices.map { column in
+                DatabaseProperty(id: propertyIds[column], databaseId: databaseId, name: titles[column], kind: columnKinds[column].propertyKind,
+                                 config: columnKinds[column].config, sortKey: .between(nil, nil))
+            }
+            for column in overlayColumns.keys.sorted() {
+                guard let expression = overlayColumns[column]?.formula else { continue }
+                let formulaSchema = PlannedFormulaSchema(properties: drafts.map(DatabaseFormulaSchema.formulaProperty))
+                switch NotionFormula.translate(expression, propertyNamesById: overlay.propertyNamesById, schema: formulaSchema) {
+                case .translated(let stored, _):
+                    columnKinds[column] = .formula(stored: stored)
+                    drafts[column].config = columnKinds[column].config
+                case .notTranslated(let reason):
+                    columnKinds[column] = guessedKinds[column]
+                    overlayColumns[column] = nil
+                    notes.append("«\(titles[column])» — формула Notion не перенесена (\(reason)): значения из выгрузки")
+                }
+            }
+        }
+
+        for (column, name) in header.enumerated() {
+            let kind = columnKinds[column]
             sortKey = .between(sortKey, nil)
-            let property = DatabaseProperty(databaseId: databaseId, name: name.isEmpty ? "Без названия" : name, kind: kind.propertyKind,
-                                            config: kind.config, sortKey: sortKey!)
+            let property = DatabaseProperty(id: propertyIds[column], databaseId: databaseId, name: name.isEmpty ? "Без названия" : name,
+                                            kind: kind.propertyKind, config: kind.config, sortKey: sortKey!)
             properties.append(property)
-            if case .options(_, let names) = kind {
+            if let names = kind.optionNames {
+                // Варианты по схеме — со своими цветами и группами; угаданные — по порядку появления, цвета по кругу.
+                let styled = overlayColumns[column]?.options ?? names.enumerated().map { position, optionName in
+                    OverlayOption(name: optionName, color: OptionColor.allCases[position % OptionColor.allCases.count].rawValue)
+                }
                 var optionKey: FractionalSortKey?
-                for (position, optionName) in names.enumerated() {
+                for option in styled {
                     optionKey = .between(optionKey, nil)
-                    options.append(SelectOption(propertyId: property.id, name: optionName,
-                                                color: OptionColor.allCases[position % OptionColor.allCases.count], sortKey: optionKey!))
+                    options.append(SelectOption(propertyId: property.id, name: option.name, color: OptionColor(rawValue: option.color) ?? .default,
+                                                sortKey: optionKey!, statusGroup: option.group))
                 }
             }
             summaryLines.append(kind.reportLine(name: property.name))
@@ -211,8 +285,16 @@ struct NotionDatabaseReader {
         var database = PlannedDatabase(pageIndex: index, schema: DatabaseSchema(pageId: databaseId, isInline: parentLinks),
                                        properties: properties, options: options, views: [view], rows: rows,
                                        summary: DatabaseImportSummary(title: page.title, rowCount: csvRows.count, templateCount: templates.count,
-                                                                      properties: summaryLines, notes: notes),
+                                                                      properties: summaryLines, notes: notes, schemaApplied: overlay != nil),
                                        isFromNotion: true)
+        // Связь по схеме есть и в пустом столбце: без неё у свойства не было бы базы-цели.
+        for (column, overlayColumn) in overlayColumns {
+            if let relation = overlayColumn.relation, case .relation = columnKinds[column] {
+                if pending[column] == nil { pending[column] = [:] }
+                database.declaredRelations[column] = relation
+            }
+            if let rollup = overlayColumn.rollup { database.pendingRollups[column] = rollup }
+        }
         database.pendingRelations = pending
         return database
     }
@@ -223,9 +305,10 @@ struct NotionDatabaseReader {
         var databaseOfRow: [Int: Int] = [:]
         for (index, database) in databases { for row in database.rows { databaseOfRow[row.pageIndex] = index } }
         // Свойство-связь: база, колонка, база-цель, пары (строка, цель) — индексы страниц плана.
-        struct Relation { var database: Int; var column: Int; var target: Int; var pairs: Set<[Int]> }
+        // `declaredPair` — ответное свойство по схеме Notion: `nil` — схемы нет (пара по значениям), `.some(nil)` — пары нет.
+        struct Relation { var database: Int; var column: Int; var target: Int; var pairs: Set<[Int]>; var declaredPair: String?? }
         var relations: [Relation] = []
-        for (index, database) in databases {
+        for (index, database) in databases.sorted(by: { $0.key < $1.key }) {
             for (column, byRow) in database.pendingRelations.sorted(by: { $0.key < $1.key }) {
                 var targetDatabase: Int?
                 var pairs: Set<[Int]> = []
@@ -236,20 +319,40 @@ struct NotionDatabaseReader {
                         pairs.insert([row, target])
                     }
                 }
-                relations.append(Relation(database: index, column: column, target: targetDatabase ?? index, pairs: pairs))
+                let declared = database.declaredRelations[column]
+                let declaredTarget = declared.flatMap { plan.pageByNotionId[$0.targetNotionId] }.flatMap { databases[$0] == nil ? nil : $0 }
+                relations.append(Relation(database: index, column: column, target: declaredTarget ?? targetDatabase ?? index, pairs: pairs,
+                                          declaredPair: declared.map { $0.pairedName }))
             }
         }
+        func columnName(_ relation: Relation) -> String { databases[relation.database]!.properties[relation.column].name }
+        func isSame(_ a: Relation, _ b: Relation) -> Bool { a.database == b.database && a.column == b.column }
+        /// Ответное свойство: по схеме (с любой из двух сторон), а без схемы — то, чьи связи зеркальны.
+        func pairOf(_ relation: Relation) -> Relation? {
+            if let declared = relation.declaredPair {
+                guard let name = declared else { return nil }
+                return relations.first { $0.database == relation.target && !isSame($0, relation) && columnName($0) == name }
+            }
+            let name = columnName(relation)
+            if let mirror = relations.first(where: { other in
+                other.database == relation.target && other.target == relation.database && !isSame(other, relation)
+                    && other.declaredPair.flatMap({ $0 }) == name
+            }) {
+                return mirror
+            }
+            return relations.first { other in
+                other.database == relation.target && other.target == relation.database && !isSame(other, relation)
+                    && other.declaredPair == nil && Set(other.pairs.map { [$0[1], $0[0]] }) == relation.pairs
+            }
+        }
+        var targetOfColumn: [[Int]: Int] = [:]
         for relation in relations {
+            targetOfColumn[[relation.database, relation.column]] = relation.target
             var source = databases[relation.database]!
             let target = databases[relation.target]!
             var config: JSONValue = ["targetDatabaseId": .string(target.schema.pageId.databaseText), "limit": "none"]
             var line = "связь с «\(target.summary.title)»"
-            let pair = relations.first { other in
-                other.database == relation.target && other.target == relation.database
-                    && !(other.database == relation.database && other.column == relation.column)
-                    && Set(other.pairs.map { [$0[1], $0[0]] }) == relation.pairs
-            }
-            if let pair {
+            if let pair = pairOf(relation) {
                 config["pairedPropertyId"] = .string(databases[pair.database]!.properties[pair.column].id.databaseText)
                 line += ", двусторонняя"
             }
@@ -263,6 +366,24 @@ struct NotionDatabaseReader {
                 if !targets.isEmpty { source.rows[position].relations.append((propertyId, targets.map { plan.pages[$0].id })) }
             }
             databases[relation.database] = source
+        }
+
+        // Сводки по схеме: связь — свойство этой базы, свойство цели — по названию в базе, куда ведёт связь.
+        for (index, database) in databases.sorted(by: { $0.key < $1.key }) where !database.pendingRollups.isEmpty {
+            var source = database
+            for (column, rollup) in database.pendingRollups.sorted(by: { $0.key < $1.key }) {
+                let name = source.properties[column].name
+                guard let target = targetOfColumn[[index, rollup.relationColumn]], source.properties[rollup.relationColumn].kind == .relation,
+                      let targetProperty = databases[target]?.properties.first(where: { $0.name == rollup.targetName })
+                else {
+                    source.summary.notes.append("«\(name)» — сводка Notion не перенесена: связь или свойство цели не найдены, значения не заполнены")
+                    continue
+                }
+                source.properties[column].config = ["relationPropertyId": .string(source.properties[rollup.relationColumn].id.databaseText),
+                                                    "targetPropertyId": .string(targetProperty.id.databaseText),
+                                                    "calculation": .string(rollup.calculation)]
+            }
+            databases[index] = source
         }
     }
 
@@ -378,6 +499,11 @@ enum ColumnKind: Equatable {
     case number(format: String?)
     case uniqueId(prefix: String?)
     case options(multi: Bool, names: [String])
+    // Только по схеме Notion: в выгрузке статус неотличим от выбора, а формула и сводка приходят значениями.
+    case status(names: [String])
+    case formula(stored: String)
+    /// Настройки сводки (связь, свойство цели, вычисление) дописываются вторым проходом по связям.
+    case rollup
 
     var propertyKind: PropertyKind {
         switch self {
@@ -394,6 +520,9 @@ enum ColumnKind: Equatable {
         case .number: .number
         case .uniqueId: .uniqueId
         case .options(let multi, _): multi ? .multiSelect : .select
+        case .status: .status
+        case .formula: .formula
+        case .rollup: .rollup
         }
     }
 
@@ -401,7 +530,16 @@ enum ColumnKind: Equatable {
         switch self {
         case .number(let format?): ["format": .string(format)]
         case .uniqueId(let prefix?): ["prefix": .string(prefix)]
+        case .formula(let stored): ["expression": .string(stored)]
         default: .emptyObject
+        }
+    }
+
+    /// Названия вариантов у выбора и статуса.
+    var optionNames: [String]? {
+        switch self {
+        case .options(_, let names), .status(let names): names
+        default: nil
         }
     }
 
@@ -414,7 +552,7 @@ enum ColumnKind: Equatable {
     /// Значение ячейки из текста колонки; `nil` — пусто.
     func value(_ text: String, optionIds: [String: UUID], timeZone: TimeZone) -> JSONValue? {
         switch self {
-        case .title, .createdTime, .lastEditedTime, .relation: return nil
+        case .title, .createdTime, .lastEditedTime, .relation, .formula, .rollup: return nil
         case .text: return ["runs": [], "string": .string(text)]
         case .checkbox: return .bool(text == "Yes")
         case .url, .email, .phone: return .string(text)
@@ -430,6 +568,8 @@ enum ColumnKind: Equatable {
                 let ids = ColumnGuess.multiParts(text).compactMap { optionIds[$0] }
                 return ids.isEmpty ? nil : .array(ids.map { .string($0.databaseText) })
             }
+            return optionIds[text].map { .string($0.databaseText) }
+        case .status:
             return optionIds[text].map { .string($0.databaseText) }
         }
     }

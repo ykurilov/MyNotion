@@ -1,4 +1,5 @@
 import AppKit
+import Databases
 import NotesCore
 import PagePicker
 import VisualStyle
@@ -26,10 +27,21 @@ extension MainWindowModel {
     /// `anchor` — место меню на экране; `nil` — у верхней полосы справа (⇧⌘P, меню «•••»).
     func showMovePagePicker(_ pageId: UUID, anchor: NSRect? = nil) {
         showMovePicker(.page(pageId), anchor: anchor) { [weak self] target in
-            switch target {
-            case .page(let parentId): self?.move(pageId, toParent: parentId, at: .max)
-            case .topLevel: self?.move(pageId, toParent: nil, at: .max)
-            }
+            let parentId: UUID? = if case .page(let id) = target { id } else { nil }
+            self?.confirmRowLeavingDatabase(pageId, to: parentId) { self?.move(pageId, toParent: parentId, at: .max) }
+        }
+    }
+
+    /// Строка базы уходит в обычную страницу — её свойства пропадут из вида (spec, Edge Cases): спросить. ⌘Z вернёт всё.
+    private func confirmRowLeavingDatabase(_ pageId: UUID, to parentId: UUID?, then move: @escaping () -> Void) {
+        guard let window, (try? DatabaseTreeAddon.movingLosesProperties(pageId, to: parentId, in: store)) == true else { return move() }
+        let alert = NSAlert()
+        alert.messageText = "Перенести строку из базы?"
+        alert.informativeText = "Страница перестанет быть строкой базы, и её свойства пропадут. Вернуть всё можно через ⌘Z."
+        alert.addButton(withTitle: "Перенести")
+        alert.addButton(withTitle: "Отмена")
+        alert.beginSheetModal(for: window) { response in
+            if response == .alertFirstButtonReturn { move() }
         }
     }
 

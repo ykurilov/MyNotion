@@ -1,0 +1,321 @@
+{
+  "database_parent": {
+    "page_id": "400714fd-da69-80b2-9f57-d064952851a5",
+    "type": "page_id"
+  },
+  "database_type": null,
+  "id": "400714fd-da69-805f-802d-000b57b4f42a",
+  "in_trash": false,
+  "is_inline": true,
+  "object": "data_source",
+  "parent": {
+    "database_id": "400714fd-da69-8045-a03f-f04d83b47e70",
+    "type": "database_id"
+  },
+  "properties": {
+    "Button": {
+      "button": {},
+      "description": null,
+      "id": "U%5E%3Fa",
+      "name": "Button",
+      "type": "button"
+    },
+    "Checkbox": {
+      "checkbox": {},
+      "description": null,
+      "id": "dGwn",
+      "name": "Checkbox",
+      "type": "checkbox"
+    },
+    "Created by": {
+      "created_by": {},
+      "description": null,
+      "id": "sVMH",
+      "name": "Created by",
+      "type": "created_by"
+    },
+    "Created time": {
+      "created_time": {},
+      "description": null,
+      "id": "Pd%3Ch",
+      "name": "Created time",
+      "type": "created_time"
+    },
+    "Due Date": {
+      "date": {},
+      "description": null,
+      "id": "sr%5Cm",
+      "name": "Due Date",
+      "type": "date"
+    },
+    "Email": {
+      "description": null,
+      "email": {},
+      "id": "%3D%7DbF",
+      "name": "Email",
+      "type": "email"
+    },
+    "Files & media": {
+      "description": null,
+      "files": {},
+      "id": "s%60%7CJ",
+      "name": "Files & media",
+      "type": "files"
+    },
+    "Formula": {
+      "description": null,
+      "formula": {
+        "expression": "\"Привет, \" + prop(\"Name\")"
+      },
+      "id": "VlZx",
+      "name": "Formula",
+      "type": "formula"
+    },
+    "ID": {
+      "description": null,
+      "id": "zKiw",
+      "name": "ID",
+      "type": "unique_id",
+      "unique_id": {
+        "prefix": null
+      }
+    },
+    "Last edited by": {
+      "description": null,
+      "id": "l%5Em%3C",
+      "last_edited_by": {},
+      "name": "Last edited by",
+      "type": "last_edited_by"
+    },
+    "Last edited time": {
+      "description": null,
+      "id": "~mz%3A",
+      "last_edited_time": {},
+      "name": "Last edited time",
+      "type": "last_edited_time"
+    },
+    "Multi-select": {
+      "description": null,
+      "id": "wk%5DZ",
+      "multi_select": {
+        "options": []
+      },
+      "name": "Multi-select",
+      "type": "multi_select"
+    },
+    "Name": {
+      "description": null,
+      "id": "title",
+      "name": "Name",
+      "title": {},
+      "type": "title"
+    },
+    "Number": {
+      "description": null,
+      "id": "%60SNd",
+      "name": "Number",
+      "number": {
+        "format": "number"
+      },
+      "type": "number"
+    },
+    "Owner": {
+      "description": null,
+      "id": "verification_owner",
+      "name": "Owner",
+      "people": {},
+      "type": "people"
+    },
+    "Person": {
+      "description": null,
+      "id": "xCBc",
+      "name": "Person",
+      "people": {},
+      "type": "people"
+    },
+    "Phone": {
+      "description": null,
+      "id": "GaFF",
+      "name": "Phone",
+      "phone_number": {},
+      "type": "phone_number"
+    },
+    "Place": {
+      "description": null,
+      "id": "mCA%40",
+      "name": "Place",
+      "place": {},
+      "type": "place"
+    },
+    "Select": {
+      "description": null,
+      "id": "Md%5B_",
+      "name": "Select",
+      "select": {
+        "options": [
+          {
+            "color": "red",
+            "description": null,
+            "id": "]tIT",
+            "name": "Потом"
+          },
+          {
+            "color": "pink",
+            "description": null,
+            "id": "y}DJ",
+            "name": "Обычно"
+          },
+          {
+            "color": "orange",
+            "description": null,
+            "id": "MI\\r",
+            "name": "Срочно"
+          }
+        ]
+      },
+      "type": "select"
+    },
+    "Status": {
+      "description": null,
+      "id": "rIiv",
+      "name": "Status",
+      "status": {
+        "default_option": "Not started",
+        "groups": [
+          {
+            "color": "gray",
+            "id": "c14e7be5-3ad5-4484-83ff-4f99a1800255",
+            "name": "To-do",
+            "option_ids": [
+              "84683463-34aa-405a-ad3a-dbdf58896f6d"
+            ]
+          },
+          {
+            "color": "blue",
+            "id": "9ee30350-73f6-4f0e-8cc7-f6bb16e1ec94",
+            "name": "In progress",
+            "option_ids": [
+              "24791aaf-9702-46d6-862d-65bbf9855023"
+            ]
+          },
+          {
+            "color": "green",
+            "id": "560de7f5-3c0d-4f4a-a4d6-5d2e93ae9c4e",
+            "name": "Complete",
+            "option_ids": [
+              "a4a80eef-4571-4089-a299-659db71b65f3"
+            ]
+          }
+        ],
+        "options": [
+          {
+            "color": "default",
+            "description": null,
+            "id": "84683463-34aa-405a-ad3a-dbdf58896f6d",
+            "name": "Not started"
+          },
+          {
+            "color": "blue",
+            "description": null,
+            "id": "24791aaf-9702-46d6-862d-65bbf9855023",
+            "name": "In progress"
+          },
+          {
+            "color": "green",
+            "description": null,
+            "id": "a4a80eef-4571-4089-a299-659db71b65f3",
+            "name": "Done"
+          }
+        ]
+      },
+      "type": "status"
+    },
+    "URL": {
+      "description": null,
+      "id": "%3CpiY",
+      "name": "URL",
+      "type": "url",
+      "url": {}
+    },
+    "Verification": {
+      "description": null,
+      "id": "verification",
+      "name": "Verification",
+      "type": "verification",
+      "verification": {}
+    },
+    "Итог": {
+      "description": null,
+      "id": "hhT%40",
+      "name": "Итог",
+      "rollup": {
+        "function": "show_original",
+        "relation_property_id": "MW:w",
+        "relation_property_name": "Проект",
+        "rollup_property_id": "`SNd",
+        "rollup_property_name": "Number"
+      },
+      "type": "rollup"
+    },
+    "Обратная": {
+      "description": null,
+      "id": "VtZ%3B",
+      "name": "Обратная",
+      "relation": {
+        "data_source_id": "400714fd-da69-805f-802d-000b57b4f42a",
+        "database_id": "400714fd-da69-8045-a03f-f04d83b47e70",
+        "dual_property": {
+          "synced_property_id": "MW%3Aw",
+          "synced_property_name": "Проект"
+        },
+        "limit": null,
+        "type": "dual_property"
+      },
+      "type": "relation"
+    },
+    "Проект": {
+      "description": null,
+      "id": "MW%3Aw",
+      "name": "Проект",
+      "relation": {
+        "data_source_id": "400714fd-da69-805f-802d-000b57b4f42a",
+        "database_id": "400714fd-da69-8045-a03f-f04d83b47e70",
+        "dual_property": {
+          "synced_property_id": "VtZ%3B",
+          "synced_property_name": "Обратная"
+        },
+        "limit": null,
+        "type": "dual_property"
+      },
+      "type": "relation"
+    },
+    "Формула": {
+      "description": null,
+      "formula": {
+        "expression": ""
+      },
+      "id": "qR~m",
+      "name": "Формула",
+      "type": "formula"
+    }
+  },
+  "title": [
+    {
+      "annotations": {
+        "bold": false,
+        "code": false,
+        "color": "default",
+        "italic": false,
+        "strikethrough": false,
+        "underline": false
+      },
+      "href": null,
+      "plain_text": "Задачи",
+      "text": {
+        "content": "Задачи",
+        "link": null
+      },
+      "type": "text"
+    }
+  ]
+}

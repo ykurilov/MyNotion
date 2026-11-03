@@ -21,8 +21,8 @@ final class AppTransferControl: TransferControl {
 
     var isImporting: Bool {
         switch importController.state {
-        case .preparing, .running: true
-        case .idle, .confirmRepeat, .finished, .failed: false
+        case .preparing, .running, .fetchingSchema: true
+        case .idle, .confirmRepeat, .offerSchema, .finished, .failed: false
         }
     }
 

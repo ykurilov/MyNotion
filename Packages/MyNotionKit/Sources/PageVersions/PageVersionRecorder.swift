@@ -204,13 +204,14 @@ public final class PageVersionRecorder: Sendable {
             try versions.clearDue(pageId: pageId, upTo: .distantFuture)
             return nil
         }
-        return try record(content, deviceName: deviceName, agent: agent)
+        return try record(content, rowValues: try store.rowValues(pageId), deviceName: deviceName, agent: agent)
     }
 
-    private func record(_ content: PageContent, deviceName: String?, agent: String? = nil, clearsDueMark: Bool = true) throws -> PageVersionInfo {
+    private func record(_ content: PageContent, rowValues: RowValues? = nil, deviceName: String?, agent: String? = nil,
+                        clearsDueMark: Bool = true) throws -> PageVersionInfo {
         let createdAt = now()
         let pageId = content.page.id
-        let snapshot = PageSnapshot(page: content.page, blocks: content.blocks)
+        let snapshot = PageSnapshot(page: content.page, blocks: content.blocks, rowValues: rowValues)
         let previous = try versions.latest(ofPage: pageId)
         let author = deviceName ?? state.withLock { $0.localDeviceName }
         var summary = VersionDiff.summary(from: previous?.snapshot, to: snapshot)

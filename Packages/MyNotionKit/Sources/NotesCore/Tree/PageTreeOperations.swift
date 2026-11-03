@@ -404,6 +404,9 @@ public final class PageTreeOperations {
                 if let newParentId = placement.parentId {
                     try Self.appendLink(to: pageId, in: newParentId, transaction)
                 }
+                for addon in transaction.treeAddons {
+                    try addon.pageMoved(pageId, from: page.parentId, to: placement.parentId, in: transaction)
+                }
             }
             return (page.parentId, page.sortKey)
         }
