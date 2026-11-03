@@ -64,7 +64,7 @@ let package = Package(
         .target(name: "PageSearch", dependencies: ["NotesCore", "VisualStyle", .product(name: "GRDB", package: "GRDB.swift")]),
         .target(name: "MarkdownExport", dependencies: ["NotesCore", "LinkPreview", "Databases", .product(name: "GRDB", package: "GRDB.swift")]),
         // Импорт из Notion (US6): записи и журнал импортов (`import_run`) пишет прямо через GRDB, как поиск свой индекс.
-        .target(name: "NotionImport", dependencies: ["NotesCore", "CodeHighlighting", "LinkPreview", "Databases", "MarkdownExport", .product(name: "GRDB", package: "GRDB.swift")]),
+        .target(name: "NotionImport", dependencies: ["NotesCore", "CodeHighlighting", "LinkPreview", "Databases", "MarkdownExport", "NotionSchemaFetch", "Formulas", .product(name: "GRDB", package: "GRDB.swift")]),
         .target(name: "Sync", dependencies: ["NotesCore", "Proofreading", "NotionAPI", "AIChatHistory", .product(name: "GRDB", package: "GRDB.swift")]),
         // Состояния галереи для блоков 002 — из описателей типов редактора (`BlockKinds.gallerySamples`).
         .target(name: "UIGallery", dependencies: ["NotesCore", "PageEditor"]),
@@ -145,7 +145,7 @@ let package = Package(
         .testTarget(name: "EmojiPickerTests", dependencies: ["EmojiPicker", "NotesCore"]),
         .testTarget(name: "PageSearchTests", dependencies: ["PageSearch", "NotesCore", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "MarkdownExportTests", dependencies: ["MarkdownExport", "NotesCore", "Databases"]),
-        .testTarget(name: "NotionImportTests", dependencies: ["NotionImport", "NotesCore", "MarkdownExport", "PageEditor", "Databases", .product(name: "GRDB", package: "GRDB.swift")],
+        .testTarget(name: "NotionImportTests", dependencies: ["NotionImport", "NotesCore", "MarkdownExport", "PageEditor", "Databases", "NotionSchemaFetch", .product(name: "GRDB", package: "GRDB.swift")],
                     resources: [.copy("Fixtures")]),
         .testTarget(name: "SyncTests", dependencies: ["Sync", "NotesCore", "AIChatHistory", "Databases", "Reminders", "Attachments", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "UIGalleryTests", dependencies: ["UIGallery", "NotesCore", "PageEditor"]),
@@ -166,7 +166,7 @@ let package = Package(
         .testTarget(name: "DatabaseGridTests", dependencies: ["DatabaseGrid", "DatabaseViewBar", "DatabaseRowPage", "Databases", "NotesCore", "Formulas"]),
         .testTarget(name: "DatabaseViewBarTests", dependencies: ["DatabaseViewBar", "DatabaseGrid", "Databases", "NotesCore"]),
         .testTarget(name: "DatabaseRowPageTests", dependencies: ["DatabaseRowPage", "DatabaseGrid", "Databases", "NotesCore"]),
-        .testTarget(name: "NotionSchemaFetchTests", dependencies: ["NotionSchemaFetch", "Formulas"]),
+        .testTarget(name: "NotionSchemaFetchTests", dependencies: ["NotionSchemaFetch", "Formulas"], resources: [.copy("Fixtures")]),
         .testTarget(name: "ControlProtocolTests", dependencies: ["ControlProtocol"]),
         .testTarget(name: "ControlServerTests", dependencies: ["ControlServer", "ControlProtocol"]),
         .testTarget(name: "ControlClientTests", dependencies: ["ControlClient", "ControlServer", "ControlProtocol"]),

@@ -2,6 +2,7 @@ import AppKit
 import Attachments
 import NotesCore
 import NotionImport
+import NotionSchemaFetch
 import Observation
 import SwiftUI
 import UniformTypeIdentifiers
@@ -30,6 +31,10 @@ final class NotionImportController {
         case preparing
         /// Эту выгрузку уже импортировали: импортировать ли ещё раз.
         case confirmRepeat(previous: NotionImportRun)
+        /// В выгрузке есть базы: предложить дочитать их схему из Notion (типы, цвета, формулы, сводки). `hasKey` — ключ уже сохранён.
+        case offerSchema(databaseCount: Int, hasKey: Bool)
+        /// Схемы баз читаются из Notion по ключу (только чтение).
+        case fetchingSchema
         case running(NotionImportProgress)
         case finished(NotionImportReport)
         case failed(String)
@@ -44,12 +49,19 @@ final class NotionImportController {
     /// Ветка импорта появилась: перечитать дерево и открыть её.
     @ObservationIgnored private let showBranch: @MainActor (UUID) -> Void
     @ObservationIgnored private var prepared: PreparedNotionExport?
+    /// Базы выгрузки и схемы, дочитанные для них из Notion (пусто — импорт по одним таблицам).
+    @ObservationIgnored private var databaseIds: [String] = []
+    @ObservationIgnored private var schema = NotionSchemaFetchResult()
+    /// Ключ интеграции Notion: тот же, что для картинок.
+    @ObservationIgnored private let notionKey: @Sendable () async throws -> String?
     @ObservationIgnored private var task: Task<Void, Never>?
     /// «Остановить» импорта командой `mynotion import notion` (005): сам импорт идёт в обработчике команды.
     @ObservationIgnored private var stopCommandImport: (@MainActor () -> Void)?
 
     init(store: NotesStore, attachments: AttachmentStore? = nil, saveOpenPages: @escaping @MainActor () -> Bool,
-         showBranch: @escaping @MainActor (UUID) -> Void) {
+         showBranch: @escaping @MainActor (UUID) -> Void,
+         notionKey: @escaping @Sendable () async throws -> String? = { nil }) {
+        self.notionKey = notionKey
         self.attachments = attachments
         self.store = store
         self.saveOpenPages = saveOpenPages
@@ -58,7 +70,7 @@ final class NotionImportController {
 
     var isBusy: Bool {
         switch state {
-        case .preparing, .running, .confirmRepeat: true
+        case .preparing, .running, .confirmRepeat, .offerSchema, .fetchingSchema: true
         default: false
         }
     }
@@ -83,11 +95,12 @@ final class NotionImportController {
         state = .preparing
         let store = store
         task = Task { [weak self] in
-            let outcome = await Task.detached(priority: .userInitiated) { () -> Result<(PreparedNotionExport, NotionImportRun?), any Error> in
+            let outcome = await Task.detached(priority: .userInitiated) { () -> Result<PreparedImport, any Error> in
                 Result {
                     let prepared = try NotionExportUnpacker().prepare(source)
                     do {
-                        return (prepared, try NotionImporter(store: store).previousImport(withFingerprint: prepared.fingerprint))
+                        return PreparedImport(export: prepared, databaseIds: prepared.databaseIds(),
+                                              previous: try NotionImporter(store: store).previousImport(withFingerprint: prepared.fingerprint))
                     } catch {
                         prepared.discard()
                         throw error
@@ -98,30 +111,86 @@ final class NotionImportController {
         }
     }
 
-    private func didPrepare(_ outcome: Result<(PreparedNotionExport, NotionImportRun?), any Error>) {
+    /// Выгрузка, готовая к переносу: папка, id её баз и прежний перенос того же файла, если был.
+    private struct PreparedImport: Sendable {
+        let export: PreparedNotionExport
+        let databaseIds: [String]
+        let previous: NotionImportRun?
+    }
+
+    private func didPrepare(_ outcome: Result<PreparedImport, any Error>) {
         switch outcome {
         case .failure(let error):
             state = .failed(Self.message(for: error))
-        case .success(let (prepared, previous)):
-            self.prepared = prepared
-            if let previous {
+        case .success(let ready):
+            prepared = ready.export
+            databaseIds = ready.databaseIds
+            schema = NotionSchemaFetchResult()
+            if let previous = ready.previous {
                 state = .confirmRepeat(previous: previous)
             } else {
-                runImport()
+                offerSchemaOrImport()
             }
         }
     }
 
     func confirmRepeat() {
         guard case .confirmRepeat = state else { return }
-        runImport()
+        offerSchemaOrImport()
     }
 
     func cancelRepeat() {
         guard case .confirmRepeat = state else { return }
+        discardPrepared()
+    }
+
+    private func discardPrepared() {
         prepared?.discard()
         prepared = nil
+        databaseIds = []
+        schema = NotionSchemaFetchResult()
         state = .idle
+    }
+
+    /// Есть базы — предложить дочитать их схему из Notion; нет баз — сразу переносить.
+    private func offerSchemaOrImport() {
+        guard !databaseIds.isEmpty else {
+            runImport()
+            return
+        }
+        state = .preparing
+        let notionKey = notionKey
+        let count = databaseIds.count
+        task = Task { [weak self] in
+            let hasKey = ((try? await notionKey()) ?? nil)?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            guard let self, case .preparing = self.state else { return }
+            self.state = .offerSchema(databaseCount: count, hasKey: hasKey)
+        }
+    }
+
+    /// «Дочитать схему из Notion»: только чтение по ключу, потом перенос. Не вышло — перенос по таблицам, причина в итоге.
+    func fetchSchemaAndImport() {
+        guard case .offerSchema = state else { return }
+        state = .fetchingSchema
+        let fetch = NotionSchemaFetch(key: notionKey)
+        let ids = databaseIds
+        task = Task { [weak self] in
+            let result = await fetch.fetch(databaseIds: ids)
+            guard let self, case .fetchingSchema = self.state, !Task.isCancelled else { return }
+            self.schema = result
+            self.runImport()
+        }
+    }
+
+    func importWithoutSchema() {
+        guard case .offerSchema = state else { return }
+        schema = NotionSchemaFetchResult()
+        runImport()
+    }
+
+    func cancelSchemaOffer() {
+        guard case .offerSchema = state else { return }
+        discardPrepared()
     }
 
     private func runImport() {
@@ -132,10 +201,11 @@ final class NotionImportController {
         }
         state = .running(NotionImportProgress(phase: .reading, done: 0, total: 0))
         let importer = NotionImporter(store: store, attachments: attachments)
+        let schema = schema
         task = Task { [weak self] in
             let detached = Task.detached(priority: .userInitiated) { () -> Result<NotionImportReport, any Error> in
                 Result {
-                    try importer.importExport(prepared) { step in
+                    try importer.importExport(prepared, schema: schema) { step in
                         Task { @MainActor in self?.report(step) }
                     }
                 }
@@ -144,15 +214,24 @@ final class NotionImportController {
             let outcome = await withTaskCancellationHandler { await detached.value } onCancel: { detached.cancel() }
             prepared.discard()
             self?.prepared = nil
+            self?.databaseIds = []
+            self?.schema = NotionSchemaFetchResult()
             self?.finish(outcome)
         }
     }
 
-    /// Остановить импорт: ветка откатывается целиком.
+    /// Остановить импорт: ветка откатывается целиком. Пока схема читается из Notion, ничего ещё не записано.
     func stop() {
-        guard case .running = state else { return }
-        task?.cancel()
-        stopCommandImport?()
+        switch state {
+        case .running:
+            task?.cancel()
+            stopCommandImport?()
+        case .fetchingSchema:
+            task?.cancel()
+            discardPrepared()
+        default:
+            break
+        }
     }
 
     // MARK: Импорт командой (005)
@@ -222,6 +301,12 @@ struct NotionImportNoticeView: View {
             NoticeCard(identifier: "notion-import-notice") {
                 NoticeProgress(done: 0, total: 0, text: "Открываю файл из Notion…")
             }
+        case .fetchingSchema:
+            NoticeCard(identifier: "notion-import-notice") {
+                NoticeProgress(done: 0, total: 0, text: "Читаю схему баз из Notion…")
+                Button("Остановить") { controller.stop() }
+                    .accessibilityIdentifier("notion-import-stop")
+            }
         case .running(let step):
             NoticeCard(identifier: "notion-import-notice") {
                 NoticeProgress(done: step.done, total: step.total, text: Self.progressText(step))
@@ -235,7 +320,7 @@ struct NotionImportNoticeView: View {
                 Button("Закрыть") { controller.dismiss() }
                     .accessibilityIdentifier("notion-import-close")
             }
-        case .idle, .confirmRepeat, .finished:
+        case .idle, .confirmRepeat, .offerSchema, .finished:
             EmptyView()
         }
     }
@@ -258,6 +343,7 @@ struct NotionImportSheets: ViewModifier {
             if let controller {
                 switch controller.state {
                 case .confirmRepeat(let previous): NotionImportRepeatView(controller: controller, previous: previous)
+                case .offerSchema(let count, let hasKey): NotionImportSchemaOfferView(controller: controller, databaseCount: count, hasKey: hasKey)
                 case .finished(let report): NotionImportReportView(controller: controller, report: report)
                 default: EmptyView()
                 }
@@ -267,7 +353,7 @@ struct NotionImportSheets: ViewModifier {
 
     private var isPresented: Bool {
         switch controller?.state {
-        case .confirmRepeat?, .finished?: true
+        case .confirmRepeat?, .offerSchema?, .finished?: true
         default: false
         }
     }
@@ -291,7 +377,7 @@ struct NotionImportReportView: View {
                     .accessibilityIdentifier("notion-import-notice-line")
             }
             if !report.databases.isEmpty {
-                Text("Базы стали базами MyNotion. Типы свойств угаданы по значениям:")
+                Text(verbatim: Self.databasesIntro(report))
                     .foregroundStyle(Color(nsColor: Palette.textSecondary))
                     .fixedSize(horizontal: false, vertical: true)
                 Group {
@@ -360,6 +446,14 @@ struct NotionImportReportView: View {
         .padding(10)
     }
 
+    /// Откуда взяты типы свойств: из схемы Notion, по значениям таблицы или и так и так.
+    static func databasesIntro(_ report: NotionImportReport) -> String {
+        let applied = report.databases.filter(\.schemaApplied).count
+        if applied == 0 { return "Базы стали базами MyNotion. Типы свойств угаданы по значениям:" }
+        if applied == report.databases.count { return "Базы стали базами MyNotion. Типы свойств, формулы и сводки взяты из схемы Notion:" }
+        return "Базы стали базами MyNotion. Где схему Notion прочитать не удалось, типы угаданы по значениям:"
+    }
+
     /// «строк: 4, шаблонов: 1».
     static func rowsText(_ database: DatabaseImportSummary) -> String {
         "строк: \(number(database.rowCount))" + (database.templateCount > 0 ? ", шаблонов: \(number(database.templateCount))" : "")
@@ -374,6 +468,46 @@ struct NotionImportReportView: View {
             }
         }
         .padding(10)
+    }
+}
+
+/// Выгрузка Notion не хранит формулы, сводки, цвета и статусы баз: предлагаем дочитать их по ключу интеграции (только чтение).
+struct NotionImportSchemaOfferView: View {
+    let controller: NotionImportController
+    let databaseCount: Int
+    let hasKey: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ModalCardTitle(text: "Дочитать схему баз из Notion?")
+            Text(verbatim: "В файле баз: \(number(databaseCount)). Файл не хранит их формулы, сводки, цвета вариантов и статусы. Их можно дочитать из Notion по вашему ключу: приложение только читает, в Notion ничего не меняется.")
+                .fixedSize(horizontal: false, vertical: true)
+            Text(verbatim: hasKey
+                ? "Доступ нужен к каждой базе: в Notion откройте базу, «•••» → «Подключения» и добавьте свою интеграцию. Базы без доступа перенесутся по таблицам, причина будет в итоге."
+                : "Ключа Notion пока нет. Добавьте его в «Настройки → Notion» (интеграция создаётся на notion.so/profile/integrations), затем вернитесь сюда. Можно и сейчас перенести по таблицам: типы свойств тогда угадываются по значениям.")
+                .foregroundStyle(Color(nsColor: Palette.textSecondary))
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("notion-import-schema-hint")
+            HStack(spacing: 8) {
+                Spacer()
+                Button("Отмена") { controller.cancelSchemaOffer() }
+                    .buttonStyle(ModalCardButtonStyle())
+                    .keyboardShortcut(.cancelAction)
+                    .accessibilityIdentifier("notion-import-schema-cancel")
+                Button("Перенести без схемы") { controller.importWithoutSchema() }
+                    .buttonStyle(ModalCardButtonStyle(isPrimary: !hasKey))
+                    .accessibilityIdentifier("notion-import-schema-skip")
+                if hasKey {
+                    Button("Дочитать схему из Notion") { controller.fetchSchemaAndImport() }
+                        .buttonStyle(ModalCardButtonStyle(isPrimary: true))
+                        .keyboardShortcut(.defaultAction)
+                        .accessibilityIdentifier("notion-import-schema-fetch")
+                }
+            }
+            .padding(.top, 4)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("notion-import-schema-offer")
     }
 }
 

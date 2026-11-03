@@ -79,7 +79,8 @@ struct MyNotionApp: App {
         }
         importController = pages.map { pages in
             NotionImportController(store: pages.store, attachments: pages.attachments, saveOpenPages: { pages.saveAll() },
-                                   showBranch: { (pages.activeWindow ?? pages.firstWindow).showImportedBranch($0) })
+                                   showBranch: { (pages.activeWindow ?? pages.firstWindow).showImportedBranch($0) },
+                                   notionKey: { try await AppNotion.keychain.key() })
         }
         AppDelegate.importController = importController
         AppDelegate.exportController = exportController

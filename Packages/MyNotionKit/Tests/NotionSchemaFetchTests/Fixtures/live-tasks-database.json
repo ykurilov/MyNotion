@@ -1,0 +1,25 @@
+{
+  "data_sources": [
+    {
+      "id": "400714fd-da69-805f-802d-000b57b4f42a",
+      "name": "Задачи"
+    }
+  ],
+  "id": "400714fd-da69-8045-a03f-f04d83b47e70",
+  "is_inline": true,
+  "object": "database",
+  "parent": {
+    "page_id": "400714fd-da69-80b2-9f57-d064952851a5",
+    "type": "page_id"
+  },
+  "title": [
+    {
+      "plain_text": "list",
+      "text": {
+        "content": "list",
+        "link": null
+      },
+      "type": "text"
+    }
+  ]
+}
