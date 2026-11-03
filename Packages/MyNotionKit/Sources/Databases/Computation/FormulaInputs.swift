@@ -7,8 +7,6 @@ import NotesCore
 /// (`current.prop(…)`). Одно чтение на пачку, без лишних свойств (проба R20.3).
 struct FormulaInputs: FormulaContext {
     var values: [UUID: [String: FormulaValue]] = [:]
-    /// `updatedAt` строк при чтении — для сверки при записи (R21).
-    var stamps: [UUID: String] = [:]
     /// Названия прочитанных строк — `format` и `join` списка страниц.
     var titles: [UUID: String] = [:]
     let now: Date
@@ -38,20 +36,19 @@ struct FormulaInputs: FormulaContext {
     }
 
     private mutating func readPages(_ rows: [UUID], catalog: DatabaseCatalog, properties: [DatabaseProperty], in db: Database) throws {
-        let marks = Array(repeating: "?", count: rows.count).joined(separator: ",")
         let pageKinds = properties.filter { [.title, .createdTime, .lastEditedTime].contains($0.kind) }
-        for row in try Row.fetchAll(db, sql: "SELECT id, title, createdAt, updatedAt, CAST(updatedAt AS TEXT) AS stamp FROM page WHERE id IN (\(marks))",
-                                    arguments: StatementArguments(rows.map(\.databaseText))) {
-            guard let id = UUID(uuidString: row["id"]) else { continue }
-            stamps[id] = row["stamp"]
-            titles[id] = row["title"]
-            for property in pageKinds {
-                let value: FormulaValue = switch property.kind {
-                case .title: .text(row["title"])
-                case .createdTime: .date(FormulaDate(start: row["createdAt"], hasTime: true))
-                default: .date(FormulaDate(start: row["updatedAt"], hasTime: true))
+        try SQLChunks.forEach(rows) { marks, arguments in
+            for row in try Row.fetchAll(db, sql: "SELECT id, title, createdAt, updatedAt FROM page WHERE id IN (\(marks))", arguments: arguments) {
+                guard let id = UUID(uuidString: row["id"]) else { continue }
+                titles[id] = row["title"]
+                for property in pageKinds {
+                    let value: FormulaValue = switch property.kind {
+                    case .title: .text(row["title"])
+                    case .createdTime: .date(FormulaDate(start: row["createdAt"], hasTime: true))
+                    default: .date(FormulaDate(start: row["updatedAt"], hasTime: true))
+                    }
+                    values[id, default: [:]][property.id.databaseText] = value
                 }
-                values[id, default: [:]][property.id.databaseText] = value
             }
         }
     }
@@ -60,16 +57,17 @@ struct FormulaInputs: FormulaContext {
         let stored = properties.filter { $0.kind.storesCells || $0.kind == .formula || $0.kind == .rollup }
         guard !stored.isEmpty else { return }
         let byId = Dictionary(uniqueKeysWithValues: stored.map { ($0.id.databaseText, $0) })
-        let marks = Array(repeating: "?", count: rows.count).joined(separator: ",")
         let propertyMarks = Array(repeating: "?", count: stored.count).joined(separator: ",")
-        for table in ["db_cell", "db_computed"] {
-            let cursor = try Row.fetchCursor(db, sql: """
-                SELECT rowId, propertyId, value FROM \(table) WHERE rowId IN (\(marks)) AND propertyId IN (\(propertyMarks)) AND value IS NOT NULL
-                """, arguments: StatementArguments(rows.map(\.databaseText) + stored.map(\.id.databaseText)))
-            while let row = try cursor.next() {
-                guard let rowId = UUID(uuidString: row[0]), let property = byId[row[1]], let text: String = row[2],
-                      let json = FastJSON.parse(text) else { continue }
-                values[rowId, default: [:]][row[1]] = Self.formulaValue(json, property: property, catalog: catalog)
+        try SQLChunks.forEach(rows) { marks, arguments in
+            for table in ["db_cell", "db_computed"] {
+                let cursor = try Row.fetchCursor(db, sql: """
+                    SELECT rowId, propertyId, value FROM \(table) WHERE rowId IN (\(marks)) AND propertyId IN (\(propertyMarks)) AND value IS NOT NULL
+                    """, arguments: arguments + StatementArguments(stored.map(\.id.databaseText)))
+                while let row = try cursor.next() {
+                    guard let rowId = UUID(uuidString: row[0]), let property = byId[row[1]], let text: String = row[2],
+                          let json = FastJSON.parse(text) else { continue }
+                    values[rowId, default: [:]][row[1]] = Self.formulaValue(json, property: property, catalog: catalog)
+                }
             }
         }
     }

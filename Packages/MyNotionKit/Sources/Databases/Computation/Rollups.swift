@@ -9,7 +9,8 @@ import NotesCore
 public struct RollupRecompute: Sendable {
     struct Rollup: Sendable {
         let property: DatabaseProperty
-        let relation: DatabaseProperty
+        /// Связь удалена или стала другим типом — сводка пустая, а не со старым итогом.
+        let relation: DatabaseProperty?
         /// Свойство базы-цели; нет — сводка пустая.
         let target: DatabaseProperty?
         let targetCatalog: DatabaseCatalog?
@@ -27,15 +28,18 @@ public struct RollupRecompute: Sendable {
         var targetCatalogs: [UUID: DatabaseCatalog] = [:]
         var rollups: [Rollup] = []
         for property in catalog.properties where property.kind == .rollup {
-            guard let relationId = property.config["relationPropertyId"]?.string.flatMap(UUID.init(uuidString:)),
-                  let relation = catalog.propertiesById[relationId], relation.kind == .relation, let targetDatabase = relation.relationTarget
-            else { continue }
+            let relationId = property.config["relationPropertyId"]?.string.flatMap(UUID.init(uuidString:))
+            let relation = relationId.flatMap { catalog.propertiesById[$0] }.flatMap { $0.kind == .relation && $0.relationTarget != nil ? $0 : nil }
             let targetId = property.config["targetPropertyId"]?.string.flatMap(UUID.init(uuidString:))
-            if let propertyIds, !propertyIds.contains(property.id), !propertyIds.contains(relationId), !(targetId.map(propertyIds.contains) ?? false) {
+            if let propertyIds, !propertyIds.contains(property.id), !(relationId.map(propertyIds.contains) ?? false),
+               !(targetId.map(propertyIds.contains) ?? false) {
                 continue
             }
-            if targetCatalogs[targetDatabase] == nil { targetCatalogs[targetDatabase] = try DatabaseCatalog.read(targetDatabase, in: db) }
-            let targetCatalog = targetCatalogs[targetDatabase]
+            var targetCatalog: DatabaseCatalog?
+            if let targetDatabase = relation?.relationTarget {
+                if targetCatalogs[targetDatabase] == nil { targetCatalogs[targetDatabase] = try DatabaseCatalog.read(targetDatabase, in: db) }
+                targetCatalog = targetCatalogs[targetDatabase]
+            }
             rollups.append(Rollup(property: property, relation: relation, target: targetId.flatMap { targetCatalog?.propertiesById[$0] },
                                   targetCatalog: targetCatalog,
                                   calculation: property.config["calculation"]?.string.flatMap(Calculation.init(rawValue:)) ?? .showOriginal))
@@ -49,11 +53,11 @@ public struct RollupRecompute: Sendable {
     /// Итоги сводок строк `rows`.
     func values(_ rows: [UUID], in db: Database) throws -> [ComputedValue] {
         var result: [ComputedValue] = []
-        for group in Dictionary(grouping: rollups, by: \.relation.id).values {
-            let links = try RelationLinks.targets(of: rows, through: group[0].relation, in: db)
+        for group in Dictionary(grouping: rollups, by: \.relation?.id).values {
+            let links = try group[0].relation.map { try RelationLinks.targets(of: rows, through: $0, in: db) } ?? [:]
             let targetRows = Array(Set(links.values.flatMap { $0.map(\.id) }))
             for rollup in group {
-                guard let target = rollup.target, let catalog = rollup.targetCatalog else {
+                guard rollup.relation != nil, let target = rollup.target, let catalog = rollup.targetCatalog else {
                     result += rows.map { ComputedValue(rowId: $0, propertyId: rollup.property.id, value: nil) }
                     continue
                 }
@@ -106,7 +110,7 @@ public struct RollupRecompute: Sendable {
             }
         case .title, .createdTime, .lastEditedTime:
             let context = catalog.context(for: property, calendar: calendar)
-            try forEachChunk(rows) { marks, arguments in
+            try SQLChunks.forEach(rows) { marks, arguments in
                 for row in try Row.fetchAll(db, sql: "SELECT id, title, createdAt, updatedAt FROM page WHERE id IN (\(marks))", arguments: arguments) {
                     guard let id = UUID(uuidString: row[0]) else { continue }
                     switch property.kind {
@@ -120,7 +124,7 @@ public struct RollupRecompute: Sendable {
             }
         default:
             let table = property.kind == .formula || property.kind == .rollup ? "db_computed" : "db_cell"
-            try forEachChunk(rows) { marks, arguments in
+            try SQLChunks.forEach(rows) { marks, arguments in
                 let cursor = try Row.fetchCursor(db, sql: """
                     SELECT rowId, value FROM \(table) WHERE propertyId = ? AND rowId IN (\(marks)) AND value IS NOT NULL
                     """, arguments: StatementArguments([property.id.databaseText]) + arguments)
@@ -148,13 +152,6 @@ public struct RollupRecompute: Sendable {
         case .files: return .array(FilesType.names(json).map(JSONValue.string))
         case .url, .email, .phone: return json.string.flatMap { $0.isEmpty ? nil : .string($0) }
         default: return json
-        }
-    }
-
-    private static func forEachChunk(_ rows: [UUID], _ body: (String, StatementArguments) throws -> Void) throws {
-        for start in stride(from: 0, to: rows.count, by: 500) {
-            let chunk = rows[start..<min(start + 500, rows.count)]
-            try body(Array(repeating: "?", count: chunk.count).joined(separator: ","), StatementArguments(chunk.map(\.databaseText)))
         }
     }
 }

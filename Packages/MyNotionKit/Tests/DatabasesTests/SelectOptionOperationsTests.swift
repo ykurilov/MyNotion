@@ -154,6 +154,33 @@ struct SelectOptionOperationsTests {
         #expect(try cell(rows[1], select.id) == nil)
     }
 
+    @Test("⌘Z удаления варианта не затирает ячейку, которую поменяли после удаления (другой Mac или правка руками)")
+    func undoDeleteKeepsLaterEdits() throws {
+        let select = try quiet.addProperty(to: base.databaseId, name: "Тип", kind: .select)
+        let bug = try quiet.createOption(in: select.id, named: "Баг")
+        let task = try quiet.createOption(in: select.id, named: "Задача")
+        let tags = try quiet.addProperty(to: base.databaseId, name: "Теги", kind: .multiSelect)
+        let urgent = try quiet.createOption(in: tags.id, named: "Срочно")
+        let later = try quiet.createOption(in: tags.id, named: "Потом")
+        try quiet.setCell(rowId: rows[0], propertyId: select.id, value: id(bug))
+        try quiet.setCell(rowId: rows[1], propertyId: select.id, value: id(bug))
+        try quiet.setCell(rowId: rows[0], propertyId: tags.id, value: [id(urgent), id(later)])
+        try quiet.setCell(rowId: rows[1], propertyId: tags.id, value: [id(urgent), id(later)])
+
+        try step { try operations.deleteOption(bug.id) }
+        try quiet.setCell(rowId: rows[1], propertyId: select.id, value: id(task))
+        undo.undo()
+        #expect(try names(select.id) == ["Баг", "Задача"])
+        #expect(try cell(rows[0], select.id) == id(bug))
+        #expect(try cell(rows[1], select.id) == id(task))
+
+        try step { try operations.deleteOption(urgent.id) }
+        try quiet.setCell(rowId: rows[1], propertyId: tags.id, value: nil)
+        undo.undo()
+        #expect(try cell(rows[0], tags.id) == .array([id(urgent), id(later)]))
+        #expect(try cell(rows[1], tags.id) == nil)
+    }
+
     // MARK: Порядок
 
     @Test("Перетащить вариант — новый порядок и сортировка строк по нему; ⌘Z — прежний")

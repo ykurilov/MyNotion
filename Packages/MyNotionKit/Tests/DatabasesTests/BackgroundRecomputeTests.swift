@@ -58,7 +58,7 @@ struct BackgroundRecomputeTests {
         let (values, stamps) = try store.database.dbWriter.read { db in
             let inputs = try FormulaInputs(rows: [row], needed: [done.databaseText], catalog: try DatabaseCatalog.read(sample.tasksId, in: db),
                                            now: Date(), calendar: .current, in: db)
-            return (recompute.evaluate([row], inputs: inputs), inputs.stamps)
+            return (recompute.evaluate([row], inputs: inputs), try ComputedWriter.rowStamps([row], in: db))
         }
         // …а тем временем строку поправили — правка пересчитала свои итоги в своей транзакции.
         let old = try store.write { tx in try tx.cell(rowId: row, propertyId: done)?.value?.bool ?? false }
@@ -73,5 +73,30 @@ struct BackgroundRecomputeTests {
         #expect(skipped == [row])
         #expect(try computed(row, "Итог") == fresh, "старый итог не вернулся")
         _ = result
+    }
+
+    @Test("Пачка не затирает итог, который правка строки другой базы пересчитала после чтения (своя строка не менялась)")
+    func skipsRowsRecomputedThroughRelation() throws {
+        let rows = try ViewQuery.open(sample.tableViewId, in: store)!.result.rowIds
+        let recompute = try FormulaRecompute(store: store, databaseId: sample.tasksId)
+        let row = rows[0], relation = sample.taskProperties["Проект"]!, title = sample.projectProperties["Название"]!
+        let project = try #require(try store.write { tx in try tx.relationLinks(propertyId: relation, rowId: row).first?.targetRowId })
+        // Прочитали и вычислили «Проект (имя)» со старым названием проекта…
+        let (values, stamps) = try store.database.dbWriter.read { db in
+            let inputs = try FormulaInputs(rows: [row], needed: [relation.databaseText, title.databaseText],
+                                           catalog: try DatabaseCatalog.read(sample.tasksId, in: db), now: Date(), calendar: .current, in: db)
+            return (recompute.evaluate([row], inputs: inputs), try ComputedWriter.rowStamps([row], in: db))
+        }
+        // …а тем временем проект переименовали — правка пересчитала итог задачи в своей транзакции; сама задача не менялась.
+        try store.write { tx throws in
+            var page = try #require(try tx.page(project))
+            page.title = "Новое имя"
+            try tx.updatePage(page)
+            try recompute.recompute(rows: [row], in: tx)
+        }
+        #expect(try computed(row, "Проект (имя)") == .array(["Новое имя"]))
+        let skipped = try store.database.dbWriter.write { db in try ComputedWriter.write(values, readStamps: stamps, in: db) }
+        #expect(skipped == [row])
+        #expect(try computed(row, "Проект (имя)") == .array(["Новое имя"]), "старое имя не вернулось")
     }
 }

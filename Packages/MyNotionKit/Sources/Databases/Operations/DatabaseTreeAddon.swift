@@ -177,7 +177,7 @@ public struct DatabaseTreeAddon: PageTreeAddon {
     // MARK: Связи
 
     /// Живые связи свойства в виде «строка этого свойства → строка цели», как бы они ни хранились.
-    private static func links(through property: DatabaseProperty, in transaction: NotesTransaction) throws
+    static func links(through property: DatabaseProperty, in transaction: NotesTransaction) throws
         -> [(rowId: UUID, targetRowId: UUID, sortKey: FractionalSortKey)] {
         let storage = RelationLinks.storage(of: property)
         return try Row.fetchAll(transaction.database, sql: """
@@ -190,7 +190,7 @@ public struct DatabaseTreeAddon: PageTreeAddon {
     }
 
     /// Живые связи одной строки свойства.
-    private static func links(of rowId: UUID, through property: DatabaseProperty, in transaction: NotesTransaction) throws
+    static func links(of rowId: UUID, through property: DatabaseProperty, in transaction: NotesTransaction) throws
         -> [(targetRowId: UUID, sortKey: FractionalSortKey)] {
         let storage = RelationLinks.storage(of: property)
         return storage.reversed
@@ -198,8 +198,8 @@ public struct DatabaseTreeAddon: PageTreeAddon {
             : try transaction.relationLinks(propertyId: storage.propertyId, rowId: rowId).map { ($0.targetRowId, $0.sortKey) }
     }
 
-    private static func saveLink(_ rowId: UUID, through property: DatabaseProperty, to targetRowId: UUID, sortKey: FractionalSortKey,
-                                 in transaction: NotesTransaction) throws {
+    static func saveLink(_ rowId: UUID, through property: DatabaseProperty, to targetRowId: UUID, sortKey: FractionalSortKey,
+                         in transaction: NotesTransaction) throws {
         let storage = RelationLinks.storage(of: property)
         let (from, to) = storage.reversed ? (targetRowId, rowId) : (rowId, targetRowId)
         let existing = try transaction.relationLink(RelationLink.id(propertyId: storage.propertyId, rowId: from, targetRowId: to))
