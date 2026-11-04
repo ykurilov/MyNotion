@@ -520,12 +520,50 @@ final class TableView: NSView {
 
     // MARK: Мышь
 
+    /// Таблица с «+» столбца: у таблицы во всю ширину кнопка справа за краем вида, как у Notion.
+    private var hoverRect: NSRect { bounds.union(addColumnRect) }
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         trackingAreas.forEach(removeTrackingArea)
-        // Вместе с кнопкой «+» столбца: у таблицы во всю ширину она справа за краем вида, как у Notion.
-        addTrackingArea(NSTrackingArea(rect: bounds.union(addColumnRect), options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow],
+        // AppKit обрезает область по рамке блока: за её краем мышь ведёт pointerMonitor.
+        addTrackingArea(NSTrackingArea(rect: hoverRect, options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow],
                                        owner: self))
+    }
+
+    /// Пока мышь у «+» столбца за краем рамки блока, события вида туда не приходят — их читает монитор окна.
+    private var pointerMonitor: Any?
+
+    private func pointerDidMove(toWindowPoint windowPoint: NSPoint) {
+        let point = convert(windowPoint, from: nil)
+        isPointerInside = hoverRect.contains(point)
+        if isPointerInside, !visibleRect.contains(point) {
+            startPointerMonitor()
+        } else {
+            stopPointerMonitor()
+        }
+    }
+
+    private func startPointerMonitor() {
+        guard pointerMonitor == nil else { return }
+        pointerMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] event in
+            if let self, event.window === self.window { self.pointerDidMove(toWindowPoint: event.locationInWindow) }
+            return event
+        }
+    }
+
+    private func stopPointerMonitor() {
+        guard let pointerMonitor else { return }
+        NSEvent.removeMonitor(pointerMonitor)
+        self.pointerMonitor = nil
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        if newWindow == nil {
+            stopPointerMonitor()
+            isPointerInside = false
+        }
     }
 
     /// Кнопка «+» столбца за краем вида тоже ловит щелчок.
@@ -534,8 +572,8 @@ final class TableView: NSView {
         return addColumnButton.frame.contains(convert(point, from: superview)) ? addColumnButton : nil
     }
 
-    override func mouseEntered(with event: NSEvent) { isPointerInside = true }
-    override func mouseExited(with event: NSEvent) { isPointerInside = false }
+    override func mouseEntered(with event: NSEvent) { pointerDidMove(toWindowPoint: event.locationInWindow) }
+    override func mouseExited(with event: NSEvent) { pointerDidMove(toWindowPoint: event.locationInWindow) }
 
     override func mouseMoved(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
@@ -596,7 +634,12 @@ final class TableView: NSView {
 @MainActor
 final class TableAddButton: NSView {
     var onPress: (() -> Void)?
-    var isShown = false { didSet { needsDisplay = true } }
+    var isShown = false {
+        didSet {
+            needsDisplay = true
+            setAccessibilityValue(isShown ? "виден" : "скрыт")
+        }
+    }
 
     init(identifier: String, label: String) {
         super.init(frame: .zero)
@@ -604,6 +647,7 @@ final class TableAddButton: NSView {
         setAccessibilityRole(.button)
         setAccessibilityLabel(label)
         setAccessibilityIdentifier(identifier)
+        setAccessibilityValue("скрыт")
     }
 
     @available(*, unavailable)
