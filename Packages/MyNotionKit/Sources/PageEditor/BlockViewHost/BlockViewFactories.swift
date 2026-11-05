@@ -12,11 +12,17 @@ public protocol BlockViewFactory: AnyObject {
     func height(for block: Block, width: CGFloat) -> CGFloat?
     /// То же, когда известен редактор: высота колонок и таблицы зависит от их блоков в документе.
     func height(for block: Block, width: CGFloat, context: BlockViewContext) -> CGFloat?
+    /// Ширина вида блока: обычно — колонка `columnWidth`; широкой таблице — больше, до `maxWidth` (края страницы).
+    func viewWidth(for block: Block, columnWidth: CGFloat, maxWidth: CGFloat, context: BlockViewContext) -> CGFloat
 }
 
 extension BlockViewFactory {
     public func height(for block: Block, width: CGFloat, context: BlockViewContext) -> CGFloat? {
         height(for: block, width: width)
+    }
+
+    public func viewWidth(for block: Block, columnWidth: CGFloat, maxWidth: CGFloat, context: BlockViewContext) -> CGFloat {
+        columnWidth
     }
 }
 

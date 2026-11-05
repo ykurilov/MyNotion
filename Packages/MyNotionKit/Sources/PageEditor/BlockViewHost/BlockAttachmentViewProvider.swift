@@ -18,6 +18,7 @@ final class BlockAttachmentViewProvider: NSTextAttachmentViewProvider {
     static func makeHostedView(for attachment: BlockAttachment, textView: PageTextView?) -> BlockAttachmentHostView {
         let width = textView?.textContainer?.size.width ?? 720
         let host = BlockAttachmentHostView(blockId: attachment.blockId, textView: textView)
+        host.columnWidth = width
         host.frame = NSRect(x: 0, y: 0, width: width, height: attachment.height(forWidth: width, in: textView))
         let context = BlockViewContext(textView: textView, width: width)
         if let content = BlockViewFactories.shared.factory(for: attachment.block.kind)?.makeView(for: attachment.block, context: context) {
@@ -33,6 +34,8 @@ final class BlockAttachmentViewProvider: NSTextAttachmentViewProvider {
 final class BlockAttachmentHostView: NSView {
     let blockId: UUID
     weak var textView: PageTextView?
+    /// Ширина колонки текста под блоком; вид бывает шире (широкая таблица — до края страницы).
+    var columnWidth: CGFloat = 0
 
     init(blockId: UUID, textView: PageTextView?) {
         self.blockId = blockId
@@ -42,13 +45,6 @@ final class BlockAttachmentHostView: NSView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
-
-    /// Часть вида блока за краем рамки (кнопка «+» столбца у таблицы во всю ширину) тоже ловит щелчок.
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        if let hit = super.hitTest(point) { return hit }
-        let local = convert(point, from: superview)
-        return subviews.lazy.compactMap { $0.hitTest(local) }.first
-    }
 
     override func mouseDown(with event: NSEvent) {
         guard let textView else { return super.mouseDown(with: event) }

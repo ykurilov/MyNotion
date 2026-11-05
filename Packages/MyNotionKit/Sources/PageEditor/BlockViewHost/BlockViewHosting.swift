@@ -45,7 +45,7 @@ final class BlockViewHosting {
         let visible = textView.visibleRect
         let area = visible.insetBy(dx: 0, dy: -visible.height)
         let origin = textView.textContainerOrigin
-        var wanted: [UUID: (BlockAttachment, NSRect)] = [:]
+        var wanted: [UUID: (BlockAttachment, NSRect, columnWidth: CGFloat)] = [:]
         // Страница без блоков-вложений: искать нечего (прокрутка страницы на 10 000 блоков — без лишнего прохода).
         let hasAttachments = !views.isEmpty || textView.document.blocks.contains { $0.kind.rendersAsAttachment }
         // Начало поиска — разложенный абзац у верха области. Его нет — прокрутка ушла туда, где TextKit ещё не раскладывал:
@@ -71,8 +71,9 @@ final class BlockViewHosting {
                 let width = max(0, origin.x + (textView.textContainer?.size.width ?? frame.width) - x
                                 - (textView.textContainer?.lineFragmentPadding ?? 0))
                 let height = attachment.height(forWidth: width, in: textView)
-                let rect = NSRect(x: x, y: frame.minY + lineBounds.minY, width: width, height: height)
-                if rect.intersects(area) { wanted[attachment.blockId] = (attachment, rect.integral) }
+                let viewWidth = Self.viewWidth(of: attachment, columnWidth: width, maxWidth: max(width, textView.bounds.maxX - x), in: textView)
+                let rect = NSRect(x: x, y: frame.minY + lineBounds.minY, width: viewWidth, height: height)
+                if rect.intersects(area) { wanted[attachment.blockId] = (attachment, rect.integral, width) }
                 return true
             }
         }
@@ -80,17 +81,26 @@ final class BlockViewHosting {
             view.removeFromSuperview()
             views[id] = nil
         }
-        for (id, (attachment, rect)) in wanted {
+        for (id, (attachment, rect, columnWidth)) in wanted {
             if let view = views[id] {
+                view.columnWidth = columnWidth
                 if view.frame != rect { view.frame = rect }
                 view.update(attachment.block)
             } else {
                 let view = BlockAttachmentViewProvider.makeHostedView(for: attachment, textView: textView)
+                view.columnWidth = columnWidth
                 view.frame = rect
                 textView.addSubview(view)
                 views[id] = view
             }
         }
+    }
+
+    /// Ширина вида блока по его фабрике: широкая таблица занимает место справа до края страницы.
+    private static func viewWidth(of attachment: BlockAttachment, columnWidth: CGFloat, maxWidth: CGFloat, in textView: PageTextView) -> CGFloat {
+        BlockViewFactories.shared.factory(for: attachment.block.kind)?
+            .viewWidth(for: attachment.block, columnWidth: columnWidth, maxWidth: maxWidth,
+                       context: BlockViewContext(textView: textView, width: columnWidth)) ?? columnWidth
     }
 
     /// Прокрутить, не ставя виды на абзацы, которые ещё не разложены на новом месте.
