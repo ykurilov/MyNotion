@@ -133,7 +133,8 @@ enum TableAction: CaseIterable {
 
 /// Вид простой таблицы (research R3): ячейки рисует сам, правит одно поле на таблицу — `TableCellEditor` над ячейкой.
 /// «+» под таблицей — строка, справа — столбец; ширина столбца — протяжкой правой границы; Esc, как у Notion:
-/// выделение ячейки → её строка → таблица выделена как блок.
+/// выделение ячейки → её строка → таблица выделена как блок. Вид — документ `TableScrollView`: широкая сетка,
+/// как у Notion, занимает место справа до края страницы и дальше прокручивается вбок; «+» столбца — у конца сетки.
 @MainActor
 final class TableView: NSView, PointerOwner {
     let tableId: UUID
@@ -207,17 +208,47 @@ final class TableView: NSView, PointerOwner {
                 override = (activeCell, editor.contentHeight())
             }
         }
+        let previousWidth = contentWidth
         tableLayout = TableLayout(grid: grid, widths: draftWidths, override: override)
         if let selection = selectedCells, selection.rows.upperBound >= grid.rowCount || selection.columns.upperBound >= grid.columnCount {
             selectedCells = nil
         }
+        fitToVisibleWidth()
         positionEditor()
         addRowButton.frame = addRowRect
         addColumnButton.frame = addColumnRect
-        updateTrackingAreas()
         window?.invalidateCursorRects(for: self)
         needsDisplay = true
-        host?.embeddedViewHeightDidChange(tableId, height: Self.height(of: tableLayout), width: bounds.width)
+        guard let blockView else { return }
+        host?.embeddedViewHeightDidChange(tableId, height: Self.height(of: tableLayout), width: blockView.columnWidth)
+        // Сетка стала шире или уже: вид блока — по новой ширине, до края страницы.
+        if contentWidth != previousWidth { host?.blockViews.update() }
+    }
+
+    /// Рамка блока на странице: вид таблицы в ней — документ прокрутки вбок.
+    private var blockView: BlockAttachmentHostView? { enclosingScrollView?.superview as? BlockAttachmentHostView }
+
+    /// Ширина сетки с «+» столбца справа.
+    var contentWidth: CGFloat { Self.contentWidth(gridWidth: tableLayout.gridSize.width) }
+
+    static func contentWidth(gridWidth: CGFloat) -> CGFloat {
+        gridWidth + Metrics.Table.addButtonGap + Metrics.Table.addButtonThickness
+    }
+
+    /// Ширина вида блока: не уже колонки, по сетке с «+», но не дальше `maxWidth` — дальше сетка прокручивается.
+    static func blockWidth(contentWidth: CGFloat, columnWidth: CGFloat, maxWidth: CGFloat) -> CGFloat {
+        max(columnWidth, min(contentWidth, maxWidth))
+    }
+
+    /// Размер документа прокрутки: сетка с «+», не уже видимой части — щелчок правее узкой сетки тоже в таблице.
+    /// Пока тянут границу, документ не сужается: иначе прокрученная к концу сетка съезжала бы под мышью вправо,
+    /// и столбец сужался бы быстрее мыши.
+    func fitToVisibleWidth() {
+        let visibleWidth = (enclosingScrollView as? TableScrollView)?.contentSize.width ?? 0
+        var width = max(contentWidth, visibleWidth)
+        if columnDrag != nil { width = max(width, frame.width) }
+        let size = NSSize(width: width, height: Self.height(of: tableLayout))
+        if frame.size != size { setFrameSize(size) }
     }
 
     /// Высота вида: сетка и место под «+» строки.
@@ -321,9 +352,24 @@ final class TableView: NSView, PointerOwner {
         activeCell = cell
         if editor.superview !== self { addSubview(editor) }
         reload()
+        scrollToCell(cell)
         window?.makeFirstResponder(editor)
         editor.focus(atEnd: caret == .end)
         needsDisplay = true
+    }
+
+    /// Ячейка за краем видимой части — таблица прокручивается вбок к ней; страница вверх-вниз не двигается.
+    private func scrollToCell(_ cell: TableCellPosition) {
+        guard let scroll = enclosingScrollView as? TableScrollView else { return }
+        let visible = scroll.contentView.bounds
+        let rect = tableLayout.cellRect(cell)
+        var x = visible.minX
+        if rect.maxX > visible.maxX { x = rect.maxX - visible.width }
+        if rect.minX < x { x = rect.minX }
+        x = max(0, min(x, frame.width - visible.width))
+        guard x != visible.minX else { return }
+        scroll.contentView.scroll(to: NSPoint(x: x, y: visible.minY))
+        scroll.reflectScrolledClipView(scroll.contentView)
     }
 
     /// Убрать поле правки: текст ячейки снова рисует таблица.
@@ -521,60 +567,21 @@ final class TableView: NSView, PointerOwner {
 
     // MARK: Мышь
 
-    /// Таблица с «+» столбца: у таблицы во всю ширину кнопка справа за краем вида, как у Notion.
-    private var hoverRect: NSRect { bounds.union(addColumnRect) }
-
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         trackingAreas.forEach(removeTrackingArea)
-        // AppKit обрезает область по рамке блока: за её краем мышь ведёт pointerMonitor.
-        addTrackingArea(NSTrackingArea(rect: hoverRect, options: [.mouseEnteredAndExited, .mouseMoved, .cursorUpdate, .activeInKeyWindow],
+        // Видимая часть прокрутки: «+» столбца у конца сетки виден, когда к нему прокрутили.
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .mouseMoved, .cursorUpdate, .activeInKeyWindow, .inVisibleRect],
                                        owner: self))
     }
 
-    /// Пока мышь у «+» столбца за краем рамки блока, события вида туда не приходят — их читает монитор окна.
-    private var pointerMonitor: Any?
-
     private func pointerDidMove(toWindowPoint windowPoint: NSPoint) {
-        let point = convert(windowPoint, from: nil)
-        isPointerInside = hoverRect.contains(point)
-        if isPointerInside, !visibleRect.contains(point) {
-            startPointerMonitor()
-        } else {
-            stopPointerMonitor()
-        }
-    }
-
-    private func startPointerMonitor() {
-        guard pointerMonitor == nil else { return }
-        pointerMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] event in
-            if let self, event.window === self.window { self.pointerDidMove(toWindowPoint: event.locationInWindow) }
-            return event
-        }
-    }
-
-    private func stopPointerMonitor() {
-        guard let pointerMonitor else { return }
-        NSEvent.removeMonitor(pointerMonitor)
-        self.pointerMonitor = nil
+        isPointerInside = visibleRect.contains(convert(windowPoint, from: nil))
     }
 
     override func viewWillMove(toWindow newWindow: NSWindow?) {
         super.viewWillMove(toWindow: newWindow)
-        if newWindow == nil {
-            stopPointerMonitor()
-            isPointerInside = false
-        }
-    }
-
-    /// Сетка шире колонки текста и кнопка «+» столбца за краем вида тоже ловят мышь: щелчок, «↔» на границе.
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        if let hit = super.hitTest(point) { return hit }
-        let local = convert(point, from: superview)
-        if addColumnButton.frame.contains(local) { return addColumnButton }
-        guard NSRect(origin: .zero, size: tableLayout.gridSize).contains(local) else { return nil }
-        if let editor, editor.frame.contains(local) { return editor }
-        return self
+        if newWindow == nil { isPointerInside = false }
     }
 
     override func mouseEntered(with event: NSEvent) { pointerDidMove(toWindowPoint: event.locationInWindow) }
@@ -646,6 +653,7 @@ final class TableView: NSView, PointerOwner {
             dragColumnBoundary(drag.column, toWidth: widths[drag.column])
         }
         columnDrag = nil
+        fitToVisibleWidth()
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {
@@ -717,9 +725,17 @@ struct CellKey: Hashable {
 final class TableViewFactory: BlockViewFactory {
     func makeView(for block: Block, context: BlockViewContext) -> NSView? {
         guard let textView = context.textView else { return nil }
-        let view = TableView(document: textView.document.pageDocument, tableId: block.id, host: textView)
-        view.frame.size.width = context.width
-        return view
+        return TableScrollView(table: TableView(document: textView.document.pageDocument, tableId: block.id, host: textView))
+    }
+
+    /// Широкая сетка занимает место справа до края страницы; что не влезло — прокрутка вбок.
+    func viewWidth(for block: Block, columnWidth: CGFloat, maxWidth: CGFloat, context: BlockViewContext) -> CGFloat {
+        let contentWidth = context.textView?.tableView(for: block.id)?.contentWidth
+            ?? context.textView?.document.pageDocument.tableGrid(block.id).map { grid in
+                TableView.contentWidth(gridWidth: (0..<grid.columnCount).reduce(Metrics.Table.borderWidth) { $0 + CGFloat(grid.width(ofColumn: $1)) })
+            }
+        guard let contentWidth else { return columnWidth }
+        return TableView.blockWidth(contentWidth: contentWidth, columnWidth: columnWidth, maxWidth: maxWidth)
     }
 
     func height(for block: Block, width: CGFloat) -> CGFloat? { nil }
@@ -736,8 +752,40 @@ extension PageTextView {
     /// Вид таблицы на экране — в этом редакторе или в редакторе колонки.
     func tableView(for tableId: UUID) -> TableView? {
         for editor in pageEditor.editorTree {
-            if let view = editor.blockViews.view(for: tableId)?.subviews.first as? TableView { return view }
+            if let view = (editor.blockViews.view(for: tableId)?.subviews.first as? TableScrollView)?.table { return view }
         }
         return nil
+    }
+}
+
+/// Прокрутка таблицы вбок, как у Notion: тонкая полоса поверх нижнего края, колесо вверх и вниз уходит странице.
+@MainActor
+final class TableScrollView: NSScrollView {
+    let table: TableView
+
+    init(table: TableView) {
+        self.table = table
+        super.init(frame: .zero)
+        hasHorizontalScroller = true
+        hasVerticalScroller = false
+        autohidesScrollers = true
+        scrollerStyle = .overlay
+        drawsBackground = false
+        verticalScrollElasticity = .none
+        horizontalScrollElasticity = .automatic
+        documentView = table
+        setAccessibilityIdentifier("table-scroll")
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
+
+    override func tile() {
+        super.tile()
+        table.fitToVisibleWidth()
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        if abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX) { nextResponder?.scrollWheel(with: event) } else { super.scrollWheel(with: event) }
     }
 }
