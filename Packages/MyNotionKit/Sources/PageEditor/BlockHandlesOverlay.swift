@@ -457,7 +457,7 @@ extension PageTextView {
         var hit = target
         while let child = hit, child !== self {
             // Родитель тоже получает mouseMoved: не ждём отдельного cursorUpdate кнопки.
-            if let owner = child as? PointerOwner { owner.pointer.set(); return true }
+            if let owner = child as? PointerOwner, let pointer = owner.pointer(atWindowPoint: windowPoint) { pointer.set(); return true }
             // Встроенные элементы управления выбирают собственный курсор.
             if child is NSControl, child !== emptyParagraphHint { return false }
             hit = child.superview

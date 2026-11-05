@@ -6,6 +6,12 @@ import AppKit
 /// ставит его указатель, а не свой: иначе на каждом сдвиге мыши указатель мигает «свой → рука».
 @MainActor public protocol PointerOwner: NSView {
     var pointer: NSCursor { get }
+    /// Указатель в точке окна; nil — вид здесь указатель не выбирает, решает родитель.
+    func pointer(atWindowPoint windowPoint: NSPoint) -> NSCursor?
+}
+
+extension PointerOwner {
+    public func pointer(atWindowPoint windowPoint: NSPoint) -> NSCursor? { pointer }
 }
 
 extension NSView {
@@ -14,7 +20,7 @@ extension NSView {
         guard let superview else { return nil }
         var hit = hitTest(superview.convert(windowPoint, from: nil))
         while let view = hit, view !== self {
-            if let owner = view as? PointerOwner { return owner.pointer }
+            if let owner = view as? PointerOwner, let pointer = owner.pointer(atWindowPoint: windowPoint) { return pointer }
             hit = view.superview
         }
         return nil

@@ -135,7 +135,7 @@ enum TableAction: CaseIterable {
 /// «+» под таблицей — строка, справа — столбец; ширина столбца — протяжкой правой границы; Esc, как у Notion:
 /// выделение ячейки → её строка → таблица выделена как блок.
 @MainActor
-final class TableView: NSView {
+final class TableView: NSView, PointerOwner {
     let tableId: UUID
     let document: PageDocument
     private weak var host: PageTextView?
@@ -580,12 +580,18 @@ final class TableView: NSView {
     override func cursorUpdate(with event: NSEvent) { updateCursor(atWindowPoint: event.locationInWindow) }
 
     private func updateCursor(atWindowPoint windowPoint: NSPoint) {
+        (pointer(atWindowPoint: windowPoint) ?? .arrow).set()
+    }
+
+    var pointer: NSCursor { .arrow }
+
+    /// Над линией между столбцами — «↔», над ячейками — I-beam. Текст страницы ставит этот же указатель,
+    /// а не свой I-beam поверх «↔»: иначе на каждом сдвиге мыши указатель мигает.
+    func pointer(atWindowPoint windowPoint: NSPoint) -> NSCursor? {
         let point = convert(windowPoint, from: nil)
-        if point.y < tableLayout.gridSize.height, tableLayout.columnBoundary(near: point.x) != nil {
-            NSCursor.resizeLeftRight.set()
-        } else {
-            NSCursor.arrow.set()
-        }
+        guard point.x >= 0, point.y >= 0, point.y < tableLayout.gridSize.height else { return nil }
+        if tableLayout.columnBoundary(near: point.x) != nil { return .resizeLeftRight }
+        return point.x < tableLayout.gridSize.width ? .iBeam : nil
     }
 
     /// Курсор «↔» на линиях между столбцами закреплён за видом: текстовый вид страницы свой курсор не перебивает.
