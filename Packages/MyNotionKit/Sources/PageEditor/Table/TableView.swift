@@ -567,10 +567,14 @@ final class TableView: NSView, PointerOwner {
         }
     }
 
-    /// Кнопка «+» столбца за краем вида тоже ловит щелчок.
+    /// Сетка шире колонки текста и кнопка «+» столбца за краем вида тоже ловят мышь: щелчок, «↔» на границе.
     override func hitTest(_ point: NSPoint) -> NSView? {
         if let hit = super.hitTest(point) { return hit }
-        return addColumnButton.frame.contains(convert(point, from: superview)) ? addColumnButton : nil
+        let local = convert(point, from: superview)
+        if addColumnButton.frame.contains(local) { return addColumnButton }
+        guard NSRect(origin: .zero, size: tableLayout.gridSize).contains(local) else { return nil }
+        if let editor, editor.frame.contains(local) { return editor }
+        return self
     }
 
     override func mouseEntered(with event: NSEvent) { pointerDidMove(toWindowPoint: event.locationInWindow) }
