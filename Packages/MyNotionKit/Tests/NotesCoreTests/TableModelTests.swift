@@ -135,6 +135,18 @@ struct TableModelTests {
         #expect(document.block(twin.id) == nil)
     }
 
+    @Test("Новый столбец узкий (120), даже если сосед слева широкий")
+    func newColumnIsNarrow() throws {
+        let document = try openDocument()
+        var grid = try #require(document.tableGrid(tableId))
+        document.apply(grid.settingWidth(400, ofColumn: 1))
+        grid = try #require(document.tableGrid(tableId))
+        document.apply(grid.insertingColumn(at: grid.columnCount))
+        grid = try #require(document.tableGrid(tableId))
+        #expect(grid.width(ofColumn: grid.columnCount - 1) == TableGrid.defaultColumnWidth)
+        #expect(grid.width(ofColumn: 1) == 400)
+    }
+
     @Test("Вставка строки и столбца в любое место; порядок — по ключам")
     func insertRowsAndColumns() throws {
         let document = try openDocument()

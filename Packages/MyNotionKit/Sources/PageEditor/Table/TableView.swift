@@ -215,6 +215,7 @@ final class TableView: NSView {
         addRowButton.frame = addRowRect
         addColumnButton.frame = addColumnRect
         updateTrackingAreas()
+        window?.invalidateCursorRects(for: self)
         needsDisplay = true
         host?.embeddedViewHeightDidChange(tableId, height: Self.height(of: tableLayout), width: bounds.width)
     }
@@ -527,7 +528,7 @@ final class TableView: NSView {
         super.updateTrackingAreas()
         trackingAreas.forEach(removeTrackingArea)
         // AppKit обрезает область по рамке блока: за её краем мышь ведёт pointerMonitor.
-        addTrackingArea(NSTrackingArea(rect: hoverRect, options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow],
+        addTrackingArea(NSTrackingArea(rect: hoverRect, options: [.mouseEnteredAndExited, .mouseMoved, .cursorUpdate, .activeInKeyWindow],
                                        owner: self))
     }
 
@@ -575,12 +576,25 @@ final class TableView: NSView {
     override func mouseEntered(with event: NSEvent) { pointerDidMove(toWindowPoint: event.locationInWindow) }
     override func mouseExited(with event: NSEvent) { pointerDidMove(toWindowPoint: event.locationInWindow) }
 
-    override func mouseMoved(with event: NSEvent) {
-        let point = convert(event.locationInWindow, from: nil)
+    override func mouseMoved(with event: NSEvent) { updateCursor(atWindowPoint: event.locationInWindow) }
+    override func cursorUpdate(with event: NSEvent) { updateCursor(atWindowPoint: event.locationInWindow) }
+
+    private func updateCursor(atWindowPoint windowPoint: NSPoint) {
+        let point = convert(windowPoint, from: nil)
         if point.y < tableLayout.gridSize.height, tableLayout.columnBoundary(near: point.x) != nil {
             NSCursor.resizeLeftRight.set()
         } else {
             NSCursor.arrow.set()
+        }
+    }
+
+    /// Курсор «↔» на линиях между столбцами закреплён за видом: текстовый вид страницы свой курсор не перебивает.
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        let half = Metrics.Table.resizeHandleWidth / 2
+        for column in tableLayout.columnWidths.indices {
+            let x = tableLayout.columnX[column] + tableLayout.columnWidths[column]
+            addCursorRect(NSRect(x: x - half, y: 0, width: half * 2, height: tableLayout.gridSize.height), cursor: .resizeLeftRight)
         }
     }
 
