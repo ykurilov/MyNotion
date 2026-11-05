@@ -153,11 +153,11 @@ public struct TableGrid: Sendable, Hashable {
         return BlockChanges(upserts: [Block(pageId: table.pageId, kind: .tableRow, sortKey: key, containerId: table.id)])
     }
 
-    /// Пустой столбец на месте `index` (0…columnCount): ширина как у соседа слева или по умолчанию.
+    /// Пустой столбец на месте `index` (0…columnCount): узкий, `defaultColumnWidth`, как у Notion.
     public func insertingColumn(at index: Int) -> BlockChanges {
         let key = Self.key(at: index, in: columns, all: rows + columns)
         var column = Block(pageId: table.pageId, kind: .tableColumn, sortKey: key, containerId: table.id, props: .defaults(for: .tableColumn))
-        if index > 0, let width = columns[safe: index - 1]?.props.width { column.props.width = width }
+        column.props.width = Self.defaultColumnWidth
         return BlockChanges(upserts: [column])
     }
 
