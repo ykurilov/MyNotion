@@ -18,6 +18,9 @@ enum GalleryAIChatScene {
         switch kind {
         case .empty: chat.newChat()
         case .toolReply: chat.openChat(mainChat)
+        case .stepsExpanded:
+            chat.openChat(mainChat)
+            chat.expandAllSteps()
         case .modelMenu:
             chat.newChat()
             chat.popup = .models
@@ -34,7 +37,7 @@ enum GalleryAIChatScene {
             chat.toggleChatMenu(row.id)
         }
         chat.isOpen = true
-        if kind == .toolReply, chat.entries.count < 5 { return "чат не открылся" }
+        if kind == .toolReply || kind == .stepsExpanded, chat.entries.count < 5 { return "чат не открылся" }
         try? await Task.sleep(for: .milliseconds(600))
         return nil
     }
@@ -50,28 +53,34 @@ enum GalleryAIChatScene {
         let now = Date()
         let page = PageContext(pageID: "", title: "Планы", path: "Проекты/Планы", markdown: "", truncated: false)
         let read = ModelToolCall(id: "g1", name: "page_read", arguments: #"{"page":"current"}"#)
-        let append = ModelToolCall(id: "g2", name: "page_append", arguments: "{\"page\":\"current\",\"markdown\":\"## Задачи на неделю\"}")
-        var first = ChatEntry(createdAt: now, kind: .assistant)
-        first.reasoning = "Нужно прочитать страницу, выбрать дела с датами и дописать их списком в конец."
+        var first = ChatEntry(createdAt: now.addingTimeInterval(2), kind: .assistant)
+        first.reasoning = "Нужно прочитать страницу, выбрать дела с датами и оформить их задачами."
         first.toolCalls = [read]
-        var second = ChatEntry(createdAt: now, kind: .assistant)
-        second.toolCalls = [append]
-        var answer = ChatEntry(createdAt: now, kind: .assistant, text: """
-        Готово. Дописал в конец страницы раздел **«Задачи на неделю»**:
+        var second = ChatEntry(createdAt: now.addingTimeInterval(5), kind: .assistant)
+        second.reasoning = "Дела нашлись в девяти абзацах — превращаю каждый в задачу со сроком."
+        let edits = (1...9).map { ModelToolCall(id: "e\($0)", name: "block_update", arguments: "{}") }
+        second.toolCalls = edits
+        var answer = ChatEntry(createdAt: now.addingTimeInterval(18), kind: .assistant, text: """
+        Готово. Превратил дела на странице в задачи со сроками и собрал их в начале раздела **«Задачи на неделю»**:
 
         - [ ] Созвон с командой — вторник
         - [ ] Черновик отчёта — среда
         - [ ] Купить билеты — пятница
+
+        Остальные абзацы не трогал, а если нужно, могу расставить задачам ответственных и напоминания.
         """)
-        answer.reasoning = "Список дописан, коротко сообщаю, что изменилось."
+        answer.reasoning = "Список готов, коротко сообщаю, что изменилось."
+        let editEntries = edits.enumerated().map { index, call in
+            ChatEntry.tool(callID: call.id, name: call.name, outcome: ToolOutcome(ok: true, output: "{}"), title: NoteToolbox.title(for: call),
+                           at: now.addingTimeInterval(6 + Double(index)))
+        }
         let entries = [
             ChatEntry.user("Собери из этой страницы список задач на неделю", page: page, at: now),
             first,
-            ChatEntry.tool(callID: read.id, name: read.name, outcome: ToolOutcome(ok: true, output: "{}"), title: NoteToolbox.title(for: read), at: now),
+            ChatEntry.tool(callID: read.id, name: read.name, outcome: ToolOutcome(ok: true, output: "{}"), title: NoteToolbox.title(for: read),
+                           at: now.addingTimeInterval(3)),
             second,
-            ChatEntry.tool(callID: append.id, name: append.name, outcome: ToolOutcome(ok: true, output: "{}"), title: NoteToolbox.title(for: append), at: now),
-            answer,
-        ]
+        ] + editEntries + [answer]
         try chats.createChat(id: mainChat, title: "Собери из этой страницы список задач на неделю", at: now)
         for entry in entries { try chats.append(try ChatEntryCoding.encode(entry), id: entry.id, to: mainChat, at: entry.createdAt) }
 
