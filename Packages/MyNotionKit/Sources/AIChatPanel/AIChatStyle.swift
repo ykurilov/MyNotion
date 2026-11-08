@@ -10,6 +10,14 @@ enum AIChatStyle {
     static let popupCornerRadius: CGFloat = 10
     static let bodyFont = Font.system(size: 14)
     static let smallFont = Font.system(size: 12)
+    static let stepFont = Font.system(size: 13)
+    /// Межстрочный интервал ленты: 14 пт плюс 4 — строка около 21 пт, в полтора кегля, как в чате Notion AI.
+    static let bodyLineSpacing: CGFloat = 4
+    static let smallLineSpacing: CGFloat = 3
+    /// Между абзацами и пунктами списка в ответе.
+    static let blockSpacing: CGFloat = 8
+    /// Между сообщениями, сводками шагов и ответами.
+    static let messageSpacing: CGFloat = 16
 
     static let text = Color(nsColor: Palette.textPrimary)
     static let secondary = Color(nsColor: Palette.textSecondary)

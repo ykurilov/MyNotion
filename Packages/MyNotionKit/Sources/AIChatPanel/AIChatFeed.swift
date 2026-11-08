@@ -1,19 +1,23 @@
 import AIAgent
 import SwiftUI
 
-/// Лента чата: сообщения человека, ответы с рассуждениями под спойлером, короткие строки вызовов инструментов
-/// и ответ, который приходит сейчас.
+/// Лента чата: сообщения человека, ответы и между ними шаги агента — одной строкой-сводкой, которая раскрывается.
 struct AIChatFeed: View {
     let controller: AIChatController
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 12) {
-                ForEach(controller.entries.filter(AIChatEntryView.hasContent)) { entry in
-                    AIChatEntryView(entry: entry)
-                }
-                if let reply = controller.reply {
-                    AIChatLiveReplyView(reply: reply)
+            LazyVStack(alignment: .leading, spacing: AIChatStyle.messageSpacing) {
+                ForEach(AIChatFeedLayout.items(entries: controller.entries, reply: controller.reply)) { item in
+                    switch item {
+                    case .user(let entry): AIChatUserMessage(text: entry.text)
+                    case .answer(let entry): AIChatAnswer(entry: entry)
+                    case .steps(let group):
+                        AIChatSteps(group: group, isExpanded: controller.expandedSteps.contains(group.id)) {
+                            controller.toggleSteps(group.id)
+                        }
+                    case .liveText(let text): AIChatMarkdown(text: text)
+                    }
                 }
             }
             .padding(.horizontal, AIChatStyle.horizontalPadding)
@@ -24,109 +28,133 @@ struct AIChatFeed: View {
     }
 }
 
-struct AIChatEntryView: View {
-    let entry: ChatEntry
-
-    /// Ход модели, где были одни вызовы инструментов, своей строки не занимает: их видно ниже.
-    static func hasContent(_ entry: ChatEntry) -> Bool {
-        entry.kind != .assistant || !entry.text.isEmpty || !(entry.reasoning ?? "").isEmpty || entry.error != nil || entry.stopped == true
-    }
+struct AIChatUserMessage: View {
+    let text: String
 
     var body: some View {
-        switch entry.kind {
-        case .user:
-            HStack {
-                Spacer(minLength: 48)
-                Text(entry.text)
-                    .font(AIChatStyle.bodyFont)
-                    .foregroundStyle(AIChatStyle.text)
-                    .textSelection(.enabled)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(AIChatStyle.userBubble))
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(AIChatStyle.border.opacity(0.6), lineWidth: 1))
-            }
-        case .assistant:
-            VStack(alignment: .leading, spacing: 6) {
-                if let reasoning = entry.reasoning, !reasoning.isEmpty {
-                    AIChatReasoning(text: reasoning, isThinking: false)
-                }
-                if !entry.text.isEmpty { AIChatMarkdown(text: entry.text) }
-                if let error = entry.error {
-                    Label(error, systemImage: "exclamationmark.triangle")
-                        .font(AIChatStyle.bodyFont)
-                        .foregroundStyle(AIChatStyle.destructive)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if entry.stopped == true {
-                    Text("Остановлено").font(AIChatStyle.smallFont).foregroundStyle(AIChatStyle.secondary)
-                }
-                if let notice = entry.notice {
-                    Label(notice, systemImage: "info.circle")
-                        .font(AIChatStyle.smallFont)
-                        .foregroundStyle(AIChatStyle.secondary)
-                        .help("Ответ пришёл через OpenRouter")
-                }
-            }
-        case .tool:
-            AIChatToolRow(title: entry.title ?? entry.toolName ?? "", state: entry.ok == false ? .failed : .done)
+        HStack {
+            Spacer(minLength: 48)
+            Text(text)
+                .font(AIChatStyle.bodyFont)
+                .lineSpacing(AIChatStyle.bodyLineSpacing)
+                .foregroundStyle(AIChatStyle.text)
+                .textSelection(.enabled)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(RoundedRectangle(cornerRadius: 12).fill(AIChatStyle.userBubble))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(AIChatStyle.border.opacity(0.6), lineWidth: 1))
         }
     }
 }
 
-struct AIChatLiveReplyView: View {
-    let reply: AIChatController.LiveReply
+/// Ответ модели: текст, ошибка, пометка «остановлено». Рассуждения к нему — в сводке шагов выше.
+struct AIChatAnswer: View {
+    let entry: ChatEntry
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if !reply.reasoning.isEmpty || reply.text.isEmpty && reply.runningTool == nil {
-                AIChatReasoning(text: reply.reasoning, isThinking: reply.text.isEmpty)
+            if !entry.text.isEmpty { AIChatMarkdown(text: entry.text) }
+            if let error = entry.error {
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .font(AIChatStyle.bodyFont)
+                    .foregroundStyle(AIChatStyle.destructive)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            if !reply.text.isEmpty { AIChatMarkdown(text: reply.text) }
-            if let tool = reply.runningTool { AIChatToolRow(title: tool, state: .running) }
+            if entry.stopped == true {
+                Text("Остановлено").font(AIChatStyle.smallFont).foregroundStyle(AIChatStyle.secondary)
+            }
+            if let notice = entry.notice {
+                Label(notice, systemImage: "info.circle")
+                    .font(AIChatStyle.smallFont)
+                    .foregroundStyle(AIChatStyle.secondary)
+                    .help("Ответ пришёл через OpenRouter")
+            }
         }
     }
 }
 
-/// Рассуждения модели: свёрнуты, по щелчку раскрываются.
+/// Шаги агента одной строкой: пока ход идёт — текущий шаг, после — «Работал 14 с». По щелчку — все шаги списком.
+struct AIChatSteps: View {
+    let group: AIChatStepGroup
+    let isExpanded: Bool
+    let toggle: () -> Void
+
+    /// Пройденные шаги под сводкой; текущий уже виден в самой строке.
+    private var listed: [AIChatStep] { group.isRunning ? Array(group.steps.dropLast()) : group.steps }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button { if !listed.isEmpty { toggle() } } label: {
+                HStack(spacing: 6) {
+                    if let current = group.current {
+                        ProgressView().controlSize(.mini).frame(width: 14)
+                        Text(current.title).lineLimit(1).truncationMode(.middle)
+                    } else {
+                        Text(group.summary)
+                    }
+                    if !listed.isEmpty {
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right").font(.system(size: 9, weight: .semibold))
+                    }
+                }
+                .font(AIChatStyle.stepFont)
+                .foregroundStyle(AIChatStyle.secondary)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("ai-chat-steps")
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(listed.enumerated()), id: \.offset) { _, step in
+                        switch step.kind {
+                        case .reasoning: AIChatReasoning(title: step.title, text: step.detail ?? "")
+                        case .tool: AIChatToolRow(title: step.title, state: step.state)
+                        }
+                    }
+                }
+                .padding(.leading, 10)
+                .overlay(alignment: .leading) { Rectangle().fill(AIChatStyle.divider).frame(width: 2) }
+            }
+        }
+    }
+}
+
+/// Рассуждение внутри шагов: подпись, по щелчку — текст.
 struct AIChatReasoning: View {
+    let title: String
     let text: String
-    let isThinking: Bool
     @State private var isExpanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
             Button { if !text.isEmpty { isExpanded.toggle() } } label: {
-                HStack(spacing: 5) {
-                    if isThinking { ProgressView().controlSize(.mini) }
-                    Text(isThinking ? "Думает…" : "Рассуждения")
+                HStack(spacing: 6) {
+                    Image(systemName: "brain").frame(width: 14)
+                    Text(title)
                     if !text.isEmpty {
                         Image(systemName: isExpanded ? "chevron.down" : "chevron.right").font(.system(size: 9, weight: .semibold))
                     }
                 }
-                .font(AIChatStyle.smallFont)
-                .foregroundStyle(AIChatStyle.secondary)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             if isExpanded {
                 Text(text)
                     .font(AIChatStyle.smallFont)
-                    .foregroundStyle(AIChatStyle.secondary)
+                    .lineSpacing(AIChatStyle.smallLineSpacing)
                     .textSelection(.enabled)
-                    .padding(.leading, 10)
-                    .overlay(alignment: .leading) { Rectangle().fill(AIChatStyle.divider).frame(width: 2) }
+                    .padding(.leading, 20)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .font(AIChatStyle.stepFont)
+        .foregroundStyle(AIChatStyle.secondary)
     }
 }
 
 /// Вызов инструмента одной строкой: «Читает страницу «План»».
 struct AIChatToolRow: View {
-    enum State { case running, done, failed }
-
     let title: String
-    let state: State
+    let state: AIChatStep.State
 
     var body: some View {
         HStack(spacing: 6) {
@@ -137,7 +165,7 @@ struct AIChatToolRow: View {
             }
             Text(title).lineLimit(1).truncationMode(.middle)
         }
-        .font(.system(size: 13))
+        .font(AIChatStyle.stepFont)
         .foregroundStyle(AIChatStyle.secondary)
     }
 }
@@ -147,7 +175,7 @@ struct AIChatMarkdown: View {
     let text: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: AIChatStyle.blockSpacing) {
             ForEach(Array(MarkdownBlock.parse(text).enumerated()), id: \.offset) { _, block in
                 switch block {
                 case .heading(let line):
@@ -169,6 +197,7 @@ struct AIChatMarkdown: View {
             }
         }
         .font(AIChatStyle.bodyFont)
+        .lineSpacing(AIChatStyle.bodyLineSpacing)
         .foregroundStyle(AIChatStyle.text)
         .textSelection(.enabled)
         .fixedSize(horizontal: false, vertical: true)

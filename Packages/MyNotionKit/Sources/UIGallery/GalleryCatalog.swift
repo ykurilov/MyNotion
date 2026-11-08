@@ -105,8 +105,10 @@ public enum GalleryScene: Hashable, Sendable {
 public enum GalleryAIChat: CaseIterable, Sendable {
     /// Пустой чат: «Чем помочь?» и просьбы про открытую страницу.
     case empty
-    /// Ответ с рассуждениями и вызовом инструмента.
+    /// Ответ после рассуждений и вызовов инструментов: шаги свёрнуты в одну строку-сводку.
     case toolReply
+    /// Тот же ответ, сводка шагов раскрыта.
+    case stepsExpanded
     /// Открытый список моделей над полем ввода.
     case modelMenu
     /// Открытый список уровней рассуждений.
@@ -326,7 +328,8 @@ public enum GalleryCatalog {
 
     static let aiChatStates: [GalleryState] = [
         GalleryState("ai-chat-empty", .aiChat(.empty), "Панель ИИ-агента: пустой чат и просьбы про страницу", section: "ИИ-агент"),
-        GalleryState("ai-chat-tool-reply", .aiChat(.toolReply), "Ответ: рассуждения свёрнуты, вызовы инструментов строками", section: "ИИ-агент"),
+        GalleryState("ai-chat-tool-reply", .aiChat(.toolReply), "Ответ: шаги агента свёрнуты в строку «Работал … с»", section: "ИИ-агент"),
+        GalleryState("ai-chat-steps-expanded", .aiChat(.stepsExpanded), "Сводка шагов раскрыта: рассуждения и вызовы инструментов списком", section: "ИИ-агент"),
         GalleryState("ai-chat-model-menu", .aiChat(.modelMenu), "Список моделей над полем ввода", section: "ИИ-агент"),
         GalleryState("ai-chat-level-menu", .aiChat(.levelMenu), "Список уровней рассуждений", section: "ИИ-агент"),
         GalleryState("ai-chat-past-chats", .aiChat(.pastChats), "Прошлые чаты по срокам с поиском", section: "ИИ-агент"),

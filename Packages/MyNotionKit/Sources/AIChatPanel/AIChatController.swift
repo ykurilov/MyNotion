@@ -89,6 +89,8 @@ public final class AIChatController {
     public private(set) var chatID: UUID?
     public private(set) var entries: [ChatEntry] = []
     public private(set) var reply: LiveReply?
+    /// Раскрытые сводки шагов агента. Здесь, а не в строке ленты: ленивая лента забывает состояние строк за краем.
+    public private(set) var expandedSteps: Set<String> = []
     public private(set) var model: ChatModel
     public private(set) var level: ReasoningLevel
 
@@ -171,6 +173,7 @@ public final class AIChatController {
         popup = nil
         chatID = id
         entries = loadEntries(id)
+        expandedSteps = []
     }
 
     /// Меню строки прошлого чата: открывается у одной строки, повторное нажатие закрывает.
@@ -195,6 +198,17 @@ public final class AIChatController {
         guard model.supports(level) else { return }
         self.level = level
         defaults.set(level.rawValue, forKey: Keys.level(model))
+    }
+
+    public func toggleSteps(_ id: String) {
+        if expandedSteps.remove(id) == nil { expandedSteps.insert(id) }
+    }
+
+    /// Все сводки шагов открытого чата раскрыты — для галереи состояний.
+    public func expandAllSteps() {
+        expandedSteps = Set(AIChatFeedLayout.items(entries: entries, reply: reply).compactMap {
+            if case .steps(let group) = $0 { group.id } else { nil }
+        })
     }
 
     public func toggle(_ popup: Popup) {
@@ -291,6 +305,7 @@ public final class AIChatController {
         detachRun()
         chatID = nil
         entries = []
+        expandedSteps = []
     }
 
     /// Ход отцепляется от панели и останавливается; панель свободна для нового сообщения сразу.
