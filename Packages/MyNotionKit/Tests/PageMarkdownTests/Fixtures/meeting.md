@@ -38,6 +38,7 @@ print(release)
 
 </details>
 
+<!-- mynotion:table header-row="true" header-column="false" widths="120,120,120" -->
 | Кто | Что | Когда |
 | --- | --- | --- |
 | Аня | Сборка | Четверг |

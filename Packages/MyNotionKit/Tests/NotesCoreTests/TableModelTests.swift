@@ -46,18 +46,16 @@ struct TableModelTests {
         #expect(!document.blocks.contains { $0.kind == .tableRow })
     }
 
-    @Test("Новая таблица во всю ширину, как у Notion 7.39: первый столбец 240, второй — остаток; узко — пополам, не уже наименьшего")
+    @Test("Новая таблица во всю ширину: столбцы делят её поровну, остаток — последнему; узко — не уже порога, дальше шире колонки")
     func newTableWidths() {
-        #expect(TableGrid.columnWidths(ofNewTableFitting: 716) == [240, 476])
-        #expect(TableGrid.columnWidths(ofNewTableFitting: 300) == [150, 150])
-        #expect(TableGrid.columnWidths(ofNewTableFitting: 40) == [TableGrid.minimumColumnWidth, TableGrid.minimumColumnWidth])
-    }
-
-    @Test("Вставленная таблица: столбцы делят строку поровну, ширина округляется вниз и не уже наименьшей")
-    func sharedColumnWidth() {
-        #expect(TableGrid.columnWidth(ofColumns: 3, sharing: 716) == 238)
-        #expect(TableGrid.columnWidth(ofColumns: 1, sharing: 716) == 716)
-        #expect(TableGrid.columnWidth(ofColumns: 40, sharing: 300) == TableGrid.minimumColumnWidth)
+        let narrowest = TableGrid.narrowestFittedColumnWidth
+        #expect(narrowest == 100)
+        #expect(TableGrid.columnWidths(ofNewTable: 2, fitting: 716) == [358, 358])
+        #expect(TableGrid.columnWidths(ofNewTable: 3, fitting: 716) == [238, 238, 240])
+        #expect(TableGrid.columnWidths(ofNewTable: 1, fitting: 716) == [716])
+        #expect(TableGrid.columnWidths(ofNewTable: 7, fitting: 716) == [102, 102, 102, 102, 102, 102, 104])
+        #expect(TableGrid.columnWidths(ofNewTable: 10, fitting: 716) == Array(repeating: narrowest, count: 10))
+        #expect(TableGrid.columnWidths(ofNewTable: 2, fitting: 40) == [narrowest, narrowest])
     }
 
     @Test("Таблица — table + tableColumn + tableRow + tableCell: столбцы и строки в потоке таблицы, ячейки — в потоке строки")
@@ -135,16 +133,128 @@ struct TableModelTests {
         #expect(document.block(twin.id) == nil)
     }
 
-    @Test("Новый столбец узкий (120), даже если сосед слева широкий")
-    func newColumnIsNarrow() throws {
+    func widths(_ document: PageDocument) throws -> [Double] {
+        let grid = try #require(document.tableGrid(tableId))
+        return (0..<grid.columnCount).map { grid.width(ofColumn: $0) }
+    }
+
+    func setWidths(_ widths: [Double], in document: PageDocument) throws {
+        for (index, width) in widths.enumerated() {
+            document.apply(try #require(document.tableGrid(tableId)).settingWidth(width, ofColumn: index))
+        }
+    }
+
+    @Test("Новый столбец встаёт в ширину таблицы: его доля — поровну на всех, остальные сужаются пропорционально, не уже порога")
+    func newColumnFitsTableWidth() throws {
         let document = try openDocument()
-        var grid = try #require(document.tableGrid(tableId))
-        document.apply(grid.settingWidth(400, ofColumn: 1))
-        grid = try #require(document.tableGrid(tableId))
-        document.apply(grid.insertingColumn(at: grid.columnCount))
-        grid = try #require(document.tableGrid(tableId))
-        #expect(grid.width(ofColumn: grid.columnCount - 1) == TableGrid.defaultColumnWidth)
-        #expect(grid.width(ofColumn: 1) == 400)
+        try setWidths([200, 400, 200], in: document)
+        document.apply(try #require(document.tableGrid(tableId)).insertingColumn(at: 3))
+        #expect(try widths(document) == [150, 300, 150, 200])
+
+        // Узкие соседи упираются в порог (100), остаток отдают широкие.
+        try setWidths([120, 400, 120], in: document)
+        document.apply(try #require(document.tableGrid(tableId)).insertingColumn(at: 4))
+        let shrunk = try widths(document)
+        #expect(shrunk.count == 5 && shrunk.reduce(0, +) == 840, "\(shrunk)")
+        #expect(shrunk[4] == 168, "\(shrunk)")
+        #expect(shrunk.allSatisfy { $0 >= TableGrid.narrowestFittedColumnWidth }, "\(shrunk)")
+    }
+
+    @Test("Сужать некуда — столбцы на пороге остаются, таблица расширяется; столбцы уже порога (протянуты руками) не меняются")
+    func newColumnWidensTableAtThreshold() throws {
+        let document = try openDocument()
+        try setWidths([100, 100, 100], in: document)
+        document.apply(try #require(document.tableGrid(tableId)).insertingColumn(at: 3))
+        #expect(try widths(document) == [100, 100, 100, 100])
+
+        try setWidths([100, 300, 200, 100], in: document)
+        document.apply(try #require(document.tableGrid(tableId)).insertingColumn(at: 4))
+        #expect(try widths(document) == [100, 216, 144, 100, 140])
+
+        let minimum = TableGrid.minimumColumnWidth
+        try setWidths([minimum, 60, 400, 100, 100], in: document)
+        document.apply(try #require(document.tableGrid(tableId)).insertingColumn(at: 0))
+        let manual = try widths(document)
+        #expect(manual[0] == 115 && manual[1] == minimum && manual[2] == 60, "\(manual)")
+        #expect(manual.reduce(0, +) == 692, "\(manual)")
+    }
+
+    @Test("Удаление столбца ширины остальных не трогает")
+    func removingColumnKeepsWidths() throws {
+        let document = try openDocument()
+        try setWidths([120, 400, 200], in: document)
+        document.apply(try #require(document.tableGrid(tableId)).removingColumn(at: 1))
+        #expect(try widths(document) == [120, 200])
+    }
+
+    @Test("Ширины всех столбцов сразу: одна правка, не уже наименьшей; число ширин не по числу столбцов — нет правки")
+    func settingAllWidths() throws {
+        let document = try openDocument()
+        let grid = try #require(document.tableGrid(tableId))
+        let changes = grid.settingWidths([200, 10, 300.4])
+        #expect(changes.upserts.count == 3 && changes.removals.isEmpty)
+        document.apply(changes)
+        #expect(try widths(document) == [200, TableGrid.minimumColumnWidth, 300])
+        #expect(try #require(document.tableGrid(tableId)).settingWidths([1, 2]).isEmpty)
+        #expect(try #require(document.tableGrid(tableId)).settingWidths([200, 32, 300]).isEmpty, "те же ширины — нет правки")
+    }
+
+    @Test("Старая таблица без ширин остаётся узкой (120), пока её не правят")
+    func oldTableKeepsDefaultWidth() throws {
+        let document = try openDocument()
+        let grid = try #require(document.tableGrid(tableId))
+        var column = grid.columns[0]
+        column.props.width = nil
+        document.apply(BlockChanges(upserts: [column]))
+        #expect(try #require(document.tableGrid(tableId)).width(ofColumn: 0) == TableGrid.defaultColumnWidth)
+    }
+
+    // MARK: Новые таблицы без окна
+
+    /// Таблица страницы (или вложенная в `containerId`) и её столбцы с ширинами `widths`.
+    func freeTable(widths: [Double?], indent: Int = 0, containerId: UUID? = nil, key: FractionalSortKey = .between(nil, nil)) -> [Block] {
+        let table = Block(pageId: pageId, kind: .table, indent: indent, sortKey: key, containerId: containerId, props: .defaults(for: .table))
+        var contents = TableGrid.contents(ofTable: table, cells: [widths.map { _ in InlineText("x") }])
+        let columns = contents.indices.filter { contents[$0].kind == .tableColumn }
+        for (position, index) in columns.enumerated() { contents[index].props.width = widths[position] }
+        return [table] + contents
+    }
+
+    func columnWidths(_ blocks: [Block], of table: Block) -> [Double?] {
+        blocks.filter { $0.kind == .tableColumn && $0.containerId == table.id }.sorted { $0.sortKey < $1.sortKey }.map(\.props.width)
+    }
+
+    @Test("Без окна: таблица без ширин — на стандартную колонку текста поровну; с отступом — уже; заданные ширины остаются")
+    func fittingNewTablesWithoutWindow() {
+        let plain = freeTable(widths: [nil, nil, nil])
+        let indented = freeTable(widths: [nil, nil], indent: 1, key: .between(plain[0].sortKey, nil))
+        let explicit = freeTable(widths: [120, nil], key: .between(indented[0].sortKey, nil))
+        let fitted = TableGrid.fittingNewTables(in: plain + indented + explicit)
+        #expect(TableGrid.standardTextWidth == 716)
+        #expect(columnWidths(fitted, of: plain[0]) == [238, 238, 240])
+        #expect(columnWidths(fitted, of: indented[0]) == [342, 342])
+        #expect(columnWidths(fitted, of: explicit[0]) == [120, nil])
+        #expect(fitted.count == plain.count + indented.count + explicit.count)
+    }
+
+    @Test("Без окна: таблица в колонке страницы — на ширину своей колонки")
+    func fittingTableInColumn() {
+        let list = Block(pageId: pageId, kind: .columnList, sortKey: .between(nil, nil))
+        var left = Block(pageId: pageId, kind: .column, sortKey: .between(nil, nil), containerId: list.id)
+        left.props.widthRatio = 0.25
+        var right = Block(pageId: pageId, kind: .column, sortKey: .between(left.sortKey, nil), containerId: list.id)
+        right.props.widthRatio = 0.75
+        let table = freeTable(widths: [nil, nil], containerId: right.id)
+        let fitted = TableGrid.fittingNewTables(in: [list, left, right] + table)
+        // (716 − просвет 46) × 0,75 = 502,5 → 502.
+        #expect(columnWidths(fitted, of: table[0]) == [251, 251])
+    }
+
+    @Test("Ширина под таблицей в документе — та же, что без окна в блоках")
+    func standardWidthInDocument() throws {
+        let document = try openDocument()
+        let table = try #require(document.block(tableId))
+        #expect(document.standardTableWidth(of: table) == 716)
     }
 
     @Test("Вставка строки и столбца в любое место; порядок — по ключам")
@@ -164,7 +274,7 @@ struct TableModelTests {
         #expect(grid.rowCount == 3 && grid.columnCount == 4)
         let texts = (0..<3).map { row in (0..<4).map { grid.text(row: row, column: $0).string } }
         #expect(texts == [["", "00", "01", "02"], ["", "", "", ""], ["", "10", "11", "12"]])
-        #expect(grid.columns[0].props.width == 120)
+        #expect(grid.columns.map(\.props.width) == [100, 100, 100, 100], "3 × 120: сузиться до порога 100 и вместить новый нельзя — таблица шире")
 
         save(document)
         let reopened = try #require(try openDocument().tableGrid(tableId))

@@ -1,6 +1,7 @@
 import XCTest
 
 /// «+» справа и снизу у простой таблицы: курсор в ячейке, мышь ведут к «+» — он остаётся виден и нажимается, как у Notion.
+/// Новый столбец встаёт в прежнюю ширину таблицы.
 final class TableAddButtonsHoverTests: XCTestCase {
     private var library: UITestLibrary!
 
@@ -41,11 +42,14 @@ final class TableAddButtonsHoverTests: XCTestCase {
             shot.lifetime = .keepAlways
             add(shot)
             XCTAssertEqual(button.value as? String, "виден", "«+» \(name) исчез под мышью")
+            let size = table.value as? String
             button.click()
             XCTAssertEqual(button.value as? String, "виден", "«+» \(name) исчез после нажатия")
-            // Новый столбец сдвигает «+» вправо, новая строка — вниз.
-            XCTAssertTrue(waitUntil { button.frame.midX > target.x + 1 || button.frame.midY > target.y + 1 },
-                          "Нажатие «+» \(name) ничего не добавило")
+            XCTAssertTrue(waitUntil { table.value as? String != size }, "Нажатие «+» \(name) ничего не добавило: \(size ?? "")")
+            if button == addColumn {
+                // Новый столбец встаёт в прежнюю ширину таблицы: остальные ужимаются.
+                XCTAssertEqual(table.frame.width, before.width, accuracy: 1, "Таблица расширилась от нового столбца")
+            }
         }
     }
 

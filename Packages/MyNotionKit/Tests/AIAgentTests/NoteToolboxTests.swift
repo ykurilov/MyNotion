@@ -131,6 +131,20 @@ struct NoteToolboxTests {
         #expect(outcome.output.contains("обрезан"))
     }
 
+    @Test("Ширины столбцов таблицы: инструмент есть, описание говорит про пометку Markdown, числа списком доходят строками")
+    func tableWidths() async throws {
+        let widths = try tool("block_table-widths")
+        #expect(widths.description.contains("mynotion:table"), "\(widths.description)")
+        #expect(widths.parameters["properties"]?["widths"]?["type"] == "array")
+        #expect(AgentPrompt.systemInstruction.contains("block_table-widths"))
+        let commands = FakeCommands()
+        _ = await NoteToolbox(runner: commands.runner).run(ModelToolCall(id: "w", name: "block_table-widths",
+                                                                         arguments: #"{"block":"t","widths":[200,120.5,"300"]}"#))
+        #expect(commands.seen.first?.command == "block.table-widths")
+        #expect(commands.seen.first?.args["widths"] == ["200", "120.5", "300"])
+        #expect(NoteToolbox.title(for: ModelToolCall(id: "", name: "block_table-widths", arguments: "{}")) == "Подгоняет ширину столбцов")
+    }
+
     @Test("Короткая подпись вызова для ленты чата")
     func titles() {
         #expect(NoteToolbox.title(for: ModelToolCall(id: "", name: "page_read", arguments: #"{"page":"current"}"#)) == "Читает открытую страницу")

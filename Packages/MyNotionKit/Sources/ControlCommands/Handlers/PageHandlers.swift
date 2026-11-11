@@ -105,7 +105,13 @@ public enum PageHandlers {
                 block.containerId = anchor?.containerId
                 return block
             }
-            return BlockChanges(upserts: blocks)
+            // Новые таблицы — во всю ширину места, куда встают (в том числе в колонке страницы).
+            let byId = Dictionary(blocks.map { ($0.id, $0) }) { first, _ in first }
+            let lookup = { (id: UUID) in byId[id] ?? document.block(id) }
+            let fitted = TableGrid.fittingNewTables(in: blocks, table: lookup) { table in
+                TableGrid.standardWidth(under: table, lookup: lookup) { listId in document.flow(listId).filter { $0.kind == .column } }
+            }
+            return BlockChanges(upserts: fitted)
         }
         return try session.pageResult(page.id)
     }
@@ -283,7 +289,8 @@ extension CommandSession {
         guard let page = outline.page(pageId) else { throw NotesStoreError.pageNotFound(pageId) }
         try outline.requireEditable(page)
         try await editContent(of: pageId, checkpoint: checkpoint) { document in
-            var blocks = self.blocks(fromMarkdown: markdown, pageId: pageId, existing: document.allBlocks, outline: outline)
+            var blocks = TableGrid.fittingNewTables(in: self.blocks(fromMarkdown: markdown, pageId: pageId, existing: document.allBlocks,
+                                                                     outline: outline))
             let linked = Set(blocks.compactMap(\.linkedPageId))
             // Колонки уходят вместе со своими блоками: ссылки из них — в поток страницы, иначе пропали бы с ней.
             let kept = document.allBlocks.filter { block in

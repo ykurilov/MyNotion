@@ -8,6 +8,7 @@ public enum BlockHandlers {
         "block.get": BlockContentCommands.get,
         "block.insert": BlockContentCommands.insert,
         "block.update": BlockContentCommands.update,
+        "block.table-widths": BlockContentCommands.tableWidths,
         "block.move": BlockLayoutCommands.move,
         "block.indent": BlockLayoutCommands.indent,
         "block.outdent": BlockLayoutCommands.outdent,

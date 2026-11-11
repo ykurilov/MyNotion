@@ -32,7 +32,8 @@ struct TableHorizontalScrollTests {
         try #require(tableView.enclosingScrollView as? TableScrollView)
     }
 
-    /// Ещё `count` столбцов справа (новый — 120): сетка шире места до края страницы.
+    /// Ещё `count` столбцов справа, затем все по 300: сетка шире места до края страницы (новый столбец сам таблицу
+    /// не расширяет — встаёт в её ширину).
     func widen(_ editor: EditorFixture, _ table: UUID, by count: Int) throws {
         for _ in 0..<count {
             let tableView = try view(editor, table)
@@ -40,6 +41,11 @@ struct TableHorizontalScrollTests {
             editor.step { tableView.perform(.insertColumnRight, at: TableCellPosition(row: 0, column: grid.columnCount - 1)) }
             editor.layoutViewport()
         }
+        let grid = try #require(editor.document.tableGrid(table))
+        editor.step {
+            editor.textView.applyStructuralChanges(grid.settingWidths(Array(repeating: 300, count: grid.columnCount)), actionName: "Ширина")
+        }
+        editor.layoutViewport()
     }
 
     func scrollEvent(dx: Int32, dy: Int32) throws -> NSEvent {

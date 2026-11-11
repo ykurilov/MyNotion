@@ -17,7 +17,7 @@ public struct NoteToolbox: Sendable {
         "page.tree", "page.get", "page.read", "page.create", "page.write", "page.append", "page.rename", "page.move",
         "page.duplicate", "page.trash", "page.restore", "page.icon", "page.layout", "trash.list", "search", "recents",
         "favorites.list", "favorites.add", "favorites.remove", "template.list",
-        "block.kinds", "block.get", "block.insert", "block.update", "block.move", "block.move-to-page", "block.indent",
+        "block.kinds", "block.get", "block.insert", "block.update", "block.table-widths", "block.move", "block.move-to-page", "block.indent",
         "block.outdent", "block.check", "block.uncheck", "block.delete",
         "db.create", "db.schema", "db.rows", "db.prop.add", "db.prop.update", "db.prop.type", "db.prop.move", "db.prop.delete",
         "db.prop.restore", "db.option.add", "db.option.rename", "db.option.color", "db.option.delete", "db.row.add",
@@ -129,6 +129,9 @@ public struct NoteToolbox: Sendable {
                 continue
             case (.int, .string(let text)) where Int(text) != nil, (.number, .string(let text)) where Double(text) != nil:
                 result[key] = .number(Double(text)!)
+            case (.list, .array(let items)):
+                // Ширины и прочие списки модель шлёт числами — каталог ждёт строки.
+                result[key] = .array(items.map { item in item.number.map { .string(String(format: "%g", $0)) } ?? item })
             case (.bool, .string(let text)):
                 result[key] = .bool(text == "true")
             case (.choice, .bool(let flag)) where argument.type == .onOff:
@@ -179,6 +182,7 @@ public struct NoteToolbox: Sendable {
         case "open": return page("Открывает")
         case "block.insert": return "Вставляет блок"
         case "block.delete": return "Удаляет блок"
+        case "block.table-widths": return "Подгоняет ширину столбцов"
         case "block.kinds", "block.get": return "Смотрит блоки"
         case "block.move", "block.move-to-page": return "Переносит блок"
         case "db.create": return "Создаёт базу"
