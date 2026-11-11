@@ -30,10 +30,11 @@ struct TablesColumnsExportTests {
         writer.markdown(for: blocks, resolveLink: { _ in nil })
     }
 
-    @Test("Таблица — GFM: первая строка — шапка; строка заголовков по умолчанию без пометки")
+    @Test("Таблица — GFM: первая строка — шапка; перед ней пометка с ширинами столбцов: загрузка вернёт их как были")
     func gfmTable() {
         let text = markdown(table([["Имя", "Роль"], ["Юрий", "автор"], ["Мишка", nil]]))
         #expect(text == """
+            <!-- mynotion:table header-row="true" header-column="false" widths="120,120" -->
             | Имя | Роль |
             | --- | --- |
             | Юрий | автор |
@@ -46,6 +47,7 @@ struct TablesColumnsExportTests {
     func cellEscaping() {
         let text = markdown(table([["a | b", "две\nстроки"], ["жирный", ""]], runs: ["жирный": [StyledRun(start: 0, length: 6, style: .bold)]]))
         #expect(text == """
+            <!-- mynotion:table header-row="true" header-column="false" widths="120,120" -->
             | a \\| b | две<br>строки |
             | --- | --- |
             | **жирный** |  |
@@ -53,10 +55,10 @@ struct TablesColumnsExportTests {
             """)
     }
 
-    @Test("Без строки заголовков или со столбцом заголовков — пометка перед таблицей; ширины не по умолчанию — тоже")
+    @Test("Без строки заголовков или со столбцом заголовков — в пометке; ширины — всегда")
     func headerComment() {
         #expect(markdown(table([["a"]], headerRow: false)) == """
-            <!-- mynotion:table header-row="false" header-column="false" -->
+            <!-- mynotion:table header-row="false" header-column="false" widths="120" -->
             | a |
             | --- |
 

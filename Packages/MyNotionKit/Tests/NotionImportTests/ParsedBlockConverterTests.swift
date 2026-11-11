@@ -23,7 +23,8 @@ struct ParsedBlockConverterTests {
         #expect(!plan.pages.isEmpty)
         for index in plan.pages.indices {
             let converted = NotionImporter.blocks(for: index, in: plan, databases: databases, ids: ids)
-            let legacy = LegacyImportBlocks.blocks(for: index, in: plan, databases: databases, ids: ids)
+            // Сверх прежнего кода импорт делит новые таблицы поровну на ширину текста.
+            let legacy = TableGrid.fittingNewTables(in: LegacyImportBlocks.blocks(for: index, in: plan, databases: databases, ids: ids))
             #expect(Self.comparable(converted) == Self.comparable(legacy), "страница «\(plan.pages[index].title)» в \(source)")
         }
     }

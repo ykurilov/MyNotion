@@ -54,14 +54,14 @@ struct TableEditingTests {
 
     // MARK: Вставка и набор
 
-    @Test("«/» → «Таблица» — 2 столбца × 3 строки во всю ширину (240 и остаток), курсор в первой ячейке; таблица — один знак-вложение")
+    @Test("«/» → «Таблица» — 2 столбца × 3 строки во всю ширину поровну, курсор в первой ячейке; таблица — один знак-вложение")
     func slashTable() throws {
         let (editor, table) = try tableFixture()
         let grid = try grid(editor, table)
         #expect(grid.columnCount == 2 && grid.rowCount == 3)
-        // Как у Notion 7.39: первый столбец 240, второй — до края колонки текста.
+        // Столбцы поровну делят колонку текста.
         let available = Double(Metrics.Page.columnWidth - 2 * Metrics.Page.blockHorizontalPadding)
-        #expect(grid.columns.map(\.props.width) == [240, available - 240])
+        #expect(grid.columns.map(\.props.width) == [available / 2, available / 2])
         #expect(editor.textView.string == "до\n\u{FFFC}\nпосле\n")
         let cell = try cellEditor(editor)
         #expect(try view(editor, table).activeCell == TableCellPosition(row: 0, column: 0))

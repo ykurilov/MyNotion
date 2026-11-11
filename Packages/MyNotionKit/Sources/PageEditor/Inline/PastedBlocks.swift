@@ -107,17 +107,10 @@ extension PageTextView {
         return true
     }
 
-    /// Таблица из чужого Markdown или HTML ширин столбцов не знает (у разбора это обычные 120): как у Notion, её столбцы
-    /// делят строку страницы поровну. Ширины, выставленные руками, остаются.
-    private func fitColumnsToPage(of tableIds: Set<UUID>, in upserts: inout [Block]) {
-        for tableId in tableIds {
-            guard let table = document.block(tableId), table.kind == .table else { continue }
-            let columns = upserts.indices.filter { upserts[$0].kind == .tableColumn && upserts[$0].containerId == tableId }
-            let isUnset = columns.allSatisfy { (upserts[$0].props.width ?? TableGrid.defaultColumnWidth) == TableGrid.defaultColumnWidth }
-            guard !columns.isEmpty, isUnset else { continue }
-            let width = TableGrid.columnWidth(ofColumns: columns.count, sharing: availableTableWidth(indent: table.indent))
-            for index in columns { upserts[index].props.width = width }
-        }
+    /// Таблица из чужого Markdown или HTML ширин столбцов не знает: её столбцы делят строку страницы поровну.
+    /// Ширины, заданные в источнике, остаются.
+    private func fitColumnsToPage(in upserts: inout [Block]) {
+        upserts = TableGrid.fittingNewTables(in: upserts, table: document.block) { [self] table in availableTableWidth(indent: table.indent) }
     }
 
     /// Ячейки таблиц и блоки колонок вставки — в потоки своих новых контейнеров.
@@ -133,7 +126,7 @@ extension PageTextView {
             if let containerId = block.containerId, let newId = newIds[containerId] { block.containerId = newId }
             return block
         }
-        if fitsTablesToPage { fitColumnsToPage(of: Set(newIds.values), in: &upserts) }
+        if fitsTablesToPage { fitColumnsToPage(in: &upserts) }
         applyStructuralChanges(BlockChanges(upserts: upserts), actionName: "Вставить")
         textLayoutManager?.textViewportLayoutController.layoutViewport()
         blockViews.update()

@@ -87,8 +87,12 @@ struct BlockInsertion {
         }
         switch kind {
         case .table:
-            let contents = tableRows.map { TableGrid.contents(ofTable: block, cells: $0) }
-                ?? TableGrid.contents(ofNewTable: block, columns: 2, rows: 3)
+            // Во всю колонку текста страницы, поровну; подогнать под содержимое — `block table-widths`.
+            let available = document.standardTableWidth(of: block)
+            let contents = tableRows.map { rows in
+                TableGrid.contents(ofTable: block, cells: rows,
+                                   widths: TableGrid.columnWidths(ofNewTable: max(1, rows.map(\.count).max() ?? 1), fitting: available))
+            } ?? TableGrid.contents(ofNewTable: block, columns: 2, rows: 3, widths: TableGrid.columnWidths(ofNewTable: 2, fitting: available))
             document.apply(BlockChanges(upserts: contents))
         case .columnList:
             document.apply(BlockChanges(upserts: columns(of: block)))

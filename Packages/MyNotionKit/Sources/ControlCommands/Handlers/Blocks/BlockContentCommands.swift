@@ -36,6 +36,34 @@ enum BlockContentCommands {
         }
         return CommandResult(try session.storedBlockJSON(block.id), text: "✓ Блок изменён")
     }
+
+    /// `block table-widths`: ширины всех столбцов таблицы одной правкой — один шаг отмены.
+    static let tableWidths: CommandHandler = { session in
+        let block = try session.block()
+        guard block.kind == .table else {
+            throw ControlError(.invalidArgument, "Ширины столбцов бывают только у таблицы, а это «\(block.kind.rawValue)»",
+                               hint: "id таблицы — в mynotion page read <страница> --format json", details: ["argument": "block"])
+        }
+        let texts = session.strings("widths").flatMap { $0.split(separator: ",") }.map { $0.trimmingCharacters(in: .whitespaces) }
+        let widths = texts.compactMap { Double($0) }
+        guard widths.count == texts.count, !widths.isEmpty, widths.allSatisfy({ $0.isFinite && $0 > 0 }) else {
+            throw ControlError(.invalidValue, "Ширины — положительные числа через запятую", hint: "Пример: --widths 240,120,356",
+                               details: ["argument": "widths"])
+        }
+        let pageId = try session.editablePage(of: block).id
+        try await BlockPageEditor(session: session, pageId: pageId).edit("Ширина столбцов") { document in
+            guard let grid = document.tableGrid(block.id) else { throw ControlError(.blockNotFound, "Таблицы нет на странице") }
+            guard widths.count == grid.columnCount else {
+                throw ControlError(.invalidValue, "Ширин \(widths.count), а столбцов \(grid.columnCount)",
+                                   hint: "Нужна ширина на каждый столбец, по порядку", details: ["argument": "widths", "columns": .number(Double(grid.columnCount))])
+            }
+            document.apply(grid.settingWidths(widths))
+        }
+        let narrowest = TableGrid.minimumColumnWidth
+        let applied = widths.map { max(narrowest, $0.rounded()) }
+        return CommandResult(try session.storedBlockJSON(block.id, extra: ["widths": .array(applied.map(ControlJSON.number))]),
+                             text: "✓ Ширины столбцов: " + applied.map { String(format: "%g", $0) }.joined(separator: ", "))
+    }
 }
 
 /// Правка блока `block update`: новый текст, свойства, вид. Всё проверяется до правки страницы.

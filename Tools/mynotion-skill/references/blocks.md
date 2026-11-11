@@ -35,6 +35,7 @@ mynotion block insert current --kind paragraph --text 'Внутри списка
 - Текст — `--text` (Markdown строки: `**жирный**`, `*курсив*`, `` `код` ``, `[ссылка](url)`) или `--rich` (точная разметка: `bold italic strikethrough code underline link:<url> textColor:<цвет> backgroundColor:<цвет> mention:<id> date:<ISO> equation`). Вместе — нельзя.
 - `code` и `equation`: текст как есть, без Markdown.
 - Таблица: `--kind table --props '{"rows":[["Имя","Роль"],["Аня","Автор"]],"hasHeaderRow":true}'`. Колонки: `--kind columnList --props '{"columns":2}'` (от 2). Строки, ячейки и колонки внутри — внутренние, на вход не принимаются.
+- Новая таблица встаёт во всю ширину текста, столбцы поровну. Создав таблицу, подгони ширины столбцов под содержимое: `block table-widths <таблица> --widths <ширины через запятую>` (в точках, по порядку, одной правкой).
 - `pageLink` создаёт подстраницу: `--text` — её название; в ответе `block.linkedPageId`.
 - `database` вставкой не делается: `mynotion db create --inline` (группа баз).
 - Картинки, файлы, видео вставляет `mynotion attachment add current --file … --as image` (группа библиотеки), не `block insert`.

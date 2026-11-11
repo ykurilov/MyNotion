@@ -454,7 +454,7 @@ public struct NotionImporter: Sendable {
             append(.pageLink, link: ids[child])
         }
         if result.isEmpty { append(.paragraph) }
-        return result
+        return TableGrid.fittingNewTables(in: result)
     }
 
     /// Ссылка на своей строке, не на страницу выгрузки: YouTube и Vimeo — видео, прочее — закладка с адресом

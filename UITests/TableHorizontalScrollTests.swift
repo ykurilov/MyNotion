@@ -14,30 +14,18 @@ final class TableHorizontalScrollTests: XCTestCase {
     func testWideTableScrollsSidewaysAndResizesScrolledColumn() throws {
         let app = library.launchApp()
         app.createPage(titled: "Широкая таблица")
-        app.typeText("/табл")
-        XCTAssertTrue(app.popupItem("table").waitForExistence(timeout: 5), "Меню «/» не нашло таблицу")
-        app.typeKey(.return, modifierFlags: [])
-        XCTAssertTrue(app.textViews["table-cell"].waitForExistence(timeout: 5), "Курсор не встал в ячейку")
-        app.typeText("Имя")
+        // Таблица с явными ширинами по 300 — шире колонки текста.
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString("<!-- mynotion:table widths=\"300,300,300,300,300\" -->\n| Имя | А | Б | В | Г |\n| --- | --- | --- | --- | --- |\n| 1 | 2 | 3 | 4 | 5 |\n",
+                             forType: .string)
+        app.typeKey("v", modifierFlags: .command)
         let table = app.descendants(matching: .any)["table"]
         let scroll = app.descendants(matching: .any)["table-scroll"]
-        let addColumn = app.descendants(matching: .any)["table-add-column"]
-        XCTAssertTrue(scroll.waitForExistence(timeout: 5))
+        XCTAssertTrue(scroll.waitForExistence(timeout: 5), "Таблица не вставилась")
         let window = app.windows.firstMatch.frame
         let scrollLeft = scroll.frame.minX
 
-        // Четыре столбца по 120 справа: сетка шире места до края окна.
-        for _ in 0..<4 {
-            let width = table.frame.width
-            scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.3)).hover()
-            XCTAssertTrue(waitUntil { addColumn.value as? String == "виден" }, "«+» столбца не появился")
-            if addColumn.frame.maxX > scroll.frame.maxX {
-                scroll.scroll(byDeltaX: -2000, deltaY: 0)
-                RunLoop.current.run(until: Date().addingTimeInterval(0.5))
-            }
-            addColumn.click()
-            XCTAssertTrue(waitUntil { table.frame.width > width + 100 }, "«+» столбца ничего не добавил")
-        }
         XCTAssertEqual(scroll.frame.minX, scrollLeft, accuracy: 1, "Левый край таблицы сдвинулся")
         XCTAssertLessThanOrEqual(scroll.frame.maxX, window.maxX + 1, "Таблица ушла за край окна")
         XCTAssertGreaterThan(table.frame.width, scroll.frame.width + 100, "Сетка не шире видимой части")

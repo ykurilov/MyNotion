@@ -3,8 +3,8 @@ import NotesCore
 
 /// Таблица и колонки в Markdown (contracts/markdown-and-notion.md, «Блоки»).
 
-/// Таблица GFM: первая строка — шапка всегда (так требует GFM). Без строки заголовков, со столбцом заголовков
-/// или с шириной столбцов не по умолчанию — перед таблицей пометка `<!-- mynotion:table … -->`.
+/// Таблица GFM: первая строка — шапка всегда (так требует GFM). Перед таблицей — пометка `<!-- mynotion:table … -->`
+/// с заголовками и ширинами столбцов: загрузка вернёт таблицу с теми же ширинами, а не растянет её как новую.
 /// В ячейке `|` экранируется, перенос — `<br>`.
 struct TableWriter: MarkdownBlockKindWriter {
     var kinds: Set<BlockKind> { [.table] }
@@ -13,14 +13,8 @@ struct TableWriter: MarkdownBlockKindWriter {
         let grid = TableGrid(table: block, flow: context.flow)
         guard grid.columnCount > 0, grid.rowCount > 0 else { return nil }
         let widths = grid.columns.indices.map { grid.width(ofColumn: $0) }
-        var lines: [String] = []
-        if !grid.hasHeaderRow || grid.hasHeaderColumn || widths.contains(where: { $0 != TableGrid.defaultColumnWidth }) {
-            var comment = "<!-- mynotion:table header-row=\"\(grid.hasHeaderRow)\" header-column=\"\(grid.hasHeaderColumn)\""
-            if widths.contains(where: { $0 != TableGrid.defaultColumnWidth }) {
-                comment += " widths=\"" + widths.map { String(format: "%g", $0) }.joined(separator: ",") + "\""
-            }
-            lines.append(comment + " -->")
-        }
+        var lines = ["<!-- mynotion:table header-row=\"\(grid.hasHeaderRow)\" header-column=\"\(grid.hasHeaderColumn)\" widths=\""
+            + widths.map { String(format: "%g", $0) }.joined(separator: ",") + "\" -->"]
         func row(_ index: Int) -> String {
             let cells = (0..<grid.columnCount).map { column in
                 InlineMarkdown.render(grid.text(row: index, column: column), resolveLink: context.resolveLink)

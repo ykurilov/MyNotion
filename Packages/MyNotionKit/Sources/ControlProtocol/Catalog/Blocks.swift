@@ -30,6 +30,12 @@ extension CommandCatalog {
                  arguments: [.positional("block", .block, "Блок"), .flag("after", .block, "За блоком"), .switch("first", "В начало"),
                              .switch("last", "В конец")],
                  exclusive: [["after", "first", "last"]], requiresOneOf: [["after", "first", "last"]]),
+        .command("block table-widths",
+                 "Ширины столбцов таблицы в точках, по порядку, одной правкой; создав таблицу, подогнать их под содержимое. "
+                     + "В Markdown страницы то же задаёт пометка <!-- mynotion:table widths=\"…\" --> перед таблицей",
+                 access: .write, batchable: true, stage: 3, example: "mynotion block table-widths 3f2a91c0-… --widths 240,120,356",
+                 arguments: [.positional("block", .block, "Таблица"),
+                             .flag("widths", .list, "Ширины столбцов по порядку, в точках", required: true)]),
         blockAction("block indent", "Сдвинуть блок вправо"),
         blockAction("block outdent", "Сдвинуть блок влево"),
         blockAction("block check", "Отметить задачу"),

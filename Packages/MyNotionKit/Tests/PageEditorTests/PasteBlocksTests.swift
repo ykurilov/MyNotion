@@ -175,8 +175,8 @@ struct PasteBlocksTests {
         let line = (container.size.width - 2 * container.lineFragmentPadding).rounded(.down)
         let widths = (0..<grid.columnCount).map { grid.width(ofColumn: $0) }
         #expect(widths.count == 3)
-        #expect(Set(widths).count == 1)
-        #expect(widths.reduce(0, +) <= Double(line) && widths.reduce(0, +) > Double(line) - 3, "\(widths) в строке \(line)")
+        #expect(widths[0] == widths[1] && widths[2] - widths[0] < 3, "поровну, остаток — последнему: \(widths)")
+        #expect(widths.reduce(0, +) == Double(line), "\(widths) в строке \(line)")
         let view = try #require(editor.textView.tableView(for: table.id))
         #expect(view.tableLayout.columnWidths.map(Double.init) == widths)
     }

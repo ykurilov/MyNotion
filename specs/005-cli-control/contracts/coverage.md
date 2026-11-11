@@ -15,7 +15,7 @@
 | `moveBlocks(_:from:to:)` | `block move-to-page` |
 | `restoreVersion` | `history restore` |
 | `turnIntoSubpage` | `block update --kind pageLink` |
-| Правка блоков в `PageTextView` (вставка, текст, вид, отступ, перенос, отметка, раскрытие, удаление) | `block insert/update/indent/outdent/move/check/uncheck/expand/collapse/delete` |
+| Правка блоков в `PageTextView` (вставка, текст, вид, ширина столбцов таблицы, отступ, перенос, отметка, раскрытие, удаление) | `block insert/update/table-widths/indent/outdent/move/check/uncheck/expand/collapse/delete` |
 | `DatabaseOperations.createDatabase` | `db create` |
 | `addProperty`, `insertProperty`, `renameProperty`, `setPropertyConfig`, `changeType`/`startChangeType`, `moveProperty`, `duplicateProperty`, `setDeleted`, `eraseProperty`, `deletedProperties` | `db prop add/update/type/move/duplicate/delete/restore` (удалённые свойства `restore` называет в подсказке) |
 | `createOption`, `addGroupOption`, `renameOption`, `setOptionColor`, `moveOption`, `deleteOption`, `removeOption`, `setOptionSort` | `db option …`, `db prop update --config` |

@@ -35,6 +35,14 @@ struct TablesImportTests {
         #expect(page.simplifications.isEmpty)
     }
 
+    @Test("Разбор: без пометки ширин у столбцов ширины нет (её поставит место, куда таблица встаёт); с пометкой — заданная")
+    func widthsOnlyFromComment() {
+        let plain = parse("| a | b |\n| --- | --- |\n")
+        #expect(plain.blocks[0].contained.filter { $0.kind == .tableColumn }.map(\.props.width) == [nil, nil])
+        let marked = parse("<!-- mynotion:table widths=\"120,300\" -->\n| a | b |\n| --- | --- |\n")
+        #expect(marked.blocks[0].contained.filter { $0.kind == .tableColumn }.map(\.props.width) == [120, 300])
+    }
+
     @Test("Короткая строка таблицы — недостающие ячейки пустые, без блока")
     func shortRow() {
         let page = parse("| a | b | c |\n|---|---|---|\n| 1 |\n")
@@ -96,6 +104,7 @@ struct TablesImportTests {
         let grid = try #require(document.tableGrid(document.blocks[0].id))
         #expect((0..<2).map { row in (0..<2).map { grid.text(row: row, column: $0).string } } == [["A", "B"], ["1", "2"]])
         #expect(grid.hasHeaderRow)
+        #expect((0..<2).map { grid.width(ofColumn: $0) } == [358, 358], "таблица без ширин — на всю колонку текста поровну")
         let columns = document.flow(document.blocks[1].id)
         #expect(columns.map { document.flow($0.id).map(\.text.string) } == [["лево"], ["право"]])
     }

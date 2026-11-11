@@ -210,6 +210,7 @@ final class TableView: NSView, PointerOwner {
         }
         let previousWidth = contentWidth
         tableLayout = TableLayout(grid: grid, widths: draftWidths, override: override)
+        setAccessibilityValue("\(grid.columnCount) × \(grid.rowCount)")
         if let selection = selectedCells, selection.rows.upperBound >= grid.rowCount || selection.columns.upperBound >= grid.columnCount {
             selectedCells = nil
         }

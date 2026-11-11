@@ -70,20 +70,98 @@ public struct TableGrid: Sendable, Hashable {
 
     // MARK: Новая таблица
 
-    /// Первый столбец таблицы из «/» (Notion 7.39: 240).
-    public static let newTableFirstColumnWidth: Double = 240
+    /// Порог, до которого столбцы сужаются сами: новая таблица и добавленный столбец. Как у Notion (новый столбец 120),
+    /// в 100 ещё помещается пара коротких слов шрифтом таблицы, а 7 столбцов умещаются в стандартную колонку текста.
+    /// Дальше таблица шире колонки и прокручивается вбок. Руками протянуть уже можно — до `minimumColumnWidth`.
+    public static let narrowestFittedColumnWidth: Double = 100
 
-    /// Ширины двух столбцов таблицы из «/» во всю ширину `available`, как у Notion 7.39: первый 240, второй — остаток;
-    /// узко — пополам; не уже `minimumColumnWidth`.
-    public static func columnWidths(ofNewTableFitting available: Double) -> [Double] {
-        let first = max(minimumColumnWidth, min(newTableFirstColumnWidth, (available / 2).rounded(.down)))
-        return [first, max(minimumColumnWidth, available - first)]
+    /// Ширины `count` столбцов новой таблицы во всю ширину `available`: поровну, остаток округления — последнему;
+    /// не уже `narrowestFittedColumnWidth`.
+    public static func columnWidths(ofNewTable count: Int, fitting available: Double) -> [Double] {
+        guard count > 0 else { return [] }
+        let share = (available / Double(count)).rounded(.down)
+        guard share > narrowestFittedColumnWidth else {
+            let width = max(narrowestFittedColumnWidth, share)
+            return Array(repeating: width, count: count - 1) + [max(width, available - width * Double(count - 1))]
+        }
+        return Array(repeating: share, count: count - 1) + [available - share * Double(count - 1)]
     }
 
-    /// Ширина каждого из `count` столбцов, когда они поровну делят строку шириной `available`: так вставленная таблица,
-    /// как у Notion, занимает всю ширину текста страницы.
-    public static func columnWidth(ofColumns count: Int, sharing available: Double) -> Double {
-        max(minimumColumnWidth, (available / Double(max(1, count))).rounded(.down))
+    /// Ширины `widths`, сжатые в `target` пропорционально: столбец не уже `narrowestFittedColumnWidth`, а уже узкий
+    /// (протянут руками) не меняется. Не влезает — сумма больше `target`, таблица шире.
+    static func shrinking(_ widths: [Double], toFit target: Double) -> [Double] {
+        let limit = narrowestFittedColumnWidth
+        var result = widths
+        var free = Set(widths.indices.filter { widths[$0] > limit })
+        var factor = 1.0
+        while !free.isEmpty {
+            let fixed = widths.indices.filter { !free.contains($0) }.map { result[$0] }.reduce(0, +)
+            let freeSum = free.map { widths[$0] }.reduce(0, +)
+            factor = min(1, (target - fixed) / freeSum)
+            let hitting = free.filter { widths[$0] * factor < limit }
+            if hitting.isEmpty { break }
+            for index in hitting {
+                result[index] = limit
+                free.remove(index)
+            }
+        }
+        guard !free.isEmpty, factor < 1 else { return result }
+        for index in free { result[index] = (widths[index] * factor).rounded(.down) }
+        let leftover = target - result.reduce(0, +)
+        if leftover > 0, let widest = free.max(by: { result[$0] < result[$1] }) { result[widest] += leftover }
+        return result
+    }
+
+    // MARK: Ширина под таблицей без окна
+
+    /// Ширина колонки текста страницы без окна: `Metrics.Page.columnWidth` 720 без полей строки 2 × 2. Так встают
+    /// таблицы, созданные командой, агентом, записью Markdown и импортом; в окне — по его колонке текста.
+    public static let standardTextWidth: Double = 716
+    /// Сдвиг вложенного блока на уровень (`Metrics.Page.indentPerLevel`).
+    public static let standardIndentWidth: Double = 32
+    /// Просвет между колонками страницы (`Metrics.Columns.gap`).
+    public static let standardColumnsGap: Double = 46
+
+    /// Ширина под блоком `table` без окна: колонка текста за вычетом отступа; в колонке страницы — её доля.
+    /// `lookup` — блок по id, `columns` — колонки списка колонок по порядку.
+    public static func standardWidth(under table: Block, lookup: (UUID) -> Block?, columns: (UUID) -> [Block]) -> Double {
+        func available(_ block: Block) -> Double {
+            let indent = Double(block.indent) * standardIndentWidth
+            guard let containerId = block.containerId, let column = lookup(containerId), column.kind == .column,
+                  let listId = column.containerId, let list = lookup(listId) else { return standardTextWidth - indent }
+            let siblings = columns(listId)
+            let ratios = ColumnLayout.ratios(of: siblings)
+            guard let position = siblings.firstIndex(where: { $0.id == column.id }) else { return standardTextWidth - indent }
+            let usable = available(list) - standardColumnsGap * Double(max(0, siblings.count - 1))
+            return (usable * ratios[position]).rounded(.down) - indent
+        }
+        return available(table)
+    }
+
+    /// Новые таблицы среди `blocks`: у таблицы, ни одному столбцу которой ширина не задана, столбцы поровну делят
+    /// ширину под ней `width`. Заданные источником ширины остаются. `table` — таблица по id.
+    public static func fittingNewTables(in blocks: [Block], table: (UUID) -> Block?, width: (Block) -> Double) -> [Block] {
+        var result = blocks
+        let columnsByTable = Dictionary(grouping: blocks.indices.filter { blocks[$0].kind == .tableColumn }) { blocks[$0].containerId }
+        for (tableId, indices) in columnsByTable {
+            guard let tableId, let tableBlock = table(tableId), tableBlock.kind == .table,
+                  indices.allSatisfy({ blocks[$0].props.width == nil }) else { continue }
+            let ordered = indices.sorted { blocks[$0].sortKey < blocks[$1].sortKey }
+            for (index, columnWidth) in zip(ordered, columnWidths(ofNewTable: ordered.count, fitting: width(tableBlock))) {
+                result[index].props.width = columnWidth
+            }
+        }
+        return result
+    }
+
+    /// То же без окна, когда таблицы и их колонки страницы — все среди `blocks` (запись Markdown, импорт).
+    public static func fittingNewTables(in blocks: [Block]) -> [Block] {
+        let byId = Dictionary(blocks.map { ($0.id, $0) }) { first, _ in first }
+        let lookup = { (id: UUID) in byId[id] }
+        let columns = { (listId: UUID) in
+            blocks.filter { $0.containerId == listId && $0.kind == .column }.sorted { $0.sortKey < $1.sortKey }
+        }
+        return fittingNewTables(in: blocks, table: lookup) { standardWidth(under: $0, lookup: lookup, columns: columns) }
     }
 
     /// Столбцы и строки новой таблицы, без ячеек; `widths` — ширины столбцов по порядку.
@@ -153,12 +231,22 @@ public struct TableGrid: Sendable, Hashable {
         return BlockChanges(upserts: [Block(pageId: table.pageId, kind: .tableRow, sortKey: key, containerId: table.id)])
     }
 
-    /// Пустой столбец на месте `index` (0…columnCount): узкий, `defaultColumnWidth`, как у Notion.
+    /// Пустой столбец на месте `index` (0…columnCount) в нынешнюю ширину таблицы: его доля — поровну на всех,
+    /// остальные сужаются пропорционально до `narrowestFittedColumnWidth`; дальше таблица становится шире.
     public func insertingColumn(at index: Int) -> BlockChanges {
         let key = Self.key(at: index, in: columns, all: rows + columns)
+        let widths = columns.indices.map(width(ofColumn:))
+        let total = widths.reduce(0, +)
+        let newWidth = max(Self.narrowestFittedColumnWidth, (total / Double(columnCount + 1)).rounded(.down))
         var column = Block(pageId: table.pageId, kind: .tableColumn, sortKey: key, containerId: table.id, props: .defaults(for: .tableColumn))
-        column.props.width = Self.defaultColumnWidth
-        return BlockChanges(upserts: [column])
+        column.props.width = columns.isEmpty ? Self.defaultColumnWidth : newWidth
+        var upserts = [column]
+        for (position, shrunk) in Self.shrinking(widths, toFit: total - newWidth).enumerated() where shrunk != widths[position] {
+            var existing = columns[position]
+            existing.props.width = shrunk
+            upserts.append(existing)
+        }
+        return BlockChanges(upserts: upserts)
     }
 
     /// Строка с её ячейками; последняя строка — вся таблица.
@@ -238,6 +326,21 @@ public struct TableGrid: Sendable, Hashable {
         return BlockChanges(upserts: [column])
     }
 
+    /// Ширины всех столбцов по порядку одной правкой, не уже `minimumColumnWidth`; число ширин не по числу столбцов —
+    /// правки нет.
+    public func settingWidths(_ widths: [Double]) -> BlockChanges {
+        guard widths.count == columnCount else { return BlockChanges() }
+        var upserts: [Block] = []
+        for (column, width) in zip(columns, widths) {
+            let width = max(Self.minimumColumnWidth, width.rounded())
+            guard column.props.width != width else { continue }
+            var column = column
+            column.props.width = width
+            upserts.append(column)
+        }
+        return BlockChanges(upserts: upserts)
+    }
+
     /// Ключ нового элемента на месте `index` среди `items` (строк или столбцов). В потоке таблицы строки
     /// и столбцы перемешаны ключами — ключ берётся строго между соседями из `items`, не задевая остальных.
     private static func key(at index: Int, in items: [Block], all: [Block]) -> FractionalSortKey {
@@ -262,5 +365,10 @@ extension PageDocument {
     public func tableGrid(_ tableId: UUID) -> TableGrid? {
         guard let table = block(tableId), table.kind == .table else { return nil }
         return TableGrid(table: table, flow: flow)
+    }
+
+    /// Ширина под таблицей без окна (`TableGrid.standardWidth`) по блокам этой страницы.
+    public func standardTableWidth(of table: Block) -> Double {
+        TableGrid.standardWidth(under: table, lookup: block) { [self] listId in flow(listId).filter { $0.kind == .column } }
     }
 }

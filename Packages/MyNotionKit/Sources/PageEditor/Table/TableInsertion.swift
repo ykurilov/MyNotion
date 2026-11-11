@@ -3,7 +3,7 @@ import NotesCore
 import VisualStyle
 
 extension PageTextView {
-    /// «/» → «Таблица», как у Notion 7.39: 2 столбца × 3 строки во всю ширину колонки текста (240 и остаток);
+    /// «/» → «Таблица»: 2 столбца × 3 строки во всю ширину колонки текста, поровну;
     /// пустой абзац сам становится таблицей, у абзаца с текстом таблица — ниже.
     func insertTable(at index: Int) {
         commitEdits()
@@ -21,7 +21,7 @@ extension PageTextView {
         let table = Block(pageId: document.pageId, kind: .table, indent: block.indent, sortKey: key, containerId: document.containerId,
                           props: .defaults(for: .table))
         changes.upserts += [table] + TableGrid.contents(ofNewTable: table, columns: 2, rows: 3,
-                                                                     widths: TableGrid.columnWidths(ofNewTableFitting: availableTableWidth(indent: block.indent)))
+                                                                     widths: TableGrid.columnWidths(ofNewTable: 2, fitting: availableTableWidth(indent: block.indent)))
         // Под таблицей в конце потока — пустой абзац: писать дальше есть где.
         if index + 1 == blocks.count {
             changes.upserts.append(Block(pageId: document.pageId, sortKey: .between(key, nil), containerId: document.containerId))

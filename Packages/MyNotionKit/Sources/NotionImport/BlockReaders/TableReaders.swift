@@ -27,9 +27,10 @@ struct TableReader: NotionBlockReader {
 
         let columnCount = rows.map(\.count).max() ?? 1
         let columns = (0..<columnCount).map { position in
+            // Без пометки ширины нет: её ставит место, куда таблица встаёт (`TableGrid.fittingNewTables`).
             var column = ParsedBlock(kind: .tableColumn, props: .defaults(for: .tableColumn))
             column.id = UUID()
-            if position < widths.count, let width = widths[position] { column.props.width = width }
+            column.props.width = position < widths.count ? widths[position] : nil
             return column
         }
         let rowBlocks = rows.map { cells in
