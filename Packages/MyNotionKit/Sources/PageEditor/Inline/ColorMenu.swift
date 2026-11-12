@@ -455,7 +455,8 @@ extension PageTextView {
             closePopups()
             pageLinkMenu.close()
             guard let index = document.index(ofBlock: id) else { return }
-            selectBlocks(index..<index + 1)
+            // «⋮⋮» внутри выделения красит все выделенные блоки, как у Notion.
+            selectBlocksForBlockMenu(at: index)
             perform(.applyBlockColor(choice))
         }
         updateFormatBar()

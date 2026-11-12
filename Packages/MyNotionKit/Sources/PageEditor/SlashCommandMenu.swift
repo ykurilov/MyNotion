@@ -971,11 +971,28 @@ extension PageTextView {
     }
 
     /// Щелчок по «⋮⋮», как в Notion: блок выделен целиком (режим блоков) и открыто его меню; Esc закрывает меню,
-    /// блок остаётся выделенным.
+    /// блок остаётся выделенным. «⋮⋮» внутри выделения (блоков или текста через блоки) выделяет все эти блоки,
+    /// и меню действует на них все.
     func selectBlockAndOpenMenu(_ id: UUID, below anchor: NSRect) {
         window?.makeFirstResponder(self)
-        if let index = document.index(ofBlock: id) { selectBlocks(index..<index + 1) }
+        if let index = document.index(ofBlock: id), selectedBlocks?.contains(index) != true { selectBlocksForBlockMenu(at: index) }
         openBlockMenu(forBlock: id, below: anchor)
+    }
+
+    /// Выделить блоки, на которые действует меню блока `index`; подвижный край — на видимом блоке.
+    func selectBlocksForBlockMenu(at index: Int) {
+        let blocks = blocksForBlockMenu(at: index), last = blocks.upperBound - 1
+        let head = hiddenParagraphs.isHidden(document.blocks[last].id) ? hiddenRunOwner(ofBlockAt: last) ?? last : last
+        selectBlocks(anchor: blocks.lowerBound, head: head)
+    }
+
+    /// Блоки, на которые действует меню блока `index`: всё выделение, если блок в нём — выделены блоки или текст через
+    /// блоки («⋯» панели форматирования), как у Notion; иначе — сам блок. Со спрятанным под свёрнутым последним блоком.
+    func blocksForBlockMenu(at index: Int) -> Range<Int> {
+        guard selectedRange().length > 0, let selected = selectedBlockRange(), selected.contains(index) else {
+            return index..<endIncludingHidden(ofBlockAt: index)
+        }
+        return selected.lowerBound..<max(selected.upperBound, endIncludingHidden(ofBlockAt: selected.upperBound - 1))
     }
 
     func textDidChangeForPopups() {
@@ -1071,7 +1088,7 @@ extension PageTextView {
 
     /// Выбор в меню: из меню «/» убирается «/» с набранным поиском, затем меняется тип блока.
     func applyPopupItem(_ item: PopupMenuItem, session: EditorPopupController.Session, menuFrame: NSRect? = nil) {
-        let blockId: UUID
+        let blockId: UUID, isSlash: Bool
         if case .slash(let id, let slash) = session, case .insertDatabase(let inline) = item.action {
             return requestDatabase(fromSlashIn: id, slashLocation: slash, isInline: inline)
         }
@@ -1080,21 +1097,23 @@ extension PageTextView {
             return requestSubpage(fromSlashIn: id, slashLocation: slash)
         case .slash(let id, let slash):
             blockId = id
+            isSlash = true
             let range = slashQueryRange(from: slash)
             if range.length > 0 { replaceText(in: range, with: "") }
         case .block(let id):
             blockId = id
+            isSlash = false
         }
         guard let index = document.index(ofBlock: blockId) else { return }
-        switch item.action {
-        case .setKind(let kind): setKind(kind, ofBlocksAt: index..<index + 1)
+        // Меню «/» — про свой блок; меню блока внутри выделения — про всё выделение, как у Notion.
         // Свёрнутый переключатель или заголовок — со спрятанным под ним.
-        case .delete: removeBlocks(at: index..<endIncludingHidden(ofBlockAt: index))
-        case .duplicate: duplicateBlocks(at: index..<endIncludingHidden(ofBlockAt: index))
+        let blocks = isSlash ? index..<endIncludingHidden(ofBlockAt: index) : blocksForBlockMenu(at: index)
+        switch item.action {
+        case .setKind(let kind): keepingBlockSelection { setKind(kind, ofBlocksAt: blocks) }
+        case .delete: removeBlocks(at: blocks)
+        case .duplicate: duplicateBlocks(at: blocks)
         case .moveTo:
-            // Меню блока внутри выделения действует на всё выделение, как у Notion.
-            let range = selectedBlocks.flatMap { $0.contains(index) ? $0 : nil } ?? index..<endIncludingHidden(ofBlockAt: index)
-            requestMoveBlocks(range, anchor: menuFrame.map { NSRect(x: $0.minX, y: $0.maxY, width: $0.width, height: 0) })
+            requestMoveBlocks(blocks, anchor: menuFrame.map { NSRect(x: $0.minX, y: $0.maxY, width: $0.width, height: 0) })
             return
         case .insertColumns(let count):
             insertColumns(count, at: index)
