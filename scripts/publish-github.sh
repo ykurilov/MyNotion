@@ -13,6 +13,6 @@ if git log --name-only --format= | grep -qi '/notion-[^/]*\.\(png\|jpe\?g\)$'; t
   echo "снимки Notion остались в истории — выкладка остановлена" >&2; exit 1
 fi
 gitleaks git --no-banner --redact . >/dev/null
-git push -q git@github.com:ykurilov/MyNotion.git main:main
+git push -q https://github.com/ykurilov/MyNotion.git main:main
 echo "выложено: https://github.com/ykurilov/MyNotion ($(git rev-parse --short HEAD))"
 rm -rf "$work"
